@@ -540,15 +540,17 @@ def find_best_date_in_text_lines(text_lines: List[str]) -> Optional[dict]:
     return results[0]
 
 async def lookup_product_openfoodfacts(barcode: str) -> Optional[ProductBase]:
-    """Lookup product in Open Food Facts database"""
+    """Lookup product in Open Food Facts database avec logs détaillés"""
     try:
         async with httpx.AsyncClient(timeout=10.0) as client:
             url = f"https://world.openfoodfacts.org/api/v2/product/{barcode}.json"
             response = await client.get(url)
-            
+            print(f"Réponse OpenFoodFacts {url}: statut={response.status_code}, texte={response.text}")
             if response.status_code == 200:
                 data = response.json()
+                print(f"DATA JSON pour {barcode} : {data}")
                 if data.get("status") == 1 and data.get("product"):
+                    print("Produit trouvé, parsage OK")
                     product = data["product"]
                     return ProductBase(
                         barcode=barcode,
@@ -558,6 +560,8 @@ async def lookup_product_openfoodfacts(barcode: str) -> Optional[ProductBase]:
                         category=product.get("categories_tags", [""])[0] if product.get("categories_tags") else None,
                         quantity=product.get("quantity", "")
                     )
+                else:
+                    print(f"Produit non trouvé ou parsage KO, status={data.get('status')}, product={data.get('product')}")
     except Exception as e:
         logging.error(f"Error looking up product {barcode}: {e}")
     return None

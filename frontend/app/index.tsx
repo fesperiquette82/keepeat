@@ -1,3 +1,4 @@
+
 import React, { useEffect, useState, useCallback } from 'react';
 import {
   View,
@@ -204,7 +205,7 @@ export default function HomeScreen() {
               <Ionicons name="warning" size={20} color="#f97316" />
               <Text style={styles.sectionTitle}>{t('consumeFirst')}</Text>
             </View>
-            {priorityItems.map((item) => renderStockItem(item, true))}
+            {priorityItems.map((item: StockItem) => renderStockItem(item, true))}
           </View>
         )}
 
@@ -225,7 +226,7 @@ export default function HomeScreen() {
               <Text style={styles.emptySubtext}>{t('scanToAdd')}</Text>
             </View>
           ) : (
-            items.map((item) => renderStockItem(item))
+            items.map((item: StockItem) => renderStockItem(item))
           )}
         </View>
       </ScrollView>

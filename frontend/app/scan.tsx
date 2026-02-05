@@ -13,7 +13,7 @@ import { SafeAreaView } from 'react-native-safe-area-context';
 import { CameraView, useCameraPermissions } from 'expo-camera';
 import { useRouter } from 'expo-router';
 import { Ionicons } from '@expo/vector-icons';
-import { useStockStore, ProductInfo } from '../store/stockStore';
+import { useStockStore  } from '../store/stockStore';
 import { useLanguageStore } from '../store/languageStore';
 
 export default function ScanScreen() {
