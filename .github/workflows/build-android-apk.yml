@@ -39,7 +39,7 @@ jobs:
       - name: Expo prebuild (Android)
         env:
           EXPO_NO_TELEMETRY: "1"
-        run: npx expo prebuild --platform android --non-interactive
+        run: CI=1 npx expo prebuild --platform android
 
       - name: Build debug APK
         run: |
