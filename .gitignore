@@ -21,3 +21,11 @@ Thumbs.db
 # Expo / Metro
 .metro-cache/
 .expo/
+
+# Local scripts
+frontend/scripts/*.ps1
+
+# Local tools / folders
+monitor/
+project.zip
+
