@@ -9,6 +9,11 @@ jobs:
   build_apk:
     runs-on: ubuntu-latest
 
+    strategy:
+      fail-fast: false
+      matrix:
+        variant: [debug, release]
+
     defaults:
       run:
         working-directory: frontend
@@ -36,19 +41,26 @@ jobs:
       - name: Setup Android SDK
         uses: android-actions/setup-android@v3
 
+      - name: Clean android folder
+        run: rm -rf android
+
       - name: Expo prebuild (Android)
         env:
           EXPO_NO_TELEMETRY: "1"
         run: CI=1 npx expo prebuild --platform android
 
-      - name: Build debug APK
+      - name: Build ${{ matrix.variant }} APK
         run: |
           cd android
           chmod +x ./gradlew
-          ./gradlew assembleDebug
+          if [ "${{ matrix.variant }}" = "debug" ]; then
+            ./gradlew assembleDebug
+          else
+            ./gradlew assembleRelease
+          fi
 
-      - name: Upload APK
+      - name: Upload APK (${{ matrix.variant }})
         uses: actions/upload-artifact@v4
         with:
-          name: keepeat-debug-apk
-          path: frontend/android/app/build/outputs/apk/debug/*.apk
+          name: keepeat-${{ matrix.variant }}-apk
+          path: frontend/android/app/build/outputs/apk/${{ matrix.variant }}/*.apk

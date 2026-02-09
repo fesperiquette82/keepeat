@@ -2,7 +2,7 @@
   "expo": {
     "name": "KeepEat",
     "slug": "keepeat",
-    "version": "1.0.0",
+    "version": "0.1.0",
     "orientation": "portrait",
     "icon": "./assets/images/icon.png",
     "scheme": "keepeat",
@@ -16,14 +16,13 @@
     },
     "android": {
       "package": "com.fesperiquette.keepeat",
+      "versionCode": 1,
       "adaptiveIcon": {
         "foregroundImage": "./assets/images/adaptive-icon.png",
         "backgroundColor": "#0a0a0a"
       },
       "edgeToEdgeEnabled": true,
-      "permissions": [
-        "android.permission.CAMERA"
-      ]
+      "permissions": ["android.permission.CAMERA"]
     },
     "web": {
       "bundler": "metro",
