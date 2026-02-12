@@ -1,6 +1,10 @@
 name: Build Android APK
 
 on:
+  push:
+    branches:
+      - main
+      - ai-improvements
   workflow_dispatch:
 
 jobs:
@@ -36,7 +40,7 @@ jobs:
           distribution: 'temurin'
           java-version: '17'
 
-      - name: Build APK (debug)
+      - name: Build APK
         working-directory: frontend/android
         run: ./gradlew assembleDebug
 
