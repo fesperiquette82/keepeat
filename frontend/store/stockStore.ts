@@ -5,6 +5,10 @@ import axios from 'axios';
 
 const API_URL = process.env.EXPO_PUBLIC_BACKEND_URL;
 
+if (!API_URL) {
+  throw new Error('EXPO_PUBLIC_BACKEND_URL is not set. Expected https://keepeat-backend.onrender.com');
+}
+
 // --- Added interfaces from the suggested edit ---
 export interface StockItem {
   id: string;
@@ -60,31 +64,38 @@ export const useStockStore = create<StockStore>((set) => ({
   error: null,
 
   fetchStock: async () => {
+    set({ isLoading: true, error: null });
     try {
       const res = await axios.get(`${API_URL}/api/stock?status=active`);
-
       set({ items: res.data });
     } catch (err: any) {
       set({ error: err.message });
-
+    } finally {
+      set({ isLoading: false });
     }
   },
 
   fetchPriorityItems: async () => {
+    set({ isLoading: true, error: null });
     try {
       const res = await axios.get(`${API_URL}/api/stock/priority`);
       set({ priorityItems: res.data });
     } catch (err: any) {
       set({ error: err.message });
+    } finally {
+      set({ isLoading: false });
     }
   },
 
   fetchStats: async () => {
+    set({ isLoading: true, error: null });
     try {
       const res = await axios.get(`${API_URL}/api/stats`);
       set({ stats: res.data });
     } catch (err: any) {
       set({ error: err.message });
+    } finally {
+      set({ isLoading: false });
     }
   },
 
@@ -92,9 +103,10 @@ export const useStockStore = create<StockStore>((set) => ({
     try {
       await axios.post(`${API_URL}/api/stock/${itemId}/consume`);
       await useStockStore.getState().fetchStock();
+      await useStockStore.getState().fetchPriorityItems();
+      await useStockStore.getState().fetchStats();
     } catch (err: any) {
       set({ error: err.message });
-
     }
   },
 
@@ -102,9 +114,10 @@ export const useStockStore = create<StockStore>((set) => ({
     try {
       await axios.post(`${API_URL}/api/stock/${itemId}/throw`);
       await useStockStore.getState().fetchStock();
+      await useStockStore.getState().fetchPriorityItems();
+      await useStockStore.getState().fetchStats();
     } catch (err: any) {
       set({ error: err.message });
-
     }
   },
 
@@ -113,16 +126,16 @@ export const useStockStore = create<StockStore>((set) => ({
       const res = await axios.get(`${API_URL}/api/product/${barcode}`);
       return res.data;
     } catch (err: any) {
-
       return null;
     }
   },
-
 
   addItem: async (item) => {
     try {
       const res = await axios.post(`${API_URL}/api/stock`, item);
       await useStockStore.getState().fetchStock();
+      await useStockStore.getState().fetchPriorityItems();
+      await useStockStore.getState().fetchStats();
       return res.data;
     } catch (err: any) {
       console.error("Erreur lors de l'ajout :", err);

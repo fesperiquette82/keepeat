@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState } from 'react';
 import {
   View,
   Text,
@@ -7,13 +7,12 @@ import {
   ActivityIndicator,
   Alert,
   TextInput,
-  Platform,
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { CameraView, useCameraPermissions } from 'expo-camera';
 import { useRouter } from 'expo-router';
 import { Ionicons } from '@expo/vector-icons';
-import { useStockStore  } from '../store/stockStore';
+import { useStockStore } from '../store/stockStore';
 import { useLanguageStore } from '../store/languageStore';
 
 export default function ScanScreen() {
@@ -26,14 +25,15 @@ export default function ScanScreen() {
   const [manualBarcode, setManualBarcode] = useState('');
   const [showManualInput, setShowManualInput] = useState(false);
 
-  const handleBarCodeScanned = async ({ type, data }: { type: string; data: string }) => {
+  const handleBarCodeScanned = async ({ data }: { type: string; data: string }) => {
     if (scanned || isSearching) return;
-    
+
     setScanned(true);
     setIsSearching(true);
-    
+
     try {
       const result = await lookupProduct(data);
+
       if (result && result.product) {
         router.push({
           pathname: '/add-product',
@@ -45,11 +45,11 @@ export default function ScanScreen() {
             category: result.product.category || '',
             quantity: result.product.quantity || '',
             found: 'true',
-            shelf_life_category: result.shelfLife?.category_fr || '',
-            shelf_life_fridge: result.shelfLife?.refrigerator_days?.toString() || '',
-            shelf_life_freezer: result.shelfLife?.freezer_days?.toString() || '',
-            shelf_life_pantry: result.shelfLife?.pantry_days?.toString() || '',
-            shelf_life_tips: result.shelfLife?.tips_fr || '',
+            shelf_life_category: result.shelf_life?.category_fr || '',
+            shelf_life_fridge: result.shelf_life?.refrigerator_days?.toString() || '',
+            shelf_life_freezer: result.shelf_life?.freezer_days?.toString() || '',
+            shelf_life_pantry: result.shelf_life?.pantry_days?.toString() || '',
+            shelf_life_tips: result.shelf_life?.tips_fr || '',
           },
         });
       } else {
@@ -58,9 +58,9 @@ export default function ScanScreen() {
           params: {
             barcode: data,
             found: 'false',
-            shelf_life_category: result?.shelfLife?.category_fr || '',
-            shelf_life_fridge: result?.shelfLife?.refrigerator_days?.toString() || '7',
-            shelf_life_tips: result?.shelfLife?.tips_fr || '',
+            shelf_life_category: result?.shelf_life?.category_fr || '',
+            shelf_life_fridge: result?.shelf_life?.refrigerator_days?.toString() || '7',
+            shelf_life_tips: result?.shelf_life?.tips_fr || '',
           },
         });
       }
@@ -74,10 +74,11 @@ export default function ScanScreen() {
 
   const handleManualSearch = async () => {
     if (!manualBarcode.trim()) return;
-    
+
     setIsSearching(true);
     try {
       const result = await lookupProduct(manualBarcode.trim());
+
       if (result && result.product) {
         router.push({
           pathname: '/add-product',
@@ -89,11 +90,11 @@ export default function ScanScreen() {
             category: result.product.category || '',
             quantity: result.product.quantity || '',
             found: 'true',
-            shelf_life_category: result.shelfLife?.category_fr || '',
-            shelf_life_fridge: result.shelfLife?.refrigerator_days?.toString() || '',
-            shelf_life_freezer: result.shelfLife?.freezer_days?.toString() || '',
-            shelf_life_pantry: result.shelfLife?.pantry_days?.toString() || '',
-            shelf_life_tips: result.shelfLife?.tips_fr || '',
+            shelf_life_category: result.shelf_life?.category_fr || '',
+            shelf_life_fridge: result.shelf_life?.refrigerator_days?.toString() || '',
+            shelf_life_freezer: result.shelf_life?.freezer_days?.toString() || '',
+            shelf_life_pantry: result.shelf_life?.pantry_days?.toString() || '',
+            shelf_life_tips: result.shelf_life?.tips_fr || '',
           },
         });
       } else {
@@ -102,9 +103,9 @@ export default function ScanScreen() {
           params: {
             barcode: manualBarcode.trim(),
             found: 'false',
-            shelf_life_category: result?.shelfLife?.category_fr || '',
-            shelf_life_fridge: result?.shelfLife?.refrigerator_days?.toString() || '7',
-            shelf_life_tips: result?.shelfLife?.tips_fr || '',
+            shelf_life_category: result?.shelf_life?.category_fr || '',
+            shelf_life_fridge: result?.shelf_life?.refrigerator_days?.toString() || '7',
+            shelf_life_tips: result?.shelf_life?.tips_fr || '',
           },
         });
       }
@@ -178,7 +179,7 @@ export default function ScanScreen() {
                 <View style={[styles.corner, styles.bottomRight]} />
               </View>
             </View>
-            
+
             {isSearching && (
               <View style={styles.searchingOverlay}>
                 <ActivityIndicator size="large" color="#22c55e" />
@@ -222,11 +223,7 @@ export default function ScanScreen() {
           style={[styles.actionBtn, showManualInput && styles.actionBtnActive]}
           onPress={() => setShowManualInput(!showManualInput)}
         >
-          <Ionicons 
-            name={showManualInput ? "camera" : "keypad"} 
-            size={24} 
-            color={showManualInput ? "#22c55e" : "#fff"} 
-          />
+          <Ionicons name={showManualInput ? 'camera' : 'keypad'} size={24} color={showManualInput ? '#22c55e' : '#fff'} />
           <Text style={[styles.actionBtnText, showManualInput && styles.actionBtnTextActive]}>
             {showManualInput ? 'Scanner' : t('manualEntry')}
           </Text>
@@ -238,10 +235,7 @@ export default function ScanScreen() {
         </TouchableOpacity>
 
         {scanned && !isSearching && (
-          <TouchableOpacity
-            style={[styles.actionBtn, styles.rescanBtn]}
-            onPress={() => setScanned(false)}
-          >
+          <TouchableOpacity style={[styles.actionBtn, styles.rescanBtn]} onPress={() => setScanned(false)}>
             <Ionicons name="refresh" size={24} color="#22c55e" />
             <Text style={[styles.actionBtnText, { color: '#22c55e' }]}>Rescanner</Text>
           </TouchableOpacity>
@@ -252,10 +246,7 @@ export default function ScanScreen() {
 }
 
 const styles = StyleSheet.create({
-  container: {
-    flex: 1,
-    backgroundColor: '#0a0a0a',
-  },
+  container: { flex: 1, backgroundColor: '#0a0a0a' },
   header: {
     flexDirection: 'row',
     alignItems: 'center',
@@ -263,89 +254,36 @@ const styles = StyleSheet.create({
     paddingHorizontal: 16,
     paddingVertical: 12,
   },
-  backButton: {
-    padding: 8,
-    backgroundColor: '#1a1a1a',
-    borderRadius: 10,
-  },
-  headerTitle: {
-    fontSize: 18,
-    fontWeight: '600',
-    color: '#fff',
-  },
-  cameraContainer: {
-    flex: 1,
-    overflow: 'hidden',
-  },
-  camera: {
-    flex: 1,
-  },
+  backButton: { padding: 8, backgroundColor: '#1a1a1a', borderRadius: 10 },
+  headerTitle: { fontSize: 18, fontWeight: '600', color: '#fff' },
+
+  cameraContainer: { flex: 1, overflow: 'hidden' },
+  camera: { flex: 1 },
   overlay: {
     flex: 1,
     backgroundColor: 'rgba(0,0,0,0.5)',
     justifyContent: 'center',
     alignItems: 'center',
   },
-  scanFrame: {
-    width: 280,
-    height: 150,
-    position: 'relative',
-  },
-  corner: {
-    position: 'absolute',
-    width: 30,
-    height: 30,
-    borderColor: '#22c55e',
-  },
-  topLeft: {
-    top: 0,
-    left: 0,
-    borderTopWidth: 3,
-    borderLeftWidth: 3,
-  },
-  topRight: {
-    top: 0,
-    right: 0,
-    borderTopWidth: 3,
-    borderRightWidth: 3,
-  },
-  bottomLeft: {
-    bottom: 0,
-    left: 0,
-    borderBottomWidth: 3,
-    borderLeftWidth: 3,
-  },
-  bottomRight: {
-    bottom: 0,
-    right: 0,
-    borderBottomWidth: 3,
-    borderRightWidth: 3,
-  },
+  scanFrame: { width: 280, height: 150, position: 'relative' },
+  corner: { position: 'absolute', width: 30, height: 30, borderColor: '#22c55e' },
+  topLeft: { top: 0, left: 0, borderTopWidth: 3, borderLeftWidth: 3 },
+  topRight: { top: 0, right: 0, borderTopWidth: 3, borderRightWidth: 3 },
+  bottomLeft: { bottom: 0, left: 0, borderBottomWidth: 3, borderLeftWidth: 3 },
+  bottomRight: { bottom: 0, right: 0, borderBottomWidth: 3, borderRightWidth: 3 },
+
   searchingOverlay: {
     ...StyleSheet.absoluteFillObject,
     backgroundColor: 'rgba(0,0,0,0.8)',
     justifyContent: 'center',
     alignItems: 'center',
   },
-  searchingText: {
-    color: '#fff',
-    fontSize: 16,
-    marginTop: 12,
-  },
-  instructions: {
-    padding: 20,
-    alignItems: 'center',
-  },
-  instructionsText: {
-    color: '#888',
-    fontSize: 14,
-    textAlign: 'center',
-  },
-  manualInputContainer: {
-    flex: 1,
-    padding: 20,
-    justifyContent: 'center',
-  },
+  searchingText: { color: '#fff', fontSize: 16, marginTop: 12 },
+
+  instructions: { padding: 20, alignItems: 'center' },
+  instructionsText: { color: '#888', fontSize: 14, textAlign: 'center' },
+
+  manualInputContainer: { flex: 1, padding: 20, justifyContent: 'center' },
   barcodeInput: {
     backgroundColor: '#1a1a1a',
     borderRadius: 12,
@@ -355,20 +293,10 @@ const styles = StyleSheet.create({
     textAlign: 'center',
     marginBottom: 16,
   },
-  searchButton: {
-    backgroundColor: '#22c55e',
-    borderRadius: 12,
-    padding: 16,
-    alignItems: 'center',
-  },
-  searchButtonDisabled: {
-    backgroundColor: '#333',
-  },
-  searchButtonText: {
-    color: '#fff',
-    fontSize: 16,
-    fontWeight: '600',
-  },
+  searchButton: { backgroundColor: '#22c55e', borderRadius: 12, padding: 16, alignItems: 'center' },
+  searchButtonDisabled: { backgroundColor: '#333' },
+  searchButtonText: { color: '#fff', fontSize: 16, fontWeight: '600' },
+
   bottomActions: {
     flexDirection: 'row',
     justifyContent: 'center',
@@ -384,59 +312,21 @@ const styles = StyleSheet.create({
     backgroundColor: '#1a1a1a',
     minWidth: 100,
   },
-  actionBtnActive: {
-    backgroundColor: '#22c55e20',
-  },
-  actionBtnText: {
-    color: '#fff',
-    fontSize: 12,
-    marginTop: 4,
-  },
-  actionBtnTextActive: {
-    color: '#22c55e',
-  },
-  rescanBtn: {
-    backgroundColor: '#22c55e15',
-  },
+  actionBtnActive: { backgroundColor: '#22c55e20' },
+  actionBtnText: { color: '#fff', fontSize: 12, marginTop: 4 },
+  actionBtnTextActive: { color: '#22c55e' },
+  rescanBtn: { backgroundColor: '#22c55e15' },
+
   permissionContainer: {
     flex: 1,
     justifyContent: 'center',
     alignItems: 'center',
     padding: 40,
   },
-  permissionTitle: {
-    fontSize: 22,
-    fontWeight: 'bold',
-    color: '#fff',
-    marginTop: 24,
-    marginBottom: 12,
-  },
-  permissionText: {
-    fontSize: 16,
-    color: '#888',
-    textAlign: 'center',
-    marginBottom: 32,
-  },
-  permissionButton: {
-    backgroundColor: '#22c55e',
-    paddingHorizontal: 32,
-    paddingVertical: 16,
-    borderRadius: 12,
-  },
-  permissionButtonText: {
-    color: '#fff',
-    fontSize: 16,
-    fontWeight: '600',
-  },
-  manualButton: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    marginTop: 24,
-    padding: 12,
-    gap: 8,
-  },
-  manualButtonText: {
-    color: '#22c55e',
-    fontSize: 16,
-  },
+  permissionTitle: { fontSize: 22, fontWeight: 'bold', color: '#fff', marginTop: 24, marginBottom: 12 },
+  permissionText: { fontSize: 16, color: '#888', textAlign: 'center', marginBottom: 32 },
+  permissionButton: { backgroundColor: '#22c55e', paddingHorizontal: 32, paddingVertical: 16, borderRadius: 12 },
+  permissionButtonText: { color: '#fff', fontSize: 16, fontWeight: '600' },
+  manualButton: { flexDirection: 'row', alignItems: 'center', marginTop: 24, padding: 12, gap: 8 },
+  manualButtonText: { color: '#22c55e', fontSize: 16 },
 });

@@ -110,6 +110,9 @@ export default function AddProductScreen() {
   const performOCR = async (imageBase64: string) => {
     try {
       const API_URL = process.env.EXPO_PUBLIC_BACKEND_URL;
+      if (!API_URL) {
+        throw new Error('EXPO_PUBLIC_BACKEND_URL is not set. Expected https://keepeat-backend.onrender.com');
+      }
       const response = await fetch(`${API_URL}/api/ocr/date`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },

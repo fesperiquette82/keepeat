@@ -1,7 +1,7 @@
 import { create } from 'zustand';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 
-type Language = 'fr' | 'en';
+export type Language = 'fr' | 'en';
 
 interface Translations {
   [key: string]: { fr: string; en: string };
@@ -20,7 +20,7 @@ const translations: Translations = {
   noDate: { fr: 'Sans date', en: 'No date' },
   today: { fr: "Aujourd'hui", en: 'Today' },
   daysLeft: { fr: 'j restants', en: 'd left' },
-  
+
   // Actions
   markConsumed: { fr: 'Consommé', en: 'Consumed' },
   markThrown: { fr: 'Jeté', en: 'Thrown away' },
@@ -29,46 +29,44 @@ const translations: Translations = {
   cancel: { fr: 'Annuler', en: 'Cancel' },
   confirm: { fr: 'Confirmer', en: 'Confirm' },
   delete: { fr: 'Supprimer', en: 'Delete' },
-  
+
   // Scanner
   scanTitle: { fr: 'Scanner un produit', en: 'Scan a product' },
   scanInstructions: { fr: 'Placez le code-barres dans le cadre', en: 'Place the barcode in the frame' },
   cameraPermission: { fr: 'Autoriser la caméra', en: 'Allow camera' },
-  cameraPermissionText: { fr: "L'accès à la caméra est nécessaire pour scanner les codes-barres", en: 'Camera access is needed to scan barcodes' },
+  cameraPermissionText: {
+    fr: "L'accès à la caméra est nécessaire pour scanner les codes-barres",
+    en: 'Camera access is needed to scan barcodes',
+  },
   manualEntry: { fr: 'Saisie manuelle', en: 'Manual entry' },
   searching: { fr: 'Recherche...', en: 'Searching...' },
-  
+
   // Add Product
   addProduct: { fr: 'Ajouter un produit', en: 'Add a product' },
   productName: { fr: 'Nom du produit', en: 'Product name' },
   brand: { fr: 'Marque', en: 'Brand' },
-  expiryDate: { fr: 'Date de péremption', en: 'Expiry date' },
-  selectDate: { fr: 'Sélectionner une date', en: 'Select a date' },
   quantity: { fr: 'Quantité', en: 'Quantity' },
-  notes: { fr: 'Notes', en: 'Notes' },
+  expiryDate: { fr: 'Date de péremption', en: 'Expiry date' },
   save: { fr: 'Enregistrer', en: 'Save' },
-  productFound: { fr: 'Produit trouvé !', en: 'Product found!' },
-  productNotFound: { fr: 'Produit non trouvé', en: 'Product not found' },
-  addManually: { fr: 'Ajouter manuellement', en: 'Add manually' },
-  productAdded: { fr: 'Produit ajouté !', en: 'Product added!' },
-  
+  editProduct: { fr: 'Modifier le produit', en: 'Edit product' },
+  deleteProduct: { fr: 'Supprimer le produit', en: 'Delete product' },
+  confirmDelete: { fr: 'Supprimer {name} ?', en: 'Delete {name}?' },
+
   // Settings
-  settings: { fr: 'Paramètres', en: 'Settings' },
+  settings: { fr: 'Réglages', en: 'Settings' },
   language: { fr: 'Langue', en: 'Language' },
-  french: { fr: 'Français', en: 'French' },
-  english: { fr: 'Anglais', en: 'English' },
-  about: { fr: 'À propos', en: 'About' },
-  version: { fr: 'Version', en: 'Version' },
-  
-  // Stats
   statistics: { fr: 'Statistiques', en: 'Statistics' },
-  consumedThisWeek: { fr: 'Consommés cette semaine', en: 'Consumed this week' },
-  thrownThisWeek: { fr: 'Jetés cette semaine', en: 'Thrown this week' },
+  totalItems: { fr: 'Total en stock', en: 'Total in stock' },
+  consumedWeek: { fr: 'Consommés cette semaine', en: 'Consumed this week' },
+  thrownWeek: { fr: 'Jetés cette semaine', en: 'Thrown away this week' },
+
+  // Mentionnée dans index.tsx
+  addManually: { fr: 'Ajouter', en: 'Add' },
 };
 
 interface LanguageStore {
   language: Language;
-  setLanguage: (lang: Language) => void;
+  setLanguage: (lang: Language) => Promise<void>;
   t: (key: string) => string;
   loadLanguage: () => Promise<void>;
 }
