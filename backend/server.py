@@ -133,6 +133,16 @@ class StockItem(StockItemCreate):
     thrown_date: Optional[str] = None
 
 
+class StockItemUpdate(BaseModel):
+    name: Optional[str] = None
+    brand: Optional[str] = None
+    image_url: Optional[str] = None
+    category: Optional[str] = None
+    quantity: Optional[str] = None
+    expiry_date: Optional[str] = None
+    notes: Optional[str] = None
+
+
 class OCRRequest(BaseModel):
     image_base64: str = Field(..., description="Base64 image, optionally data URL.")
 
@@ -325,6 +335,31 @@ async def add_stock(item: StockItemCreate):
     res = await stock_col.insert_one(doc)
     created = await stock_col.find_one({"_id": res.inserted_id})
     return _serialize_mongo(created)
+
+
+@api_router.put("/stock/{item_id}", response_model=StockItem)
+async def update_stock(item_id: str, item: StockItemUpdate):
+    try:
+        oid = ObjectId(item_id)
+    except Exception:
+        raise HTTPException(status_code=400, detail="Invalid item id")
+
+    update_data = item.model_dump(exclude_unset=True)
+    if not update_data:
+        existing = await stock_col.find_one({"_id": oid})
+        if not existing:
+            raise HTTPException(status_code=404, detail="Item not found")
+        return _serialize_mongo(existing)
+
+    res = await stock_col.update_one(
+        {"_id": oid, "status": "active"},
+        {"$set": update_data},
+    )
+    if res.matched_count == 0:
+        raise HTTPException(status_code=404, detail="Active item not found")
+
+    updated = await stock_col.find_one({"_id": oid})
+    return _serialize_mongo(updated)
 
 
 @api_router.post("/stock/{item_id}/consume")
