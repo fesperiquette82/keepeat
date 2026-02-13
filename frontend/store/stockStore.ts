@@ -46,6 +46,7 @@ interface StockStore {
   markThrown: (itemId: string) => Promise<void>;
   lookupProduct: (barcode: string) => Promise<any>;
   addItem: (item: Partial<StockItem>) => Promise<StockItem | null>;
+  updateItem: (itemId: string, updates: Partial<StockItem>) => Promise<StockItem | null>;
 }
 
 export const useStockStore = create<StockStore>((set) => ({
@@ -147,6 +148,18 @@ export const useStockStore = create<StockStore>((set) => ({
       return res.data;
     } catch (err: any) {
       console.error("Erreur lors de l'ajout :", err);
+      return null;
+    }
+  },
+  updateItem: async (itemId, updates) => {
+    try {
+      const res = await axios.put(`${API_URL}/api/stock/${itemId}`, updates);
+      await useStockStore.getState().fetchStock();
+      await useStockStore.getState().fetchPriorityItems();
+      await useStockStore.getState().fetchStats();
+      return res.data;
+    } catch (err: any) {
+      set({ error: err.message });
       return null;
     }
   },
