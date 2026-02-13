@@ -3,11 +3,8 @@
 import { create } from 'zustand';
 import axios from 'axios';
 
-const API_URL = process.env.EXPO_PUBLIC_BACKEND_URL;
-
-if (!API_URL) {
-  throw new Error('EXPO_PUBLIC_BACKEND_URL is not set. Expected https://keepeat-backend.onrender.com');
-}
+const DEFAULT_API_URL = 'https://keepeat-backend.onrender.com';
+const API_URL = process.env.EXPO_PUBLIC_BACKEND_URL?.trim() || DEFAULT_API_URL;
 
 // --- Added interfaces from the suggested edit ---
 export interface StockItem {
