@@ -46,7 +46,7 @@ interface StockStore {
   markThrown: (itemId: string) => Promise<void>;
   lookupProduct: (barcode: string) => Promise<any>;
   addItem: (item: Partial<StockItem>) => Promise<StockItem | null>;
-  updateItem: (itemId: string, updates: Partial<StockItem>) => Promise<StockItem | null>;
+  updateItem: (itemId: string, updates: Partial<StockItem>) => Promise<StockItem>;
 }
 
 export const useStockStore = create<StockStore>((set) => ({
@@ -160,8 +160,9 @@ export const useStockStore = create<StockStore>((set) => ({
       await useStockStore.getState().fetchStats();
       return res.data;
     } catch (err: any) {
-      set({ error: err.message });
-      return null;
+      const errorMessage = axios.isAxiosError(err) ? err.message : "Failed to update item";
+      set({ error: errorMessage });
+      throw err;
     }
   },
 }));
