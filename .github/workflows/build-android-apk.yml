@@ -33,7 +33,6 @@ jobs:
           java-version: "17"
           cache: "gradle"
 
-      # Optional but recommended: make sure the env var is correctly injected (URL only)
       - name: Check backend URL env
         working-directory: frontend
         env:
@@ -44,10 +43,30 @@ jobs:
       - name: Expo prebuild (Android)
         working-directory: frontend
         env:
+          NODE_ENV: "production"
           EXPO_NO_TELEMETRY: "1"
           EXPO_PUBLIC_BACKEND_URL: ${{ secrets.EXPO_PUBLIC_BACKEND_URL }}
         run: |
           CI=1 npx expo prebuild --platform android --clean
+
+      - name: Patch gradle.properties (enable New Architecture)
+        working-directory: frontend/android
+        run: |
+          set -e
+          if [ ! -f gradle.properties ]; then
+            echo "ERROR: gradle.properties not found in frontend/android"
+            exit 1
+          fi
+
+          # Ensure newArchEnabled=true (required by react-native-reanimated)
+          if grep -qE '^newArchEnabled=' gradle.properties; then
+            sed -i 's/^newArchEnabled=.*/newArchEnabled=true/' gradle.properties
+          else
+            echo 'newArchEnabled=true' >> gradle.properties
+          fi
+
+          echo "---- gradle.properties (filtered) ----"
+          grep -E '^(newArchEnabled=|android\.useAndroidX=|android\.enableJetifier=)' gradle.properties || true
 
       - name: Make gradlew executable
         working-directory: frontend/android
