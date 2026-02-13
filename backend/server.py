@@ -11,10 +11,14 @@ from typing import Any, Dict, List, Optional
 
 import httpx
 from bson import ObjectId
+from dotenv import load_dotenv
 from fastapi import APIRouter, FastAPI, HTTPException
 from fastapi.middleware.cors import CORSMiddleware
 from motor.motor_asyncio import AsyncIOMotorClient
 from pydantic import BaseModel, Field
+
+# Load local environment variables from backend/.env (safe in Render too)
+load_dotenv()
 
 # Optional OCR dependencies (EasyOCR + Pillow)
 # If you don't deploy OCR, you can remove these imports & endpoint safely.
@@ -38,6 +42,32 @@ logger = logging.getLogger("keepeat-backend")
 # App
 # -----------------------------------------------------------------------------
 app = FastAPI(title="KeepEat Backend", version="1.0.0")
+
+
+def _utc_now() -> datetime:
+    return datetime.now(timezone.utc)
+
+
+@app.get("/health")
+async def health_root():
+    """
+    Simple health endpoint for Render / monitoring / CI.
+    Also tries to ping Mongo to detect DB issues.
+    """
+    mongo_ok = True
+    try:
+        # ping Mongo
+        # (db is defined below; this function runs after module import is complete)
+        await db.command("ping")  # type: ignore[name-defined]
+    except Exception:
+        mongo_ok = False
+
+    return {
+        "status": "ok" if mongo_ok else "degraded",
+        "mongo": mongo_ok,
+        "timestamp": _utc_now().isoformat(),
+    }
+
 
 # -----------------------------------------------------------------------------
 # CORS (middleware must be added BEFORE routers)
@@ -73,10 +103,6 @@ stock_col = db["stock"]
 # -----------------------------------------------------------------------------
 # Helpers
 # -----------------------------------------------------------------------------
-def _utc_now() -> datetime:
-    return datetime.now(timezone.utc)
-
-
 def _serialize_mongo(doc: Dict[str, Any]) -> Dict[str, Any]:
     """Convert Mongo _id to string id and remove internal fields."""
     if not doc:
@@ -132,6 +158,7 @@ class StockItem(StockItemCreate):
     consumed_date: Optional[str] = None
     thrown_date: Optional[str] = None
 
+
 class StockItemUpdate(BaseModel):
     name: Optional[str] = None
     brand: Optional[str] = None
@@ -140,7 +167,8 @@ class StockItemUpdate(BaseModel):
     quantity: Optional[str] = None
     expiry_date: Optional[str] = None
     notes: Optional[str] = None
-    
+
+
 class OCRRequest(BaseModel):
     image_base64: str = Field(..., description="Base64 image, optionally data URL.")
 
@@ -334,6 +362,7 @@ async def add_stock(item: StockItemCreate):
     created = await stock_col.find_one({"_id": res.inserted_id})
     return _serialize_mongo(created)
 
+
 @api_router.put("/stock/{item_id}", response_model=StockItem)
 async def update_stock(item_id: str, item: StockItemUpdate):
     try:
@@ -453,7 +482,11 @@ async def get_stats():
 async def get_product(barcode: str):
     product = await lookup_product_openfoodfacts(barcode)
     shelf_life = infer_shelf_life(product if product else ProductBase(barcode=barcode))
-    return ProductLookupResponse(found=product is not None, product=product, shelf_life=shelf_life)
+    return ProductLookupResponse(
+        found=product is not None,
+        product=product,
+        shelf_life=shelf_life,
+    )
 
 
 @api_router.post("/ocr/date", response_model=OCRDateResult)
@@ -483,8 +516,6 @@ async def ocr_extract_date(request: OCRRequest):
 
     reader = _get_ocr_reader()
 
-    # EasyOCR expects numpy array or file path; pillow image works via conversion to bytes
-    # simplest: convert to bytes -> reopen is ok; better: convert to numpy.
     try:
         import numpy as np  # type: ignore
 
@@ -498,7 +529,7 @@ async def ocr_extract_date(request: OCRRequest):
     best_conf = 0.0
     best_raw = None
 
-    for bbox, text, conf in results:
+    for _bbox, text, conf in results:
         if not text:
             continue
         candidate = _extract_date_from_text(text)
