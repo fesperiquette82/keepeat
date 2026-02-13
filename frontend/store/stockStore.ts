@@ -161,7 +161,7 @@ export const useStockStore = create<StockStore>((set) => ({
       return res.data;
     } catch (err: any) {
       set({ error: err.message });
-      return null;
+      throw err;
     }
   },
 }));
