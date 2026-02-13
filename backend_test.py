@@ -148,47 +148,9 @@ class KeepEatAPITester:
             self.log(f"❌ Failed to get stock items - Exception: {str(e)}", "ERROR")
             return False
         
-        # Test READ (GET single item)
-        test_item = created_items[0]
-        try:
-            response = self.session.get(f"{self.base_url}/stock/{test_item['id']}")
-            if response.status_code == 200:
-                item = response.json()
-                if item["id"] == test_item["id"]:
-                    self.log(f"✅ Retrieved single item: {item['name']}")
-                else:
-                    self.log("❌ Retrieved item ID mismatch", "ERROR")
-                    return False
-            else:
-                self.log(f"❌ Failed to get single item - Status: {response.status_code}", "ERROR")
-                return False
-        except Exception as e:
-            self.log(f"❌ Failed to get single item - Exception: {str(e)}", "ERROR")
-            return False
-        
-        # Test UPDATE (PUT)
-        self.log("Testing UPDATE operations...")
-        update_data = {
-            "notes": "Updated notes - tested by API tester",
-            "quantity": "Updated quantity"
-        }
-        try:
-            response = self.session.put(f"{self.base_url}/stock/{test_item['id']}", json=update_data)
-            if response.status_code == 200:
-                updated_item = response.json()
-                if updated_item["notes"] == update_data["notes"]:
-                    self.log(f"✅ Updated item: {updated_item['name']}")
-                else:
-                    self.log("❌ Update failed - notes not updated", "ERROR")
-                    return False
-            else:
-                self.log(f"❌ Failed to update item - Status: {response.status_code}", "ERROR")
-                return False
-        except Exception as e:
-            self.log(f"❌ Failed to update item - Exception: {str(e)}", "ERROR")
-            return False
-        
-        self.log("✅ Stock CRUD operations working correctly")
+        # API currently exposes list/create + state transitions (consume/throw),
+        # not GET/PUT by item id.
+        self.log("✅ Stock create/list operations working correctly")
         return True
     
     def test_priority_items(self):

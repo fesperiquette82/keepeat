@@ -48,6 +48,8 @@ const translations: Translations = {
   quantity: { fr: 'Quantité', en: 'Quantity' },
   expiryDate: { fr: 'Date de péremption', en: 'Expiry date' },
   save: { fr: 'Enregistrer', en: 'Save' },
+  productAdded: { fr: 'Produit ajouté', en: 'Product added' },
+  selectDate: { fr: 'Sélectionner une date', en: 'Select a date' },
   editProduct: { fr: 'Modifier le produit', en: 'Edit product' },
   deleteProduct: { fr: 'Supprimer le produit', en: 'Delete product' },
   confirmDelete: { fr: 'Supprimer {name} ?', en: 'Delete {name}?' },

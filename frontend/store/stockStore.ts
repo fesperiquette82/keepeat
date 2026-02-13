@@ -39,6 +39,7 @@ interface StockStore {
   priorityItems: StockItem[];
   stats: Stats;
   isLoading: boolean;
+  loadingCount: number;
   error: string | null;
 
   fetchStock: () => Promise<void>;
@@ -61,41 +62,51 @@ export const useStockStore = create<StockStore>((set) => ({
     thrown_this_week: 0,
   },
   isLoading: false,
+  loadingCount: 0,
   error: null,
 
   fetchStock: async () => {
-    set({ isLoading: true, error: null });
+    set((state) => ({ loadingCount: state.loadingCount + 1, isLoading: true, error: null }));
     try {
       const res = await axios.get(`${API_URL}/api/stock?status=active`);
       set({ items: res.data });
     } catch (err: any) {
       set({ error: err.message });
     } finally {
-      set({ isLoading: false });
+      set((state) => {
+        const next = Math.max(0, state.loadingCount - 1);
+        return { loadingCount: next, isLoading: next > 0 };
+      });
     }
   },
 
   fetchPriorityItems: async () => {
-    set({ isLoading: true, error: null });
+    set((state) => ({ loadingCount: state.loadingCount + 1, isLoading: true, error: null }));
     try {
       const res = await axios.get(`${API_URL}/api/stock/priority`);
       set({ priorityItems: res.data });
     } catch (err: any) {
       set({ error: err.message });
     } finally {
-      set({ isLoading: false });
+      set((state) => {
+        const next = Math.max(0, state.loadingCount - 1);
+        return { loadingCount: next, isLoading: next > 0 };
+      });
     }
   },
 
   fetchStats: async () => {
-    set({ isLoading: true, error: null });
+    set((state) => ({ loadingCount: state.loadingCount + 1, isLoading: true, error: null }));
     try {
       const res = await axios.get(`${API_URL}/api/stats`);
       set({ stats: res.data });
     } catch (err: any) {
       set({ error: err.message });
     } finally {
-      set({ isLoading: false });
+      set((state) => {
+        const next = Math.max(0, state.loadingCount - 1);
+        return { loadingCount: next, isLoading: next > 0 };
+      });
     }
   },
 
