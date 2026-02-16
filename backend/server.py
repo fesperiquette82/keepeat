@@ -171,6 +171,9 @@ class StockItemUpdate(BaseModel):
 
 class OCRRequest(BaseModel):
     image_base64: str = Field(..., description="Base64 image, optionally data URL.")
+    # Configurable window: how many years in the past a detected date is still accepted.
+    # Sent by the app as JSON key "maxPastYears". Default keeps existing behavior (2 years).
+    maxPastYears: int = Field(2, ge=1, le=50, description="Max years allowed in the past for detected expiry dates.")
 
 
 class OCRDateResult(BaseModel):
@@ -401,17 +404,17 @@ def _normalize_month_end(m: int, y: int) -> Optional[str]:
         return None
 
 
-def _is_reasonable_expiry(date_str: str) -> bool:
+def _is_reasonable_expiry(date_str: str, max_past_years: int = 2) -> bool:
     dt = _parse_date_yyyy_mm_dd(date_str)
     if not dt:
         return False
     now = _utc_now().date()
-    min_date = now - timedelta(days=365 * 2)      # 2y past max
+    min_date = now - timedelta(days=365 * max_past_years)      # configurable past window
     max_date = now + timedelta(days=365 * 10)     # 10y future max
     return min_date <= dt.date() <= max_date
 
 
-def _extract_candidate_dates_from_text(text: str) -> List[Tuple[str, str]]:
+def _extract_candidate_dates_from_text(text: str, max_past_years: int = 2) -> List[Tuple[str, str]]:
     """
     Returns list of (YYYY-MM-DD, format_label).
     """
@@ -423,14 +426,14 @@ def _extract_candidate_dates_from_text(text: str) -> List[Tuple[str, str]]:
     for m in re.finditer(r"\b(\d{1,2})[\/\-.](\d{1,2})[\/\-.](\d{2,4})\b", n):
         d, mo, y = int(m.group(1)), int(m.group(2)), int(m.group(3))
         iso = _normalize_date(d, mo, y)
-        if iso and _is_reasonable_expiry(iso):
+        if iso and _is_reasonable_expiry(iso, max_past_years):
             candidates.append((iso, "DD/MM/YYYY"))
 
     # 2) YYYY-MM-DD
     for m in re.finditer(r"\b(\d{4})[\/\-.](\d{1,2})[\/\-.](\d{1,2})\b", n):
         y, mo, d = int(m.group(1)), int(m.group(2)), int(m.group(3))
         iso = _normalize_date(d, mo, y)
-        if iso and _is_reasonable_expiry(iso):
+        if iso and _is_reasonable_expiry(iso, max_past_years):
             candidates.append((iso, "YYYY-MM-DD"))
 
     # 3) DD MMM YYYY / DD MMM YY
@@ -441,7 +444,7 @@ def _extract_candidate_dates_from_text(text: str) -> List[Tuple[str, str]]:
         mo = MONTHS.get(mon)
         if mo:
             iso = _normalize_date(d, mo, y)
-            if iso and _is_reasonable_expiry(iso):
+            if iso and _is_reasonable_expiry(iso, max_past_years):
                 candidates.append((iso, "DD MMM YYYY"))
 
     # 4) MMM YYYY => end of month
@@ -451,7 +454,7 @@ def _extract_candidate_dates_from_text(text: str) -> List[Tuple[str, str]]:
         mo = MONTHS.get(mon)
         if mo:
             iso = _normalize_month_end(mo, y)
-            if iso and _is_reasonable_expiry(iso):
+            if iso and _is_reasonable_expiry(iso, max_past_years):
                 candidates.append((iso, "MMM YYYY (end-month)"))
 
     # 5) MM/YYYY => end of month
@@ -460,7 +463,7 @@ def _extract_candidate_dates_from_text(text: str) -> List[Tuple[str, str]]:
         y = int(m.group(2))
         if 1 <= mo <= 12:
             iso = _normalize_month_end(mo, y)
-            if iso and _is_reasonable_expiry(iso):
+            if iso and _is_reasonable_expiry(iso, max_past_years):
                 candidates.append((iso, "MM/YYYY (end-month)"))
 
     # 6) Compact 8 digits: DDMMYYYY
@@ -468,7 +471,7 @@ def _extract_candidate_dates_from_text(text: str) -> List[Tuple[str, str]]:
         digits = m.group(1)
         d, mo, y = int(digits[0:2]), int(digits[2:4]), int(digits[4:8])
         iso = _normalize_date(d, mo, y)
-        if iso and _is_reasonable_expiry(iso):
+        if iso and _is_reasonable_expiry(iso, max_past_years):
             candidates.append((iso, "DDMMYYYY"))
 
     # Deduplicate preserving order
@@ -696,7 +699,7 @@ async def ocr_extract_date(request: OCRRequest):
         combined_parts.append(txt)
 
         has_kw = _contains_expiry_keyword(txt)
-        line_candidates = _extract_candidate_dates_from_text(txt)
+        line_candidates = _extract_candidate_dates_from_text(txt, request.maxPastYears)
 
         for date_iso, fmt in line_candidates:
             # boost if keyword detected on same line
@@ -708,7 +711,7 @@ async def ocr_extract_date(request: OCRRequest):
     combined_text = " ".join(combined_parts).strip()
     if combined_text:
         has_kw_global = _contains_expiry_keyword(combined_text)
-        combined_candidates = _extract_candidate_dates_from_text(combined_text)
+        combined_candidates = _extract_candidate_dates_from_text(combined_text, request.maxPastYears)
         for date_iso, fmt in combined_candidates:
             # combined inference: medium confidence base
             score = 0.55 + (0.20 if has_kw_global else 0.0)

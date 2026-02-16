@@ -20,7 +20,7 @@ import { fr, enUS } from 'date-fns/locale';
 
 import { useStockStore } from '../store/stockStore';
 import { useLanguageStore } from '../store/languageStore';
-import { parseExpiryDate, DATE_FORMAT_EXAMPLES, getBestDateFromOCR } from '../utils/dateParser';
+import { parseExpiryDate, DATE_FORMAT_EXAMPLES, getBestDateFromOCR, getExpiryDetectionPastYears } from '../utils/dateParser';
 
 type DateInputMode = 'auto' | 'duration' | 'date' | 'camera';
 
@@ -139,7 +139,7 @@ export default function AddProductScreen() {
       const response = await fetch(`${API_URL}/api/ocr/date`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ image_base64: imageBase64 }),
+        body: JSON.stringify({ image_base64: imageBase64, maxPastYears: getExpiryDetectionPastYears() }),
       });
 
       if (!response.ok) {

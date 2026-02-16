@@ -1,5 +1,22 @@
 // Advanced date parser for food expiry dates with multilingual support
 // Supports OCR output with keyword detection
+// ===== EXPIRY DETECTION WINDOW (CONFIGURABLE) =====
+// How many years in the past we still accept as a "reasonable" detected expiry date.
+// Default: 2 years (current behavior)
+// You can change this from the app by calling setExpiryDetectionPastYears(years).
+
+let expiryDetectionPastYears = 2;
+
+export function getExpiryDetectionPastYears(): number {
+  return expiryDetectionPastYears;
+}
+
+export function setExpiryDetectionPastYears(years: number): void {
+  if (Number.isFinite(years) && years >= 1 && years <= 50) {
+    expiryDetectionPastYears = Math.floor(years);
+  }
+}
+
 
 // ===== MULTILINGUAL KEYWORDS =====
 // Keywords that typically precede expiry dates on packaging
@@ -278,7 +295,8 @@ function expandYear(year: number): number {
 // Validate date is reasonable (not too far past/future)
 function isReasonableDate(date: Date): boolean {
   const now = new Date();
-  const twoYearsAgo = new Date(now.getFullYear() - 2, now.getMonth(), now.getDate());
+  const pastYears = getExpiryDetectionPastYears();
+  const twoYearsAgo = new Date(now.getFullYear() - pastYears, now.getMonth(), now.getDate());
   const tenYearsFromNow = new Date(now.getFullYear() + 10, now.getMonth(), now.getDate());
   return date >= twoYearsAgo && date <= tenYearsFromNow;
 }
