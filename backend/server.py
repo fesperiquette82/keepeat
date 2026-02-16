@@ -7,7 +7,7 @@ import logging
 import os
 import re
 from datetime import datetime, timedelta, timezone
-from typing import Any, Dict, List, Optional
+from typing import Any, Dict, List, Optional, Tuple
 
 import httpx
 from bson import ObjectId
@@ -177,6 +177,9 @@ class OCRDateResult(BaseModel):
     date: Optional[str] = None  # "YYYY-MM-DD"
     confidence: float = 0.0
     raw: Optional[str] = None
+    format: Optional[str] = None
+    raw_lines: List[str] = []
+    combined_text: Optional[str] = None
 
 
 class ShelfLife(BaseModel):
@@ -279,9 +282,57 @@ def infer_shelf_life(product: Optional[ProductBase]) -> ShelfLife:
 
 
 # -----------------------------------------------------------------------------
-# OCR (expiry date) - robust minimal implementation
+# OCR (expiry date) - improved robust implementation
 # -----------------------------------------------------------------------------
 _OCR_READER = None
+
+EXPIRY_KEYWORDS = [
+    # FR
+    "a consommer avant",
+    "a consommer de preference avant",
+    "date limite",
+    "date limite de consommation",
+    "dlc",
+    "ddm",
+    "peremption",
+    "exp",
+    "valable jusqu",
+    # EN
+    "best before",
+    "best by",
+    "use by",
+    "expiry",
+    "expiry date",
+    "exp date",
+]
+
+MONTHS = {
+    # FR
+    "janvier": 1, "janv": 1, "jan": 1,
+    "fevrier": 2, "fev": 2, "feb": 2,
+    "mars": 3, "mar": 3,
+    "avril": 4, "avr": 4, "apr": 4,
+    "mai": 5, "may": 5,
+    "juin": 6, "jun": 6,
+    "juillet": 7, "juil": 7, "jul": 7,
+    "aout": 8, "août": 8, "aug": 8,
+    "septembre": 9, "sept": 9, "sep": 9,
+    "octobre": 10, "oct": 10,
+    "novembre": 11, "nov": 11,
+    "decembre": 12, "décembre": 12, "dec": 12,
+    # EN
+    "january": 1,
+    "february": 2,
+    "march": 3,
+    "april": 4,
+    "june": 6,
+    "july": 7,
+    "august": 8,
+    "september": 9,
+    "october": 10,
+    "november": 11,
+    "december": 12,
+}
 
 
 def _get_ocr_reader():
@@ -295,12 +346,30 @@ def _get_ocr_reader():
     return _OCR_READER
 
 
-DATE_PATTERNS = [
-    # 12/03/2026 or 12-03-26 etc
-    re.compile(r"\b(\d{1,2})[\/\-.](\d{1,2})[\/\-.](\d{2,4})\b"),
-    # 2026-03-12
-    re.compile(r"\b(\d{4})[\/\-.](\d{1,2})[\/\-.](\d{1,2})\b"),
-]
+def _normalize_text(text: str) -> str:
+    return (
+        text.lower()
+        .replace("é", "e")
+        .replace("è", "e")
+        .replace("ê", "e")
+        .replace("ë", "e")
+        .replace("à", "a")
+        .replace("â", "a")
+        .replace("ä", "a")
+        .replace("î", "i")
+        .replace("ï", "i")
+        .replace("ô", "o")
+        .replace("ö", "o")
+        .replace("ù", "u")
+        .replace("û", "u")
+        .replace("ü", "u")
+        .replace("ç", "c")
+    )
+
+
+def _contains_expiry_keyword(text: str) -> bool:
+    n = _normalize_text(text)
+    return any(kw in n for kw in EXPIRY_KEYWORDS)
 
 
 def _normalize_date(d: int, m: int, y: int) -> Optional[str]:
@@ -315,21 +384,101 @@ def _normalize_date(d: int, m: int, y: int) -> Optional[str]:
         return None
 
 
-def _extract_date_from_text(text: str) -> Optional[str]:
+def _normalize_month_end(m: int, y: int) -> Optional[str]:
+    if y < 100:
+        y += 2000
+    if not (1 <= m <= 12 and 2000 <= y <= 2100):
+        return None
+    try:
+        # last day of month: day 1 next month - 1 day
+        if m == 12:
+            next_month = datetime(y + 1, 1, 1, tzinfo=timezone.utc)
+        else:
+            next_month = datetime(y, m + 1, 1, tzinfo=timezone.utc)
+        dt = next_month - timedelta(days=1)
+        return dt.strftime("%Y-%m-%d")
+    except Exception:
+        return None
+
+
+def _is_reasonable_expiry(date_str: str) -> bool:
+    dt = _parse_date_yyyy_mm_dd(date_str)
+    if not dt:
+        return False
+    now = _utc_now().date()
+    min_date = now - timedelta(days=365 * 2)      # 2y past max
+    max_date = now + timedelta(days=365 * 10)     # 10y future max
+    return min_date <= dt.date() <= max_date
+
+
+def _extract_candidate_dates_from_text(text: str) -> List[Tuple[str, str]]:
+    """
+    Returns list of (YYYY-MM-DD, format_label).
+    """
     t = text.strip()
-    # pattern: dd/mm/yyyy
-    m = DATE_PATTERNS[0].search(t)
-    if m:
+    n = _normalize_text(t)
+    candidates: List[Tuple[str, str]] = []
+
+    # 1) DD/MM/YYYY or DD-MM-YY etc.
+    for m in re.finditer(r"\b(\d{1,2})[\/\-.](\d{1,2})[\/\-.](\d{2,4})\b", n):
         d, mo, y = int(m.group(1)), int(m.group(2)), int(m.group(3))
-        return _normalize_date(d, mo, y)
+        iso = _normalize_date(d, mo, y)
+        if iso and _is_reasonable_expiry(iso):
+            candidates.append((iso, "DD/MM/YYYY"))
 
-    # pattern: yyyy-mm-dd
-    m = DATE_PATTERNS[1].search(t)
-    if m:
+    # 2) YYYY-MM-DD
+    for m in re.finditer(r"\b(\d{4})[\/\-.](\d{1,2})[\/\-.](\d{1,2})\b", n):
         y, mo, d = int(m.group(1)), int(m.group(2)), int(m.group(3))
-        return _normalize_date(d, mo, y)
+        iso = _normalize_date(d, mo, y)
+        if iso and _is_reasonable_expiry(iso):
+            candidates.append((iso, "YYYY-MM-DD"))
 
-    return None
+    # 3) DD MMM YYYY / DD MMM YY
+    for m in re.finditer(r"\b(\d{1,2})\s+([a-z]{3,})\s+(\d{2,4})\b", n):
+        d = int(m.group(1))
+        mon = m.group(2)
+        y = int(m.group(3))
+        mo = MONTHS.get(mon)
+        if mo:
+            iso = _normalize_date(d, mo, y)
+            if iso and _is_reasonable_expiry(iso):
+                candidates.append((iso, "DD MMM YYYY"))
+
+    # 4) MMM YYYY => end of month
+    for m in re.finditer(r"\b([a-z]{3,})\s+(\d{2,4})\b", n):
+        mon = m.group(1)
+        y = int(m.group(2))
+        mo = MONTHS.get(mon)
+        if mo:
+            iso = _normalize_month_end(mo, y)
+            if iso and _is_reasonable_expiry(iso):
+                candidates.append((iso, "MMM YYYY (end-month)"))
+
+    # 5) MM/YYYY => end of month
+    for m in re.finditer(r"\b(\d{1,2})[\/\-.](\d{2,4})\b", n):
+        mo = int(m.group(1))
+        y = int(m.group(2))
+        if 1 <= mo <= 12:
+            iso = _normalize_month_end(mo, y)
+            if iso and _is_reasonable_expiry(iso):
+                candidates.append((iso, "MM/YYYY (end-month)"))
+
+    # 6) Compact 8 digits: DDMMYYYY
+    for m in re.finditer(r"\b(\d{8})\b", n):
+        digits = m.group(1)
+        d, mo, y = int(digits[0:2]), int(digits[2:4]), int(digits[4:8])
+        iso = _normalize_date(d, mo, y)
+        if iso and _is_reasonable_expiry(iso):
+            candidates.append((iso, "DDMMYYYY"))
+
+    # Deduplicate preserving order
+    seen = set()
+    dedup: List[Tuple[str, str]] = []
+    for c in candidates:
+        if c[0] not in seen:
+            seen.add(c[0])
+            dedup.append(c)
+    return dedup
 
 
 # -----------------------------------------------------------------------------
@@ -525,20 +674,64 @@ async def ocr_extract_date(request: OCRRequest):
         logger.warning("OCR failed: %s", e)
         raise HTTPException(status_code=500, detail="OCR processing failed")
 
-    best_date = None
-    best_conf = 0.0
-    best_raw = None
+    raw_lines: List[str] = []
+    combined_parts: List[str] = []
+
+    # (date, confidence, raw_text, format)
+    best: Optional[Tuple[str, float, str, str]] = None
+
+    def consider(date_iso: str, conf: float, raw_text: str, fmt: str):
+        nonlocal best
+        if best is None or conf >= best[1]:
+            best = (date_iso, conf, raw_text, fmt)
 
     for _bbox, text, conf in results:
         if not text:
             continue
-        candidate = _extract_date_from_text(text)
-        if candidate and conf >= best_conf:
-            best_date = candidate
-            best_conf = float(conf)
-            best_raw = text
+        txt = str(text).strip()
+        if not txt:
+            continue
 
-    return OCRDateResult(date=best_date, confidence=best_conf, raw=best_raw)
+        raw_lines.append(txt)
+        combined_parts.append(txt)
+
+        has_kw = _contains_expiry_keyword(txt)
+        line_candidates = _extract_candidate_dates_from_text(txt)
+
+        for date_iso, fmt in line_candidates:
+            # boost if keyword detected on same line
+            score = float(conf) + (0.25 if has_kw else 0.0)
+            score = min(score, 1.0)
+            consider(date_iso, score, txt, fmt)
+
+    # Also try on full concatenated OCR text (helps when OCR splits date pieces)
+    combined_text = " ".join(combined_parts).strip()
+    if combined_text:
+        has_kw_global = _contains_expiry_keyword(combined_text)
+        combined_candidates = _extract_candidate_dates_from_text(combined_text)
+        for date_iso, fmt in combined_candidates:
+            # combined inference: medium confidence base
+            score = 0.55 + (0.20 if has_kw_global else 0.0)
+            consider(date_iso, score, combined_text, f"{fmt} (combined)")
+
+    if best is None:
+        return OCRDateResult(
+            date=None,
+            confidence=0.0,
+            raw=None,
+            format=None,
+            raw_lines=raw_lines,
+            combined_text=combined_text or None,
+        )
+
+    return OCRDateResult(
+        date=best[0],
+        confidence=best[1],
+        raw=best[2],
+        format=best[3],
+        raw_lines=raw_lines,
+        combined_text=combined_text or None,
+    )
 
 
 # -----------------------------------------------------------------------------

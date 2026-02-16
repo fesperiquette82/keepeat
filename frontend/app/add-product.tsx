@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useMemo, useRef, useState } from 'react';
 import {
   View,
   Text,
@@ -7,20 +7,31 @@ import {
   TextInput,
   ScrollView,
   Alert,
-  Platform,
   Modal,
+  ActivityIndicator,
+  Platform,
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { useRouter, useLocalSearchParams } from 'expo-router';
 import { Ionicons } from '@expo/vector-icons';
 import { CameraView, useCameraPermissions } from 'expo-camera';
+import { format, addDays } from 'date-fns';
+import { fr, enUS } from 'date-fns/locale';
+
 import { useStockStore } from '../store/stockStore';
 import { useLanguageStore } from '../store/languageStore';
-import { format, addDays, isValid } from 'date-fns';
-import { fr, enUS } from 'date-fns/locale';
-import { parseExpiryDate, DATE_FORMAT_EXAMPLES, getBestDateFromOCR, SUPPORTED_LANGUAGES } from '../utils/dateParser';
+import { parseExpiryDate, DATE_FORMAT_EXAMPLES, getBestDateFromOCR } from '../utils/dateParser';
 
 type DateInputMode = 'auto' | 'duration' | 'date' | 'camera';
+
+type OCRResponse = {
+  date?: string | null;
+  confidence?: number;
+  raw?: string | null;
+  format?: string | null;
+  raw_lines?: string[];
+  combined_text?: string | null;
+};
 
 export default function AddProductScreen() {
   const router = useRouter();
@@ -38,11 +49,12 @@ export default function AddProductScreen() {
     shelf_life_pantry?: string;
     shelf_life_tips?: string;
   }>();
-  
+
   const { addItem } = useStockStore();
   const { t, language } = useLanguageStore();
   const [permission, requestPermission] = useCameraPermissions();
-  
+  const cameraRef = useRef<CameraView | null>(null);
+
   const [name, setName] = useState(params.name || '');
   const [brand, setBrand] = useState(params.brand || '');
   const [quantity, setQuantity] = useState(params.quantity || '');
@@ -54,48 +66,63 @@ export default function AddProductScreen() {
   const [dateInputMode, setDateInputMode] = useState<DateInputMode>('auto');
   const [durationDays, setDurationDays] = useState('');
   const [scannedDateText, setScannedDateText] = useState('');
-  
+
+  const [isOcrProcessing, setIsOcrProcessing] = useState(false);
+  const [ocrError, setOcrError] = useState<string | null>(null);
+  const [ocrDebug, setOcrDebug] = useState<string | null>(null);
+
+  const [parsedDateInfo, setParsedDateInfo] = useState<{
+    date: Date | null;
+    confidence: string;
+    format: string;
+  } | null>(null);
+
   const productFound = params.found === 'true';
-  
-  // Shelf life data from params
+
   const shelfLifeCategory = params.shelf_life_category || '';
-  const shelfLifeFridge = params.shelf_life_fridge ? parseInt(params.shelf_life_fridge) : null;
-  const shelfLifeFreezer = params.shelf_life_freezer ? parseInt(params.shelf_life_freezer) : null;
-  const shelfLifePantry = params.shelf_life_pantry ? parseInt(params.shelf_life_pantry) : null;
+  const shelfLifeFridge = params.shelf_life_fridge ? parseInt(params.shelf_life_fridge, 10) : null;
+  const shelfLifeFreezer = params.shelf_life_freezer ? parseInt(params.shelf_life_freezer, 10) : null;
+  const shelfLifePantry = params.shelf_life_pantry ? parseInt(params.shelf_life_pantry, 10) : null;
   const shelfLifeTips = params.shelf_life_tips || '';
+  const hasAutoSuggestions = !!(shelfLifeFridge || shelfLifeFreezer || shelfLifePantry);
 
-  // Check if we have auto suggestions
-  const hasAutoSuggestions = shelfLifeFridge || shelfLifeFreezer || shelfLifePantry;
+  const autoSuggestions = useMemo(() => {
+    const out: { label: string; days: number; icon: keyof typeof Ionicons.glyphMap; color: string }[] = [];
 
-  // Auto-suggestions based on FoodKeeper data
-  const autoSuggestions = [];
-  if (shelfLifeFridge) {
-    autoSuggestions.push({
-      label: language === 'fr' ? `Réfrigérateur (${shelfLifeFridge}j)` : `Refrigerator (${shelfLifeFridge}d)`,
-      days: shelfLifeFridge,
-      icon: 'snow-outline' as const,
-      color: '#3b82f6',
-    });
-  }
-  if (shelfLifePantry) {
-    autoSuggestions.push({
-      label: language === 'fr' ? `Placard (${shelfLifePantry}j)` : `Pantry (${shelfLifePantry}d)`,
-      days: shelfLifePantry,
-      icon: 'cube-outline' as const,
-      color: '#f59e0b',
-    });
-  }
-  if (shelfLifeFreezer) {
-    autoSuggestions.push({
-      label: language === 'fr' ? `Congélateur (${shelfLifeFreezer}j)` : `Freezer (${shelfLifeFreezer}d)`,
-      days: shelfLifeFreezer,
-      icon: 'thermometer-outline' as const,
-      color: '#8b5cf6',
-    });
-  }
+    if (shelfLifeFridge) {
+      out.push({
+        label: language === 'fr' ? `Réfrigérateur (${shelfLifeFridge}j)` : `Refrigerator (${shelfLifeFridge}d)`,
+        days: shelfLifeFridge,
+        icon: 'snow-outline',
+        color: '#3b82f6',
+      });
+    }
+    if (shelfLifePantry) {
+      out.push({
+        label: language === 'fr' ? `Placard (${shelfLifePantry}j)` : `Pantry (${shelfLifePantry}d)`,
+        days: shelfLifePantry,
+        icon: 'cube-outline',
+        color: '#f59e0b',
+      });
+    }
+    if (shelfLifeFreezer) {
+      out.push({
+        label: language === 'fr' ? `Congélateur (${shelfLifeFreezer}j)` : `Freezer (${shelfLifeFreezer}d)`,
+        days: shelfLifeFreezer,
+        icon: 'thermometer-outline',
+        color: '#8b5cf6',
+      });
+    }
+
+    return out;
+  }, [shelfLifeFridge, shelfLifePantry, shelfLifeFreezer, language]);
+
+  const formatDisplayDate = (date: Date) => {
+    return format(date, 'EEEE d MMMM yyyy', { locale: language === 'fr' ? fr : enUS });
+  };
 
   const handleDurationApply = () => {
-    const days = parseInt(durationDays);
+    const days = parseInt(durationDays, 10);
     if (days > 0) {
       setExpiryDate(addDays(new Date(), days));
       setDurationDays('');
@@ -106,8 +133,7 @@ export default function AddProductScreen() {
     setExpiryDate(addDays(new Date(), days));
   };
 
-  // API OCR call
-  const performOCR = async (imageBase64: string) => {
+  const performOCR = async (imageBase64: string): Promise<OCRResponse | null> => {
     try {
       const API_URL = process.env.EXPO_PUBLIC_BACKEND_URL?.trim() || 'https://keepeat-backend.onrender.com';
       const response = await fetch(`${API_URL}/api/ocr/date`, {
@@ -115,37 +141,135 @@ export default function AddProductScreen() {
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ image_base64: imageBase64 }),
       });
-      
-      if (response.ok) {
-        const result = await response.json();
-        return result;
+
+      if (!response.ok) {
+        const text = await response.text();
+        throw new Error(`OCR API ${response.status}: ${text}`);
       }
-      return null;
+
+      return (await response.json()) as OCRResponse;
     } catch (error) {
       console.error('OCR error:', error);
       return null;
     }
   };
 
-  // State for parsed date feedback
-  const [parsedDateInfo, setParsedDateInfo] = useState<{
-    date: Date | null;
-    confidence: string;
-    format: string;
-  } | null>(null);
-
-  // Handle scanned date text change with real-time parsing
   const handleScannedDateChange = (text: string) => {
     setScannedDateText(text);
-    if (text.trim().length > 0) {
-      const result = parseExpiryDate(text);
-      setParsedDateInfo({
-        date: result.date,
-        confidence: result.confidence,
-        format: result.format,
-      });
-    } else {
+    if (text.trim().length === 0) {
       setParsedDateInfo(null);
+      return;
+    }
+
+    const result = parseExpiryDate(text);
+    setParsedDateInfo({
+      date: result.date,
+      confidence: result.confidence,
+      format: result.format,
+    });
+  };
+
+  const applyParsedDate = (date: Date, sourceText: string, confidence: string, formatLabel: string) => {
+    setExpiryDate(date);
+    setScannedDateText(sourceText);
+    setParsedDateInfo({
+      date,
+      confidence,
+      format: formatLabel,
+    });
+  };
+
+  const tryApplyBackendDate = (dateStr?: string | null, fmt?: string | null, conf?: number) => {
+    if (!dateStr) return false;
+    const parsed = new Date(dateStr);
+    if (Number.isNaN(parsed.getTime())) return false;
+
+    applyParsedDate(
+      parsed,
+      dateStr,
+      typeof conf === 'number' ? `${Math.round(conf * 100)}%` : 'high',
+      fmt || 'YYYY-MM-DD (backend)'
+    );
+    return true;
+  };
+
+  const handleCaptureAndScan = async () => {
+    if (!permission?.granted) {
+      Alert.alert(
+        language === 'fr' ? 'Autorisation requise' : 'Permission required',
+        language === 'fr' ? 'Veuillez autoriser la caméra.' : 'Please allow camera access.'
+      );
+      return;
+    }
+
+    if (!cameraRef.current) {
+      Alert.alert(language === 'fr' ? 'Erreur caméra' : 'Camera error');
+      return;
+    }
+
+    setOcrError(null);
+    setOcrDebug(null);
+    setIsOcrProcessing(true);
+
+    try {
+      const photo = await cameraRef.current.takePictureAsync({
+        base64: true,
+        quality: 0.6,
+        skipProcessing: true,
+      });
+
+      if (!photo?.base64) {
+        throw new Error('No base64 image returned by camera');
+      }
+
+      const ocr = await performOCR(photo.base64);
+
+      if (!ocr) {
+        setOcrError(language === 'fr' ? 'OCR indisponible pour le moment.' : 'OCR unavailable right now.');
+        return;
+      }
+
+      const sourceText =
+        (ocr.raw && ocr.raw.trim().length > 0 ? ocr.raw : '') ||
+        (ocr.combined_text && ocr.combined_text.trim().length > 0 ? ocr.combined_text : '') ||
+        '';
+
+      if (ocr.raw_lines?.length) {
+        setOcrDebug(ocr.raw_lines.join(' | '));
+      }
+
+      if (sourceText) {
+        const best = getBestDateFromOCR(sourceText);
+        if (best.date) {
+          applyParsedDate(best.date, sourceText, best.confidence, ocr.format || best.format);
+          return;
+        }
+
+        const plain = parseExpiryDate(sourceText);
+        if (plain.date) {
+          applyParsedDate(plain.date, sourceText, plain.confidence, ocr.format || plain.format);
+          return;
+        }
+      }
+
+      if (tryApplyBackendDate(ocr.date, ocr.format, ocr.confidence)) {
+        return;
+      }
+
+      setOcrError(
+        language === 'fr'
+          ? 'Date non détectée automatiquement. Essayez la saisie manuelle.'
+          : 'No date detected automatically. Please use manual input.'
+      );
+    } catch (error) {
+      console.error('Capture OCR error:', error);
+      setOcrError(
+        language === 'fr'
+          ? 'Échec du scan OCR. Vérifiez la connexion et réessayez.'
+          : 'OCR scan failed. Check your connection and try again.'
+      );
+    } finally {
+      setIsOcrProcessing(false);
     }
   };
 
@@ -156,11 +280,13 @@ export default function AddProductScreen() {
       setShowCameraModal(false);
       setScannedDateText('');
       setParsedDateInfo(null);
+      setOcrError(null);
+      setOcrDebug(null);
     } else {
       const examples = DATE_FORMAT_EXAMPLES[language === 'fr' ? 'fr' : 'en'];
       Alert.alert(
         language === 'fr' ? 'Format non reconnu' : 'Unrecognized format',
-        language === 'fr' 
+        language === 'fr'
           ? `Essayez un de ces formats :\n${examples.slice(0, 4).join('\n')}`
           : `Try one of these formats:\n${examples.slice(0, 4).join('\n')}`
       );
@@ -190,40 +316,31 @@ export default function AddProductScreen() {
       });
 
       if (newItem) {
-        Alert.alert(
-          t('productAdded'),
-          '',
-          [{ text: 'OK', onPress: () => router.replace('/') }]
-        );
+        Alert.alert(t('productAdded'), '', [{ text: 'OK', onPress: () => router.replace('/') }]);
       }
     } catch (error) {
-      Alert.alert('Erreur', 'Impossible d\'ajouter le produit');
+      Alert.alert(language === 'fr' ? 'Erreur' : 'Error', language === 'fr' ? "Impossible d'ajouter le produit" : 'Unable to add product');
     } finally {
       setIsSaving(false);
     }
   };
 
-  const formatDisplayDate = (date: Date) => {
-    return format(date, 'EEEE d MMMM yyyy', { locale: language === 'fr' ? fr : enUS });
-  };
-
-  // Custom date picker using manual input
   const DatePickerModal = () => {
     const [day, setDay] = useState(expiryDate ? format(expiryDate, 'dd') : '');
     const [month, setMonth] = useState(expiryDate ? format(expiryDate, 'MM') : '');
     const [year, setYear] = useState(expiryDate ? format(expiryDate, 'yyyy') : new Date().getFullYear().toString());
 
     const handleConfirm = () => {
-      const d = parseInt(day);
-      const m = parseInt(month);
-      const y = parseInt(year);
+      const d = parseInt(day, 10);
+      const m = parseInt(month, 10);
+      const y = parseInt(year, 10);
 
       if (d >= 1 && d <= 31 && m >= 1 && m <= 12 && y >= 2024) {
         const newDate = new Date(y, m - 1, d);
         setExpiryDate(newDate);
         setShowDatePicker(false);
       } else {
-        Alert.alert('Erreur', 'Date invalide');
+        Alert.alert(language === 'fr' ? 'Erreur' : 'Error', language === 'fr' ? 'Date invalide' : 'Invalid date');
       }
     };
 
@@ -232,7 +349,7 @@ export default function AddProductScreen() {
         <View style={styles.modalOverlay}>
           <View style={styles.datePickerModal}>
             <Text style={styles.datePickerTitle}>{t('selectDate')}</Text>
-            
+
             <View style={styles.dateInputRow}>
               <View style={styles.dateInputGroup}>
                 <Text style={styles.dateInputLabel}>{language === 'fr' ? 'Jour' : 'Day'}</Text>
@@ -246,7 +363,7 @@ export default function AddProductScreen() {
                   placeholderTextColor="#666"
                 />
               </View>
-              
+
               <View style={styles.dateInputGroup}>
                 <Text style={styles.dateInputLabel}>{language === 'fr' ? 'Mois' : 'Month'}</Text>
                 <TextInput
@@ -259,7 +376,7 @@ export default function AddProductScreen() {
                   placeholderTextColor="#666"
                 />
               </View>
-              
+
               <View style={styles.dateInputGroup}>
                 <Text style={styles.dateInputLabel}>{language === 'fr' ? 'Année' : 'Year'}</Text>
                 <TextInput
@@ -275,16 +392,10 @@ export default function AddProductScreen() {
             </View>
 
             <View style={styles.datePickerActions}>
-              <TouchableOpacity
-                style={styles.datePickerCancel}
-                onPress={() => setShowDatePicker(false)}
-              >
+              <TouchableOpacity style={styles.datePickerCancel} onPress={() => setShowDatePicker(false)}>
                 <Text style={styles.datePickerCancelText}>{t('cancel')}</Text>
               </TouchableOpacity>
-              <TouchableOpacity
-                style={styles.datePickerConfirm}
-                onPress={handleConfirm}
-              >
+              <TouchableOpacity style={styles.datePickerConfirm} onPress={handleConfirm}>
                 <Text style={styles.datePickerConfirmText}>{t('confirm')}</Text>
               </TouchableOpacity>
             </View>
@@ -294,50 +405,69 @@ export default function AddProductScreen() {
     );
   };
 
-  // Camera Modal for OCR
   const CameraModal = () => {
     return (
       <Modal visible={showCameraModal} animationType="slide">
         <SafeAreaView style={styles.cameraContainer}>
           <View style={styles.cameraHeader}>
-            <TouchableOpacity onPress={() => setShowCameraModal(false)}>
+            <TouchableOpacity
+              onPress={() => {
+                setShowCameraModal(false);
+                setOcrError(null);
+                setOcrDebug(null);
+              }}
+            >
               <Ionicons name="close" size={28} color="#fff" />
             </TouchableOpacity>
-            <Text style={styles.cameraTitle}>
-              {language === 'fr' ? 'Scanner la date' : 'Scan date'}
-            </Text>
+
+            <Text style={styles.cameraTitle}>{language === 'fr' ? 'Scanner la date' : 'Scan date'}</Text>
             <View style={{ width: 28 }} />
           </View>
 
           {permission?.granted ? (
             <View style={styles.cameraView}>
-              <CameraView style={styles.camera} />
+              <CameraView ref={cameraRef} style={styles.camera} />
               <View style={styles.cameraOverlay}>
                 <View style={styles.scanZone}>
-                  <Text style={styles.scanZoneText}>
-                    {language === 'fr' ? 'Placez la date ici' : 'Place date here'}
-                  </Text>
+                  <Text style={styles.scanZoneText}>{language === 'fr' ? 'Placez la date ici' : 'Place date here'}</Text>
                 </View>
               </View>
             </View>
           ) : (
             <View style={styles.permissionBox}>
               <Ionicons name="camera-outline" size={48} color="#666" />
-              <Text style={styles.permissionText}>
-                {language === 'fr' ? 'Autorisation caméra requise' : 'Camera permission required'}
-              </Text>
+              <Text style={styles.permissionText}>{language === 'fr' ? 'Autorisation caméra requise' : 'Camera permission required'}</Text>
               <TouchableOpacity style={styles.permissionBtn} onPress={requestPermission}>
-                <Text style={styles.permissionBtnText}>
-                  {language === 'fr' ? 'Autoriser' : 'Allow'}
-                </Text>
+                <Text style={styles.permissionBtnText}>{language === 'fr' ? 'Autoriser' : 'Allow'}</Text>
               </TouchableOpacity>
             </View>
           )}
 
+          <View style={styles.ocrActions}>
+            <TouchableOpacity
+              style={[styles.captureBtn, (!permission?.granted || isOcrProcessing) && styles.captureBtnDisabled]}
+              onPress={handleCaptureAndScan}
+              disabled={!permission?.granted || isOcrProcessing}
+            >
+              {isOcrProcessing ? (
+                <ActivityIndicator color="#fff" />
+              ) : (
+                <>
+                  <Ionicons name="scan-outline" size={18} color="#fff" />
+                  <Text style={styles.captureBtnText}>{language === 'fr' ? 'Capturer & analyser' : 'Capture & scan'}</Text>
+                </>
+              )}
+            </TouchableOpacity>
+
+            {ocrError ? <Text style={styles.ocrErrorText}>{ocrError}</Text> : null}
+            {ocrDebug ? <Text style={styles.ocrDebugText}>{ocrDebug}</Text> : null}
+          </View>
+
           <View style={styles.manualInputSection}>
             <Text style={styles.manualInputLabel}>
-              {language === 'fr' ? 'Saisissez la date vue sur l\'emballage :' : 'Enter the date seen on packaging:'}
+              {language === 'fr' ? "Saisissez la date vue sur l'emballage :" : 'Enter the date seen on packaging:'}
             </Text>
+
             <TextInput
               style={styles.manualDateInput}
               value={scannedDateText}
@@ -346,13 +476,9 @@ export default function AddProductScreen() {
               placeholderTextColor="#666"
               autoCapitalize="none"
             />
-            
-            {/* Real-time parsing feedback */}
+
             {parsedDateInfo && (
-              <View style={[
-                styles.parseFeedback,
-                parsedDateInfo.date ? styles.parseFeedbackSuccess : styles.parseFeedbackError
-              ]}>
+              <View style={[styles.parseFeedback, parsedDateInfo.date ? styles.parseFeedbackSuccess : styles.parseFeedbackErrorBox]}>
                 {parsedDateInfo.date ? (
                   <>
                     <Ionicons name="checkmark-circle" size={18} color="#22c55e" />
@@ -361,38 +487,31 @@ export default function AddProductScreen() {
                         {format(parsedDateInfo.date, 'EEEE d MMMM yyyy', { locale: language === 'fr' ? fr : enUS })}
                       </Text>
                       <Text style={styles.parseFeedbackFormat}>
-                        {language === 'fr' ? 'Format détecté: ' : 'Detected format: '}{parsedDateInfo.format}
+                        {language === 'fr' ? 'Format détecté: ' : 'Detected format: '}
+                        {parsedDateInfo.format} · {parsedDateInfo.confidence}
                       </Text>
                     </View>
                   </>
                 ) : (
                   <>
                     <Ionicons name="help-circle" size={18} color="#f97316" />
-                    <Text style={styles.parseFeedbackError}>
-                      {language === 'fr' ? 'Format non reconnu' : 'Unrecognized format'}
-                    </Text>
+                    <Text style={styles.parseFeedbackErrorText}>{language === 'fr' ? 'Format non reconnu' : 'Unrecognized format'}</Text>
                   </>
                 )}
               </View>
             )}
 
-            {/* Format examples */}
             <View style={styles.formatExamples}>
-              <Text style={styles.formatExamplesTitle}>
-                {language === 'fr' ? 'Formats acceptés :' : 'Accepted formats:'}
-              </Text>
+              <Text style={styles.formatExamplesTitle}>{language === 'fr' ? 'Formats acceptés :' : 'Accepted formats:'}</Text>
               <Text style={styles.formatExamplesText}>
                 15/03/2025 • 15-03-25 • 15.03.25{'\n'}
                 15 mars 2025 • 15 MAR 25{'\n'}
                 mars 2025 • 03/2025 • 150325
               </Text>
             </View>
-            
+
             <TouchableOpacity
-              style={[
-                styles.confirmDateBtn, 
-                (!scannedDateText || !parsedDateInfo?.date) && styles.confirmDateBtnDisabled
-              ]}
+              style={[styles.confirmDateBtn, (!scannedDateText || !parsedDateInfo?.date) && styles.confirmDateBtnDisabled]}
               onPress={handleScannedDateConfirm}
               disabled={!scannedDateText || !parsedDateInfo?.date}
             >
@@ -406,7 +525,6 @@ export default function AddProductScreen() {
 
   return (
     <SafeAreaView style={styles.container}>
-      {/* Header */}
       <View style={styles.header}>
         <TouchableOpacity style={styles.backButton} onPress={() => router.back()}>
           <Ionicons name="arrow-back" size={24} color="#fff" />
@@ -416,235 +534,186 @@ export default function AddProductScreen() {
       </View>
 
       <ScrollView style={styles.scrollView} contentContainerStyle={styles.scrollContent}>
-        {/* Product Found Badge */}
         {params.barcode && (
           <View style={[styles.foundBadge, productFound ? styles.foundBadgeSuccess : styles.foundBadgeWarning]}>
-            <Ionicons
-              name={productFound ? "checkmark-circle" : "alert-circle"}
-              size={20}
-              color={productFound ? "#22c55e" : "#f97316"}
-            />
-            <Text style={[styles.foundBadgeText, { color: productFound ? "#22c55e" : "#f97316" }]}>
+            <Ionicons name={productFound ? 'checkmark-circle' : 'alert-circle'} size={20} color={productFound ? '#22c55e' : '#f97316'} />
+            <Text style={[styles.foundBadgeText, { color: productFound ? '#22c55e' : '#f97316' }]}>
               {productFound ? t('productFound') : t('productNotFound')}
             </Text>
-            {params.barcode && (
-              <Text style={styles.barcodeText}>EAN: {params.barcode}</Text>
-            )}
           </View>
         )}
 
-        {/* Form */}
-        <View style={styles.form}>
-          {/* Product Name */}
-          <View style={styles.inputGroup}>
-            <Text style={styles.label}>{t('productName')} *</Text>
-            <TextInput
-              style={styles.input}
-              value={name}
-              onChangeText={setName}
-              placeholder={language === 'fr' ? 'Ex: Lait demi-écrémé' : 'Ex: Semi-skimmed milk'}
-              placeholderTextColor="#666"
-              autoFocus={!productFound}
-            />
-          </View>
+        <View style={styles.inputGroup}>
+          <Text style={styles.label}>{t('name')}</Text>
+          <TextInput
+            style={styles.input}
+            value={name}
+            onChangeText={setName}
+            placeholder={language === 'fr' ? 'Ex: Lait demi-écrémé' : 'Ex: Semi-skimmed milk'}
+            placeholderTextColor="#666"
+            autoFocus={!productFound}
+          />
+        </View>
 
-          {/* Brand */}
-          <View style={styles.inputGroup}>
-            <Text style={styles.label}>{t('brand')}</Text>
-            <TextInput
-              style={styles.input}
-              value={brand}
-              onChangeText={setBrand}
-              placeholder={language === 'fr' ? 'Ex: Lactel' : 'Ex: Brand name'}
-              placeholderTextColor="#666"
-            />
-          </View>
+        <View style={styles.inputGroup}>
+          <Text style={styles.label}>{t('brand')}</Text>
+          <TextInput
+            style={styles.input}
+            value={brand}
+            onChangeText={setBrand}
+            placeholder={language === 'fr' ? 'Ex: Lactel' : 'Ex: Brand name'}
+            placeholderTextColor="#666"
+          />
+        </View>
 
-          {/* Quantity */}
-          <View style={styles.inputGroup}>
-            <Text style={styles.label}>{t('quantity')}</Text>
-            <TextInput
-              style={styles.input}
-              value={quantity}
-              onChangeText={setQuantity}
-              placeholder={language === 'fr' ? 'Ex: 1L, 500g' : 'Ex: 1L, 500g'}
-              placeholderTextColor="#666"
-            />
-          </View>
+        <View style={styles.inputGroup}>
+          <Text style={styles.label}>{t('quantity')}</Text>
+          <TextInput
+            style={styles.input}
+            value={quantity}
+            onChangeText={setQuantity}
+            placeholder={language === 'fr' ? 'Ex: 1L, 500g' : 'Ex: 1L, 500g'}
+            placeholderTextColor="#666"
+          />
+        </View>
 
-          {/* Expiry Date Section */}
-          <View style={styles.inputGroup}>
-            <Text style={styles.label}>{t('expiryDate')}</Text>
-            
-            {/* Mode Selector */}
-            <View style={styles.modeSelector}>
-              {hasAutoSuggestions && (
-                <TouchableOpacity
-                  style={[styles.modeBtn, dateInputMode === 'auto' && styles.modeBtnActive]}
-                  onPress={() => setDateInputMode('auto')}
-                >
-                  <Ionicons name="flash" size={16} color={dateInputMode === 'auto' ? '#fff' : '#888'} />
-                  <Text style={[styles.modeBtnText, dateInputMode === 'auto' && styles.modeBtnTextActive]}>
-                    Auto
-                  </Text>
-                </TouchableOpacity>
-              )}
-              
-              <TouchableOpacity
-                style={[styles.modeBtn, dateInputMode === 'duration' && styles.modeBtnActive]}
-                onPress={() => setDateInputMode('duration')}
-              >
-                <Ionicons name="time-outline" size={16} color={dateInputMode === 'duration' ? '#fff' : '#888'} />
-                <Text style={[styles.modeBtnText, dateInputMode === 'duration' && styles.modeBtnTextActive]}>
-                  {language === 'fr' ? 'Durée' : 'Duration'}
-                </Text>
+        <View style={styles.inputGroup}>
+          <Text style={styles.label}>{t('expiryDate')}</Text>
+
+          <View style={styles.modeSelector}>
+            {hasAutoSuggestions && (
+              <TouchableOpacity style={[styles.modeBtn, dateInputMode === 'auto' && styles.modeBtnActive]} onPress={() => setDateInputMode('auto')}>
+                <Ionicons name="flash" size={16} color={dateInputMode === 'auto' ? '#fff' : '#888'} />
+                <Text style={[styles.modeBtnText, dateInputMode === 'auto' && styles.modeBtnTextActive]}>Auto</Text>
               </TouchableOpacity>
-              
-              <TouchableOpacity
-                style={[styles.modeBtn, dateInputMode === 'date' && styles.modeBtnActive]}
-                onPress={() => setDateInputMode('date')}
-              >
-                <Ionicons name="calendar-outline" size={16} color={dateInputMode === 'date' ? '#fff' : '#888'} />
-                <Text style={[styles.modeBtnText, dateInputMode === 'date' && styles.modeBtnTextActive]}>
-                  Date
-                </Text>
-              </TouchableOpacity>
-              
-              <TouchableOpacity
-                style={[styles.modeBtn, dateInputMode === 'camera' && styles.modeBtnActive]}
-                onPress={() => {
-                  setDateInputMode('camera');
-                  setShowCameraModal(true);
-                }}
-              >
-                <Ionicons name="camera-outline" size={16} color={dateInputMode === 'camera' ? '#fff' : '#888'} />
-                <Text style={[styles.modeBtnText, dateInputMode === 'camera' && styles.modeBtnTextActive]}>
-                  Scan
-                </Text>
-              </TouchableOpacity>
-            </View>
-
-            {/* Auto Mode - FoodKeeper Suggestions */}
-            {dateInputMode === 'auto' && hasAutoSuggestions && (
-              <View style={styles.autoSection}>
-                {shelfLifeCategory && (
-                  <View style={styles.categoryBadge}>
-                    <Ionicons name="information-circle" size={16} color="#22c55e" />
-                    <Text style={styles.categoryText}>
-                      {language === 'fr' ? 'Catégorie: ' : 'Category: '}{shelfLifeCategory}
-                    </Text>
-                  </View>
-                )}
-                
-                <View style={styles.autoSuggestions}>
-                  {autoSuggestions.map((suggestion, index) => (
-                    <TouchableOpacity
-                      key={index}
-                      style={[styles.suggestionCard, { borderColor: suggestion.color }]}
-                      onPress={() => handleAutoSuggestion(suggestion.days)}
-                    >
-                      <View style={[styles.suggestionIcon, { backgroundColor: suggestion.color + '20' }]}>
-                        <Ionicons name={suggestion.icon} size={24} color={suggestion.color} />
-                      </View>
-                      <View style={styles.suggestionContent}>
-                        <Text style={styles.suggestionLabel}>{suggestion.label}</Text>
-                        <Text style={styles.suggestionDate}>
-                          → {format(addDays(new Date(), suggestion.days), 'dd MMM yyyy', { locale: language === 'fr' ? fr : enUS })}
-                        </Text>
-                      </View>
-                      <Ionicons name="chevron-forward" size={20} color="#666" />
-                    </TouchableOpacity>
-                  ))}
-                </View>
-
-                {shelfLifeTips && (
-                  <View style={styles.tipsBox}>
-                    <Ionicons name="bulb-outline" size={18} color="#eab308" />
-                    <Text style={styles.tipsText}>{shelfLifeTips}</Text>
-                  </View>
-                )}
-              </View>
             )}
 
-            {/* Duration Input */}
-            {dateInputMode === 'duration' && (
-              <View style={styles.durationInput}>
+            <TouchableOpacity style={[styles.modeBtn, dateInputMode === 'duration' && styles.modeBtnActive]} onPress={() => setDateInputMode('duration')}>
+              <Ionicons name="time-outline" size={16} color={dateInputMode === 'duration' ? '#fff' : '#888'} />
+              <Text style={[styles.modeBtnText, dateInputMode === 'duration' && styles.modeBtnTextActive]}>
+                {language === 'fr' ? 'Durée' : 'Duration'}
+              </Text>
+            </TouchableOpacity>
+
+            <TouchableOpacity style={[styles.modeBtn, dateInputMode === 'date' && styles.modeBtnActive]} onPress={() => setDateInputMode('date')}>
+              <Ionicons name="calendar-outline" size={16} color={dateInputMode === 'date' ? '#fff' : '#888'} />
+              <Text style={[styles.modeBtnText, dateInputMode === 'date' && styles.modeBtnTextActive]}>Date</Text>
+            </TouchableOpacity>
+
+            <TouchableOpacity
+              style={[styles.modeBtn, dateInputMode === 'camera' && styles.modeBtnActive]}
+              onPress={() => {
+                setDateInputMode('camera');
+                setShowCameraModal(true);
+              }}
+            >
+              <Ionicons name="camera-outline" size={16} color={dateInputMode === 'camera' ? '#fff' : '#888'} />
+              <Text style={[styles.modeBtnText, dateInputMode === 'camera' && styles.modeBtnTextActive]}>Scan</Text>
+            </TouchableOpacity>
+          </View>
+
+          {dateInputMode === 'auto' && hasAutoSuggestions && (
+            <View style={styles.autoSection}>
+              {shelfLifeCategory && (
+                <View style={styles.categoryBadge}>
+                  <Ionicons name="information-circle" size={16} color="#22c55e" />
+                  <Text style={styles.categoryText}>
+                    {language === 'fr' ? 'Catégorie: ' : 'Category: '}
+                    {shelfLifeCategory}
+                  </Text>
+                </View>
+              )}
+
+              <View style={styles.autoSuggestions}>
+                {autoSuggestions.map((suggestion, index) => (
+                  <TouchableOpacity
+                    key={index}
+                    style={[styles.suggestionCard, { borderColor: suggestion.color }]}
+                    onPress={() => handleAutoSuggestion(suggestion.days)}
+                  >
+                    <View style={[styles.suggestionIcon, { backgroundColor: suggestion.color + '20' }]}>
+                      <Ionicons name={suggestion.icon} size={24} color={suggestion.color} />
+                    </View>
+                    <View style={styles.suggestionContent}>
+                      <Text style={styles.suggestionLabel}>{suggestion.label}</Text>
+                      <Text style={styles.suggestionDate}>
+                        → {format(addDays(new Date(), suggestion.days), 'dd MMM yyyy', { locale: language === 'fr' ? fr : enUS })}
+                      </Text>
+                    </View>
+                    <Ionicons name="chevron-forward" size={20} color="#666" />
+                  </TouchableOpacity>
+                ))}
+              </View>
+
+              {shelfLifeTips ? <Text style={styles.tipText}>💡 {shelfLifeTips}</Text> : null}
+            </View>
+          )}
+
+          {dateInputMode === 'duration' && (
+            <View style={styles.durationSection}>
+              <View style={styles.durationInputRow}>
                 <TextInput
-                  style={styles.durationField}
+                  style={styles.durationInput}
                   value={durationDays}
                   onChangeText={setDurationDays}
                   placeholder={language === 'fr' ? 'Nombre de jours' : 'Number of days'}
                   placeholderTextColor="#666"
                   keyboardType="numeric"
                 />
-                <TouchableOpacity
-                  style={[styles.applyBtn, !durationDays && styles.applyBtnDisabled]}
-                  onPress={handleDurationApply}
-                  disabled={!durationDays}
-                >
-                  <Text style={styles.applyBtnText}>
-                    {language === 'fr' ? 'Appliquer' : 'Apply'}
-                  </Text>
+                <TouchableOpacity style={styles.applyBtn} onPress={handleDurationApply}>
+                  <Text style={styles.applyBtnText}>{t('apply')}</Text>
                 </TouchableOpacity>
               </View>
-            )}
+            </View>
+          )}
 
-            {/* Date Input */}
-            {dateInputMode === 'date' && (
-              <TouchableOpacity
-                style={styles.dateButton}
-                onPress={() => setShowDatePicker(true)}
-              >
-                <Ionicons name="calendar" size={20} color="#22c55e" />
-                <Text style={styles.dateButtonText}>
-                  {expiryDate ? formatDisplayDate(expiryDate) : t('selectDate')}
-                </Text>
-              </TouchableOpacity>
-            )}
+          {dateInputMode === 'date' && (
+            <TouchableOpacity style={styles.datePickerBtn} onPress={() => setShowDatePicker(true)}>
+              <Ionicons name="calendar" size={18} color="#22c55e" />
+              <Text style={styles.datePickerBtnText}>
+                {expiryDate ? formatDisplayDate(expiryDate) : language === 'fr' ? 'Choisir une date' : 'Choose a date'}
+              </Text>
+            </TouchableOpacity>
+          )}
 
-            {/* Current Date Display */}
-            {expiryDate && (
-              <View style={styles.currentDateBox}>
-                <View style={styles.currentDateContent}>
-                  <Ionicons name="checkmark-circle" size={20} color="#22c55e" />
-                  <Text style={styles.currentDateText}>
-                    {formatDisplayDate(expiryDate)}
-                  </Text>
-                </View>
-                <TouchableOpacity onPress={() => setExpiryDate(null)}>
-                  <Ionicons name="close-circle" size={24} color="#ef4444" />
-                </TouchableOpacity>
-              </View>
-            )}
-          </View>
+          {dateInputMode === 'camera' && (
+            <TouchableOpacity style={styles.datePickerBtn} onPress={() => setShowCameraModal(true)}>
+              <Ionicons name="scan-outline" size={18} color="#22c55e" />
+              <Text style={styles.datePickerBtnText}>{language === 'fr' ? 'Ouvrir le scanner OCR' : 'Open OCR scanner'}</Text>
+            </TouchableOpacity>
+          )}
 
-          {/* Notes */}
-          <View style={styles.inputGroup}>
-            <Text style={styles.label}>{t('notes')}</Text>
-            <TextInput
-              style={[styles.input, styles.notesInput]}
-              value={notes}
-              onChangeText={setNotes}
-              placeholder={language === 'fr' ? 'Notes optionnelles...' : 'Optional notes...'}
-              placeholderTextColor="#666"
-              multiline
-              numberOfLines={3}
-            />
-          </View>
+          {expiryDate && (
+            <View style={styles.selectedDateBadge}>
+              <Ionicons name="checkmark-circle" size={18} color="#22c55e" />
+              <Text style={styles.selectedDateText}>{formatDisplayDate(expiryDate)}</Text>
+            </View>
+          )}
         </View>
-      </ScrollView>
 
-      {/* Save Button */}
-      <View style={styles.footer}>
-        <TouchableOpacity
-          style={[styles.saveButton, isSaving && styles.saveButtonDisabled]}
-          onPress={handleSave}
-          disabled={isSaving}
-        >
-          <Ionicons name="checkmark" size={24} color="#fff" />
-          <Text style={styles.saveButtonText}>{t('save')}</Text>
+        <View style={styles.inputGroup}>
+          <Text style={styles.label}>{t('notes')}</Text>
+          <TextInput
+            style={[styles.input, styles.notesInput]}
+            value={notes}
+            onChangeText={setNotes}
+            placeholder={language === 'fr' ? 'Infos complémentaires...' : 'Additional notes...'}
+            placeholderTextColor="#666"
+            multiline
+          />
+        </View>
+
+        <TouchableOpacity style={[styles.saveBtn, isSaving && styles.saveBtnDisabled]} onPress={handleSave} disabled={isSaving}>
+          {isSaving ? (
+            <ActivityIndicator color="#fff" />
+          ) : (
+            <>
+              <Ionicons name="checkmark" size={20} color="#fff" />
+              <Text style={styles.saveBtnText}>{t('save')}</Text>
+            </>
+          )}
         </TouchableOpacity>
-      </View>
+      </ScrollView>
 
       <DatePickerModal />
       <CameraModal />
@@ -653,460 +722,313 @@ export default function AddProductScreen() {
 }
 
 const styles = StyleSheet.create({
-  container: {
-    flex: 1,
-    backgroundColor: '#0a0a0a',
-  },
+  container: { flex: 1, backgroundColor: '#0a0a0a' },
   header: {
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'space-between',
     paddingHorizontal: 16,
     paddingVertical: 12,
+    borderBottomWidth: 1,
+    borderBottomColor: '#1f1f1f',
   },
-  backButton: {
-    padding: 8,
-    backgroundColor: '#1a1a1a',
-    borderRadius: 10,
-  },
-  headerTitle: {
-    fontSize: 18,
-    fontWeight: '600',
-    color: '#fff',
-  },
-  scrollView: {
-    flex: 1,
-  },
-  scrollContent: {
-    padding: 20,
-    paddingBottom: 100,
-  },
+  backButton: { width: 40, height: 40, alignItems: 'center', justifyContent: 'center' },
+  headerTitle: { color: '#fff', fontSize: 18, fontWeight: '700' },
+
+  scrollView: { flex: 1 },
+  scrollContent: { padding: 16, paddingBottom: 32 },
+
   foundBadge: {
     flexDirection: 'row',
     alignItems: 'center',
+    gap: 8,
+    borderWidth: 1,
+    borderRadius: 12,
     padding: 12,
-    borderRadius: 10,
-    marginBottom: 20,
-    gap: 8,
+    marginBottom: 16,
   },
-  foundBadgeSuccess: {
-    backgroundColor: '#22c55e15',
-  },
-  foundBadgeWarning: {
-    backgroundColor: '#f9731615',
-  },
-  foundBadgeText: {
-    fontSize: 14,
-    fontWeight: '600',
-    flex: 1,
-  },
-  barcodeText: {
-    fontSize: 12,
-    color: '#666',
-  },
-  form: {
-    gap: 20,
-  },
-  inputGroup: {
-    gap: 8,
-  },
-  label: {
-    fontSize: 14,
-    fontWeight: '500',
-    color: '#888',
-  },
+  foundBadgeSuccess: { borderColor: '#22c55e55', backgroundColor: '#22c55e10' },
+  foundBadgeWarning: { borderColor: '#f9731655', backgroundColor: '#f9731610' },
+  foundBadgeText: { fontSize: 14, fontWeight: '600' },
+
+  inputGroup: { marginBottom: 18 },
+  label: { color: '#ddd', marginBottom: 8, fontSize: 14, fontWeight: '600' },
   input: {
-    backgroundColor: '#1a1a1a',
-    borderRadius: 10,
-    padding: 14,
-    fontSize: 16,
+    backgroundColor: '#111',
+    borderColor: '#2a2a2a',
+    borderWidth: 1,
+    borderRadius: 12,
     color: '#fff',
+    paddingHorizontal: 14,
+    paddingVertical: 12,
+    fontSize: 15,
   },
-  notesInput: {
-    height: 80,
-    textAlignVertical: 'top',
-  },
+  notesInput: { minHeight: 90, textAlignVertical: 'top' },
+
   modeSelector: {
     flexDirection: 'row',
-    backgroundColor: '#1a1a1a',
-    borderRadius: 10,
-    padding: 4,
-    marginBottom: 12,
+    flexWrap: 'wrap',
+    gap: 8,
+    marginBottom: 10,
   },
   modeBtn: {
-    flex: 1,
     flexDirection: 'row',
     alignItems: 'center',
-    justifyContent: 'center',
-    paddingVertical: 10,
-    borderRadius: 8,
-    gap: 4,
+    gap: 6,
+    borderWidth: 1,
+    borderColor: '#333',
+    borderRadius: 999,
+    paddingHorizontal: 12,
+    paddingVertical: 8,
+    backgroundColor: '#111',
   },
-  modeBtnActive: {
-    backgroundColor: '#22c55e',
-  },
-  modeBtnText: {
-    fontSize: 12,
-    color: '#888',
-    fontWeight: '500',
-  },
-  modeBtnTextActive: {
-    color: '#fff',
-  },
-  autoSection: {
-    gap: 12,
-  },
+  modeBtnActive: { borderColor: '#22c55e', backgroundColor: '#22c55e20' },
+  modeBtnText: { color: '#aaa', fontSize: 13, fontWeight: '600' },
+  modeBtnTextActive: { color: '#fff' },
+
+  autoSection: { gap: 10 },
   categoryBadge: {
     flexDirection: 'row',
     alignItems: 'center',
     gap: 6,
-    backgroundColor: '#22c55e15',
-    paddingHorizontal: 12,
-    paddingVertical: 8,
-    borderRadius: 8,
+    backgroundColor: '#0f2617',
+    borderColor: '#1f5f3a',
+    borderWidth: 1,
+    borderRadius: 10,
+    padding: 10,
   },
-  categoryText: {
-    fontSize: 13,
-    color: '#22c55e',
-    fontWeight: '500',
-  },
-  autoSuggestions: {
-    gap: 10,
-  },
+  categoryText: { color: '#89f0b6', fontSize: 13, fontWeight: '500' },
+  autoSuggestions: { gap: 8 },
   suggestionCard: {
     flexDirection: 'row',
     alignItems: 'center',
-    backgroundColor: '#1a1a1a',
-    borderRadius: 12,
-    padding: 14,
     borderWidth: 1,
+    backgroundColor: '#111',
+    borderRadius: 12,
+    padding: 12,
     gap: 12,
   },
   suggestionIcon: {
-    width: 44,
-    height: 44,
-    borderRadius: 12,
+    width: 40,
+    height: 40,
+    borderRadius: 999,
     alignItems: 'center',
     justifyContent: 'center',
   },
-  suggestionContent: {
-    flex: 1,
-  },
-  suggestionLabel: {
-    fontSize: 15,
-    color: '#fff',
-    fontWeight: '500',
-  },
-  suggestionDate: {
-    fontSize: 13,
-    color: '#888',
-    marginTop: 2,
-  },
-  tipsBox: {
-    flexDirection: 'row',
-    alignItems: 'flex-start',
-    backgroundColor: '#eab30815',
-    padding: 12,
-    borderRadius: 10,
-    gap: 10,
-  },
-  tipsText: {
-    fontSize: 13,
-    color: '#eab308',
-    flex: 1,
-    lineHeight: 18,
-  },
+  suggestionContent: { flex: 1 },
+  suggestionLabel: { color: '#fff', fontSize: 14, fontWeight: '600' },
+  suggestionDate: { color: '#aaa', fontSize: 12, marginTop: 2 },
+  tipText: { color: '#aaa', fontSize: 12, lineHeight: 18 },
+
+  durationSection: { marginTop: 4 },
+  durationInputRow: { flexDirection: 'row', gap: 8 },
   durationInput: {
-    flexDirection: 'row',
-    gap: 10,
-  },
-  durationField: {
     flex: 1,
-    backgroundColor: '#1a1a1a',
-    borderRadius: 10,
-    padding: 14,
-    fontSize: 16,
+    backgroundColor: '#111',
+    borderColor: '#2a2a2a',
+    borderWidth: 1,
+    borderRadius: 12,
     color: '#fff',
+    paddingHorizontal: 14,
+    paddingVertical: 12,
   },
   applyBtn: {
     backgroundColor: '#22c55e',
-    borderRadius: 10,
-    paddingHorizontal: 20,
-    justifyContent: 'center',
-  },
-  applyBtnDisabled: {
-    backgroundColor: '#333',
-  },
-  applyBtnText: {
-    color: '#fff',
-    fontWeight: '600',
-  },
-  dateButton: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    backgroundColor: '#1a1a1a',
-    borderRadius: 10,
-    padding: 14,
-    gap: 10,
-  },
-  dateButtonText: {
-    flex: 1,
-    fontSize: 16,
-    color: '#fff',
-  },
-  currentDateBox: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'space-between',
-    backgroundColor: '#22c55e15',
-    borderRadius: 10,
-    padding: 14,
-    marginTop: 8,
-  },
-  currentDateContent: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 10,
-  },
-  currentDateText: {
-    fontSize: 15,
-    color: '#22c55e',
-    fontWeight: '500',
-  },
-  footer: {
-    padding: 20,
-    paddingBottom: 30,
-  },
-  saveButton: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'center',
-    backgroundColor: '#22c55e',
     borderRadius: 12,
-    padding: 16,
+    paddingHorizontal: 16,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  applyBtnText: { color: '#fff', fontWeight: '700' },
+
+  datePickerBtn: {
+    borderRadius: 12,
+    borderWidth: 1,
+    borderColor: '#2a2a2a',
+    backgroundColor: '#111',
+    padding: 12,
+    flexDirection: 'row',
+    alignItems: 'center',
     gap: 8,
   },
-  saveButtonDisabled: {
-    backgroundColor: '#333',
+  datePickerBtnText: { color: '#e6e6e6', fontSize: 14 },
+
+  selectedDateBadge: {
+    marginTop: 10,
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 8,
+    borderWidth: 1,
+    borderColor: '#22c55e55',
+    backgroundColor: '#22c55e15',
+    borderRadius: 10,
+    paddingHorizontal: 10,
+    paddingVertical: 8,
   },
-  saveButtonText: {
-    color: '#fff',
-    fontSize: 18,
-    fontWeight: '600',
+  selectedDateText: { color: '#9bf2bd', fontSize: 13, fontWeight: '600' },
+
+  saveBtn: {
+    marginTop: 10,
+    borderRadius: 12,
+    backgroundColor: '#22c55e',
+    height: 50,
+    alignItems: 'center',
+    justifyContent: 'center',
+    flexDirection: 'row',
+    gap: 8,
   },
+  saveBtnDisabled: { opacity: 0.6 },
+  saveBtnText: { color: '#fff', fontWeight: '700', fontSize: 16 },
+
   modalOverlay: {
     flex: 1,
-    backgroundColor: 'rgba(0,0,0,0.8)',
+    backgroundColor: '#00000090',
+    alignItems: 'center',
     justifyContent: 'center',
-    alignItems: 'center',
-  },
-  datePickerModal: {
-    backgroundColor: '#1a1a1a',
-    borderRadius: 16,
-    padding: 24,
-    width: '90%',
-    maxWidth: 360,
-  },
-  datePickerTitle: {
-    fontSize: 18,
-    fontWeight: '600',
-    color: '#fff',
-    textAlign: 'center',
-    marginBottom: 20,
-  },
-  dateInputRow: {
-    flexDirection: 'row',
-    gap: 12,
-    marginBottom: 24,
-  },
-  dateInputGroup: {
-    flex: 1,
-  },
-  dateInputLabel: {
-    fontSize: 12,
-    color: '#888',
-    marginBottom: 6,
-    textAlign: 'center',
-  },
-  dateInput: {
-    backgroundColor: '#2a2a2a',
-    borderRadius: 10,
-    padding: 14,
-    fontSize: 18,
-    color: '#fff',
-    textAlign: 'center',
-  },
-  datePickerActions: {
-    flexDirection: 'row',
-    gap: 12,
-  },
-  datePickerCancel: {
-    flex: 1,
-    padding: 14,
-    borderRadius: 10,
-    backgroundColor: '#333',
-    alignItems: 'center',
-  },
-  datePickerCancelText: {
-    color: '#888',
-    fontSize: 16,
-    fontWeight: '500',
-  },
-  datePickerConfirm: {
-    flex: 1,
-    padding: 14,
-    borderRadius: 10,
-    backgroundColor: '#22c55e',
-    alignItems: 'center',
-  },
-  datePickerConfirmText: {
-    color: '#fff',
-    fontSize: 16,
-    fontWeight: '600',
-  },
-  // Camera Modal Styles
-  cameraContainer: {
-    flex: 1,
-    backgroundColor: '#0a0a0a',
-  },
-  cameraHeader: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'space-between',
     padding: 16,
   },
-  cameraTitle: {
-    fontSize: 18,
-    fontWeight: '600',
+  datePickerModal: {
+    width: '100%',
+    maxWidth: 500,
+    backgroundColor: '#111',
+    borderRadius: 14,
+    borderWidth: 1,
+    borderColor: '#2a2a2a',
+    padding: 16,
+  },
+  datePickerTitle: { color: '#fff', fontSize: 16, fontWeight: '700', marginBottom: 14 },
+  dateInputRow: { flexDirection: 'row', gap: 10 },
+  dateInputGroup: { flex: 1 },
+  dateInputLabel: { color: '#aaa', fontSize: 12, marginBottom: 6 },
+  dateInput: {
+    borderWidth: 1,
+    borderColor: '#2a2a2a',
+    borderRadius: 10,
+    backgroundColor: '#0c0c0c',
     color: '#fff',
+    paddingHorizontal: 10,
+    paddingVertical: Platform.select({ ios: 10, android: 8, default: 8 }),
+    textAlign: 'center',
   },
-  cameraView: {
-    flex: 1,
-    position: 'relative',
-  },
-  camera: {
-    flex: 1,
-  },
-  cameraOverlay: {
-    ...StyleSheet.absoluteFillObject,
-    justifyContent: 'center',
+  datePickerActions: { flexDirection: 'row', justifyContent: 'flex-end', gap: 8, marginTop: 16 },
+  datePickerCancel: { paddingHorizontal: 14, paddingVertical: 10, borderRadius: 10, borderWidth: 1, borderColor: '#333' },
+  datePickerCancelText: { color: '#aaa', fontWeight: '600' },
+  datePickerConfirm: { paddingHorizontal: 14, paddingVertical: 10, borderRadius: 10, backgroundColor: '#22c55e' },
+  datePickerConfirmText: { color: '#fff', fontWeight: '700' },
+
+  cameraContainer: { flex: 1, backgroundColor: '#000' },
+  cameraHeader: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
     alignItems: 'center',
-    backgroundColor: 'rgba(0,0,0,0.3)',
+    paddingHorizontal: 16,
+    paddingVertical: 10,
+    borderBottomColor: '#1a1a1a',
+    borderBottomWidth: 1,
+  },
+  cameraTitle: { color: '#fff', fontSize: 16, fontWeight: '700' },
+  cameraView: { flex: 1, minHeight: 240, maxHeight: 360, margin: 12, borderRadius: 14, overflow: 'hidden' },
+  camera: { flex: 1 },
+  cameraOverlay: {
+    position: 'absolute',
+    top: 0, left: 0, right: 0, bottom: 0,
+    alignItems: 'center',
+    justifyContent: 'center',
   },
   scanZone: {
-    width: '80%',
-    height: 80,
     borderWidth: 2,
     borderColor: '#22c55e',
-    borderRadius: 10,
-    justifyContent: 'center',
+    borderRadius: 12,
+    width: '85%',
+    height: '40%',
     alignItems: 'center',
-    backgroundColor: 'rgba(34, 197, 94, 0.1)',
+    justifyContent: 'center',
+    backgroundColor: '#22c55e10',
   },
-  scanZoneText: {
-    color: '#22c55e',
-    fontSize: 14,
-    fontWeight: '500',
-  },
+  scanZoneText: { color: '#fff', fontSize: 13, fontWeight: '600' },
+
   permissionBox: {
     flex: 1,
+    margin: 12,
+    borderRadius: 14,
+    borderWidth: 1,
+    borderColor: '#2a2a2a',
+    backgroundColor: '#111',
+    alignItems: 'center',
     justifyContent: 'center',
-    alignItems: 'center',
-    gap: 16,
-  },
-  permissionText: {
-    color: '#888',
-    fontSize: 16,
-  },
-  permissionBtn: {
-    backgroundColor: '#22c55e',
-    paddingHorizontal: 24,
-    paddingVertical: 12,
-    borderRadius: 10,
-  },
-  permissionBtnText: {
-    color: '#fff',
-    fontWeight: '600',
-  },
-  manualInputSection: {
-    padding: 20,
-    backgroundColor: '#1a1a1a',
-    borderTopLeftRadius: 20,
-    borderTopRightRadius: 20,
-  },
-  manualInputLabel: {
-    fontSize: 14,
-    color: '#888',
-    marginBottom: 12,
-  },
-  manualDateInput: {
-    backgroundColor: '#2a2a2a',
-    borderRadius: 10,
-    padding: 14,
-    fontSize: 18,
-    color: '#fff',
-    textAlign: 'center',
-    marginBottom: 12,
-  },
-  parseFeedback: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    padding: 12,
-    borderRadius: 10,
-    marginBottom: 12,
     gap: 10,
   },
-  parseFeedbackSuccess: {
-    backgroundColor: '#22c55e15',
-  },
-  parseFeedbackError: {
-    backgroundColor: '#f9731615',
-  },
-  parseFeedbackContent: {
-    flex: 1,
-  },
-  parseFeedbackDate: {
-    fontSize: 15,
-    color: '#22c55e',
-    fontWeight: '600',
-  },
-  parseFeedbackFormat: {
-    fontSize: 12,
-    color: '#888',
-    marginTop: 2,
-  },
-  parseFeedbackErrorText: {
-    fontSize: 14,
-    color: '#f97316',
-  },
-  formatExamples: {
-    backgroundColor: '#2a2a2a',
-    padding: 12,
+  permissionText: { color: '#aaa' },
+  permissionBtn: {
     borderRadius: 10,
-    marginBottom: 12,
-  },
-  formatExamplesTitle: {
-    fontSize: 12,
-    color: '#888',
-    marginBottom: 6,
-  },
-  formatExamplesText: {
-    fontSize: 12,
-    color: '#666',
-    lineHeight: 18,
-  },
-  confirmDateBtn: {
     backgroundColor: '#22c55e',
-    borderRadius: 10,
-    padding: 14,
+    paddingHorizontal: 14,
+    paddingVertical: 10,
+  },
+  permissionBtnText: { color: '#fff', fontWeight: '700' },
+
+  ocrActions: { paddingHorizontal: 16, paddingTop: 4, paddingBottom: 8 },
+  captureBtn: {
+    height: 46,
+    borderRadius: 12,
+    backgroundColor: '#22c55e',
     alignItems: 'center',
+    justifyContent: 'center',
+    flexDirection: 'row',
+    gap: 8,
   },
-  confirmDateBtnDisabled: {
-    backgroundColor: '#333',
-  },
-  confirmDateBtnText: {
+  captureBtnDisabled: { opacity: 0.6 },
+  captureBtnText: { color: '#fff', fontWeight: '700', fontSize: 14 },
+  ocrErrorText: { marginTop: 8, color: '#f97316', fontSize: 12 },
+  ocrDebugText: { marginTop: 6, color: '#888', fontSize: 11 },
+
+  manualInputSection: { padding: 16, paddingTop: 8 },
+  manualInputLabel: { color: '#ddd', marginBottom: 8, fontSize: 13, fontWeight: '600' },
+  manualDateInput: {
+    borderRadius: 12,
+    borderWidth: 1,
+    borderColor: '#2a2a2a',
+    backgroundColor: '#111',
     color: '#fff',
-    fontSize: 16,
-    fontWeight: '600',
+    paddingHorizontal: 12,
+    paddingVertical: 12,
   },
+
+  parseFeedback: {
+    marginTop: 10,
+    borderRadius: 10,
+    borderWidth: 1,
+    padding: 10,
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 8,
+  },
+  parseFeedbackSuccess: { borderColor: '#22c55e55', backgroundColor: '#22c55e12' },
+  parseFeedbackErrorBox: { borderColor: '#f9731655', backgroundColor: '#f9731612' },
+  parseFeedbackContent: { flex: 1 },
+  parseFeedbackDate: { color: '#d8ffe8', fontSize: 13, fontWeight: '700' },
+  parseFeedbackFormat: { color: '#9fd6b2', fontSize: 12, marginTop: 2 },
+  parseFeedbackErrorText: { color: '#ffc4a2', fontSize: 12, fontWeight: '600' },
+
+  formatExamples: {
+    marginTop: 10,
+    borderRadius: 10,
+    borderWidth: 1,
+    borderColor: '#2a2a2a',
+    backgroundColor: '#0f0f0f',
+    padding: 10,
+  },
+  formatExamplesTitle: { color: '#cfcfcf', fontSize: 12, marginBottom: 4, fontWeight: '600' },
+  formatExamplesText: { color: '#9a9a9a', fontSize: 12, lineHeight: 18 },
+
+  confirmDateBtn: {
+    marginTop: 12,
+    height: 44,
+    borderRadius: 10,
+    backgroundColor: '#22c55e',
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  confirmDateBtnDisabled: { opacity: 0.5 },
+  confirmDateBtnText: { color: '#fff', fontWeight: '700' },
 });
