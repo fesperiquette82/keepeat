@@ -109,24 +109,48 @@ export const useStockStore = create<StockStore>((set) => ({
   },
 
   markConsumed: async (itemId: string) => {
+    const { items, priorityItems, stats } = useStockStore.getState();
+    // Optimistic update : retrait immédiat de l'item
+    set((state) => ({
+      items: state.items.filter((i) => i.id !== itemId),
+      priorityItems: state.priorityItems.filter((i) => i.id !== itemId),
+      stats: {
+        ...state.stats,
+        total_items: Math.max(0, state.stats.total_items - 1),
+        consumed_this_week: state.stats.consumed_this_week + 1,
+      },
+    }));
     try {
       await axios.post(`${API_URL}/api/stock/${itemId}/consume`);
-      await useStockStore.getState().fetchStock();
-      await useStockStore.getState().fetchPriorityItems();
-      await useStockStore.getState().fetchStats();
+      // Rafraîchissement complet en parallèle
+      const s = useStockStore.getState();
+      await Promise.all([s.fetchStock(), s.fetchPriorityItems(), s.fetchStats()]);
     } catch (err: any) {
-      set({ error: err.message });
+      // Rollback si erreur réseau
+      set({ items, priorityItems, stats, error: err.message });
     }
   },
 
   markThrown: async (itemId: string) => {
+    const { items, priorityItems, stats } = useStockStore.getState();
+    // Optimistic update : retrait immédiat de l'item
+    set((state) => ({
+      items: state.items.filter((i) => i.id !== itemId),
+      priorityItems: state.priorityItems.filter((i) => i.id !== itemId),
+      stats: {
+        ...state.stats,
+        total_items: Math.max(0, state.stats.total_items - 1),
+        thrown_this_week: state.stats.thrown_this_week + 1,
+      },
+    }));
     try {
       await axios.post(`${API_URL}/api/stock/${itemId}/throw`);
-      await useStockStore.getState().fetchStock();
-      await useStockStore.getState().fetchPriorityItems();
-      await useStockStore.getState().fetchStats();
+      // Rafraîchissement complet en parallèle
+      const s = useStockStore.getState();
+      await Promise.all([s.fetchStock(), s.fetchPriorityItems(), s.fetchStats()]);
     } catch (err: any) {
-      set({ error: err.message });
+      // Rollback si erreur réseau
+      set({ items, priorityItems, stats, error: err.message });
     }
   },
 
@@ -142,9 +166,8 @@ export const useStockStore = create<StockStore>((set) => ({
   addItem: async (item) => {
     try {
       const res = await axios.post(`${API_URL}/api/stock`, item);
-      await useStockStore.getState().fetchStock();
-      await useStockStore.getState().fetchPriorityItems();
-      await useStockStore.getState().fetchStats();
+      const s = useStockStore.getState();
+      await Promise.all([s.fetchStock(), s.fetchPriorityItems(), s.fetchStats()]);
       return res.data;
     } catch (err: any) {
       console.error("Erreur lors de l'ajout :", err);
@@ -154,9 +177,8 @@ export const useStockStore = create<StockStore>((set) => ({
   updateItem: async (itemId, updates) => {
     try {
       const res = await axios.put(`${API_URL}/api/stock/${itemId}`, updates);
-      await useStockStore.getState().fetchStock();
-      await useStockStore.getState().fetchPriorityItems();
-      await useStockStore.getState().fetchStats();
+      const s = useStockStore.getState();
+      await Promise.all([s.fetchStock(), s.fetchPriorityItems(), s.fetchStats()]);
       return res.data;
     } catch (err: any) {
       set({ error: err.message });

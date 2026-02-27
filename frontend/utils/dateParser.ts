@@ -431,8 +431,8 @@ function tryMonthDayYear(text: string): ParsedDate | null {
 
 // MMM YYYY or MMM YY (e.g., "MARS 2025", "MAR 25") - end of month
 function tryMonthYear(text: string): ParsedDate | null {
-  // Month name followed by year
-  const pattern1 = /([a-zàâäéèêëïîôùûüçñß]{3,})\s*[\/\-\.\s]*(\d{2,4})/i;
+  // Month name followed by year — séparateur obligatoire (évite les faux positifs type "lot25")
+  const pattern1 = /([a-zàâäéèêëïîôùûüçñß]{3,})[\s\/\-\.]+(\d{2,4})(?!\d)/i;
   // Or MM/YYYY, MM/YY
   const pattern2 = /(\d{1,2})[\/\-\.\s]+(\d{4})/;
   const pattern3 = /(\d{1,2})[\/\-\.\s]+(\d{2})(?!\d)/;

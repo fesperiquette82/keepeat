@@ -1,4 +1,4 @@
-import React, { useMemo, useRef, useState } from 'react';
+import React, { useEffect, useMemo, useRef, useState } from 'react';
 import {
   View,
   Text,
@@ -32,6 +32,267 @@ type OCRResponse = {
   raw_lines?: string[];
   combined_text?: string | null;
 };
+
+type ParsedDateInfo = { date: Date | null; confidence: string; format: string };
+
+// ─── DatePickerModal ───────────────────────────────────────────────────────────
+// Extrait en composant top-level pour éviter le re-mount à chaque render parent.
+
+type DatePickerModalProps = {
+  visible: boolean;
+  expiryDate: Date | null;
+  language: string;
+  t: (key: string) => string;
+  onConfirm: (date: Date) => void;
+  onCancel: () => void;
+};
+
+const DatePickerModal = React.memo(({ visible, expiryDate, language, t, onConfirm, onCancel }: DatePickerModalProps) => {
+  const [day, setDay] = useState('');
+  const [month, setMonth] = useState('');
+  const [year, setYear] = useState('');
+
+  // Synchronise l'état interne à l'ouverture du modal
+  useEffect(() => {
+    if (visible) {
+      setDay(expiryDate ? format(expiryDate, 'dd') : '');
+      setMonth(expiryDate ? format(expiryDate, 'MM') : '');
+      setYear(expiryDate ? format(expiryDate, 'yyyy') : new Date().getFullYear().toString());
+    }
+  }, [visible, expiryDate]);
+
+  const handleConfirm = () => {
+    const d = parseInt(day, 10);
+    const m = parseInt(month, 10);
+    const y = parseInt(year, 10);
+
+    const newDate = new Date(y, m - 1, d);
+    // Vérifie l'absence de débordement (ex: 31 février → 3 mars) et que l'année est valide
+    if (
+      newDate.getFullYear() === y &&
+      newDate.getMonth() === m - 1 &&
+      newDate.getDate() === d &&
+      y >= new Date().getFullYear()
+    ) {
+      onConfirm(newDate);
+    } else {
+      Alert.alert(
+        language === 'fr' ? 'Erreur' : 'Error',
+        language === 'fr' ? 'Date invalide' : 'Invalid date'
+      );
+    }
+  };
+
+  return (
+    <Modal visible={visible} transparent animationType="fade">
+      <View style={styles.modalOverlay}>
+        <View style={styles.datePickerModal}>
+          <Text style={styles.datePickerTitle}>{t('selectDate')}</Text>
+
+          <View style={styles.dateInputRow}>
+            <View style={styles.dateInputGroup}>
+              <Text style={styles.dateInputLabel}>{language === 'fr' ? 'Jour' : 'Day'}</Text>
+              <TextInput
+                style={styles.dateInput}
+                value={day}
+                onChangeText={setDay}
+                keyboardType="numeric"
+                maxLength={2}
+                placeholder="DD"
+                placeholderTextColor="#666"
+              />
+            </View>
+
+            <View style={styles.dateInputGroup}>
+              <Text style={styles.dateInputLabel}>{language === 'fr' ? 'Mois' : 'Month'}</Text>
+              <TextInput
+                style={styles.dateInput}
+                value={month}
+                onChangeText={setMonth}
+                keyboardType="numeric"
+                maxLength={2}
+                placeholder="MM"
+                placeholderTextColor="#666"
+              />
+            </View>
+
+            <View style={styles.dateInputGroup}>
+              <Text style={styles.dateInputLabel}>{language === 'fr' ? 'Année' : 'Year'}</Text>
+              <TextInput
+                style={styles.dateInput}
+                value={year}
+                onChangeText={setYear}
+                keyboardType="numeric"
+                maxLength={4}
+                placeholder="YYYY"
+                placeholderTextColor="#666"
+              />
+            </View>
+          </View>
+
+          <View style={styles.datePickerActions}>
+            <TouchableOpacity style={styles.datePickerCancel} onPress={onCancel}>
+              <Text style={styles.datePickerCancelText}>{t('cancel')}</Text>
+            </TouchableOpacity>
+            <TouchableOpacity style={styles.datePickerConfirm} onPress={handleConfirm}>
+              <Text style={styles.datePickerConfirmText}>{t('confirm')}</Text>
+            </TouchableOpacity>
+          </View>
+        </View>
+      </View>
+    </Modal>
+  );
+});
+
+// ─── CameraModal ───────────────────────────────────────────────────────────────
+// Extrait en composant top-level pour éviter le re-mount à chaque render parent.
+
+type CameraModalProps = {
+  visible: boolean;
+  onClose: () => void;
+  permissionGranted: boolean;
+  requestPermission: () => void;
+  cameraRef: React.RefObject<CameraView | null>;
+  isOcrProcessing: boolean;
+  ocrError: string | null;
+  ocrDebug: string | null;
+  scannedDateText: string;
+  parsedDateInfo: ParsedDateInfo | null;
+  language: string;
+  t: (key: string) => string;
+  onCaptureAndScan: () => void;
+  onScannedDateChange: (text: string) => void;
+  onConfirm: () => void;
+};
+
+const CameraModal = React.memo(({
+  visible,
+  onClose,
+  permissionGranted,
+  requestPermission,
+  cameraRef,
+  isOcrProcessing,
+  ocrError,
+  ocrDebug,
+  scannedDateText,
+  parsedDateInfo,
+  language,
+  t,
+  onCaptureAndScan,
+  onScannedDateChange,
+  onConfirm,
+}: CameraModalProps) => {
+  return (
+    <Modal visible={visible} animationType="slide">
+      <SafeAreaView style={styles.cameraContainer}>
+        <View style={styles.cameraHeader}>
+          <TouchableOpacity onPress={onClose}>
+            <Ionicons name="close" size={28} color="#fff" />
+          </TouchableOpacity>
+          <Text style={styles.cameraTitle}>{language === 'fr' ? 'Scanner la date' : 'Scan date'}</Text>
+          <View style={{ width: 28 }} />
+        </View>
+
+        {permissionGranted ? (
+          <View style={styles.cameraView}>
+            <CameraView ref={cameraRef} style={styles.camera} />
+            <View style={styles.cameraOverlay}>
+              <View style={styles.scanZone}>
+                <Text style={styles.scanZoneText}>{language === 'fr' ? 'Placez la date ici' : 'Place date here'}</Text>
+              </View>
+            </View>
+          </View>
+        ) : (
+          <View style={styles.permissionBox}>
+            <Ionicons name="camera-outline" size={48} color="#666" />
+            <Text style={styles.permissionText}>{language === 'fr' ? 'Autorisation caméra requise' : 'Camera permission required'}</Text>
+            <TouchableOpacity style={styles.permissionBtn} onPress={requestPermission}>
+              <Text style={styles.permissionBtnText}>{language === 'fr' ? 'Autoriser' : 'Allow'}</Text>
+            </TouchableOpacity>
+          </View>
+        )}
+
+        <View style={styles.ocrActions}>
+          <TouchableOpacity
+            style={[styles.captureBtn, (!permissionGranted || isOcrProcessing) && styles.captureBtnDisabled]}
+            onPress={onCaptureAndScan}
+            disabled={!permissionGranted || isOcrProcessing}
+          >
+            {isOcrProcessing ? (
+              <ActivityIndicator color="#fff" />
+            ) : (
+              <>
+                <Ionicons name="scan-outline" size={18} color="#fff" />
+                <Text style={styles.captureBtnText}>{language === 'fr' ? 'Capturer & analyser' : 'Capture & scan'}</Text>
+              </>
+            )}
+          </TouchableOpacity>
+
+          {ocrError ? <Text style={styles.ocrErrorText}>{ocrError}</Text> : null}
+          {ocrDebug ? <Text style={styles.ocrDebugText}>{ocrDebug}</Text> : null}
+        </View>
+
+        <View style={styles.manualInputSection}>
+          <Text style={styles.manualInputLabel}>
+            {language === 'fr' ? "Saisissez la date vue sur l'emballage :" : 'Enter the date seen on packaging:'}
+          </Text>
+
+          <TextInput
+            style={styles.manualDateInput}
+            value={scannedDateText}
+            onChangeText={onScannedDateChange}
+            placeholder={language === 'fr' ? 'Ex: 15/03/2025, 15 mars 25, mars 2025...' : 'Ex: 15/03/2025, 15 Mar 25, March 2025...'}
+            placeholderTextColor="#666"
+            autoCapitalize="none"
+          />
+
+          {parsedDateInfo && (
+            <View style={[styles.parseFeedback, parsedDateInfo.date ? styles.parseFeedbackSuccess : styles.parseFeedbackErrorBox]}>
+              {parsedDateInfo.date ? (
+                <>
+                  <Ionicons name="checkmark-circle" size={18} color="#22c55e" />
+                  <View style={styles.parseFeedbackContent}>
+                    <Text style={styles.parseFeedbackDate}>
+                      {format(parsedDateInfo.date, 'EEEE d MMMM yyyy', { locale: language === 'fr' ? fr : enUS })}
+                    </Text>
+                    <Text style={styles.parseFeedbackFormat}>
+                      {language === 'fr' ? 'Format détecté: ' : 'Detected format: '}
+                      {parsedDateInfo.format} · {parsedDateInfo.confidence}
+                    </Text>
+                  </View>
+                </>
+              ) : (
+                <>
+                  <Ionicons name="help-circle" size={18} color="#f97316" />
+                  <Text style={styles.parseFeedbackErrorText}>{language === 'fr' ? 'Format non reconnu' : 'Unrecognized format'}</Text>
+                </>
+              )}
+            </View>
+          )}
+
+          <View style={styles.formatExamples}>
+            <Text style={styles.formatExamplesTitle}>{language === 'fr' ? 'Formats acceptés :' : 'Accepted formats:'}</Text>
+            <Text style={styles.formatExamplesText}>
+              15/03/2025 • 15-03-25 • 15.03.25{'\n'}
+              15 mars 2025 • 15 MAR 25{'\n'}
+              mars 2025 • 03/2025 • 150325
+            </Text>
+          </View>
+
+          <TouchableOpacity
+            style={[styles.confirmDateBtn, (!scannedDateText || !parsedDateInfo?.date) && styles.confirmDateBtnDisabled]}
+            onPress={onConfirm}
+            disabled={!scannedDateText || !parsedDateInfo?.date}
+          >
+            <Text style={styles.confirmDateBtnText}>{t('confirm')}</Text>
+          </TouchableOpacity>
+        </View>
+      </SafeAreaView>
+    </Modal>
+  );
+});
+
+// ─── AddProductScreen ──────────────────────────────────────────────────────────
 
 export default function AddProductScreen() {
   const router = useRouter();
@@ -71,11 +332,7 @@ export default function AddProductScreen() {
   const [ocrError, setOcrError] = useState<string | null>(null);
   const [ocrDebug, setOcrDebug] = useState<string | null>(null);
 
-  const [parsedDateInfo, setParsedDateInfo] = useState<{
-    date: Date | null;
-    confidence: string;
-    format: string;
-  } | null>(null);
+  const [parsedDateInfo, setParsedDateInfo] = useState<ParsedDateInfo | null>(null);
 
   const productFound = params.found === 'true';
 
@@ -179,9 +436,14 @@ export default function AddProductScreen() {
     });
   };
 
+  // Applique la date parsée par le backend.
+  // Corrige le bug de timezone : new Date("YYYY-MM-DD") parse en UTC,
+  // ce qui décale la date d'un jour en UTC+1. On parse les composants manuellement.
   const tryApplyBackendDate = (dateStr?: string | null, fmt?: string | null, conf?: number) => {
     if (!dateStr) return false;
-    const parsed = new Date(dateStr);
+    const parts = dateStr.split('-').map(Number);
+    if (parts.length !== 3 || parts.some(isNaN)) return false;
+    const parsed = new Date(parts[0], parts[1] - 1, parts[2]);
     if (Number.isNaN(parsed.getTime())) return false;
 
     applyParsedDate(
@@ -229,31 +491,33 @@ export default function AddProductScreen() {
         return;
       }
 
+      if (ocr.raw_lines?.length) {
+        setOcrDebug(ocr.raw_lines.join(' | '));
+      }
+
       const sourceText =
         (ocr.raw && ocr.raw.trim().length > 0 ? ocr.raw : '') ||
         (ocr.combined_text && ocr.combined_text.trim().length > 0 ? ocr.combined_text : '') ||
         '';
 
-      if (ocr.raw_lines?.length) {
-        setOcrDebug(ocr.raw_lines.join(' | '));
+      // Priorité 1 : date déjà parsée par le backend (EasyOCR + regex)
+      if (tryApplyBackendDate(ocr.date, ocr.format, ocr.confidence)) {
+        return;
       }
 
+      // Priorité 2 : re-parse frontend sur le texte brut OCR (fallback)
       if (sourceText) {
         const best = getBestDateFromOCR(sourceText);
         if (best.date) {
-          applyParsedDate(best.date, sourceText, best.confidence, ocr.format || best.format);
+          applyParsedDate(best.date, sourceText, best.confidence, best.format);
           return;
         }
 
         const plain = parseExpiryDate(sourceText);
         if (plain.date) {
-          applyParsedDate(plain.date, sourceText, plain.confidence, ocr.format || plain.format);
+          applyParsedDate(plain.date, sourceText, plain.confidence, plain.format);
           return;
         }
-      }
-
-      if (tryApplyBackendDate(ocr.date, ocr.format, ocr.confidence)) {
-        return;
       }
 
       setOcrError(
@@ -323,204 +587,6 @@ export default function AddProductScreen() {
     } finally {
       setIsSaving(false);
     }
-  };
-
-  const DatePickerModal = () => {
-    const [day, setDay] = useState(expiryDate ? format(expiryDate, 'dd') : '');
-    const [month, setMonth] = useState(expiryDate ? format(expiryDate, 'MM') : '');
-    const [year, setYear] = useState(expiryDate ? format(expiryDate, 'yyyy') : new Date().getFullYear().toString());
-
-    const handleConfirm = () => {
-      const d = parseInt(day, 10);
-      const m = parseInt(month, 10);
-      const y = parseInt(year, 10);
-
-      if (d >= 1 && d <= 31 && m >= 1 && m <= 12 && y >= 2024) {
-        const newDate = new Date(y, m - 1, d);
-        setExpiryDate(newDate);
-        setShowDatePicker(false);
-      } else {
-        Alert.alert(language === 'fr' ? 'Erreur' : 'Error', language === 'fr' ? 'Date invalide' : 'Invalid date');
-      }
-    };
-
-    return (
-      <Modal visible={showDatePicker} transparent animationType="fade">
-        <View style={styles.modalOverlay}>
-          <View style={styles.datePickerModal}>
-            <Text style={styles.datePickerTitle}>{t('selectDate')}</Text>
-
-            <View style={styles.dateInputRow}>
-              <View style={styles.dateInputGroup}>
-                <Text style={styles.dateInputLabel}>{language === 'fr' ? 'Jour' : 'Day'}</Text>
-                <TextInput
-                  style={styles.dateInput}
-                  value={day}
-                  onChangeText={setDay}
-                  keyboardType="numeric"
-                  maxLength={2}
-                  placeholder="DD"
-                  placeholderTextColor="#666"
-                />
-              </View>
-
-              <View style={styles.dateInputGroup}>
-                <Text style={styles.dateInputLabel}>{language === 'fr' ? 'Mois' : 'Month'}</Text>
-                <TextInput
-                  style={styles.dateInput}
-                  value={month}
-                  onChangeText={setMonth}
-                  keyboardType="numeric"
-                  maxLength={2}
-                  placeholder="MM"
-                  placeholderTextColor="#666"
-                />
-              </View>
-
-              <View style={styles.dateInputGroup}>
-                <Text style={styles.dateInputLabel}>{language === 'fr' ? 'Année' : 'Year'}</Text>
-                <TextInput
-                  style={styles.dateInput}
-                  value={year}
-                  onChangeText={setYear}
-                  keyboardType="numeric"
-                  maxLength={4}
-                  placeholder="YYYY"
-                  placeholderTextColor="#666"
-                />
-              </View>
-            </View>
-
-            <View style={styles.datePickerActions}>
-              <TouchableOpacity style={styles.datePickerCancel} onPress={() => setShowDatePicker(false)}>
-                <Text style={styles.datePickerCancelText}>{t('cancel')}</Text>
-              </TouchableOpacity>
-              <TouchableOpacity style={styles.datePickerConfirm} onPress={handleConfirm}>
-                <Text style={styles.datePickerConfirmText}>{t('confirm')}</Text>
-              </TouchableOpacity>
-            </View>
-          </View>
-        </View>
-      </Modal>
-    );
-  };
-
-  const CameraModal = () => {
-    return (
-      <Modal visible={showCameraModal} animationType="slide">
-        <SafeAreaView style={styles.cameraContainer}>
-          <View style={styles.cameraHeader}>
-            <TouchableOpacity
-              onPress={() => {
-                setShowCameraModal(false);
-                setOcrError(null);
-                setOcrDebug(null);
-              }}
-            >
-              <Ionicons name="close" size={28} color="#fff" />
-            </TouchableOpacity>
-
-            <Text style={styles.cameraTitle}>{language === 'fr' ? 'Scanner la date' : 'Scan date'}</Text>
-            <View style={{ width: 28 }} />
-          </View>
-
-          {permission?.granted ? (
-            <View style={styles.cameraView}>
-              <CameraView ref={cameraRef} style={styles.camera} />
-              <View style={styles.cameraOverlay}>
-                <View style={styles.scanZone}>
-                  <Text style={styles.scanZoneText}>{language === 'fr' ? 'Placez la date ici' : 'Place date here'}</Text>
-                </View>
-              </View>
-            </View>
-          ) : (
-            <View style={styles.permissionBox}>
-              <Ionicons name="camera-outline" size={48} color="#666" />
-              <Text style={styles.permissionText}>{language === 'fr' ? 'Autorisation caméra requise' : 'Camera permission required'}</Text>
-              <TouchableOpacity style={styles.permissionBtn} onPress={requestPermission}>
-                <Text style={styles.permissionBtnText}>{language === 'fr' ? 'Autoriser' : 'Allow'}</Text>
-              </TouchableOpacity>
-            </View>
-          )}
-
-          <View style={styles.ocrActions}>
-            <TouchableOpacity
-              style={[styles.captureBtn, (!permission?.granted || isOcrProcessing) && styles.captureBtnDisabled]}
-              onPress={handleCaptureAndScan}
-              disabled={!permission?.granted || isOcrProcessing}
-            >
-              {isOcrProcessing ? (
-                <ActivityIndicator color="#fff" />
-              ) : (
-                <>
-                  <Ionicons name="scan-outline" size={18} color="#fff" />
-                  <Text style={styles.captureBtnText}>{language === 'fr' ? 'Capturer & analyser' : 'Capture & scan'}</Text>
-                </>
-              )}
-            </TouchableOpacity>
-
-            {ocrError ? <Text style={styles.ocrErrorText}>{ocrError}</Text> : null}
-            {ocrDebug ? <Text style={styles.ocrDebugText}>{ocrDebug}</Text> : null}
-          </View>
-
-          <View style={styles.manualInputSection}>
-            <Text style={styles.manualInputLabel}>
-              {language === 'fr' ? "Saisissez la date vue sur l'emballage :" : 'Enter the date seen on packaging:'}
-            </Text>
-
-            <TextInput
-              style={styles.manualDateInput}
-              value={scannedDateText}
-              onChangeText={handleScannedDateChange}
-              placeholder={language === 'fr' ? 'Ex: 15/03/2025, 15 mars 25, mars 2025...' : 'Ex: 15/03/2025, 15 Mar 25, March 2025...'}
-              placeholderTextColor="#666"
-              autoCapitalize="none"
-            />
-
-            {parsedDateInfo && (
-              <View style={[styles.parseFeedback, parsedDateInfo.date ? styles.parseFeedbackSuccess : styles.parseFeedbackErrorBox]}>
-                {parsedDateInfo.date ? (
-                  <>
-                    <Ionicons name="checkmark-circle" size={18} color="#22c55e" />
-                    <View style={styles.parseFeedbackContent}>
-                      <Text style={styles.parseFeedbackDate}>
-                        {format(parsedDateInfo.date, 'EEEE d MMMM yyyy', { locale: language === 'fr' ? fr : enUS })}
-                      </Text>
-                      <Text style={styles.parseFeedbackFormat}>
-                        {language === 'fr' ? 'Format détecté: ' : 'Detected format: '}
-                        {parsedDateInfo.format} · {parsedDateInfo.confidence}
-                      </Text>
-                    </View>
-                  </>
-                ) : (
-                  <>
-                    <Ionicons name="help-circle" size={18} color="#f97316" />
-                    <Text style={styles.parseFeedbackErrorText}>{language === 'fr' ? 'Format non reconnu' : 'Unrecognized format'}</Text>
-                  </>
-                )}
-              </View>
-            )}
-
-            <View style={styles.formatExamples}>
-              <Text style={styles.formatExamplesTitle}>{language === 'fr' ? 'Formats acceptés :' : 'Accepted formats:'}</Text>
-              <Text style={styles.formatExamplesText}>
-                15/03/2025 • 15-03-25 • 15.03.25{'\n'}
-                15 mars 2025 • 15 MAR 25{'\n'}
-                mars 2025 • 03/2025 • 150325
-              </Text>
-            </View>
-
-            <TouchableOpacity
-              style={[styles.confirmDateBtn, (!scannedDateText || !parsedDateInfo?.date) && styles.confirmDateBtnDisabled]}
-              onPress={handleScannedDateConfirm}
-              disabled={!scannedDateText || !parsedDateInfo?.date}
-            >
-              <Text style={styles.confirmDateBtnText}>{t('confirm')}</Text>
-            </TouchableOpacity>
-          </View>
-        </SafeAreaView>
-      </Modal>
-    );
   };
 
   return (
@@ -715,8 +781,39 @@ export default function AddProductScreen() {
         </TouchableOpacity>
       </ScrollView>
 
-      <DatePickerModal />
-      <CameraModal />
+      <DatePickerModal
+        visible={showDatePicker}
+        expiryDate={expiryDate}
+        language={language}
+        t={t}
+        onConfirm={(date) => {
+          setExpiryDate(date);
+          setShowDatePicker(false);
+        }}
+        onCancel={() => setShowDatePicker(false)}
+      />
+
+      <CameraModal
+        visible={showCameraModal}
+        onClose={() => {
+          setShowCameraModal(false);
+          setOcrError(null);
+          setOcrDebug(null);
+        }}
+        permissionGranted={!!permission?.granted}
+        requestPermission={requestPermission}
+        cameraRef={cameraRef}
+        isOcrProcessing={isOcrProcessing}
+        ocrError={ocrError}
+        ocrDebug={ocrDebug}
+        scannedDateText={scannedDateText}
+        parsedDateInfo={parsedDateInfo}
+        language={language}
+        t={t}
+        onCaptureAndScan={handleCaptureAndScan}
+        onScannedDateChange={handleScannedDateChange}
+        onConfirm={handleScannedDateConfirm}
+      />
     </SafeAreaView>
   );
 }

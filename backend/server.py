@@ -575,20 +575,14 @@ async def throw_item(item_id: str):
 @api_router.get("/stock/priority", response_model=List[StockItem])
 async def get_priority_items():
     # priority: expired or expiring in <= 3 days
-    cursor = stock_col.find({"status": "active"}).sort("added_date", -1)
-    docs = await cursor.to_list(length=2000)
-
-    out: List[Dict[str, Any]] = []
-    for d in docs:
-        days = _days_until(d.get("expiry_date"))
-        if days is None:
-            continue
-        if days <= 3:
-            out.append(_serialize_mongo(d))
-
-    # sort by soonest
-    out.sort(key=lambda x: (_days_until(x.get("expiry_date")) or 10**9))
-    return out
+    # Filtre côté MongoDB : expiry_date <= aujourd'hui + 3 jours (string ISO tri lexicographique)
+    threshold = (_utc_now().date() + timedelta(days=3)).strftime("%Y-%m-%d")
+    cursor = stock_col.find({
+        "status": "active",
+        "expiry_date": {"$nin": [None, ""], "$lte": threshold},
+    }).sort("expiry_date", 1)
+    docs = await cursor.to_list(length=500)
+    return [_serialize_mongo(d) for d in docs]
 
 
 @api_router.get("/stats", response_model=StatsResponse)
