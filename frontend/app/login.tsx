@@ -18,7 +18,7 @@ import { useLanguageStore } from '../store/languageStore';
 
 export default function LoginScreen() {
   const router = useRouter();
-  const { login, error, clearError } = useAuthStore();
+  const { login, error, clearError, bypassAuth } = useAuthStore();
   const { language } = useLanguageStore();
 
   const [email, setEmail] = useState('');
@@ -144,6 +144,14 @@ export default function LoginScreen() {
                 <Text style={styles.switchLinkHighlight}>{fr ? "S'inscrire" : 'Sign up'}</Text>
               </Text>
             </TouchableOpacity>
+
+            <TouchableOpacity
+              style={styles.bypassBtn}
+              onPress={bypassAuth}
+            >
+              <Ionicons name="construct-outline" size={14} color="#555" />
+              <Text style={styles.bypassBtnText}>ByPass (dev)</Text>
+            </TouchableOpacity>
           </View>
         </ScrollView>
       </KeyboardAvoidingView>
@@ -229,4 +237,16 @@ const styles = StyleSheet.create({
   switchLink: { alignItems: 'center' },
   switchLinkText: { color: '#666', fontSize: 14 },
   switchLinkHighlight: { color: '#22c55e', fontWeight: '600' },
+
+  bypassBtn: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    gap: 6,
+    marginTop: 20,
+    paddingVertical: 10,
+    borderTopWidth: 1,
+    borderTopColor: '#1f1f1f',
+  },
+  bypassBtnText: { color: '#555', fontSize: 12 },
 });

@@ -24,6 +24,8 @@ interface AuthStore {
   register: (email: string, password: string) => Promise<void>;
   logout: () => Promise<void>;
   clearError: () => void;
+  /** DEV ONLY — bypass auth sans compte (token null, non persisté) */
+  bypassAuth: () => void;
 }
 
 async function apiAuth(endpoint: string, body: object): Promise<{ access_token: string; user: AuthUser }> {
@@ -96,4 +98,8 @@ export const useAuthStore = create<AuthStore>((set) => ({
   },
 
   clearError: () => set({ error: null }),
+
+  bypassAuth: () => {
+    set({ user: { id: 'guest', email: 'Invité', is_premium: false }, token: null });
+  },
 }));
