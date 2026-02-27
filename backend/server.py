@@ -34,8 +34,34 @@ logger = logging.getLogger("keepeat-backend")
 # -----------------------------------------------------------------------------
 # App
 # -----------------------------------------------------------------------------
+async def _seed_default_user() -> None:
+    """Crée le compte dev par défaut s'il n'existe pas encore."""
+    DEFAULT_EMAIL = "fesperiquette@hotmail.com"
+    DEFAULT_PASSWORD = "essai"
+    try:
+        existing = await users_col.find_one({"email": DEFAULT_EMAIL})
+        if not existing:
+            await users_col.insert_one({
+                "email": DEFAULT_EMAIL,
+                "hashed_password": _hash_password(DEFAULT_PASSWORD),
+                "is_premium": True,
+                "created_at": _utc_now(),
+                "last_login": None,
+            })
+            logger.info("Default dev user created: %s", DEFAULT_EMAIL)
+        elif not existing.get("is_premium"):
+            await users_col.update_one(
+                {"email": DEFAULT_EMAIL},
+                {"$set": {"is_premium": True}},
+            )
+            logger.info("Default dev user upgraded to premium: %s", DEFAULT_EMAIL)
+    except Exception as e:
+        logger.warning("Could not seed default user: %s", e)
+
+
 @asynccontextmanager
 async def lifespan(app: FastAPI):
+    await _seed_default_user()
     yield
     # Shutdown : fermeture de la connexion MongoDB
     client.close()

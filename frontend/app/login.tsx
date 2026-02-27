@@ -18,7 +18,7 @@ import { useLanguageStore } from '../store/languageStore';
 
 export default function LoginScreen() {
   const router = useRouter();
-  const { login, error, clearError, bypassAuth } = useAuthStore();
+  const { login, error, clearError } = useAuthStore();
   const { language } = useLanguageStore();
 
   const [email, setEmail] = useState('');
@@ -28,6 +28,19 @@ export default function LoginScreen() {
   const [localError, setLocalError] = useState<string | null>(null);
 
   const fr = language === 'fr';
+
+  const handleDevLogin = async () => {
+    setLocalError(null);
+    clearError();
+    setIsLoading(true);
+    try {
+      await login('fesperiquette@hotmail.com', 'essai');
+    } catch (err: any) {
+      setLocalError(err.message || (fr ? 'Connexion dev échouée.' : 'Dev login failed.'));
+    } finally {
+      setIsLoading(false);
+    }
+  };
 
   const handleLogin = async () => {
     setLocalError(null);
@@ -147,10 +160,11 @@ export default function LoginScreen() {
 
             <TouchableOpacity
               style={styles.bypassBtn}
-              onPress={bypassAuth}
+              onPress={handleDevLogin}
+              disabled={isLoading}
             >
               <Ionicons name="construct-outline" size={14} color="#555" />
-              <Text style={styles.bypassBtnText}>ByPass (dev)</Text>
+              <Text style={styles.bypassBtnText}>Connexion dev (fesperiquette)</Text>
             </TouchableOpacity>
           </View>
         </ScrollView>
