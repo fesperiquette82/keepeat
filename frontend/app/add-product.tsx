@@ -18,24 +18,13 @@ import { CameraView, useCameraPermissions } from 'expo-camera';
 import { format, addDays } from 'date-fns';
 import { fr, enUS } from 'date-fns/locale';
 
+import TextRecognition from '@react-native-ml-kit/text-recognition';
+
 import { useStockStore } from '../store/stockStore';
 import { useLanguageStore } from '../store/languageStore';
-import { parseExpiryDate, DATE_FORMAT_EXAMPLES, getBestDateFromOCR, getExpiryDetectionPastYears } from '../utils/dateParser';
+import { parseExpiryDate, DATE_FORMAT_EXAMPLES, getBestDateFromOCR } from '../utils/dateParser';
 
 type DateInputMode = 'auto' | 'duration' | 'date' | 'camera';
-
-type OCRResponse = {
-  date?: string | null;
-  confidence?: number;
-  raw?: string | null;
-  format?: string | null;
-  raw_lines?: string[];
-  combined_text?: string | null;
-};
-
-type OCRResult =
-  | { ok: true; data: OCRResponse }
-  | { ok: false; reason: 'not_available' | 'server_error' | 'network_error'; status?: number };
 
 type ParsedDateInfo = { date: Date | null; confidence: string; format: string };
 
@@ -394,32 +383,6 @@ export default function AddProductScreen() {
     setExpiryDate(addDays(new Date(), days));
   };
 
-  const performOCR = async (imageBase64: string): Promise<OCRResult> => {
-    const controller = new AbortController();
-    const timer = setTimeout(() => controller.abort(), 30_000);
-    try {
-      const API_URL = process.env.EXPO_PUBLIC_BACKEND_URL?.trim() || 'https://keepeat-backend.onrender.com';
-      const response = await fetch(`${API_URL}/api/ocr/date`, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ image_base64: imageBase64, maxPastYears: getExpiryDetectionPastYears() }),
-        signal: controller.signal,
-      });
-
-      if (!response.ok) {
-        if (response.status === 501) return { ok: false, reason: 'not_available', status: 501 };
-        return { ok: false, reason: 'server_error', status: response.status };
-      }
-
-      return { ok: true, data: (await response.json()) as OCRResponse };
-    } catch (error: any) {
-      console.error('OCR error:', error);
-      return { ok: false, reason: 'network_error' };
-    } finally {
-      clearTimeout(timer);
-    }
-  };
-
   const handleScannedDateChange = (text: string) => {
     setScannedDateText(text);
     if (text.trim().length === 0) {
@@ -445,25 +408,6 @@ export default function AddProductScreen() {
     });
   };
 
-  // Applique la date parsée par le backend.
-  // Corrige le bug de timezone : new Date("YYYY-MM-DD") parse en UTC,
-  // ce qui décale la date d'un jour en UTC+1. On parse les composants manuellement.
-  const tryApplyBackendDate = (dateStr?: string | null, fmt?: string | null, conf?: number) => {
-    if (!dateStr) return false;
-    const parts = dateStr.split('-').map(Number);
-    if (parts.length !== 3 || parts.some(isNaN)) return false;
-    const parsed = new Date(parts[0], parts[1] - 1, parts[2]);
-    if (Number.isNaN(parsed.getTime())) return false;
-
-    applyParsedDate(
-      parsed,
-      dateStr,
-      typeof conf === 'number' ? `${Math.round(conf * 100)}%` : 'high',
-      fmt || 'YYYY-MM-DD (backend)'
-    );
-    return true;
-  };
-
   const handleCaptureAndScan = async () => {
     if (!permission?.granted) {
       Alert.alert(
@@ -484,79 +428,48 @@ export default function AddProductScreen() {
 
     try {
       const photo = await cameraRef.current.takePictureAsync({
-        base64: true,
-        quality: 0.6,
+        quality: 0.7,
         skipProcessing: true,
       });
 
-      if (!photo?.base64) {
-        throw new Error('No base64 image returned by camera');
+      if (!photo?.uri) {
+        throw new Error('No URI returned by camera');
       }
 
-      const ocrResult = await performOCR(photo.base64);
+      const mlResult = await TextRecognition.recognize(photo.uri);
 
-      if (!ocrResult.ok) {
-        const msg = (() => {
-          if (ocrResult.reason === 'not_available') {
-            return language === 'fr'
-              ? 'OCR non disponible sur ce serveur.'
-              : 'OCR not available on this server.';
-          }
-          if (ocrResult.reason === 'server_error') {
-            return language === 'fr'
-              ? `Erreur serveur OCR (${ocrResult.status}). Réessayez dans un moment.`
-              : `OCR server error (${ocrResult.status}). Please retry shortly.`;
-          }
-          return language === 'fr'
-            ? 'Connexion impossible. Vérifiez votre réseau (le serveur démarre peut-être).'
-            : 'Cannot reach server. Check your connection (server may be starting up).';
-        })();
-        setOcrError(msg);
+      const allLines = mlResult.blocks.flatMap(b => b.lines.map(l => l.text));
+      if (allLines.length > 0) setOcrDebug(allLines.join(' | '));
+
+      const combinedText = mlResult.text;
+
+      // Priorité 1 : parse sur tout le texte combiné
+      const best = getBestDateFromOCR(combinedText);
+      if (best.date) {
+        applyParsedDate(best.date, combinedText, best.confidence, best.format);
         return;
       }
 
-      const ocr = ocrResult.data;
-
-      if (ocr.raw_lines?.length) {
-        setOcrDebug(ocr.raw_lines.join(' | '));
-      }
-
-      const sourceText =
-        (ocr.raw && ocr.raw.trim().length > 0 ? ocr.raw : '') ||
-        (ocr.combined_text && ocr.combined_text.trim().length > 0 ? ocr.combined_text : '') ||
-        '';
-
-      // Priorité 1 : date déjà parsée par le backend (EasyOCR + regex)
-      if (tryApplyBackendDate(ocr.date, ocr.format, ocr.confidence)) {
-        return;
-      }
-
-      // Priorité 2 : re-parse frontend sur le texte brut OCR (fallback)
-      if (sourceText) {
-        const best = getBestDateFromOCR(sourceText);
-        if (best.date) {
-          applyParsedDate(best.date, sourceText, best.confidence, best.format);
-          return;
-        }
-
-        const plain = parseExpiryDate(sourceText);
-        if (plain.date) {
-          applyParsedDate(plain.date, sourceText, plain.confidence, plain.format);
+      // Priorité 2 : parse ligne par ligne (fallback)
+      for (const line of allLines) {
+        const r = parseExpiryDate(line);
+        if (r.date) {
+          applyParsedDate(r.date, line, r.confidence, r.format);
           return;
         }
       }
 
       setOcrError(
         language === 'fr'
-          ? 'Date non détectée automatiquement. Essayez la saisie manuelle.'
-          : 'No date detected automatically. Please use manual input.'
+          ? 'Date non détectée. Essayez la saisie manuelle.'
+          : 'No date detected. Please use manual input.'
       );
     } catch (error) {
       console.error('Capture OCR error:', error);
       setOcrError(
         language === 'fr'
-          ? 'Échec du scan OCR. Vérifiez la connexion et réessayez.'
-          : 'OCR scan failed. Check your connection and try again.'
+          ? 'Échec du scan. Réessayez.'
+          : 'Scan failed. Please try again.'
       );
     } finally {
       setIsOcrProcessing(false);
