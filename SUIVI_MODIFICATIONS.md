@@ -145,12 +145,121 @@ Backend (server.py):
 
 ---
 
+---
+
+## Session du 2026-02-27 (suite)
+
+### Problèmes traités
+
+#### 8. Cold start Render + latence scan code-barres — `frontend/app/_layout.tsx`
+
+**Problème :** Le backend Render (free tier) se met en veille après ~15 min d'inactivité.
+La première requête (scan code-barres) payait 30–60 s de cold start.
+
+**Correction :** Warm-up ping `/health` au démarrage de l'app (best-effort, silencieux).
+```typescript
+async function warmUpBackend(): Promise<void> {
+  const controller = new AbortController();
+  const timer = setTimeout(() => controller.abort(), 30_000);
+  try {
+    await fetch(`${API_URL}/health`, { signal: controller.signal });
+  } catch { } finally { clearTimeout(timer); }
+}
+// useEffect(() => { warmUpBackend(); }, []);
+```
+
+---
+
+#### 9. Latence OCR premier appel + `on_event("shutdown")` déprécié — `backend/server.py`
+
+**Problème :** `easyocr.Reader(["fr","en"])` charge ~500 MB de modèles au **premier** appel OCR,
+provoquant un timeout ou OOM sur Render free (512 MB RAM). De plus `@app.on_event("shutdown")`
+est déprécié depuis FastAPI 0.93.
+
+**Correction :** Migration vers `lifespan` (contexte async) qui :
+1. Pré-charge le modèle OCR au démarrage via `run_in_executor` (non bloquant)
+2. Ferme la connexion MongoDB au shutdown
+3. Supprime le `@app.on_event` déprécié (règle aussi l'issue C)
+
+```python
+@asynccontextmanager
+async def lifespan(app: FastAPI):
+    loop = asyncio.get_running_loop()
+    try:
+        await loop.run_in_executor(None, _get_ocr_reader)
+    except Exception as e:
+        logger.warning("OCR reader pre-initialization failed: %s", e)
+    yield
+    client.close()
+
+app = FastAPI(title="KeepEat Backend", version="1.0.0", lifespan=lifespan)
+```
+
+Timeout OpenFoodFacts réduit de **10 s → 5 s** (limite les blocages sur code-barres inconnus).
+
+---
+
+#### 10. Diagnostic OCR opaque — `frontend/app/add-product.tsx`
+
+**Problème :** `performOCR` retournait `null` pour toute erreur (501, 5xx, timeout réseau),
+affichant toujours "OCR indisponible pour le moment" sans indication sur la cause.
+
+**Correction :** Type discriminé `OCRResult` avec 3 raisons d'échec distinctes.
+
+```typescript
+type OCRResult =
+  | { ok: true; data: OCRResponse }
+  | { ok: false; reason: 'not_available' | 'server_error' | 'network_error'; status?: number };
+```
+
+| Code retour | Message affiché |
+|-------------|-----------------|
+| HTTP 501 | "OCR non disponible sur ce serveur." |
+| HTTP 5xx | "Erreur serveur OCR (503). Réessayez dans un moment." |
+| Timeout / réseau | "Connexion impossible… (le serveur démarre peut-être)." |
+
+Ajout d'un `AbortController` avec timeout 30 s sur la requête OCR.
+
+---
+
+### Fichiers modifiés (session suite)
+
+| Fichier | Nature |
+|---------|--------|
+| `backend/server.py` | lifespan + pré-init OCR + timeout OFF 5 s + suppression on_event |
+| `frontend/app/_layout.tsx` | Warm-up ping au démarrage |
+| `frontend/app/add-product.tsx` | Diagnostic OCR différencié (type OCRResult) |
+
+---
+
+### Message de commit associé
+
+```
+fix: cold start, latence OCR et diagnostic d'erreur
+
+Backend (server.py):
+- Migration on_event("shutdown") → lifespan (FastAPI moderne)
+- Pré-chargement du modèle EasyOCR au démarrage via run_in_executor
+  (évite timeout/OOM au premier appel OCR)
+- Timeout OpenFoodFacts réduit de 10 s à 5 s
+
+Frontend (_layout.tsx):
+- Warm-up ping /health au démarrage de l'app
+  (réveille le serveur Render avant le premier scan)
+
+Frontend (add-product.tsx):
+- Type OCRResult discriminé : not_available / server_error / network_error
+- Messages d'erreur distincts selon la cause (501, 5xx, réseau/timeout)
+- AbortController avec timeout 30 s sur la requête OCR
+```
+
+---
+
 ### Problèmes identifiés non corrigés (à traiter)
 
 | # | Problème | Fichier | Priorité |
 |---|----------|---------|----------|
 | A | CORS `allow_origins=["*"]` en production | `backend/server.py` | Moyenne |
 | B | `loadLanguage` non appelé au démarrage | `frontend/app/_layout.tsx` | Basse |
-| C | `on_event("shutdown")` déprécié (→ `lifespan`) | `backend/server.py` | Basse |
 | D | `get_stats` charge encore 2000 docs en mémoire | `backend/server.py` | Moyenne |
 | E | Debug OCR visible en production (`ocrDebug`) | `frontend/app/add-product.tsx` | Basse |

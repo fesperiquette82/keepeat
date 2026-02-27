@@ -1,11 +1,13 @@
 # backend/server.py
 from __future__ import annotations
 
+import asyncio
 import base64
 import io
 import logging
 import os
 import re
+from contextlib import asynccontextmanager
 from datetime import datetime, timedelta, timezone
 from typing import Any, Dict, List, Optional, Tuple
 
@@ -41,7 +43,21 @@ logger = logging.getLogger("keepeat-backend")
 # -----------------------------------------------------------------------------
 # App
 # -----------------------------------------------------------------------------
-app = FastAPI(title="KeepEat Backend", version="1.0.0")
+@asynccontextmanager
+async def lifespan(app: FastAPI):
+    # Startup : pré-chargement du modèle OCR pour éviter la latence au premier appel
+    loop = asyncio.get_running_loop()
+    try:
+        await loop.run_in_executor(None, _get_ocr_reader)
+        logger.info("OCR reader pre-initialized successfully")
+    except Exception as e:
+        logger.warning("OCR reader pre-initialization failed: %s", e)
+    yield
+    # Shutdown : fermeture de la connexion MongoDB
+    client.close()
+
+
+app = FastAPI(title="KeepEat Backend", version="1.0.0", lifespan=lifespan)
 
 
 def _utc_now() -> datetime:
@@ -217,7 +233,7 @@ async def lookup_product_openfoodfacts(barcode: str) -> Optional[ProductBase]:
     try:
         url = f"https://world.openfoodfacts.net/api/v2/product/{barcode}"
         headers = {"User-Agent": OFF_USER_AGENT}
-        async with httpx.AsyncClient(timeout=10.0, headers=headers) as c:
+        async with httpx.AsyncClient(timeout=5.0, headers=headers) as c:
             r = await c.get(url)
 
         if r.status_code != 200:
@@ -737,6 +753,3 @@ async def ocr_extract_date(request: OCRRequest):
 app.include_router(api_router)
 
 
-@app.on_event("shutdown")
-async def shutdown_db_client():
-    client.close()

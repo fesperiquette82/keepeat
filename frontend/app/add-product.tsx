@@ -33,6 +33,10 @@ type OCRResponse = {
   combined_text?: string | null;
 };
 
+type OCRResult =
+  | { ok: true; data: OCRResponse }
+  | { ok: false; reason: 'not_available' | 'server_error' | 'network_error'; status?: number };
+
 type ParsedDateInfo = { date: Date | null; confidence: string; format: string };
 
 // ─── DatePickerModal ───────────────────────────────────────────────────────────
@@ -390,24 +394,29 @@ export default function AddProductScreen() {
     setExpiryDate(addDays(new Date(), days));
   };
 
-  const performOCR = async (imageBase64: string): Promise<OCRResponse | null> => {
+  const performOCR = async (imageBase64: string): Promise<OCRResult> => {
+    const controller = new AbortController();
+    const timer = setTimeout(() => controller.abort(), 30_000);
     try {
       const API_URL = process.env.EXPO_PUBLIC_BACKEND_URL?.trim() || 'https://keepeat-backend.onrender.com';
       const response = await fetch(`${API_URL}/api/ocr/date`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ image_base64: imageBase64, maxPastYears: getExpiryDetectionPastYears() }),
+        signal: controller.signal,
       });
 
       if (!response.ok) {
-        const text = await response.text();
-        throw new Error(`OCR API ${response.status}: ${text}`);
+        if (response.status === 501) return { ok: false, reason: 'not_available', status: 501 };
+        return { ok: false, reason: 'server_error', status: response.status };
       }
 
-      return (await response.json()) as OCRResponse;
-    } catch (error) {
+      return { ok: true, data: (await response.json()) as OCRResponse };
+    } catch (error: any) {
       console.error('OCR error:', error);
-      return null;
+      return { ok: false, reason: 'network_error' };
+    } finally {
+      clearTimeout(timer);
     }
   };
 
@@ -484,12 +493,29 @@ export default function AddProductScreen() {
         throw new Error('No base64 image returned by camera');
       }
 
-      const ocr = await performOCR(photo.base64);
+      const ocrResult = await performOCR(photo.base64);
 
-      if (!ocr) {
-        setOcrError(language === 'fr' ? 'OCR indisponible pour le moment.' : 'OCR unavailable right now.');
+      if (!ocrResult.ok) {
+        const msg = (() => {
+          if (ocrResult.reason === 'not_available') {
+            return language === 'fr'
+              ? 'OCR non disponible sur ce serveur.'
+              : 'OCR not available on this server.';
+          }
+          if (ocrResult.reason === 'server_error') {
+            return language === 'fr'
+              ? `Erreur serveur OCR (${ocrResult.status}). Réessayez dans un moment.`
+              : `OCR server error (${ocrResult.status}). Please retry shortly.`;
+          }
+          return language === 'fr'
+            ? 'Connexion impossible. Vérifiez votre réseau (le serveur démarre peut-être).'
+            : 'Cannot reach server. Check your connection (server may be starting up).';
+        })();
+        setOcrError(msg);
         return;
       }
+
+      const ocr = ocrResult.data;
 
       if (ocr.raw_lines?.length) {
         setOcrDebug(ocr.raw_lines.join(' | '));
