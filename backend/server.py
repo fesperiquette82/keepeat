@@ -14,10 +14,13 @@ from typing import Any, Dict, List, Optional, Tuple
 import httpx
 from bson import ObjectId
 from dotenv import load_dotenv
-from fastapi import APIRouter, FastAPI, HTTPException
+from fastapi import APIRouter, Depends, FastAPI, HTTPException, Query, status
 from fastapi.middleware.cors import CORSMiddleware
+from fastapi.security import HTTPAuthorizationCredentials, HTTPBearer
+from jose import JWTError, jwt
 from motor.motor_asyncio import AsyncIOMotorClient
-from pydantic import BaseModel, Field
+from passlib.context import CryptContext
+from pydantic import BaseModel, EmailStr, Field
 
 # Load local environment variables from backend/.env (safe in Render too)
 load_dotenv()
@@ -115,6 +118,58 @@ DB_NAME = os.getenv("DB_NAME", "keepeat_db")
 client = AsyncIOMotorClient(MONGO_URL)
 db = client[DB_NAME]
 stock_col = db["stock"]
+users_col = db["users"]
+
+# -----------------------------------------------------------------------------
+# Auth configuration
+# -----------------------------------------------------------------------------
+JWT_SECRET_KEY = os.getenv("JWT_SECRET_KEY", "changeme-set-a-real-secret-in-render")
+JWT_ALGORITHM = "HS256"
+JWT_EXPIRE_DAYS = 30
+
+ADMIN_KEY = os.getenv("ADMIN_KEY", "")
+
+pwd_context = CryptContext(schemes=["bcrypt"], deprecated="auto")
+http_bearer = HTTPBearer(auto_error=False)
+
+
+def _hash_password(password: str) -> str:
+    return pwd_context.hash(password)
+
+
+def _verify_password(plain: str, hashed: str) -> bool:
+    return pwd_context.verify(plain, hashed)
+
+
+def _create_token(user_id: str) -> str:
+    expire = _utc_now() + timedelta(days=JWT_EXPIRE_DAYS)
+    return jwt.encode(
+        {"sub": user_id, "exp": expire},
+        JWT_SECRET_KEY,
+        algorithm=JWT_ALGORITHM,
+    )
+
+
+async def _get_current_user(
+    credentials: Optional[HTTPAuthorizationCredentials] = Depends(http_bearer),
+) -> Dict[str, Any]:
+    if not credentials or not credentials.credentials:
+        raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="Not authenticated")
+    try:
+        payload = jwt.decode(credentials.credentials, JWT_SECRET_KEY, algorithms=[JWT_ALGORITHM])
+        user_id: str = payload.get("sub")
+        if not user_id:
+            raise ValueError("missing sub")
+    except (JWTError, ValueError):
+        raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="Invalid or expired token")
+
+    try:
+        doc = await users_col.find_one({"_id": ObjectId(user_id)})
+    except Exception:
+        doc = None
+    if not doc:
+        raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="User not found")
+    return _serialize_mongo(doc)
 
 # -----------------------------------------------------------------------------
 # Helpers
@@ -153,6 +208,33 @@ def _days_until(expiry_date: Optional[str]) -> Optional[int]:
 # -----------------------------------------------------------------------------
 # Models
 # -----------------------------------------------------------------------------
+
+# --- Auth models ---
+
+class UserCreate(BaseModel):
+    email: EmailStr
+    password: str = Field(..., min_length=6)
+
+
+class UserLogin(BaseModel):
+    email: EmailStr
+    password: str
+
+
+class UserResponse(BaseModel):
+    id: str
+    email: str
+    is_premium: bool
+
+
+class TokenResponse(BaseModel):
+    access_token: str
+    token_type: str = "bearer"
+    user: UserResponse
+
+
+# --- Stock models ---
+
 class ProductBase(BaseModel):
     barcode: Optional[str] = None
     name: str = ""
@@ -511,16 +593,94 @@ async def health():
     return {"status": "healthy", "timestamp": _utc_now().isoformat()}
 
 
+# -----------------------------------------------------------------------------
+# Auth routes
+# -----------------------------------------------------------------------------
+
+@api_router.post("/auth/register", response_model=TokenResponse, status_code=201)
+async def register(body: UserCreate):
+    existing = await users_col.find_one({"email": body.email.lower()})
+    if existing:
+        raise HTTPException(status_code=409, detail="Email already registered")
+
+    doc = {
+        "email": body.email.lower(),
+        "hashed_password": _hash_password(body.password),
+        "is_premium": False,
+        "created_at": _utc_now().isoformat(),
+        "last_login": _utc_now().isoformat(),
+    }
+    res = await users_col.insert_one(doc)
+    user_id = str(res.inserted_id)
+    token = _create_token(user_id)
+    return TokenResponse(
+        access_token=token,
+        user=UserResponse(id=user_id, email=doc["email"], is_premium=False),
+    )
+
+
+@api_router.post("/auth/login", response_model=TokenResponse)
+async def login(body: UserLogin):
+    doc = await users_col.find_one({"email": body.email.lower()})
+    if not doc or not _verify_password(body.password, doc["hashed_password"]):
+        raise HTTPException(status_code=401, detail="Invalid email or password")
+
+    user_id = str(doc["_id"])
+    await users_col.update_one({"_id": doc["_id"]}, {"$set": {"last_login": _utc_now().isoformat()}})
+    token = _create_token(user_id)
+    return TokenResponse(
+        access_token=token,
+        user=UserResponse(id=user_id, email=doc["email"], is_premium=doc.get("is_premium", False)),
+    )
+
+
+@api_router.get("/auth/me", response_model=UserResponse)
+async def me(current_user: Dict[str, Any] = Depends(_get_current_user)):
+    return UserResponse(
+        id=current_user["id"],
+        email=current_user["email"],
+        is_premium=current_user.get("is_premium", False),
+    )
+
+
+# -----------------------------------------------------------------------------
+# Admin routes
+# -----------------------------------------------------------------------------
+
+@api_router.put("/admin/users/{email}/set-premium")
+async def set_premium(email: str, key: str = Query(...), premium: bool = Query(True)):
+    if not ADMIN_KEY or key != ADMIN_KEY:
+        raise HTTPException(status_code=403, detail="Invalid admin key")
+    res = await users_col.update_one(
+        {"email": email.lower()},
+        {"$set": {"is_premium": premium}},
+    )
+    if res.matched_count == 0:
+        raise HTTPException(status_code=404, detail="User not found")
+    return {"ok": True, "email": email.lower(), "is_premium": premium}
+
+
+# -----------------------------------------------------------------------------
+# Stock routes (auth required — isolated by user_id)
+# -----------------------------------------------------------------------------
+
 @api_router.get("/stock", response_model=List[StockItem])
-async def get_stock(status: str = "active"):
-    cursor = stock_col.find({"status": status}).sort("added_date", -1)
+async def get_stock(
+    status: str = "active",
+    current_user: Dict[str, Any] = Depends(_get_current_user),
+):
+    cursor = stock_col.find({"user_id": current_user["id"], "status": status}).sort("added_date", -1)
     docs = await cursor.to_list(length=1000)
     return [_serialize_mongo(d) for d in docs]
 
 
 @api_router.post("/stock", response_model=StockItem)
-async def add_stock(item: StockItemCreate):
+async def add_stock(
+    item: StockItemCreate,
+    current_user: Dict[str, Any] = Depends(_get_current_user),
+):
     doc = item.model_dump()
+    doc["user_id"] = current_user["id"]
     doc["added_date"] = _utc_now().isoformat()
     doc["status"] = "active"
     doc["consumed_date"] = None
@@ -532,7 +692,11 @@ async def add_stock(item: StockItemCreate):
 
 
 @api_router.put("/stock/{item_id}", response_model=StockItem)
-async def update_stock(item_id: str, item: StockItemUpdate):
+async def update_stock(
+    item_id: str,
+    item: StockItemUpdate,
+    current_user: Dict[str, Any] = Depends(_get_current_user),
+):
     try:
         oid = ObjectId(item_id)
     except Exception:
@@ -540,13 +704,13 @@ async def update_stock(item_id: str, item: StockItemUpdate):
 
     update_data = item.model_dump(exclude_unset=True)
     if not update_data:
-        existing = await stock_col.find_one({"_id": oid})
+        existing = await stock_col.find_one({"_id": oid, "user_id": current_user["id"]})
         if not existing:
             raise HTTPException(status_code=404, detail="Item not found")
         return _serialize_mongo(existing)
 
     res = await stock_col.update_one(
-        {"_id": oid, "status": "active"},
+        {"_id": oid, "user_id": current_user["id"], "status": "active"},
         {"$set": update_data},
     )
     if res.matched_count == 0:
@@ -557,14 +721,17 @@ async def update_stock(item_id: str, item: StockItemUpdate):
 
 
 @api_router.post("/stock/{item_id}/consume")
-async def consume_item(item_id: str):
+async def consume_item(
+    item_id: str,
+    current_user: Dict[str, Any] = Depends(_get_current_user),
+):
     try:
         oid = ObjectId(item_id)
     except Exception:
         raise HTTPException(status_code=400, detail="Invalid item id")
 
     res = await stock_col.update_one(
-        {"_id": oid},
+        {"_id": oid, "user_id": current_user["id"]},
         {"$set": {"status": "consumed", "consumed_date": _utc_now().isoformat()}},
     )
     if res.matched_count == 0:
@@ -573,14 +740,17 @@ async def consume_item(item_id: str):
 
 
 @api_router.post("/stock/{item_id}/throw")
-async def throw_item(item_id: str):
+async def throw_item(
+    item_id: str,
+    current_user: Dict[str, Any] = Depends(_get_current_user),
+):
     try:
         oid = ObjectId(item_id)
     except Exception:
         raise HTTPException(status_code=400, detail="Invalid item id")
 
     res = await stock_col.update_one(
-        {"_id": oid},
+        {"_id": oid, "user_id": current_user["id"]},
         {"$set": {"status": "thrown", "thrown_date": _utc_now().isoformat()}},
     )
     if res.matched_count == 0:
@@ -589,11 +759,10 @@ async def throw_item(item_id: str):
 
 
 @api_router.get("/stock/priority", response_model=List[StockItem])
-async def get_priority_items():
-    # priority: expired or expiring in <= 3 days
-    # Filtre côté MongoDB : expiry_date <= aujourd'hui + 3 jours (string ISO tri lexicographique)
+async def get_priority_items(current_user: Dict[str, Any] = Depends(_get_current_user)):
     threshold = (_utc_now().date() + timedelta(days=3)).strftime("%Y-%m-%d")
     cursor = stock_col.find({
+        "user_id": current_user["id"],
         "status": "active",
         "expiry_date": {"$nin": [None, ""], "$lte": threshold},
     }).sort("expiry_date", 1)
@@ -602,12 +771,13 @@ async def get_priority_items():
 
 
 @api_router.get("/stats", response_model=StatsResponse)
-async def get_stats():
+async def get_stats(current_user: Dict[str, Any] = Depends(_get_current_user)):
+    uid = current_user["id"]
     # active
-    total_items = await stock_col.count_documents({"status": "active"})
+    total_items = await stock_col.count_documents({"user_id": uid, "status": "active"})
 
     # expiring soon / expired among active
-    cursor = stock_col.find({"status": "active"})
+    cursor = stock_col.find({"user_id": uid, "status": "active"})
     active_docs = await cursor.to_list(length=2000)
 
     expiring_soon = 0
@@ -625,10 +795,10 @@ async def get_stats():
     week_ago = (_utc_now() - timedelta(days=7)).isoformat()
 
     consumed_this_week = await stock_col.count_documents(
-        {"status": "consumed", "consumed_date": {"$gte": week_ago}}
+        {"user_id": uid, "status": "consumed", "consumed_date": {"$gte": week_ago}}
     )
     thrown_this_week = await stock_col.count_documents(
-        {"status": "thrown", "thrown_date": {"$gte": week_ago}}
+        {"user_id": uid, "status": "thrown", "thrown_date": {"$gte": week_ago}}
     )
 
     return StatsResponse(

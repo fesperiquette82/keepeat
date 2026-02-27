@@ -5,22 +5,45 @@ import {
   StyleSheet,
   TouchableOpacity,
   ScrollView,
+  Alert,
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { useRouter } from 'expo-router';
 import { Ionicons } from '@expo/vector-icons';
 import { useLanguageStore } from '../store/languageStore';
 import { useStockStore } from '../store/stockStore';
+import { useAuthStore } from '../store/authStore';
 
 export default function SettingsScreen() {
   const router = useRouter();
   const { language, setLanguage, t, loadLanguage } = useLanguageStore();
   const { stats, fetchStats } = useStockStore();
+  const { user, logout } = useAuthStore();
+
+  const fr = language === 'fr';
 
   useEffect(() => {
     loadLanguage();
     fetchStats();
   }, []);
+
+  const handleLogout = () => {
+    Alert.alert(
+      fr ? 'Déconnexion' : 'Sign out',
+      fr ? 'Voulez-vous vous déconnecter ?' : 'Do you want to sign out?',
+      [
+        { text: fr ? 'Annuler' : 'Cancel', style: 'cancel' },
+        {
+          text: fr ? 'Se déconnecter' : 'Sign out',
+          style: 'destructive',
+          onPress: async () => {
+            await logout();
+            // La navigation est gérée par _layout.tsx
+          },
+        },
+      ]
+    );
+  };
 
   return (
     <SafeAreaView style={styles.container}>
@@ -34,6 +57,37 @@ export default function SettingsScreen() {
       </View>
 
       <ScrollView style={styles.scrollView} contentContainerStyle={styles.scrollContent}>
+        {/* Account Section */}
+        {user && (
+          <View style={styles.section}>
+            <Text style={styles.sectionTitle}>{fr ? 'Compte' : 'Account'}</Text>
+            <View style={styles.accountCard}>
+              <View style={styles.accountRow}>
+                <View style={styles.accountIconWrapper}>
+                  <Ionicons name="person-circle-outline" size={28} color="#22c55e" />
+                </View>
+                <View style={styles.accountInfo}>
+                  <Text style={styles.accountEmail}>{user.email}</Text>
+                  <View style={[styles.licenseBadge, user.is_premium ? styles.licensePremium : styles.licenseFree]}>
+                    <Ionicons
+                      name={user.is_premium ? 'star' : 'star-outline'}
+                      size={12}
+                      color={user.is_premium ? '#f59e0b' : '#666'}
+                    />
+                    <Text style={[styles.licenseText, user.is_premium ? styles.licenseTextPremium : styles.licenseTextFree]}>
+                      {user.is_premium ? 'Premium' : (fr ? 'Gratuit' : 'Free')}
+                    </Text>
+                  </View>
+                </View>
+              </View>
+              <TouchableOpacity style={styles.logoutBtn} onPress={handleLogout}>
+                <Ionicons name="log-out-outline" size={18} color="#ef4444" />
+                <Text style={styles.logoutText}>{fr ? 'Se déconnecter' : 'Sign out'}</Text>
+              </TouchableOpacity>
+            </View>
+          </View>
+        )}
+
         {/* Language Section */}
         <View style={styles.section}>
           <Text style={styles.sectionTitle}>{t('language')}</Text>
@@ -208,6 +262,52 @@ const styles = StyleSheet.create({
     textTransform: 'uppercase',
     letterSpacing: 1,
   },
+  accountCard: {
+    backgroundColor: '#1a1a1a',
+    borderRadius: 12,
+    padding: 16,
+    gap: 14,
+  },
+  accountRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 12,
+  },
+  accountIconWrapper: {
+    width: 48,
+    height: 48,
+    borderRadius: 24,
+    backgroundColor: '#22c55e15',
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  accountInfo: { flex: 1, gap: 6 },
+  accountEmail: { color: '#fff', fontSize: 14, fontWeight: '600' },
+  licenseBadge: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 4,
+    alignSelf: 'flex-start',
+    paddingHorizontal: 8,
+    paddingVertical: 3,
+    borderRadius: 20,
+    borderWidth: 1,
+  },
+  licensePremium: { backgroundColor: '#f59e0b15', borderColor: '#f59e0b40' },
+  licenseFree: { backgroundColor: '#ffffff08', borderColor: '#333' },
+  licenseText: { fontSize: 11, fontWeight: '700' },
+  licenseTextPremium: { color: '#f59e0b' },
+  licenseTextFree: { color: '#666' },
+  logoutBtn: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 8,
+    paddingTop: 14,
+    borderTopWidth: 1,
+    borderTopColor: '#2a2a2a',
+  },
+  logoutText: { color: '#ef4444', fontSize: 14, fontWeight: '600' },
+
   languageOptions: {
     gap: 10,
   },

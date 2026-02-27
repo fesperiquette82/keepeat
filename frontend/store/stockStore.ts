@@ -2,9 +2,15 @@
 
 import { create } from 'zustand';
 import axios from 'axios';
+import { useAuthStore } from './authStore';
 
 const DEFAULT_API_URL = 'https://keepeat-backend.onrender.com';
 const API_URL = process.env.EXPO_PUBLIC_BACKEND_URL?.trim() || DEFAULT_API_URL;
+
+const authHeaders = () => {
+  const token = useAuthStore.getState().token;
+  return token ? { Authorization: `Bearer ${token}` } : {};
+};
 
 // --- Added interfaces from the suggested edit ---
 export interface StockItem {
@@ -66,7 +72,7 @@ export const useStockStore = create<StockStore>((set) => ({
   fetchStock: async () => {
     set((state) => ({ loadingCount: state.loadingCount + 1, isLoading: true, error: null }));
     try {
-      const res = await axios.get(`${API_URL}/api/stock?status=active`);
+      const res = await axios.get(`${API_URL}/api/stock?status=active`, { headers: authHeaders() });
       set({ items: res.data });
     } catch (err: any) {
       set({ error: err.message });
@@ -81,7 +87,7 @@ export const useStockStore = create<StockStore>((set) => ({
   fetchPriorityItems: async () => {
     set((state) => ({ loadingCount: state.loadingCount + 1, isLoading: true, error: null }));
     try {
-      const res = await axios.get(`${API_URL}/api/stock/priority`);
+      const res = await axios.get(`${API_URL}/api/stock/priority`, { headers: authHeaders() });
       set({ priorityItems: res.data });
     } catch (err: any) {
       set({ error: err.message });
@@ -96,7 +102,7 @@ export const useStockStore = create<StockStore>((set) => ({
   fetchStats: async () => {
     set((state) => ({ loadingCount: state.loadingCount + 1, isLoading: true, error: null }));
     try {
-      const res = await axios.get(`${API_URL}/api/stats`);
+      const res = await axios.get(`${API_URL}/api/stats`, { headers: authHeaders() });
       set({ stats: res.data });
     } catch (err: any) {
       set({ error: err.message });
@@ -110,7 +116,6 @@ export const useStockStore = create<StockStore>((set) => ({
 
   markConsumed: async (itemId: string) => {
     const { items, priorityItems, stats } = useStockStore.getState();
-    // Optimistic update : retrait immédiat de l'item
     set((state) => ({
       items: state.items.filter((i) => i.id !== itemId),
       priorityItems: state.priorityItems.filter((i) => i.id !== itemId),
@@ -121,19 +126,16 @@ export const useStockStore = create<StockStore>((set) => ({
       },
     }));
     try {
-      await axios.post(`${API_URL}/api/stock/${itemId}/consume`);
-      // Rafraîchissement complet en parallèle
+      await axios.post(`${API_URL}/api/stock/${itemId}/consume`, {}, { headers: authHeaders() });
       const s = useStockStore.getState();
       await Promise.all([s.fetchStock(), s.fetchPriorityItems(), s.fetchStats()]);
     } catch (err: any) {
-      // Rollback si erreur réseau
       set({ items, priorityItems, stats, error: err.message });
     }
   },
 
   markThrown: async (itemId: string) => {
     const { items, priorityItems, stats } = useStockStore.getState();
-    // Optimistic update : retrait immédiat de l'item
     set((state) => ({
       items: state.items.filter((i) => i.id !== itemId),
       priorityItems: state.priorityItems.filter((i) => i.id !== itemId),
@@ -144,12 +146,10 @@ export const useStockStore = create<StockStore>((set) => ({
       },
     }));
     try {
-      await axios.post(`${API_URL}/api/stock/${itemId}/throw`);
-      // Rafraîchissement complet en parallèle
+      await axios.post(`${API_URL}/api/stock/${itemId}/throw`, {}, { headers: authHeaders() });
       const s = useStockStore.getState();
       await Promise.all([s.fetchStock(), s.fetchPriorityItems(), s.fetchStats()]);
     } catch (err: any) {
-      // Rollback si erreur réseau
       set({ items, priorityItems, stats, error: err.message });
     }
   },
@@ -165,7 +165,7 @@ export const useStockStore = create<StockStore>((set) => ({
 
   addItem: async (item) => {
     try {
-      const res = await axios.post(`${API_URL}/api/stock`, item);
+      const res = await axios.post(`${API_URL}/api/stock`, item, { headers: authHeaders() });
       const s = useStockStore.getState();
       await Promise.all([s.fetchStock(), s.fetchPriorityItems(), s.fetchStats()]);
       return res.data;
@@ -174,9 +174,10 @@ export const useStockStore = create<StockStore>((set) => ({
       return null;
     }
   },
+
   updateItem: async (itemId, updates) => {
     try {
-      const res = await axios.put(`${API_URL}/api/stock/${itemId}`, updates);
+      const res = await axios.put(`${API_URL}/api/stock/${itemId}`, updates, { headers: authHeaders() });
       const s = useStockStore.getState();
       await Promise.all([s.fetchStock(), s.fetchPriorityItems(), s.fetchStats()]);
       return res.data;

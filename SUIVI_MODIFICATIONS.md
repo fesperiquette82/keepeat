@@ -260,6 +260,181 @@ Frontend (add-product.tsx):
 | # | Problème | Fichier | Priorité |
 |---|----------|---------|----------|
 | A | CORS `allow_origins=["*"]` en production | `backend/server.py` | Moyenne |
-| B | `loadLanguage` non appelé au démarrage | `frontend/app/_layout.tsx` | Basse |
+| ~~B~~ | ~~`loadLanguage` non appelé au démarrage~~ | ~~`frontend/app/_layout.tsx`~~ | ~~Basse~~ — **Corrigé (session multiple_usr)** |
 | D | `get_stats` charge encore 2000 docs en mémoire | `backend/server.py` | Moyenne |
 | E | Debug OCR visible en production (`ocrDebug`) | `frontend/app/add-product.tsx` | Basse |
+
+---
+
+---
+
+## Session du 2026-02-27 — branche `multiple_usr`
+
+### Objectif
+
+Ajout de la gestion des comptes utilisateurs : inscription, connexion, déconnexion,
+isolation du stock par utilisateur, et flag `is_premium` activable manuellement.
+
+---
+
+### Nouvelles fonctionnalités
+
+#### 11. Authentification JWT — `backend/server.py`
+
+**Ajouts :**
+- Collection MongoDB `users` avec champs `email`, `hashed_password`, `is_premium`, `created_at`, `last_login`
+- Hachage bcrypt via `passlib.CryptContext`
+- Tokens JWT HS256 (expiration 30 jours) via `python-jose`
+- Helper `_get_current_user` : dépendance FastAPI (`Depends`) extraite du header `Authorization: Bearer`
+
+**Routes ajoutées :**
+```
+POST /api/auth/register  → crée un compte, retourne token + user
+POST /api/auth/login     → authentifie, retourne token + user
+GET  /api/auth/me        → retourne l'utilisateur courant (auth requise)
+PUT  /api/admin/users/{email}/set-premium?key=ADMIN_KEY&premium=true
+```
+
+**Variables d'env à ajouter sur Render :**
+| Variable | Description |
+|----------|-------------|
+| `JWT_SECRET_KEY` | Clé secrète JWT (ex: `openssl rand -hex 32`) |
+| `ADMIN_KEY` | Clé admin pour activer `is_premium` |
+
+---
+
+#### 12. Isolation du stock par utilisateur — `backend/server.py`
+
+**Toutes les routes stock** (`GET /api/stock`, `POST /api/stock`, `PUT /api/stock/:id`,
+`POST /api/stock/:id/consume`, `POST /api/stock/:id/throw`, `GET /api/stock/priority`,
+`GET /api/stats`) reçoivent désormais `current_user = Depends(_get_current_user)`.
+
+- Lecture : filtre `{"user_id": current_user["id"], ...}`
+- Écriture : injection `doc["user_id"] = current_user["id"]`
+
+Les routes `/api/product/{barcode}`, `/api/ocr/date` et `/health` restent publiques.
+
+---
+
+#### 13. Store auth frontend — `frontend/store/authStore.ts` *(nouveau fichier)*
+
+Zustand store avec persistance sécurisée :
+- Token JWT → `expo-secure-store` (Keychain iOS / EncryptedSharedPreferences Android)
+- Objet user → `AsyncStorage` (non sensible)
+
+```typescript
+interface AuthUser { id: string; email: string; is_premium: boolean; }
+interface AuthStore {
+  user: AuthUser | null;  token: string | null;  isLoaded: boolean;
+  loadAuth: () => Promise<void>;
+  login: (email, password) => Promise<void>;
+  register: (email, password) => Promise<void>;
+  logout: () => Promise<void>;
+}
+```
+
+---
+
+#### 14. Écrans connexion / inscription — `frontend/app/login.tsx` + `register.tsx` *(nouveaux)*
+
+- `login.tsx` : email + mot de passe, affichage erreur inline, lien vers register
+- `register.tsx` : email + mdp + confirmation, validation côté client
+  (format email, min 6 chars, correspondance), lien vers login
+- Style cohérent (fond `#0a0a0a`, vert `#22c55e`)
+
+---
+
+#### 15. Guard auth — `frontend/app/_layout.tsx`
+
+- `loadAuth()` + `loadLanguage()` appelés au démarrage (corrige issue B)
+- Effet de navigation :
+  - Non connecté hors auth-group → redirect `/login`
+  - Connecté sur login/register → redirect `/`
+- Typage TS : `segments[0] as string | undefined` + `router.replace('/login' as any)`
+  (routes typées mises à jour après build Expo)
+
+---
+
+#### 16. Header Authorization sur les appels stock — `frontend/store/stockStore.ts`
+
+```typescript
+const authHeaders = () => {
+  const token = useAuthStore.getState().token;
+  return token ? { Authorization: `Bearer ${token}` } : {};
+};
+```
+
+Toutes les méthodes `axios.get/post/put` transmettent désormais ce header.
+La route `lookupProduct` reste sans auth (route publique).
+
+---
+
+#### 17. Section compte dans les réglages — `frontend/app/settings.tsx`
+
+Nouvelle section "Compte" affichée uniquement si `user !== null` :
+- Email de l'utilisateur
+- Badge **Premium** (étoile or) ou **Gratuit** (étoile outline grise)
+- Bouton "Se déconnecter" avec confirmation `Alert` → `authStore.logout()`
+
+---
+
+### Fichiers modifiés / créés
+
+| Fichier | Nature |
+|---------|--------|
+| `backend/server.py` | Routes auth, helpers JWT/bcrypt, isolation stock par user_id |
+| `frontend/store/authStore.ts` | **Nouveau** — store Zustand + SecureStore |
+| `frontend/app/login.tsx` | **Nouveau** — écran connexion |
+| `frontend/app/register.tsx` | **Nouveau** — écran inscription |
+| `frontend/app/_layout.tsx` | Guard auth + loadAuth + loadLanguage au démarrage |
+| `frontend/store/stockStore.ts` | Header Authorization sur tous les appels axios |
+| `frontend/app/settings.tsx` | Section compte (email, badge premium, déconnexion) |
+
+**Dépendance ajoutée :**
+```bash
+cd frontend && npx expo install expo-secure-store
+```
+
+---
+
+### Actions requises avant déploiement
+
+1. Ajouter les variables d'env sur Render :
+   - `JWT_SECRET_KEY` (générer avec `openssl rand -hex 32`)
+   - `ADMIN_KEY` (valeur secrète au choix)
+2. Activer `is_premium` via : `PUT /api/admin/users/<email>/set-premium?key=<ADMIN_KEY>&premium=true`
+
+---
+
+### Message de commit associé
+
+```
+feat: gestion des comptes utilisateurs et isolation du stock
+
+Backend (server.py):
+- Authentification JWT (python-jose, HS256, 30 jours)
+- Hachage bcrypt des mots de passe (passlib)
+- Routes POST /api/auth/register et /login, GET /api/auth/me
+- Route admin PUT /api/admin/users/{email}/set-premium
+- Isolation du stock : toutes les routes filtrées/injectées par user_id
+- Dépendance _get_current_user via HTTPBearer + Depends()
+
+Frontend (authStore.ts) — nouveau:
+- Store Zustand : login / register / logout / loadAuth
+- Token JWT dans expo-secure-store (Keychain / EncryptedSharedPreferences)
+- Objet user dans AsyncStorage
+
+Frontend (login.tsx / register.tsx) — nouveaux:
+- Écrans connexion et inscription
+- Validation client (format email, min 6 chars, confirmation mdp)
+
+Frontend (_layout.tsx):
+- Guard auth : redirect /login si non connecté, redirect / si déjà connecté
+- loadAuth() et loadLanguage() appelés au démarrage (fix issue B)
+
+Frontend (stockStore.ts):
+- Header Authorization: Bearer <token> sur tous les appels axios
+
+Frontend (settings.tsx):
+- Section Compte : email, badge Premium/Gratuit, bouton déconnexion
+```
