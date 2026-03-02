@@ -130,7 +130,9 @@ users_col = db["users"]
 # -----------------------------------------------------------------------------
 # Auth configuration
 # -----------------------------------------------------------------------------
-JWT_SECRET_KEY = os.getenv("JWT_SECRET_KEY", "changeme-set-a-real-secret-in-render")
+JWT_SECRET_KEY = os.getenv("JWT_SECRET_KEY")
+if not JWT_SECRET_KEY:
+    raise RuntimeError("JWT_SECRET_KEY is required. Set it in Render > Environment Variables.")
 JWT_ALGORITHM = "HS256"
 JWT_EXPIRE_DAYS = 30
 
