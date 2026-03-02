@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import {
   View,
   Text,
@@ -16,9 +16,11 @@ import { Ionicons } from '@expo/vector-icons';
 import { CameraView, useCameraPermissions } from 'expo-camera';
 import { useStockStore } from '../store/stockStore';
 import { useLanguageStore } from '../store/languageStore';
-import { format, addDays, parse, isValid } from 'date-fns';
+import { format, addDays, parseISO } from 'date-fns';
 import { fr, enUS } from 'date-fns/locale';
 import { parseExpiryDate, DATE_FORMAT_EXAMPLES, getBestDateFromOCR } from '../utils/dateParser';
+import { addOcrCorrection, findOcrMatch } from '../utils/ocrLearning';
+import TextRecognition from '@react-native-ml-kit/text-recognition';
 
 type DateInputMode = 'duration' | 'date' | 'camera';
 
@@ -42,7 +44,12 @@ export default function EditProductScreen() {
   const [showDatePicker, setShowDatePicker] = useState(false);
   const [showCameraModal, setShowCameraModal] = useState(false);
   const [permission, requestPermission] = useCameraPermissions();
+  const cameraRef = useRef<CameraView | null>(null);
   const [scannedDateText, setScannedDateText] = useState('');
+  const [isOcrProcessing, setIsOcrProcessing] = useState(false);
+  const [ocrError, setOcrError] = useState<string | null>(null);
+  const [lastOcrRawText, setLastOcrRawText] = useState<string | null>(null);
+  const [ocrFailed, setOcrFailed] = useState(false);
 
   useEffect(() => {
     const foundItem = items.find(i => i.id === params.id);
@@ -54,8 +61,8 @@ export default function EditProductScreen() {
       setNotes(foundItem.notes || '');
       if (foundItem.expiry_date) {
         try {
-          setExpiryDate(new Date(foundItem.expiry_date));
-        } catch (e) {
+          setExpiryDate(parseISO(foundItem.expiry_date));
+        } catch {
           setExpiryDate(null);
         }
       }
@@ -161,18 +168,89 @@ export default function EditProductScreen() {
     }
   };
 
+  const handleCaptureAndScan = async () => {
+    if (!permission?.granted) {
+      Alert.alert(
+        language === 'fr' ? 'Autorisation requise' : 'Permission required',
+        language === 'fr' ? 'Veuillez autoriser la caméra.' : 'Please allow camera access.'
+      );
+      return;
+    }
+    if (!cameraRef.current) return;
+
+    setOcrError(null);
+    setOcrFailed(false);
+    setLastOcrRawText(null);
+    setIsOcrProcessing(true);
+
+    try {
+      const photo = await cameraRef.current.takePictureAsync({ quality: 0.7, skipProcessing: true });
+      if (!photo?.uri) throw new Error('No URI');
+
+      const mlResult = await TextRecognition.recognize(photo.uri);
+      const combinedText = mlResult.text;
+      const allLines = mlResult.blocks.flatMap(b => b.lines.map(l => l.text));
+      setLastOcrRawText(combinedText);
+
+      // Priorité 0 : corrections apprises
+      const learnedDate = await findOcrMatch(combinedText);
+      if (learnedDate) {
+        const learned = parseISO(learnedDate);
+        setParsedDateInfo({ date: learned, confidence: 'high', format: language === 'fr' ? 'appris' : 'learned' });
+        setScannedDateText(learnedDate);
+        return;
+      }
+
+      // Priorité 1 : texte combiné
+      const best = getBestDateFromOCR(combinedText);
+      if (best.date) {
+        setParsedDateInfo({ date: best.date, confidence: best.confidence, format: best.format });
+        setScannedDateText(combinedText);
+        return;
+      }
+
+      // Priorité 2 : ligne par ligne
+      for (const line of allLines) {
+        const r = parseExpiryDate(line);
+        if (r.date) {
+          setParsedDateInfo({ date: r.date, confidence: r.confidence, format: r.format });
+          setScannedDateText(line);
+          return;
+        }
+      }
+
+      setOcrFailed(true);
+      setOcrError(
+        language === 'fr'
+          ? 'Date non détectée. Saisissez-la manuellement pour améliorer la reconnaissance.'
+          : 'No date detected. Enter it manually to improve future recognition.'
+      );
+    } catch {
+      setOcrError(language === 'fr' ? 'Échec du scan. Réessayez.' : 'Scan failed. Please try again.');
+    } finally {
+      setIsOcrProcessing(false);
+    }
+  };
+
   const handleScannedDateConfirm = () => {
     const result = parseExpiryDate(scannedDateText);
     if (result.date) {
+      // Sauvegarder la correction OCR si l'OCR avait échoué
+      if (ocrFailed && lastOcrRawText) {
+        addOcrCorrection(lastOcrRawText, format(result.date, 'yyyy-MM-dd'));
+      }
       setExpiryDate(result.date);
       setShowCameraModal(false);
       setScannedDateText('');
       setParsedDateInfo(null);
+      setOcrError(null);
+      setOcrFailed(false);
+      setLastOcrRawText(null);
     } else {
       const examples = DATE_FORMAT_EXAMPLES[language === 'fr' ? 'fr' : 'en'];
       Alert.alert(
         language === 'fr' ? 'Format non reconnu' : 'Unrecognized format',
-        language === 'fr' 
+        language === 'fr'
           ? `Essayez un de ces formats :\n${examples.slice(0, 4).join('\n')}`
           : `Try one of these formats:\n${examples.slice(0, 4).join('\n')}`
       );
@@ -283,7 +361,7 @@ export default function EditProductScreen() {
 
           {permission?.granted ? (
             <View style={styles.cameraView}>
-              <CameraView style={styles.camera} />
+              <CameraView ref={cameraRef} style={styles.camera} />
               <View style={styles.cameraOverlay}>
                 <View style={styles.scanZone}>
                   <Text style={styles.scanZoneText}>
@@ -305,6 +383,24 @@ export default function EditProductScreen() {
               </TouchableOpacity>
             </View>
           )}
+
+          <View style={styles.ocrActions}>
+            <TouchableOpacity
+              style={[styles.captureBtn, (!permission?.granted || isOcrProcessing) && styles.captureBtnDisabled]}
+              onPress={handleCaptureAndScan}
+              disabled={!permission?.granted || isOcrProcessing}
+            >
+              {isOcrProcessing ? (
+                <ActivityIndicator color="#fff" />
+              ) : (
+                <>
+                  <Ionicons name="scan-outline" size={18} color="#fff" />
+                  <Text style={styles.captureBtnText}>{language === 'fr' ? 'Capturer & analyser' : 'Capture & scan'}</Text>
+                </>
+              )}
+            </TouchableOpacity>
+            {ocrError ? <Text style={styles.ocrErrorText}>{ocrError}</Text> : null}
+          </View>
 
           <View style={styles.manualInputSection}>
             <Text style={styles.manualInputLabel}>
@@ -831,6 +927,33 @@ const styles = StyleSheet.create({
     color: '#22c55e',
     fontSize: 14,
     fontWeight: '500',
+  },
+  ocrActions: {
+    paddingHorizontal: 20,
+    paddingTop: 12,
+    gap: 8,
+  },
+  captureBtn: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    gap: 8,
+    backgroundColor: '#22c55e',
+    borderRadius: 10,
+    paddingVertical: 12,
+  },
+  captureBtnDisabled: {
+    backgroundColor: '#333',
+  },
+  captureBtnText: {
+    color: '#fff',
+    fontSize: 15,
+    fontWeight: '600',
+  },
+  ocrErrorText: {
+    color: '#f97316',
+    fontSize: 13,
+    textAlign: 'center',
   },
   permissionBox: {
     flex: 1,

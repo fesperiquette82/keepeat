@@ -11,7 +11,8 @@
     "ios": {
       "supportsTablet": true,
       "infoPlist": {
-        "NSCameraUsageDescription": "Scan barcodes to add products"
+        "NSCameraUsageDescription": "Scan barcodes to add products",
+        "UIBackgroundModes": ["remote-notification"]
       }
     },
     "android": {
@@ -23,7 +24,11 @@
       },
       "edgeToEdgeEnabled": true,
       "permissions": [
-        "android.permission.CAMERA"
+        "android.permission.CAMERA",
+        "android.permission.RECEIVE_BOOT_COMPLETED",
+        "android.permission.SCHEDULE_EXACT_ALARM",
+        "android.permission.USE_EXACT_ALARM",
+        "android.permission.POST_NOTIFICATIONS"
       ]
     },
     "web": {
@@ -51,7 +56,15 @@
           }
         }
       ],
-      "expo-secure-store"
+      "expo-secure-store",
+      [
+        "expo-notifications",
+        {
+          "icon": "./assets/images/icon.png",
+          "color": "#f97316",
+          "defaultChannel": "expiry-alerts"
+        }
+      ]
     ],
     "experiments": {
       "typedRoutes": true

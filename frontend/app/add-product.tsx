@@ -15,7 +15,7 @@ import { SafeAreaView } from 'react-native-safe-area-context';
 import { useRouter, useLocalSearchParams } from 'expo-router';
 import { Ionicons } from '@expo/vector-icons';
 import { CameraView, useCameraPermissions } from 'expo-camera';
-import { format, addDays } from 'date-fns';
+import { format, addDays, parseISO } from 'date-fns';
 import { fr, enUS } from 'date-fns/locale';
 
 import TextRecognition from '@react-native-ml-kit/text-recognition';
@@ -23,6 +23,7 @@ import TextRecognition from '@react-native-ml-kit/text-recognition';
 import { useStockStore } from '../store/stockStore';
 import { useLanguageStore } from '../store/languageStore';
 import { parseExpiryDate, DATE_FORMAT_EXAMPLES, getBestDateFromOCR } from '../utils/dateParser';
+import { addOcrCorrection, findOcrMatch } from '../utils/ocrLearning';
 
 type DateInputMode = 'auto' | 'duration' | 'date' | 'camera';
 
@@ -324,6 +325,8 @@ export default function AddProductScreen() {
   const [isOcrProcessing, setIsOcrProcessing] = useState(false);
   const [ocrError, setOcrError] = useState<string | null>(null);
   const [ocrDebug, setOcrDebug] = useState<string | null>(null);
+  const [lastOcrRawText, setLastOcrRawText] = useState<string | null>(null);
+  const [ocrFailed, setOcrFailed] = useState(false);
 
   const [parsedDateInfo, setParsedDateInfo] = useState<ParsedDateInfo | null>(null);
 
@@ -424,6 +427,8 @@ export default function AddProductScreen() {
 
     setOcrError(null);
     setOcrDebug(null);
+    setOcrFailed(false);
+    setLastOcrRawText(null);
     setIsOcrProcessing(true);
 
     try {
@@ -442,6 +447,15 @@ export default function AddProductScreen() {
       if (allLines.length > 0) setOcrDebug(allLines.join(' | '));
 
       const combinedText = mlResult.text;
+      setLastOcrRawText(combinedText);
+
+      // Priorité 0 : chercher dans les corrections apprises
+      const learnedDate = await findOcrMatch(combinedText);
+      if (learnedDate) {
+        const learned = parseISO(learnedDate);
+        applyParsedDate(learned, learnedDate, 'high', language === 'fr' ? 'appris' : 'learned');
+        return;
+      }
 
       // Priorité 1 : parse sur tout le texte combiné
       const best = getBestDateFromOCR(combinedText);
@@ -459,10 +473,11 @@ export default function AddProductScreen() {
         }
       }
 
+      setOcrFailed(true);
       setOcrError(
         language === 'fr'
-          ? 'Date non détectée. Essayez la saisie manuelle.'
-          : 'No date detected. Please use manual input.'
+          ? 'Date non détectée. Saisissez-la manuellement pour améliorer la reconnaissance.'
+          : 'No date detected. Enter it manually to improve future recognition.'
       );
     } catch (error) {
       console.error('Capture OCR error:', error);
@@ -479,12 +494,18 @@ export default function AddProductScreen() {
   const handleScannedDateConfirm = () => {
     const result = parseExpiryDate(scannedDateText);
     if (result.date) {
+      // Sauvegarder la correction OCR si l'OCR avait échoué
+      if (ocrFailed && lastOcrRawText) {
+        addOcrCorrection(lastOcrRawText, format(result.date, 'yyyy-MM-dd'));
+      }
       setExpiryDate(result.date);
       setShowCameraModal(false);
       setScannedDateText('');
       setParsedDateInfo(null);
       setOcrError(null);
       setOcrDebug(null);
+      setOcrFailed(false);
+      setLastOcrRawText(null);
     } else {
       const examples = DATE_FORMAT_EXAMPLES[language === 'fr' ? 'fr' : 'en'];
       Alert.alert(

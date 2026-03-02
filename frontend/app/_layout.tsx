@@ -5,6 +5,8 @@ import { View, StyleSheet } from 'react-native';
 import ErrorBoundary from "../component/ErrorBoundary";
 import { useAuthStore } from '../store/authStore';
 import { useLanguageStore } from '../store/languageStore';
+import { requestNotificationPermissions } from '../utils/notificationService';
+import { useNetworkSync } from '../utils/useNetworkSync';
 
 const API_URL = process.env.EXPO_PUBLIC_BACKEND_URL?.trim() || 'https://keepeat-backend.onrender.com';
 
@@ -26,11 +28,15 @@ export default function RootLayout() {
   const { user, isLoaded, loadAuth } = useAuthStore();
   const { loadLanguage } = useLanguageStore();
 
+  // Surveillance de la connectivité réseau + sync automatique
+  useNetworkSync();
+
   // Initialisation au démarrage
   useEffect(() => {
     warmUpBackend();
     loadAuth();
     loadLanguage();
+    requestNotificationPermissions();
   }, []);
 
   // Guard auth : redirige selon l'état de connexion

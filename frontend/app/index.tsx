@@ -21,7 +21,7 @@ import { fr, enUS } from 'date-fns/locale';
 
 export default function HomeScreen() {
   const router = useRouter();
-  const { items, priorityItems, stats, fetchStock, fetchPriorityItems, fetchStats, markConsumed, markThrown, isLoading } = useStockStore();
+  const { items, priorityItems, stats, fetchStock, fetchPriorityItems, fetchStats, markConsumed, markThrown, isLoading, isOnline, pendingMutations } = useStockStore();
   const { t, language } = useLanguageStore();
   const [refreshing, setRefreshing] = useState(false);
 
@@ -171,6 +171,26 @@ export default function HomeScreen() {
         </TouchableOpacity>
       </View>
 
+      {/* Bandeau offline */}
+      {(!isOnline || pendingMutations.length > 0) && (
+        <View style={styles.offlineBanner}>
+          <Ionicons
+            name={isOnline ? 'sync-outline' : 'cloud-offline-outline'}
+            size={16}
+            color="#fff"
+          />
+          <Text style={styles.offlineBannerText}>
+            {!isOnline
+              ? language === 'fr'
+                ? `Hors ligne${pendingMutations.length > 0 ? ` — ${pendingMutations.length} modification${pendingMutations.length > 1 ? 's' : ''} en attente` : ''}`
+                : `Offline${pendingMutations.length > 0 ? ` — ${pendingMutations.length} pending change${pendingMutations.length > 1 ? 's' : ''}` : ''}`
+              : language === 'fr'
+              ? `Synchronisation en cours (${pendingMutations.length})…`
+              : `Syncing (${pendingMutations.length})…`}
+          </Text>
+        </View>
+      )}
+
       {/* Stats Cards */}
       <View style={styles.statsContainer}>
         <View style={[styles.statCard, { backgroundColor: '#22c55e20' }]}>
@@ -246,6 +266,20 @@ const styles = StyleSheet.create({
   container: {
     flex: 1,
     backgroundColor: '#0a0a0a',
+  },
+  offlineBanner: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 8,
+    backgroundColor: '#b45309',
+    paddingHorizontal: 16,
+    paddingVertical: 8,
+  },
+  offlineBannerText: {
+    color: '#fff',
+    fontSize: 13,
+    fontWeight: '500',
+    flex: 1,
   },
   header: {
     flexDirection: 'row',
