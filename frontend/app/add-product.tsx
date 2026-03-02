@@ -19,6 +19,7 @@ import { format, addDays, parseISO } from 'date-fns';
 import { fr, enUS } from 'date-fns/locale';
 
 import TextRecognition from '@react-native-ml-kit/text-recognition';
+import * as ImageManipulator from 'expo-image-manipulator';
 
 import { useStockStore } from '../store/stockStore';
 import { useLanguageStore } from '../store/languageStore';
@@ -157,6 +158,7 @@ type CameraModalProps = {
   onCaptureAndScan: () => void;
   onScannedDateChange: (text: string) => void;
   onConfirm: () => void;
+  onCameraLayout: (dims: { width: number; height: number }) => void;
 };
 
 const CameraModal = React.memo(({
@@ -175,6 +177,7 @@ const CameraModal = React.memo(({
   onCaptureAndScan,
   onScannedDateChange,
   onConfirm,
+  onCameraLayout,
 }: CameraModalProps) => {
   return (
     <Modal visible={visible} animationType="slide">
@@ -188,7 +191,10 @@ const CameraModal = React.memo(({
         </View>
 
         {permissionGranted ? (
-          <View style={styles.cameraView}>
+          <View
+            style={styles.cameraView}
+            onLayout={(e) => onCameraLayout({ width: e.nativeEvent.layout.width, height: e.nativeEvent.layout.height })}
+          >
             <CameraView ref={cameraRef} style={styles.camera} />
             <View style={styles.cameraOverlay}>
               <View style={styles.scanZone}>
@@ -223,7 +229,7 @@ const CameraModal = React.memo(({
           </TouchableOpacity>
 
           {ocrError ? <Text style={styles.ocrErrorText}>{ocrError}</Text> : null}
-          {ocrDebug ? <Text style={styles.ocrDebugText}>{ocrDebug}</Text> : null}
+          {__DEV__ && ocrDebug ? <Text style={styles.ocrDebugText}>{ocrDebug}</Text> : null}
         </View>
 
         <View style={styles.manualInputSection}>
@@ -264,14 +270,16 @@ const CameraModal = React.memo(({
             </View>
           )}
 
-          <View style={styles.formatExamples}>
-            <Text style={styles.formatExamplesTitle}>{language === 'fr' ? 'Formats acceptés :' : 'Accepted formats:'}</Text>
-            <Text style={styles.formatExamplesText}>
-              15/03/2025 • 15-03-25 • 15.03.25{'\n'}
-              15 mars 2025 • 15 MAR 25{'\n'}
-              mars 2025 • 03/2025 • 150325
-            </Text>
-          </View>
+          {!parsedDateInfo?.date && (
+            <View style={styles.formatExamples}>
+              <Text style={styles.formatExamplesTitle}>{language === 'fr' ? 'Formats acceptés :' : 'Accepted formats:'}</Text>
+              <Text style={styles.formatExamplesText}>
+                15/03/2025 • 15-03-25 • 15.03.25{'\n'}
+                15 mars 2025 • 15 MAR 25{'\n'}
+                mars 2025 • 03/2025 • 150325
+              </Text>
+            </View>
+          )}
 
           <TouchableOpacity
             style={[styles.confirmDateBtn, (!scannedDateText || !parsedDateInfo?.date) && styles.confirmDateBtnDisabled]}
@@ -309,6 +317,7 @@ export default function AddProductScreen() {
   const { t, language } = useLanguageStore();
   const [permission, requestPermission] = useCameraPermissions();
   const cameraRef = useRef<CameraView | null>(null);
+  const cameraViewDimsRef = useRef({ width: 0, height: 0 });
 
   const [name, setName] = useState(params.name || '');
   const [brand, setBrand] = useState(params.brand || '');
@@ -441,7 +450,36 @@ export default function AddProductScreen() {
         throw new Error('No URI returned by camera');
       }
 
-      const mlResult = await TextRecognition.recognize(photo.uri);
+      // Recadrer sur la zone de scan (80% largeur, 160dp hauteur avec padding, centrée)
+      let uriToScan = photo.uri;
+      try {
+        const { width: viewW, height: viewH } = cameraViewDimsRef.current;
+        if (viewW > 0 && viewH > 0 && photo.width > 0 && photo.height > 0) {
+          const zoneH = 160;
+          const zoneY = Math.max(0, (viewH - zoneH) / 2);
+          // Si l'image est en landscape (téléphone portrait, capteur landscape)
+          const imgW = photo.width > photo.height ? photo.height : photo.width;
+          const imgH = photo.width > photo.height ? photo.width : photo.height;
+          const sx = imgW / viewW;
+          const sy = imgH / viewH;
+          const cropX = Math.floor(viewW * 0.05 * sx);
+          const cropY = Math.floor(zoneY * sy);
+          const cropW = Math.min(imgW - cropX, Math.floor(viewW * 0.9 * sx));
+          const cropH = Math.min(imgH - cropY, Math.floor(zoneH * sy));
+          if (cropW > 0 && cropH > 0) {
+            const cropped = await ImageManipulator.manipulateAsync(
+              photo.uri,
+              [{ crop: { originX: cropX, originY: cropY, width: cropW, height: cropH } }],
+              { compress: 0.9, format: ImageManipulator.SaveFormat.JPEG }
+            );
+            uriToScan = cropped.uri;
+          }
+        }
+      } catch (_e) {
+        // crop échoué → on utilise l'image complète
+      }
+
+      const mlResult = await TextRecognition.recognize(uriToScan);
 
       const allLines = mlResult.blocks.flatMap(b => b.lines.map(l => l.text));
       if (allLines.length > 0) setOcrDebug(allLines.join(' | '));
@@ -460,7 +498,7 @@ export default function AddProductScreen() {
       // Priorité 1 : parse sur tout le texte combiné
       const best = getBestDateFromOCR(combinedText);
       if (best.date) {
-        applyParsedDate(best.date, combinedText, best.confidence, best.format);
+        applyParsedDate(best.date, format(best.date, 'dd/MM/yyyy'), best.confidence, best.format);
         return;
       }
 
@@ -773,6 +811,7 @@ export default function AddProductScreen() {
         onCaptureAndScan={handleCaptureAndScan}
         onScannedDateChange={handleScannedDateChange}
         onConfirm={handleScannedDateConfirm}
+        onCameraLayout={(dims) => { cameraViewDimsRef.current = dims; }}
       />
     </SafeAreaView>
   );
