@@ -72,12 +72,12 @@ jobs:
         working-directory: frontend/android
         run: chmod +x ./gradlew
 
-      - name: Build APK (debug)
-        working-directory: frontend/android
-        env:
-          NODE_ENV: production
-          EXPO_PUBLIC_BACKEND_URL: ${{ secrets.EXPO_PUBLIC_BACKEND_URL }}
-        run: ./gradlew assembleDebug --no-daemon
+      # - name: Build APK (debug)
+      #   working-directory: frontend/android
+      #   env:
+      #     NODE_ENV: production
+      #     EXPO_PUBLIC_BACKEND_URL: ${{ secrets.EXPO_PUBLIC_BACKEND_URL }}
+      #   run: ./gradlew assembleDebug --no-daemon
 
       - name: Build APK (release)
         working-directory: frontend/android
