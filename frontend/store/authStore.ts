@@ -11,6 +11,7 @@ export interface AuthUser {
   id: string;
   email: string;
   is_premium: boolean;
+  is_verified?: boolean;
 }
 
 interface AuthStore {
@@ -21,14 +22,18 @@ interface AuthStore {
 
   loadAuth: () => Promise<void>;
   login: (email: string, password: string) => Promise<void>;
-  register: (email: string, password: string) => Promise<void>;
+  register: (email: string, password: string) => Promise<{ email: string }>;
+  verifyEmail: (token: string) => Promise<void>;
+  resendVerification: (email: string) => Promise<void>;
+  forgotPassword: (email: string) => Promise<void>;
+  resetPassword: (token: string, newPassword: string) => Promise<void>;
   logout: () => Promise<void>;
   clearError: () => void;
   /** DEV ONLY — bypass auth sans compte (token null, non persisté) */
   bypassAuth: () => void;
 }
 
-async function apiAuth(endpoint: string, body: object): Promise<{ access_token: string; user: AuthUser }> {
+async function apiPost(endpoint: string, body: object): Promise<any> {
   const response = await fetch(`${API_URL}/api/auth/${endpoint}`, {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
@@ -41,7 +46,7 @@ async function apiAuth(endpoint: string, body: object): Promise<{ access_token: 
     throw new Error(data.detail || `Error ${response.status}`);
   }
 
-  return data as { access_token: string; user: AuthUser };
+  return data;
 }
 
 export const useAuthStore = create<AuthStore>((set) => ({
@@ -68,7 +73,8 @@ export const useAuthStore = create<AuthStore>((set) => ({
   login: async (email, password) => {
     set({ error: null });
     try {
-      const { access_token, user } = await apiAuth('login', { email, password });
+      const data = await apiPost('login', { email, password });
+      const { access_token, user } = data as { access_token: string; user: AuthUser };
       await SecureStore.setItemAsync(TOKEN_KEY, access_token);
       await AsyncStorage.setItem(USER_KEY, JSON.stringify(user));
       set({ token: access_token, user });
@@ -81,12 +87,54 @@ export const useAuthStore = create<AuthStore>((set) => ({
   register: async (email, password) => {
     set({ error: null });
     try {
-      const { access_token, user } = await apiAuth('register', { email, password });
+      const data = await apiPost('register', { email, password });
+      return { email: data.email as string };
+    } catch (err: any) {
+      set({ error: err.message || "Erreur d'inscription" });
+      throw err;
+    }
+  },
+
+  verifyEmail: async (token) => {
+    set({ error: null });
+    try {
+      const data = await apiPost('verify-email', { token });
+      const { access_token, user } = data as { access_token: string; user: AuthUser };
       await SecureStore.setItemAsync(TOKEN_KEY, access_token);
       await AsyncStorage.setItem(USER_KEY, JSON.stringify(user));
       set({ token: access_token, user });
     } catch (err: any) {
-      set({ error: err.message || "Erreur d'inscription" });
+      set({ error: err.message || 'Erreur de vérification' });
+      throw err;
+    }
+  },
+
+  resendVerification: async (email) => {
+    set({ error: null });
+    try {
+      await apiPost('resend-verification', { email });
+    } catch (err: any) {
+      set({ error: err.message || "Erreur d'envoi" });
+      throw err;
+    }
+  },
+
+  forgotPassword: async (email) => {
+    set({ error: null });
+    try {
+      await apiPost('forgot-password', { email });
+    } catch (err: any) {
+      set({ error: err.message || "Erreur d'envoi" });
+      throw err;
+    }
+  },
+
+  resetPassword: async (token, newPassword) => {
+    set({ error: null });
+    try {
+      await apiPost('reset-password', { token, new_password: newPassword });
+    } catch (err: any) {
+      set({ error: err.message || 'Erreur de réinitialisation' });
       throw err;
     }
   },

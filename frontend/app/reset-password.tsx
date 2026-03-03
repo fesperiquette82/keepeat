@@ -11,7 +11,7 @@ import {
   ScrollView,
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
-import { useRouter } from 'expo-router';
+import { useRouter, useLocalSearchParams } from 'expo-router';
 import { Ionicons } from '@expo/vector-icons';
 import { useAuthStore } from '../store/authStore';
 import { useLanguageStore } from '../store/languageStore';
@@ -26,33 +26,30 @@ function checkPassword(password: string) {
   };
 }
 
-export default function RegisterScreen() {
+export default function ResetPasswordScreen() {
   const router = useRouter();
-  const { register, error, clearError } = useAuthStore();
+  const { token } = useLocalSearchParams<{ token: string }>();
+  const { resetPassword } = useAuthStore();
   const { language } = useLanguageStore();
 
-  const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
   const [confirmPassword, setConfirmPassword] = useState('');
   const [showPassword, setShowPassword] = useState(false);
   const [isLoading, setIsLoading] = useState(false);
   const [localError, setLocalError] = useState<string | null>(null);
+  const [tokenExpired, setTokenExpired] = useState(false);
+  const [success, setSuccess] = useState(false);
 
   const fr = language === 'fr';
 
   const pwdChecks = useMemo(() => checkPassword(password), [password]);
   const isPasswordValid = Object.values(pwdChecks).every(Boolean);
 
-  const handleRegister = async () => {
+  const handleReset = async () => {
     setLocalError(null);
-    clearError();
 
-    if (!email.trim()) {
-      setLocalError(fr ? 'Veuillez saisir une adresse email.' : 'Please enter an email.');
-      return;
-    }
-    if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email.trim())) {
-      setLocalError(fr ? 'Adresse email invalide.' : 'Invalid email address.');
+    if (!token) {
+      setLocalError(fr ? 'Lien invalide.' : 'Invalid link.');
       return;
     }
     if (!isPasswordValid) {
@@ -70,22 +67,21 @@ export default function RegisterScreen() {
 
     setIsLoading(true);
     try {
-      const result = await register(email.trim().toLowerCase(), password);
-      router.replace(`/email-sent?email=${encodeURIComponent(result.email)}` as any);
+      await resetPassword(token as string, password);
+      setSuccess(true);
     } catch (err: any) {
-      setLocalError(
-        err.message?.includes('already') || err.message?.includes('409')
-          ? (fr ? 'Cette adresse email est déjà utilisée.' : 'This email is already registered.')
-          : err.message?.includes('WEAK_PASSWORD')
-          ? (fr ? 'Mot de passe trop faible.' : 'Password too weak.')
-          : err.message || (fr ? "Erreur lors de l'inscription." : 'Registration failed.')
-      );
+      const msg = err?.message ?? '';
+      if (msg === 'TOKEN_EXPIRED') {
+        setTokenExpired(true);
+      } else if (msg === 'TOKEN_INVALID') {
+        setLocalError(fr ? 'Ce lien est invalide ou a déjà été utilisé.' : 'This link is invalid or has already been used.');
+      } else {
+        setLocalError(msg || (fr ? 'Erreur lors de la réinitialisation.' : 'Reset failed.'));
+      }
     } finally {
       setIsLoading(false);
     }
   };
-
-  const displayError = localError || error;
 
   const criteriaLabels = fr
     ? {
@@ -103,57 +99,94 @@ export default function RegisterScreen() {
         special: 'One special character (!@#$...)',
       };
 
+  if (success) {
+    return (
+      <SafeAreaView style={styles.container}>
+        <View style={styles.content}>
+          <View style={[styles.iconCircle, styles.iconCircleGreen]}>
+            <Ionicons name="checkmark-circle" size={48} color="#22c55e" />
+          </View>
+          <Text style={styles.title}>
+            {fr ? 'Mot de passe mis à jour !' : 'Password updated!'}
+          </Text>
+          <Text style={styles.description}>
+            {fr
+              ? 'Votre mot de passe a été réinitialisé avec succès. Vous pouvez maintenant vous connecter.'
+              : 'Your password has been successfully reset. You can now sign in.'}
+          </Text>
+          <TouchableOpacity
+            style={styles.submitBtn}
+            onPress={() => router.replace('/login')}
+          >
+            <Text style={styles.submitBtnText}>
+              {fr ? 'Se connecter' : 'Sign in'}
+            </Text>
+          </TouchableOpacity>
+        </View>
+      </SafeAreaView>
+    );
+  }
+
+  if (tokenExpired) {
+    return (
+      <SafeAreaView style={styles.container}>
+        <View style={styles.content}>
+          <View style={[styles.iconCircle, styles.iconCircleRed]}>
+            <Ionicons name="time-outline" size={48} color="#ef4444" />
+          </View>
+          <Text style={styles.title}>
+            {fr ? 'Lien expiré' : 'Link expired'}
+          </Text>
+          <Text style={styles.description}>
+            {fr
+              ? 'Ce lien de réinitialisation a expiré (valable 1h). Faites une nouvelle demande.'
+              : 'This reset link has expired (valid 1h). Please request a new one.'}
+          </Text>
+          <TouchableOpacity
+            style={styles.submitBtn}
+            onPress={() => router.replace('/forgot-password')}
+          >
+            <Text style={styles.submitBtnText}>
+              {fr ? 'Nouvelle demande' : 'New request'}
+            </Text>
+          </TouchableOpacity>
+        </View>
+      </SafeAreaView>
+    );
+  }
+
   return (
     <SafeAreaView style={styles.container}>
       <KeyboardAvoidingView
         style={styles.flex}
         behavior={Platform.OS === 'ios' ? 'padding' : undefined}
       >
-        <ScrollView
-          contentContainerStyle={styles.scroll}
-          keyboardShouldPersistTaps="handled"
-        >
-          {/* Logo */}
-          <View style={styles.logoSection}>
-            <View style={styles.logoIcon}>
-              <Ionicons name="leaf" size={40} color="#22c55e" />
+        <ScrollView contentContainerStyle={styles.scroll} keyboardShouldPersistTaps="handled">
+          <View style={styles.formContent}>
+            <View style={styles.iconCircle}>
+              <Ionicons name="lock-closed-outline" size={40} color="#22c55e" />
             </View>
-            <Text style={styles.logoTitle}>KeepEat</Text>
-            <Text style={styles.logoTagline}>
-              {fr ? 'Vos aliments, au bon moment' : 'Your food, at the right time'}
+
+            <Text style={styles.title}>
+              {fr ? 'Nouveau mot de passe' : 'New password'}
             </Text>
-          </View>
+            <Text style={styles.description}>
+              {fr
+                ? 'Choisissez un mot de passe sécurisé pour votre compte.'
+                : 'Choose a secure password for your account.'}
+            </Text>
 
-          {/* Form */}
-          <View style={styles.form}>
-            <Text style={styles.formTitle}>{fr ? 'Créer un compte' : 'Create account'}</Text>
-
-            {displayError ? (
+            {localError ? (
               <View style={styles.errorBox}>
                 <Ionicons name="alert-circle" size={16} color="#ef4444" />
-                <Text style={styles.errorText}>{displayError}</Text>
+                <Text style={styles.errorText}>{localError}</Text>
               </View>
             ) : null}
 
             <View style={styles.inputGroup}>
-              <Text style={styles.inputLabel}>Email</Text>
-              <View style={styles.inputWrapper}>
-                <Ionicons name="mail-outline" size={18} color="#666" style={styles.inputIcon} />
-                <TextInput
-                  style={styles.input}
-                  value={email}
-                  onChangeText={setEmail}
-                  placeholder="example@email.com"
-                  placeholderTextColor="#444"
-                  keyboardType="email-address"
-                  autoCapitalize="none"
-                  autoComplete="email"
-                />
-              </View>
-            </View>
-
-            <View style={styles.inputGroup}>
-              <Text style={styles.inputLabel}>{fr ? 'Mot de passe' : 'Password'}</Text>
+              <Text style={styles.inputLabel}>
+                {fr ? 'Nouveau mot de passe' : 'New password'}
+              </Text>
               <View style={styles.inputWrapper}>
                 <Ionicons name="lock-closed-outline" size={18} color="#666" style={styles.inputIcon} />
                 <TextInput
@@ -169,7 +202,6 @@ export default function RegisterScreen() {
                 </TouchableOpacity>
               </View>
 
-              {/* Checklist critères mot de passe */}
               {password.length > 0 && (
                 <View style={styles.pwdChecklist}>
                   {(Object.entries(pwdChecks) as [keyof typeof pwdChecks, boolean][]).map(([key, ok]) => (
@@ -189,7 +221,9 @@ export default function RegisterScreen() {
             </View>
 
             <View style={styles.inputGroup}>
-              <Text style={styles.inputLabel}>{fr ? 'Confirmer le mot de passe' : 'Confirm password'}</Text>
+              <Text style={styles.inputLabel}>
+                {fr ? 'Confirmer le mot de passe' : 'Confirm password'}
+              </Text>
               <View style={styles.inputWrapper}>
                 <Ionicons name="lock-closed-outline" size={18} color="#666" style={styles.inputIcon} />
                 <TextInput
@@ -204,27 +238,26 @@ export default function RegisterScreen() {
             </View>
 
             <TouchableOpacity
-              style={[
-                styles.submitBtn,
-                (!isPasswordValid || isLoading) && styles.submitBtnDisabled,
-              ]}
-              onPress={handleRegister}
+              style={[styles.submitBtn, (!isPasswordValid || isLoading) && styles.submitBtnDisabled]}
+              onPress={handleReset}
               disabled={!isPasswordValid || isLoading}
             >
               {isLoading ? (
                 <ActivityIndicator color="#fff" />
               ) : (
-                <Text style={styles.submitBtnText}>{fr ? 'Créer mon compte' : 'Create account'}</Text>
+                <Text style={styles.submitBtnText}>
+                  {fr ? 'Réinitialiser le mot de passe' : 'Reset password'}
+                </Text>
               )}
             </TouchableOpacity>
 
             <TouchableOpacity
-              style={styles.switchLink}
+              style={styles.backLink}
               onPress={() => router.replace('/login')}
             >
-              <Text style={styles.switchLinkText}>
-                {fr ? 'Déjà un compte ? ' : 'Already have an account? '}
-                <Text style={styles.switchLinkHighlight}>{fr ? 'Se connecter' : 'Sign in'}</Text>
+              <Ionicons name="arrow-back-outline" size={16} color="#666" />
+              <Text style={styles.backLinkText}>
+                {fr ? 'Retour à la connexion' : 'Back to sign in'}
               </Text>
             </TouchableOpacity>
           </View>
@@ -237,32 +270,45 @@ export default function RegisterScreen() {
 const styles = StyleSheet.create({
   container: { flex: 1, backgroundColor: '#0a0a0a' },
   flex: { flex: 1 },
-  scroll: { flexGrow: 1, justifyContent: 'center', padding: 24 },
-
-  logoSection: { alignItems: 'center', marginBottom: 40 },
-  logoIcon: {
-    width: 80,
-    height: 80,
-    borderRadius: 20,
+  scroll: { flexGrow: 1 },
+  content: {
+    flex: 1,
+    alignItems: 'center',
+    justifyContent: 'center',
+    padding: 32,
+  },
+  formContent: {
+    alignItems: 'center',
+    padding: 24,
+    paddingTop: 48,
+  },
+  iconCircle: {
+    width: 90,
+    height: 90,
+    borderRadius: 45,
     backgroundColor: '#22c55e15',
     borderWidth: 1,
     borderColor: '#22c55e30',
     alignItems: 'center',
     justifyContent: 'center',
-    marginBottom: 16,
+    marginBottom: 24,
   },
-  logoTitle: { fontSize: 32, fontWeight: 'bold', color: '#22c55e' },
-  logoTagline: { fontSize: 14, color: '#666', marginTop: 6 },
-
-  form: {
-    backgroundColor: '#111',
-    borderRadius: 16,
-    borderWidth: 1,
-    borderColor: '#1f1f1f',
-    padding: 24,
+  iconCircleGreen: { backgroundColor: '#22c55e15', borderColor: '#22c55e30' },
+  iconCircleRed: { backgroundColor: '#ef444415', borderColor: '#ef444430' },
+  title: {
+    fontSize: 22,
+    fontWeight: '700',
+    color: '#fff',
+    textAlign: 'center',
+    marginBottom: 10,
   },
-  formTitle: { fontSize: 22, fontWeight: '700', color: '#fff', marginBottom: 20 },
-
+  description: {
+    fontSize: 14,
+    color: '#888',
+    textAlign: 'center',
+    lineHeight: 22,
+    marginBottom: 28,
+  },
   errorBox: {
     flexDirection: 'row',
     alignItems: 'center',
@@ -273,18 +319,19 @@ const styles = StyleSheet.create({
     borderRadius: 10,
     padding: 12,
     marginBottom: 16,
+    width: '100%',
   },
   errorText: { color: '#ef4444', fontSize: 13, flex: 1 },
-
-  inputGroup: { marginBottom: 16 },
+  inputGroup: { width: '100%', marginBottom: 16 },
   inputLabel: { color: '#aaa', fontSize: 13, fontWeight: '600', marginBottom: 8 },
   inputWrapper: {
     flexDirection: 'row',
     alignItems: 'center',
-    backgroundColor: '#0c0c0c',
+    backgroundColor: '#111',
     borderRadius: 12,
     borderWidth: 1,
     borderColor: '#2a2a2a',
+    width: '100%',
   },
   inputIcon: { paddingLeft: 14 },
   input: {
@@ -296,7 +343,6 @@ const styles = StyleSheet.create({
   },
   inputPassword: { paddingRight: 0 },
   eyeBtn: { padding: 14 },
-
   pwdChecklist: {
     marginTop: 10,
     gap: 6,
@@ -307,18 +353,13 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     gap: 6,
   },
-  pwdCheckText: {
-    fontSize: 12,
-    color: '#555',
-  },
-  pwdCheckTextOk: {
-    color: '#22c55e',
-  },
-
+  pwdCheckText: { fontSize: 12, color: '#555' },
+  pwdCheckTextOk: { color: '#22c55e' },
   submitBtn: {
     backgroundColor: '#22c55e',
     borderRadius: 12,
     height: 50,
+    width: '100%',
     alignItems: 'center',
     justifyContent: 'center',
     marginTop: 8,
@@ -326,8 +367,10 @@ const styles = StyleSheet.create({
   },
   submitBtnDisabled: { opacity: 0.4 },
   submitBtnText: { color: '#fff', fontWeight: '700', fontSize: 16 },
-
-  switchLink: { alignItems: 'center' },
-  switchLinkText: { color: '#666', fontSize: 14 },
-  switchLinkHighlight: { color: '#22c55e', fontWeight: '600' },
+  backLink: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 6,
+  },
+  backLinkText: { color: '#666', fontSize: 14 },
 });

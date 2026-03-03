@@ -18,7 +18,7 @@ import { useLanguageStore } from '../store/languageStore';
 
 export default function LoginScreen() {
   const router = useRouter();
-  const { login, error, clearError } = useAuthStore();
+  const { login, resendVerification, error, clearError } = useAuthStore();
   const { language } = useLanguageStore();
 
   const [email, setEmail] = useState('');
@@ -26,12 +26,16 @@ export default function LoginScreen() {
   const [showPassword, setShowPassword] = useState(false);
   const [isLoading, setIsLoading] = useState(false);
   const [localError, setLocalError] = useState<string | null>(null);
+  const [emailNotVerified, setEmailNotVerified] = useState(false);
+  const [resendLoading, setResendLoading] = useState(false);
+  const [resendDone, setResendDone] = useState(false);
 
   const fr = language === 'fr';
 
   const handleDevLogin = async () => {
     setLocalError(null);
     clearError();
+    setEmailNotVerified(false);
     setIsLoading(true);
     try {
       await login('fesperiquette@hotmail.com', 'essai');
@@ -45,6 +49,7 @@ export default function LoginScreen() {
   const handleLogin = async () => {
     setLocalError(null);
     clearError();
+    setEmailNotVerified(false);
 
     if (!email.trim()) {
       setLocalError(fr ? 'Veuillez saisir votre adresse email.' : 'Please enter your email.');
@@ -60,9 +65,33 @@ export default function LoginScreen() {
       await login(email.trim().toLowerCase(), password);
       // La navigation est gérée par _layout.tsx via le changement d'état user
     } catch (err: any) {
-      setLocalError(err.message || (fr ? 'Email ou mot de passe incorrect.' : 'Invalid email or password.'));
+      if (err.message === 'EMAIL_NOT_VERIFIED') {
+        setEmailNotVerified(true);
+      } else {
+        setLocalError(
+          err.message || (fr ? 'Email ou mot de passe incorrect.' : 'Invalid email or password.')
+        );
+      }
     } finally {
       setIsLoading(false);
+    }
+  };
+
+  const handleResendVerification = async () => {
+    if (!email.trim()) {
+      setLocalError(fr ? 'Saisissez votre email pour renvoyer la confirmation.' : 'Enter your email to resend confirmation.');
+      return;
+    }
+    setResendLoading(true);
+    try {
+      await resendVerification(email.trim().toLowerCase());
+      setResendDone(true);
+      router.push(`/email-sent?email=${encodeURIComponent(email.trim().toLowerCase())}` as any);
+    } catch {
+      // L'action ne lance pas d'erreur côté frontend (anti-énumération)
+      setResendDone(true);
+    } finally {
+      setResendLoading(false);
     }
   };
 
@@ -100,6 +129,35 @@ export default function LoginScreen() {
               </View>
             ) : null}
 
+            {/* Bandeau email non vérifié */}
+            {emailNotVerified && (
+              <View style={styles.warningBox}>
+                <Ionicons name="mail-outline" size={16} color="#f59e0b" />
+                <View style={styles.warningContent}>
+                  <Text style={styles.warningText}>
+                    {fr
+                      ? 'Votre adresse email n\'a pas encore été confirmée.'
+                      : 'Your email address has not been confirmed yet.'}
+                  </Text>
+                  <TouchableOpacity
+                    onPress={handleResendVerification}
+                    disabled={resendLoading || resendDone}
+                    style={styles.resendBtn}
+                  >
+                    {resendLoading ? (
+                      <ActivityIndicator size="small" color="#f59e0b" />
+                    ) : (
+                      <Text style={styles.resendBtnText}>
+                        {resendDone
+                          ? (fr ? 'Email envoyé !' : 'Email sent!')
+                          : (fr ? 'Renvoyer l\'email de confirmation' : 'Resend confirmation email')}
+                      </Text>
+                    )}
+                  </TouchableOpacity>
+                </View>
+              </View>
+            )}
+
             <View style={styles.inputGroup}>
               <Text style={styles.inputLabel}>Email</Text>
               <View style={styles.inputWrapper}>
@@ -118,7 +176,14 @@ export default function LoginScreen() {
             </View>
 
             <View style={styles.inputGroup}>
-              <Text style={styles.inputLabel}>{fr ? 'Mot de passe' : 'Password'}</Text>
+              <View style={styles.passwordLabelRow}>
+                <Text style={styles.inputLabel}>{fr ? 'Mot de passe' : 'Password'}</Text>
+                <TouchableOpacity onPress={() => router.push('/forgot-password' as any)}>
+                  <Text style={styles.forgotLink}>
+                    {fr ? 'Mot de passe oublié ?' : 'Forgot password?'}
+                  </Text>
+                </TouchableOpacity>
+              </View>
               <View style={styles.inputWrapper}>
                 <Ionicons name="lock-closed-outline" size={18} color="#666" style={styles.inputIcon} />
                 <TextInput
@@ -215,8 +280,31 @@ const styles = StyleSheet.create({
   },
   errorText: { color: '#ef4444', fontSize: 13, flex: 1 },
 
+  warningBox: {
+    flexDirection: 'row',
+    alignItems: 'flex-start',
+    gap: 10,
+    backgroundColor: '#f59e0b15',
+    borderWidth: 1,
+    borderColor: '#f59e0b30',
+    borderRadius: 10,
+    padding: 12,
+    marginBottom: 16,
+  },
+  warningContent: { flex: 1, gap: 8 },
+  warningText: { color: '#f59e0b', fontSize: 13 },
+  resendBtn: { alignSelf: 'flex-start' },
+  resendBtnText: { color: '#f59e0b', fontSize: 13, fontWeight: '600', textDecorationLine: 'underline' },
+
   inputGroup: { marginBottom: 16 },
-  inputLabel: { color: '#aaa', fontSize: 13, fontWeight: '600', marginBottom: 8 },
+  passwordLabelRow: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    marginBottom: 8,
+  },
+  inputLabel: { color: '#aaa', fontSize: 13, fontWeight: '600' },
+  forgotLink: { color: '#22c55e', fontSize: 12, fontWeight: '500' },
   inputWrapper: {
     flexDirection: 'row',
     alignItems: 'center',

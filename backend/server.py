@@ -4,9 +4,14 @@ from __future__ import annotations
 import logging
 import os
 import re
+import secrets
 from contextlib import asynccontextmanager
 from datetime import datetime, timedelta, timezone
+from email.mime.multipart import MIMEMultipart
+from email.mime.text import MIMEText
 from typing import Any, Dict, List, Optional
+
+import aiosmtplib
 
 import httpx
 from bson import ObjectId
@@ -45,16 +50,20 @@ async def _seed_default_user() -> None:
                 "email": DEFAULT_EMAIL,
                 "hashed_password": _hash_password(DEFAULT_PASSWORD),
                 "is_premium": True,
+                "email_verified": True,
                 "created_at": _utc_now(),
                 "last_login": None,
             })
             logger.info("Default dev user created: %s", DEFAULT_EMAIL)
-        elif not existing.get("is_premium"):
-            await users_col.update_one(
-                {"email": DEFAULT_EMAIL},
-                {"$set": {"is_premium": True}},
-            )
-            logger.info("Default dev user upgraded to premium: %s", DEFAULT_EMAIL)
+        else:
+            updates: dict = {}
+            if not existing.get("is_premium"):
+                updates["is_premium"] = True
+            if not existing.get("email_verified"):
+                updates["email_verified"] = True
+            if updates:
+                await users_col.update_one({"email": DEFAULT_EMAIL}, {"$set": updates})
+                logger.info("Default dev user updated: %s → %s", DEFAULT_EMAIL, updates)
     except Exception as e:
         logger.warning("Could not seed default user: %s", e)
 
@@ -150,6 +159,51 @@ def _verify_password(plain: str, hashed: str) -> bool:
     return pwd_context.verify(plain, hashed)
 
 
+def _validate_password(password: str) -> None:
+    """Lève HTTPException 422 si le mot de passe ne respecte pas les critères de sécurité."""
+    errors = []
+    if len(password) < 8:
+        errors.append("8 caractères minimum")
+    if not re.search(r"[A-Z]", password):
+        errors.append("au moins une majuscule")
+    if not re.search(r"[a-z]", password):
+        errors.append("au moins une minuscule")
+    if not re.search(r"[0-9]", password):
+        errors.append("au moins un chiffre")
+    if not re.search(r'[!@#$%^&*()\-_=+\[\]{};:\'",.<>?/\\|`~]', password):
+        errors.append("au moins un caractère spécial")
+    if errors:
+        raise HTTPException(
+            status_code=422,
+            detail=f"WEAK_PASSWORD: {', '.join(errors)}",
+        )
+
+
+async def _send_email(to: str, subject: str, html_body: str) -> None:
+    """Envoie un email HTML via Brevo SMTP relay (aiosmtplib)."""
+    smtp_login = os.getenv("BREVO_SMTP_LOGIN")
+    if not smtp_login:
+        logger.warning("Email non envoyé vers %s : BREVO_SMTP_LOGIN non configuré", to)
+        return
+    msg = MIMEMultipart("alternative")
+    msg["Subject"] = subject
+    msg["From"] = f"{os.getenv('MAIL_FROM_NAME', 'KeepEat')} <{os.getenv('MAIL_FROM', 'noreply@keepeat.app')}>"
+    msg["To"] = to
+    msg.attach(MIMEText(html_body, "html", "utf-8"))
+    try:
+        await aiosmtplib.send(
+            msg,
+            hostname=os.getenv("BREVO_SMTP_HOST", "smtp-relay.brevo.com"),
+            port=int(os.getenv("BREVO_SMTP_PORT", "587")),
+            username=smtp_login,
+            password=os.getenv("BREVO_SMTP_PASSWORD", ""),
+            start_tls=True,
+        )
+        logger.info("Email envoyé à %s : %s", to, subject)
+    except Exception as e:
+        logger.error("Échec envoi email à %s : %s", to, e)
+
+
 def _create_token(user_id: str) -> str:
     expire = _utc_now() + timedelta(days=JWT_EXPIRE_DAYS)
     return jwt.encode(
@@ -222,7 +276,7 @@ def _days_until(expiry_date: Optional[str]) -> Optional[int]:
 
 class UserCreate(BaseModel):
     email: EmailStr
-    password: str = Field(..., min_length=6)
+    password: str = Field(..., min_length=8)
 
 
 class UserLogin(BaseModel):
@@ -234,12 +288,35 @@ class UserResponse(BaseModel):
     id: str
     email: str
     is_premium: bool
+    is_verified: bool = True
 
 
 class TokenResponse(BaseModel):
     access_token: str
     token_type: str = "bearer"
     user: UserResponse
+
+
+class RegisterResponse(BaseModel):
+    message: str
+    email: str
+
+
+class VerifyEmailBody(BaseModel):
+    token: str
+
+
+class ResendVerificationBody(BaseModel):
+    email: EmailStr
+
+
+class ForgotPasswordBody(BaseModel):
+    email: EmailStr
+
+
+class ResetPasswordBody(BaseModel):
+    token: str
+    new_password: str
 
 
 # --- Stock models ---
@@ -390,26 +467,41 @@ async def health():
 # Auth routes
 # -----------------------------------------------------------------------------
 
-@api_router.post("/auth/register", response_model=TokenResponse, status_code=201)
+@api_router.post("/auth/register", response_model=RegisterResponse, status_code=201)
 async def register(body: UserCreate):
+    _validate_password(body.password)
+
     existing = await users_col.find_one({"email": body.email.lower()})
     if existing:
         raise HTTPException(status_code=409, detail="Email already registered")
 
+    verification_token = secrets.token_urlsafe(32)
     doc = {
         "email": body.email.lower(),
         "hashed_password": _hash_password(body.password),
         "is_premium": False,
+        "email_verified": False,
+        "verification_token": verification_token,
+        "verification_token_exp": (_utc_now() + timedelta(hours=24)).isoformat(),
         "created_at": _utc_now().isoformat(),
-        "last_login": _utc_now().isoformat(),
+        "last_login": None,
     }
-    res = await users_col.insert_one(doc)
-    user_id = str(res.inserted_id)
-    token = _create_token(user_id)
-    return TokenResponse(
-        access_token=token,
-        user=UserResponse(id=user_id, email=doc["email"], is_premium=False),
-    )
+    await users_col.insert_one(doc)
+
+    deep_link = f"keepeat://verify-email?token={verification_token}"
+    html_body = f"""
+    <div style="font-family:Arial,sans-serif;max-width:600px;margin:auto;padding:24px">
+      <h2 style="color:#4CAF50">Bienvenue sur KeepEat !</h2>
+      <p>Merci de vous être inscrit. Cliquez sur le bouton ci-dessous pour confirmer votre adresse email.</p>
+      <a href="{deep_link}" style="display:inline-block;padding:14px 28px;background:#4CAF50;color:#fff;text-decoration:none;border-radius:8px;font-weight:bold;margin:16px 0">
+        Confirmer mon email
+      </a>
+      <p style="color:#888;font-size:12px">Ce lien expire dans 24 heures. Si vous n'avez pas créé de compte, ignorez cet email.</p>
+    </div>
+    """
+    await _send_email(body.email.lower(), "Confirmez votre adresse email — KeepEat", html_body)
+
+    return RegisterResponse(message="verification_sent", email=body.email.lower())
 
 
 @api_router.post("/auth/login", response_model=TokenResponse)
@@ -418,13 +510,134 @@ async def login(body: UserLogin):
     if not doc or not _verify_password(body.password, doc["hashed_password"]):
         raise HTTPException(status_code=401, detail="Invalid email or password")
 
+    if not doc.get("email_verified", True):
+        raise HTTPException(status_code=403, detail="EMAIL_NOT_VERIFIED")
+
     user_id = str(doc["_id"])
     await users_col.update_one({"_id": doc["_id"]}, {"$set": {"last_login": _utc_now().isoformat()}})
     token = _create_token(user_id)
     return TokenResponse(
         access_token=token,
-        user=UserResponse(id=user_id, email=doc["email"], is_premium=doc.get("is_premium", False)),
+        user=UserResponse(
+            id=user_id,
+            email=doc["email"],
+            is_premium=doc.get("is_premium", False),
+            is_verified=doc.get("email_verified", True),
+        ),
     )
+
+
+@api_router.post("/auth/verify-email", response_model=TokenResponse)
+async def verify_email(body: VerifyEmailBody):
+    doc = await users_col.find_one({"verification_token": body.token})
+    if not doc:
+        raise HTTPException(status_code=400, detail="TOKEN_INVALID")
+
+    exp_raw = doc.get("verification_token_exp")
+    if not exp_raw:
+        raise HTTPException(status_code=400, detail="TOKEN_INVALID")
+    exp = datetime.fromisoformat(exp_raw)
+    if exp.tzinfo is None:
+        exp = exp.replace(tzinfo=timezone.utc)
+    if _utc_now() > exp:
+        raise HTTPException(status_code=400, detail="TOKEN_EXPIRED")
+
+    user_id = str(doc["_id"])
+    await users_col.update_one(
+        {"_id": doc["_id"]},
+        {"$set": {"email_verified": True, "last_login": _utc_now().isoformat()},
+         "$unset": {"verification_token": "", "verification_token_exp": ""}},
+    )
+    token = _create_token(user_id)
+    return TokenResponse(
+        access_token=token,
+        user=UserResponse(
+            id=user_id,
+            email=doc["email"],
+            is_premium=doc.get("is_premium", False),
+            is_verified=True,
+        ),
+    )
+
+
+@api_router.post("/auth/resend-verification")
+async def resend_verification(body: ResendVerificationBody):
+    doc = await users_col.find_one({"email": body.email.lower(), "email_verified": False})
+    if doc:
+        new_token = secrets.token_urlsafe(32)
+        await users_col.update_one(
+            {"_id": doc["_id"]},
+            {"$set": {
+                "verification_token": new_token,
+                "verification_token_exp": (_utc_now() + timedelta(hours=24)).isoformat(),
+            }},
+        )
+        deep_link = f"keepeat://verify-email?token={new_token}"
+        html_body = f"""
+        <div style="font-family:Arial,sans-serif;max-width:600px;margin:auto;padding:24px">
+          <h2 style="color:#4CAF50">Confirmation de votre email KeepEat</h2>
+          <p>Voici votre nouveau lien de confirmation :</p>
+          <a href="{deep_link}" style="display:inline-block;padding:14px 28px;background:#4CAF50;color:#fff;text-decoration:none;border-radius:8px;font-weight:bold;margin:16px 0">
+            Confirmer mon email
+          </a>
+          <p style="color:#888;font-size:12px">Ce lien expire dans 24 heures.</p>
+        </div>
+        """
+        await _send_email(body.email.lower(), "Nouveau lien de confirmation — KeepEat", html_body)
+    # Réponse identique qu'un email soit trouvé ou non (anti-énumération)
+    return {"message": "sent"}
+
+
+@api_router.post("/auth/forgot-password")
+async def forgot_password(body: ForgotPasswordBody):
+    doc = await users_col.find_one({"email": body.email.lower()})
+    if doc:
+        reset_token = secrets.token_urlsafe(32)
+        await users_col.update_one(
+            {"_id": doc["_id"]},
+            {"$set": {
+                "reset_token": reset_token,
+                "reset_token_exp": (_utc_now() + timedelta(hours=1)).isoformat(),
+            }},
+        )
+        deep_link = f"keepeat://reset-password?token={reset_token}"
+        html_body = f"""
+        <div style="font-family:Arial,sans-serif;max-width:600px;margin:auto;padding:24px">
+          <h2 style="color:#4CAF50">Réinitialisation de votre mot de passe KeepEat</h2>
+          <p>Vous avez demandé à réinitialiser votre mot de passe. Cliquez ci-dessous :</p>
+          <a href="{deep_link}" style="display:inline-block;padding:14px 28px;background:#FF6B35;color:#fff;text-decoration:none;border-radius:8px;font-weight:bold;margin:16px 0">
+            Réinitialiser mon mot de passe
+          </a>
+          <p style="color:#888;font-size:12px">Ce lien expire dans 1 heure. Si vous n'avez pas fait cette demande, ignorez cet email.</p>
+        </div>
+        """
+        await _send_email(body.email.lower(), "Réinitialisation du mot de passe — KeepEat", html_body)
+    return {"message": "sent"}
+
+
+@api_router.post("/auth/reset-password")
+async def reset_password(body: ResetPasswordBody):
+    _validate_password(body.new_password)
+
+    doc = await users_col.find_one({"reset_token": body.token})
+    if not doc:
+        raise HTTPException(status_code=400, detail="TOKEN_INVALID")
+
+    exp_raw = doc.get("reset_token_exp")
+    if not exp_raw:
+        raise HTTPException(status_code=400, detail="TOKEN_INVALID")
+    exp = datetime.fromisoformat(exp_raw)
+    if exp.tzinfo is None:
+        exp = exp.replace(tzinfo=timezone.utc)
+    if _utc_now() > exp:
+        raise HTTPException(status_code=400, detail="TOKEN_EXPIRED")
+
+    await users_col.update_one(
+        {"_id": doc["_id"]},
+        {"$set": {"hashed_password": _hash_password(body.new_password)},
+         "$unset": {"reset_token": "", "reset_token_exp": ""}},
+    )
+    return {"message": "password_updated"}
 
 
 @api_router.get("/auth/me", response_model=UserResponse)
@@ -433,6 +646,7 @@ async def me(current_user: Dict[str, Any] = Depends(_get_current_user)):
         id=current_user["id"],
         email=current_user["email"],
         is_premium=current_user.get("is_premium", False),
+        is_verified=current_user.get("email_verified", True),
     )
 
 

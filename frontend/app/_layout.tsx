@@ -44,12 +44,13 @@ export default function RootLayout() {
     if (!isLoaded) return;
 
     const segment = segments[0] as string | undefined;
-    const inAuthGroup = segment === 'login' || segment === 'register';
+    const PUBLIC_SCREENS = ['login', 'register', 'email-sent', 'verify-email', 'forgot-password', 'reset-password'];
+    const inPublicScreen = PUBLIC_SCREENS.includes(segment ?? '');
 
-    if (!user && !inAuthGroup) {
+    if (!user && !inPublicScreen) {
       // eslint-disable-next-line @typescript-eslint/no-explicit-any
       router.replace('/login' as any);
-    } else if (user && inAuthGroup) {
+    } else if (user && (segment === 'login' || segment === 'register')) {
       router.replace('/');
     }
   }, [user, isLoaded, segments]);
