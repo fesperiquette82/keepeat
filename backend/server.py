@@ -16,13 +16,16 @@ import aiosmtplib
 import httpx
 from bson import ObjectId
 from dotenv import load_dotenv
-from fastapi import APIRouter, Depends, FastAPI, HTTPException, Query, status
+from fastapi import APIRouter, Depends, FastAPI, Header, HTTPException, Query, Request, status
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.security import HTTPAuthorizationCredentials, HTTPBearer
 from jose import JWTError, jwt
 from motor.motor_asyncio import AsyncIOMotorClient
 from passlib.context import CryptContext
 from pydantic import BaseModel, EmailStr, Field
+from slowapi import Limiter, _rate_limit_exceeded_handler
+from slowapi.errors import RateLimitExceeded
+from slowapi.util import get_remote_address
 
 # Load local environment variables from backend/.env (safe in Render too)
 load_dotenv()
@@ -40,9 +43,22 @@ logger = logging.getLogger("keepeat-backend")
 # App
 # -----------------------------------------------------------------------------
 async def _seed_default_user() -> None:
-    """Crée le compte dev par défaut s'il n'existe pas encore."""
-    DEFAULT_EMAIL = "fesperiquette@hotmail.com"
-    DEFAULT_PASSWORD = "essai"
+    """Crée le compte dev par défaut s'il n'existe pas encore.
+
+    Nécessite les variables d'environnement SEED_EMAIL et SEED_PASSWORD.
+    Si absentes, le seed est silencieusement ignoré.
+    Le mot de passe doit respecter les critères de sécurité de _validate_password.
+    """
+    DEFAULT_EMAIL = os.getenv("SEED_EMAIL", "").strip().lower()
+    DEFAULT_PASSWORD = os.getenv("SEED_PASSWORD", "")
+    if not DEFAULT_EMAIL or not DEFAULT_PASSWORD:
+        logger.info("SEED_EMAIL/SEED_PASSWORD non configurés → seed dev ignoré")
+        return
+    try:
+        _validate_password(DEFAULT_PASSWORD)
+    except HTTPException as e:
+        logger.warning("SEED_PASSWORD trop faible (%s) → seed dev ignoré", e.detail)
+        return
     try:
         existing = await users_col.find_one({"email": DEFAULT_EMAIL})
         if not existing:
@@ -78,6 +94,11 @@ async def lifespan(app: FastAPI):
 
 app = FastAPI(title="KeepEat Backend", version="1.0.0", lifespan=lifespan)
 
+# Rate limiting (in-memory, par adresse IP)
+limiter = Limiter(key_func=get_remote_address)
+app.state.limiter = limiter
+app.add_exception_handler(RateLimitExceeded, _rate_limit_exceeded_handler)
+
 
 def _utc_now() -> datetime:
     return datetime.now(timezone.utc)
@@ -107,12 +128,22 @@ async def health_root():
 # -----------------------------------------------------------------------------
 # CORS (middleware must be added BEFORE routers)
 # -----------------------------------------------------------------------------
+# CORS_ORIGINS : origines autorisées, séparées par des virgules.
+# Pour une app React Native pure, "*" est correct car CORS n'est pas enforced
+# par les clients mobiles (pas de navigateur). À restreindre uniquement si
+# un frontend web accède aussi à ce backend.
+# Exemples : "*" | "https://keepeat.app,https://admin.keepeat.app"
 cors_origins = os.getenv("CORS_ORIGINS", "*").strip()
-origins = (
-    ["*"]
-    if cors_origins == "*"
-    else [o.strip() for o in cors_origins.split(",") if o.strip()]
-)
+
+if cors_origins == "*":
+    logger.warning(
+        "⚠️  CORS_ORIGINS='*' — Toutes les origines sont autorisées. "
+        "Acceptable pour une app mobile-only. À restreindre si un frontend web utilise ce backend."
+    )
+    origins: list[str] = ["*"]
+else:
+    origins = [o.strip() for o in cors_origins.split(",") if o.strip()]
+    logger.info("CORS origines autorisées : %s", origins)
 
 app.add_middleware(
     CORSMiddleware,
@@ -468,7 +499,8 @@ async def health():
 # -----------------------------------------------------------------------------
 
 @api_router.post("/auth/register", response_model=RegisterResponse, status_code=201)
-async def register(body: UserCreate):
+@limiter.limit("5/minute")
+async def register(request: Request, body: UserCreate):
     _validate_password(body.password)
 
     existing = await users_col.find_one({"email": body.email.lower()})
@@ -505,7 +537,8 @@ async def register(body: UserCreate):
 
 
 @api_router.post("/auth/login", response_model=TokenResponse)
-async def login(body: UserLogin):
+@limiter.limit("10/minute")
+async def login(request: Request, body: UserLogin):
     doc = await users_col.find_one({"email": body.email.lower()})
     if not doc or not _verify_password(body.password, doc["hashed_password"]):
         raise HTTPException(status_code=401, detail="Invalid email or password")
@@ -561,7 +594,8 @@ async def verify_email(body: VerifyEmailBody):
 
 
 @api_router.post("/auth/resend-verification")
-async def resend_verification(body: ResendVerificationBody):
+@limiter.limit("3/minute")
+async def resend_verification(request: Request, body: ResendVerificationBody):
     doc = await users_col.find_one({"email": body.email.lower(), "email_verified": False})
     if doc:
         new_token = secrets.token_urlsafe(32)
@@ -589,7 +623,8 @@ async def resend_verification(body: ResendVerificationBody):
 
 
 @api_router.post("/auth/forgot-password")
-async def forgot_password(body: ForgotPasswordBody):
+@limiter.limit("3/minute")
+async def forgot_password(request: Request, body: ForgotPasswordBody):
     doc = await users_col.find_one({"email": body.email.lower()})
     if doc:
         reset_token = secrets.token_urlsafe(32)
@@ -616,7 +651,8 @@ async def forgot_password(body: ForgotPasswordBody):
 
 
 @api_router.post("/auth/reset-password")
-async def reset_password(body: ResetPasswordBody):
+@limiter.limit("5/minute")
+async def reset_password(request: Request, body: ResetPasswordBody):
     _validate_password(body.new_password)
 
     doc = await users_col.find_one({"reset_token": body.token})
@@ -655,8 +691,16 @@ async def me(current_user: Dict[str, Any] = Depends(_get_current_user)):
 # -----------------------------------------------------------------------------
 
 @api_router.put("/admin/users/{email}/set-premium")
-async def set_premium(email: str, key: str = Query(...), premium: bool = Query(True)):
-    if not ADMIN_KEY or key != ADMIN_KEY:
+async def set_premium(
+    email: str,
+    premium: bool = Query(True),
+    x_admin_key: Optional[str] = Header(None, alias="X-Admin-Key"),
+):
+    """Met à jour le statut premium d'un utilisateur.
+
+    Authentification : header HTTP `X-Admin-Key: <valeur de ADMIN_KEY>`.
+    """
+    if not ADMIN_KEY or x_admin_key != ADMIN_KEY:
         raise HTTPException(status_code=403, detail="Invalid admin key")
     res = await users_col.update_one(
         {"email": email.lower()},

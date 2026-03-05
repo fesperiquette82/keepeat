@@ -29,7 +29,7 @@ interface AuthStore {
   resetPassword: (token: string, newPassword: string) => Promise<void>;
   logout: () => Promise<void>;
   clearError: () => void;
-  /** DEV ONLY — bypass auth sans compte (token null, non persisté) */
+  /** DEV ONLY — bypass auth sans compte (token null, non persisté). Lance une erreur en production. */
   bypassAuth: () => void;
 }
 
@@ -148,6 +148,9 @@ export const useAuthStore = create<AuthStore>((set) => ({
   clearError: () => set({ error: null }),
 
   bypassAuth: () => {
+    if (!__DEV__) {
+      throw new Error('bypassAuth is only available in development builds.');
+    }
     set({ user: { id: 'guest', email: 'Invité', is_premium: false }, token: null });
   },
 }));
