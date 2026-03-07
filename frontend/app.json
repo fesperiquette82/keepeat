@@ -12,7 +12,9 @@
       "supportsTablet": true,
       "infoPlist": {
         "NSCameraUsageDescription": "Scan barcodes to add products",
-        "UIBackgroundModes": ["remote-notification"]
+        "UIBackgroundModes": [
+          "remote-notification"
+        ]
       }
     },
     "android": {
@@ -68,6 +70,13 @@
     ],
     "experiments": {
       "typedRoutes": true
-    }
+    },
+    "extra": {
+      "router": {},
+      "eas": {
+        "projectId": "00fe91c0-6cb4-4c64-b292-3da6db037b0f"
+      }
+    },
+    "owner": "fesperiquette"
   }
 }
