@@ -1,8 +1,12 @@
 import * as Notifications from 'expo-notifications';
 import AsyncStorage from '@react-native-async-storage/async-storage';
+import Constants from 'expo-constants';
 import { Platform } from 'react-native';
 import { parseISO } from 'date-fns';
 import { StockItem } from '../store/stockStore';
+
+const API_URL = process.env.EXPO_PUBLIC_BACKEND_URL?.trim() || 'https://keepeat-backend.onrender.com';
+const PUSH_TOKEN_KEY = 'keepeat_push_token';
 
 const NOTIF_IDS_KEY = 'keepeat_notification_ids';
 
@@ -26,6 +30,18 @@ export async function requestNotificationPermissions(): Promise<boolean> {
       lightColor: '#f97316',
       sound: 'default',
     });
+    await Notifications.setNotificationChannelAsync('recalls', {
+      name: 'Rappels produits',
+      importance: Notifications.AndroidImportance.MAX,
+      vibrationPattern: [0, 500, 250, 500],
+      lightColor: '#ef4444',
+      sound: 'default',
+    });
+    await Notifications.setNotificationChannelAsync('inactivity', {
+      name: "Rappels d'activité",
+      importance: Notifications.AndroidImportance.DEFAULT,
+      sound: 'default',
+    });
   }
 
   const { status: existing } = await Notifications.getPermissionsAsync();
@@ -33,6 +49,67 @@ export async function requestNotificationPermissions(): Promise<boolean> {
 
   const { status } = await Notifications.requestPermissionsAsync();
   return status === 'granted';
+}
+
+/**
+ * Obtient le push token Expo de l'appareil et l'enregistre sur le backend.
+ * À appeler après authentification de l'utilisateur.
+ */
+export async function registerPushToken(authToken: string): Promise<void> {
+  if (Platform.OS === 'web') return;
+
+  const { status } = await Notifications.getPermissionsAsync();
+  if (status !== 'granted') return;
+
+  try {
+    const projectId =
+      (Constants.expoConfig?.extra as any)?.eas?.projectId ??
+      (Constants.easConfig as any)?.projectId;
+
+    const tokenData = await Notifications.getExpoPushTokenAsync(
+      projectId ? { projectId } : undefined
+    );
+    const expoPushToken = tokenData.data;
+
+    // Éviter de re-enregistrer le même token à chaque lancement
+    const cached = await AsyncStorage.getItem(PUSH_TOKEN_KEY);
+    if (cached === expoPushToken) return;
+
+    await fetch(`${API_URL}/api/push-token`, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        Authorization: `Bearer ${authToken}`,
+      },
+      body: JSON.stringify({ token: expoPushToken }),
+    });
+
+    await AsyncStorage.setItem(PUSH_TOKEN_KEY, expoPushToken);
+  } catch (err) {
+    console.warn('[Push] registerPushToken error:', err);
+  }
+}
+
+/**
+ * Supprime le push token du backend lors de la déconnexion.
+ */
+export async function unregisterPushToken(authToken: string): Promise<void> {
+  if (Platform.OS === 'web') return;
+  try {
+    const cached = await AsyncStorage.getItem(PUSH_TOKEN_KEY);
+    if (!cached) return;
+    await fetch(`${API_URL}/api/push-token`, {
+      method: 'DELETE',
+      headers: {
+        'Content-Type': 'application/json',
+        Authorization: `Bearer ${authToken}`,
+      },
+      body: JSON.stringify({ token: cached }),
+    });
+    await AsyncStorage.removeItem(PUSH_TOKEN_KEY);
+  } catch (err) {
+    console.warn('[Push] unregisterPushToken error:', err);
+  }
 }
 
 async function loadNotifIds(): Promise<Record<string, string>> {

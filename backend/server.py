@@ -1,6 +1,7 @@
 # backend/server.py
 from __future__ import annotations
 
+import asyncio
 import logging
 import os
 import re
@@ -42,6 +43,177 @@ logger = logging.getLogger("keepeat-backend")
 # -----------------------------------------------------------------------------
 # App
 # -----------------------------------------------------------------------------
+# -----------------------------------------------------------------------------
+# Push notifications (Expo Push API)
+# -----------------------------------------------------------------------------
+
+async def _send_expo_push(tokens: list[str], title: str, body: str, data: dict | None = None) -> None:
+    """Envoie une push notification via l'API Expo Push."""
+    valid = [t for t in tokens if t.startswith(("ExponentPushToken[", "ExpoPushToken["))]
+    if not valid:
+        return
+    messages = [
+        {"to": t, "title": title, "body": body, "data": data or {}, "sound": "default"}
+        for t in valid
+    ]
+    try:
+        async with httpx.AsyncClient(timeout=15) as client_http:
+            await client_http.post(
+                "https://exp.host/--/push/v2/send",
+                json=messages,
+                headers={"Content-Type": "application/json", "Accept": "application/json"},
+            )
+    except Exception as exc:
+        logger.warning("Expo push failed: %s", exc)
+
+
+# -----------------------------------------------------------------------------
+# Rappels produits — rappel.conso.gouv.fr
+# -----------------------------------------------------------------------------
+
+async def _fetch_recent_recalls() -> list[dict]:
+    """Récupère les rappels des 30 derniers jours avec code-barres depuis rappel.conso.gouv.fr."""
+    since = (_utc_now() - timedelta(days=30)).strftime("%Y-%m-%d")
+    url = "https://data.economie.gouv.fr/api/explore/v2.1/catalog/datasets/rappelconso0/records"
+    params: dict = {
+        "where": f"code_barre is not null and date_de_publication >= '{since}'",
+        "select": (
+            "code_barre,nom_de_la_marque_du_produit,"
+            "noms_des_modeles_ou_references,"
+            "risques_encourus_par_le_consommateur,"
+            "date_de_publication"
+        ),
+        "limit": 100,
+        "offset": 0,
+    }
+    results: list[dict] = []
+    try:
+        async with httpx.AsyncClient(timeout=30) as client_http:
+            while True:
+                r = await client_http.get(url, params=params)
+                if r.status_code != 200:
+                    logger.warning("Rappel.conso API returned %s", r.status_code)
+                    break
+                page_data = r.json()
+                page_results = page_data.get("results", [])
+                results.extend(page_results)
+                if len(page_results) < 100:
+                    break
+                params["offset"] += 100
+    except Exception as exc:
+        logger.warning("Rappel.conso fetch failed: %s", exc)
+    logger.info("Rappel.conso : %d rappels récupérés", len(results))
+    return results
+
+
+async def _check_recalls_and_notify() -> None:
+    """Vérifie si des produits en stock sont rappelés et envoie une push notification."""
+    recalls = await _fetch_recent_recalls()
+    if not recalls:
+        return
+
+    recall_map: dict[str, dict] = {}
+    for r in recalls:
+        bc = str(r.get("code_barre", "")).strip()
+        if bc:
+            recall_map[bc] = r
+
+    if not recall_map:
+        return
+
+    async for user_doc in users_col.find({"push_tokens": {"$exists": True, "$ne": []}}):
+        user_id = str(user_doc["_id"])
+        tokens: list[str] = user_doc.get("push_tokens", [])
+        cursor = stock_col.find({"user_id": user_id, "status": "active", "barcode": {"$exists": True, "$ne": ""}})
+        async for item in cursor:
+            bc = str(item.get("barcode", "")).strip()
+            if bc not in recall_map:
+                continue
+            alert_key = f"recall_{bc}"
+            already_sent = await user_alerts_col.find_one({"user_id": user_id, "key": alert_key})
+            if already_sent:
+                continue
+            recall_info = recall_map[bc]
+            brand = recall_info.get("nom_de_la_marque_du_produit", "")
+            risk = recall_info.get("risques_encourus_par_le_consommateur", "Vérifiez l'emballage")
+            item_label = item["name"] + (f" — {brand}" if brand else "")
+            await _send_expo_push(
+                tokens,
+                title="⚠️ Produit rappelé",
+                body=f"{item_label} fait l'objet d'un rappel officiel. {risk}",
+                data={"type": "recall", "itemId": str(item["_id"]), "barcode": bc},
+            )
+            await user_alerts_col.insert_one({
+                "user_id": user_id,
+                "key": alert_key,
+                "sent_at": _utc_now(),
+            })
+            logger.info("Recall alert sent — user=%s barcode=%s", user_id, bc)
+
+
+async def _check_inactivity_and_notify() -> None:
+    """Envoie une push si l'utilisateur n'a pas interagi avec son stock depuis 7 jours."""
+    threshold = _utc_now() - timedelta(days=7)
+
+    async for user_doc in users_col.find({"push_tokens": {"$exists": True, "$ne": []}}):
+        user_id = str(user_doc["_id"])
+        count = await stock_col.count_documents({"user_id": user_id, "status": "active"})
+        if count == 0:
+            continue
+
+        last_action_raw = user_doc.get("last_stock_action") or user_doc.get("created_at")
+        if not last_action_raw:
+            continue
+        last_action = (
+            datetime.fromisoformat(last_action_raw)
+            if isinstance(last_action_raw, str)
+            else last_action_raw
+        )
+        # Normaliser en UTC
+        if last_action.tzinfo is None:
+            last_action = last_action.replace(tzinfo=timezone.utc)
+        if last_action > threshold:
+            continue  # Activité récente, pas d'alerte
+
+        # Dedup : pas plus d'une alerte inactivité par semaine
+        already_sent = await user_alerts_col.find_one({
+            "user_id": user_id,
+            "key": "inactivity",
+            "sent_at": {"$gte": threshold},
+        })
+        if already_sent:
+            continue
+
+        tokens: list[str] = user_doc.get("push_tokens", [])
+        nb = count
+        await _send_expo_push(
+            tokens,
+            title="🥗 Votre stock vous attend !",
+            body=(
+                f"Vous avez {nb} produit{'s' if nb > 1 else ''} en stock. "
+                "Pensez à les consommer pour éviter le gaspillage."
+            ),
+            data={"type": "inactivity"},
+        )
+        await user_alerts_col.insert_one({
+            "user_id": user_id,
+            "key": "inactivity",
+            "sent_at": _utc_now(),
+        })
+        logger.info("Inactivity alert sent — user=%s items=%d", user_id, nb)
+
+
+async def _alert_loop() -> None:
+    """Boucle de fond : vérifie toutes les 6h les rappels et l'inactivité."""
+    while True:
+        await asyncio.sleep(6 * 3600)
+        try:
+            await _check_recalls_and_notify()
+            await _check_inactivity_and_notify()
+        except Exception as exc:
+            logger.error("Alert loop error: %s", exc)
+
+
 async def _seed_default_user() -> None:
     """Crée le compte dev par défaut s'il n'existe pas encore.
 
@@ -87,8 +259,12 @@ async def _seed_default_user() -> None:
 @asynccontextmanager
 async def lifespan(app: FastAPI):
     await _seed_default_user()
+    # Index TTL sur user_alerts : auto-suppression après 30 jours
+    await user_alerts_col.create_index("sent_at", expireAfterSeconds=30 * 24 * 3600)
+    # Lancer la boucle d'alertes en arrière-plan
+    alert_task = asyncio.create_task(_alert_loop())
     yield
-    # Shutdown : fermeture de la connexion MongoDB
+    alert_task.cancel()
     client.close()
 
 
@@ -166,6 +342,7 @@ client = AsyncIOMotorClient(MONGO_URL)
 db = client[DB_NAME]
 stock_col = db["stock"]
 users_col = db["users"]
+user_alerts_col = db["user_alerts"]  # alertes envoyées (dedup, TTL 30j)
 
 # -----------------------------------------------------------------------------
 # Auth configuration
@@ -787,6 +964,10 @@ async def consume_item(
     )
     if res.matched_count == 0:
         raise HTTPException(status_code=404, detail="Item not found")
+    await users_col.update_one(
+        {"_id": ObjectId(current_user["id"])},
+        {"$set": {"last_stock_action": _utc_now().isoformat()}},
+    )
     return {"ok": True}
 
 
@@ -806,6 +987,10 @@ async def throw_item(
     )
     if res.matched_count == 0:
         raise HTTPException(status_code=404, detail="Item not found")
+    await users_col.update_one(
+        {"_id": ObjectId(current_user["id"])},
+        {"$set": {"last_stock_action": _utc_now().isoformat()}},
+    )
     return {"ok": True}
 
 
@@ -873,6 +1058,40 @@ async def get_product(barcode: str):
 
 
 # -----------------------------------------------------------------------------
+# -----------------------------------------------------------------------------
+# Push tokens
+# -----------------------------------------------------------------------------
+
+class PushTokenBody(BaseModel):
+    token: str
+
+
+@api_router.post("/push-token", status_code=204)
+async def register_push_token(
+    body: PushTokenBody,
+    current_user: Dict[str, Any] = Depends(_get_current_user),
+):
+    """Enregistre le push token Expo de l'appareil pour l'utilisateur courant."""
+    if not body.token.startswith(("ExponentPushToken[", "ExpoPushToken[")):
+        raise HTTPException(status_code=400, detail="Invalid Expo push token format")
+    await users_col.update_one(
+        {"_id": ObjectId(current_user["id"])},
+        {"$addToSet": {"push_tokens": body.token}},
+    )
+
+
+@api_router.delete("/push-token", status_code=204)
+async def unregister_push_token(
+    body: PushTokenBody,
+    current_user: Dict[str, Any] = Depends(_get_current_user),
+):
+    """Supprime le push token de l'appareil (à appeler lors de la déconnexion)."""
+    await users_col.update_one(
+        {"_id": ObjectId(current_user["id"])},
+        {"$pull": {"push_tokens": body.token}},
+    )
+
+
 # Wire routes
 # -----------------------------------------------------------------------------
 app.include_router(api_router)

@@ -1,6 +1,7 @@
 import { create } from 'zustand';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import * as SecureStore from 'expo-secure-store';
+import { unregisterPushToken } from '../utils/notificationService';
 
 const API_URL = process.env.EXPO_PUBLIC_BACKEND_URL?.trim() || 'https://keepeat-backend.onrender.com';
 
@@ -140,6 +141,10 @@ export const useAuthStore = create<AuthStore>((set) => ({
   },
 
   logout: async () => {
+    const { token } = useAuthStore.getState();
+    if (token) {
+      await unregisterPushToken(token);
+    }
     await SecureStore.deleteItemAsync(TOKEN_KEY);
     await AsyncStorage.removeItem(USER_KEY);
     set({ token: null, user: null, error: null });
