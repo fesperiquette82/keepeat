@@ -1,4 +1,4 @@
-import React, { useEffect } from 'react';
+import React, { useEffect, useState } from 'react';
 import {
   View,
   Text,
@@ -14,18 +14,40 @@ import { useLanguageStore } from '../store/languageStore';
 import { useStockStore } from '../store/stockStore';
 import { useAuthStore } from '../store/authStore';
 
+const API_URL = process.env.EXPO_PUBLIC_BACKEND_URL ?? 'http://localhost:8000';
+
 export default function SettingsScreen() {
   const router = useRouter();
   const { language, setLanguage, t, loadLanguage } = useLanguageStore();
   const { stats, fetchStats } = useStockStore();
-  const { user, logout } = useAuthStore();
+  const { user, logout, token } = useAuthStore();
+  const [lastRecallCheck, setLastRecallCheck] = useState<string | null>(null);
 
   const fr = language === 'fr';
 
   useEffect(() => {
     loadLanguage();
     fetchStats();
+    if (token) {
+      fetch(`${API_URL}/api/recalls/status`, {
+        headers: { Authorization: `Bearer ${token}` },
+      })
+        .then(r => r.json())
+        .then(data => setLastRecallCheck(data.last_check ?? null))
+        .catch(() => {});
+    }
   }, []);
+
+  const formatLastCheck = (iso: string | null): string => {
+    if (!iso) return fr ? 'Jamais effectuée' : 'Never performed';
+    const diff = Math.floor((Date.now() - new Date(iso).getTime()) / 60000);
+    if (diff < 1) return fr ? 'À l\'instant' : 'Just now';
+    if (diff < 60) return fr ? `Il y a ${diff} min` : `${diff} min ago`;
+    const h = Math.floor(diff / 60);
+    if (h < 24) return fr ? `Il y a ${h}h` : `${h}h ago`;
+    const d = Math.floor(h / 24);
+    return fr ? `Il y a ${d} jour${d > 1 ? 's' : ''}` : `${d} day${d > 1 ? 's' : ''} ago`;
+  };
 
   const handleLogout = () => {
     Alert.alert(
@@ -154,6 +176,50 @@ export default function SettingsScreen() {
               </View>
               <Text style={styles.statValue}>{stats.expiring_soon}</Text>
               <Text style={styles.statLabel}>{t('expiringSoon')}</Text>
+            </View>
+          </View>
+        </View>
+
+        {/* Push Alerts Section */}
+        <View style={styles.section}>
+          <Text style={styles.sectionTitle}>{fr ? 'Alertes push' : 'Push alerts'}</Text>
+          <View style={styles.alertsCard}>
+            <View style={styles.alertRow}>
+              <View style={[styles.alertIconWrapper, { backgroundColor: '#f59e0b20' }]}>
+                <Ionicons name="alert-circle-outline" size={22} color="#f59e0b" />
+              </View>
+              <View style={styles.alertInfo}>
+                <Text style={styles.alertTitle}>
+                  {fr ? 'Produits rappelés' : 'Recalled products'}
+                </Text>
+                <Text style={styles.alertDesc}>
+                  {fr
+                    ? 'Vérification toutes les 6h sur rappel.conso.gouv.fr'
+                    : 'Checked every 6h on rappel.conso.gouv.fr'}
+                </Text>
+                <Text style={styles.alertLastCheck}>
+                  {fr ? 'Dernière vérification : ' : 'Last check: '}
+                  <Text style={styles.alertLastCheckValue}>{formatLastCheck(lastRecallCheck)}</Text>
+                </Text>
+              </View>
+            </View>
+
+            <View style={styles.alertDivider} />
+
+            <View style={styles.alertRow}>
+              <View style={[styles.alertIconWrapper, { backgroundColor: '#3b82f620' }]}>
+                <Ionicons name="time-outline" size={22} color="#3b82f6" />
+              </View>
+              <View style={styles.alertInfo}>
+                <Text style={styles.alertTitle}>
+                  {fr ? 'Inactivité' : 'Inactivity'}
+                </Text>
+                <Text style={styles.alertDesc}>
+                  {fr
+                    ? 'Rappel si aucune action sur votre stock depuis 7 jours'
+                    : 'Reminder if no stock action in 7 days'}
+                </Text>
+              </View>
             </View>
           </View>
         </View>
@@ -426,5 +492,50 @@ const styles = StyleSheet.create({
     fontSize: 14,
     color: '#ccc',
     flex: 1,
+  },
+  alertsCard: {
+    backgroundColor: '#1a1a1a',
+    borderRadius: 12,
+    padding: 16,
+    gap: 14,
+  },
+  alertRow: {
+    flexDirection: 'row',
+    alignItems: 'flex-start',
+    gap: 12,
+  },
+  alertIconWrapper: {
+    width: 40,
+    height: 40,
+    borderRadius: 20,
+    alignItems: 'center',
+    justifyContent: 'center',
+    marginTop: 2,
+  },
+  alertInfo: {
+    flex: 1,
+    gap: 3,
+  },
+  alertTitle: {
+    fontSize: 14,
+    fontWeight: '600',
+    color: '#fff',
+  },
+  alertDesc: {
+    fontSize: 13,
+    color: '#888',
+  },
+  alertLastCheck: {
+    fontSize: 12,
+    color: '#666',
+    marginTop: 2,
+  },
+  alertLastCheckValue: {
+    color: '#22c55e',
+    fontWeight: '500',
+  },
+  alertDivider: {
+    height: 1,
+    backgroundColor: '#2a2a2a',
   },
 });

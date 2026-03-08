@@ -109,6 +109,12 @@ async def _fetch_recent_recalls() -> list[dict]:
 async def _check_recalls_and_notify() -> None:
     """Vérifie si des produits en stock sont rappelés et envoie une push notification."""
     recalls = await _fetch_recent_recalls()
+    # Enregistrer la date du dernier check (même si aucun rappel trouvé)
+    await app_state_col.update_one(
+        {"key": "last_recall_check"},
+        {"$set": {"key": "last_recall_check", "checked_at": _utc_now()}},
+        upsert=True,
+    )
     if not recalls:
         return
 
@@ -343,6 +349,7 @@ db = client[DB_NAME]
 stock_col = db["stock"]
 users_col = db["users"]
 user_alerts_col = db["user_alerts"]  # alertes envoyées (dedup, TTL 30j)
+app_state_col = db["app_state"]      # état global de l'app (last_recall_check, ...)
 
 # -----------------------------------------------------------------------------
 # Auth configuration
@@ -1090,6 +1097,18 @@ async def unregister_push_token(
         {"_id": ObjectId(current_user["id"])},
         {"$pull": {"push_tokens": body.token}},
     )
+
+
+@api_router.get("/recalls/status")
+async def get_recalls_status(
+    current_user: Dict[str, Any] = Depends(_get_current_user),
+):
+    """Retourne la date du dernier check rappel.conso (visible dans les paramètres)."""
+    doc = await app_state_col.find_one({"key": "last_recall_check"})
+    last_check: str | None = None
+    if doc and doc.get("checked_at"):
+        last_check = doc["checked_at"].replace(tzinfo=timezone.utc).isoformat()
+    return {"last_check": last_check}
 
 
 # Wire routes
