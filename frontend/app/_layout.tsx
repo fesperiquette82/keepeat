@@ -65,7 +65,7 @@ export default function RootLayout() {
   return (
     <ErrorBoundary>
       <View style={styles.container}>
-        <StatusBar style="light" />
+        <StatusBar style="dark" />
         <Slot />
       </View>
     </ErrorBoundary>
@@ -75,6 +75,6 @@ export default function RootLayout() {
 const styles = StyleSheet.create({
   container: {
     flex: 1,
-    backgroundColor: '#0a0a0a',
+    backgroundColor: '#F7F8FA',
   },
 });
