@@ -267,6 +267,10 @@ async def lifespan(app: FastAPI):
     await _seed_default_user()
     # Index TTL sur user_alerts : auto-suppression après 30 jours
     await user_alerts_col.create_index("sent_at", expireAfterSeconds=30 * 24 * 3600)
+    # Index TTL sur products_cache : auto-suppression après 7 jours
+    await products_cache_col.create_index("cached_at", expireAfterSeconds=7 * 24 * 3600)
+    # Index unique sur barcode pour lookup rapide
+    await products_cache_col.create_index("barcode", unique=True)
     # Lancer la boucle d'alertes en arrière-plan
     alert_task = asyncio.create_task(_alert_loop())
     yield
@@ -348,8 +352,9 @@ client = AsyncIOMotorClient(MONGO_URL)
 db = client[DB_NAME]
 stock_col = db["stock"]
 users_col = db["users"]
-user_alerts_col = db["user_alerts"]  # alertes envoyées (dedup, TTL 30j)
-app_state_col = db["app_state"]      # état global de l'app (last_recall_check, ...)
+user_alerts_col = db["user_alerts"]      # alertes envoyées (dedup, TTL 30j)
+app_state_col = db["app_state"]          # état global de l'app (last_recall_check, ...)
+products_cache_col = db["products_cache"]  # cache OFF (TTL 7j)
 
 # -----------------------------------------------------------------------------
 # Auth configuration
@@ -597,6 +602,14 @@ OFF_USER_AGENT = os.getenv("OFF_USER_AGENT", "KeepEat/1.0 (https://keepeat.app)"
 
 
 async def lookup_product_openfoodfacts(barcode: str) -> Optional[ProductBase]:
+    # 1. Vérifier le cache MongoDB (TTL 7j)
+    cached = await products_cache_col.find_one({"barcode": barcode})
+    if cached:
+        logger.info("OFF cache hit barcode=%s", barcode)
+        return ProductBase(**{k: v for k, v in cached.items() if k in ProductBase.model_fields})
+
+    # 2. Cache miss → appel OpenFoodFacts
+    product: Optional[ProductBase] = None
     try:
         url = f"https://world.openfoodfacts.net/api/v2/product/{barcode}"
         headers = {"User-Agent": OFF_USER_AGENT}
@@ -605,24 +618,36 @@ async def lookup_product_openfoodfacts(barcode: str) -> Optional[ProductBase]:
 
         if r.status_code != 200:
             logger.info("OFF lookup failed status=%s barcode=%s", r.status_code, barcode)
-            return None
-
-        data = r.json()
-        if data.get("status") != 1 or not data.get("product"):
-            return None
-
-        p = data["product"]
-        return ProductBase(
-            barcode=barcode,
-            name=p.get("product_name") or p.get("product_name_fr") or "Produit inconnu",
-            brand=p.get("brands", "") or "",
-            image_url=p.get("image_front_small_url") or p.get("image_url") or "",
-            category=(p.get("categories_tags") or [None])[0],
-            quantity=p.get("quantity", "") or "",
-        )
+        else:
+            data = r.json()
+            if data.get("status") == 1 and data.get("product"):
+                p = data["product"]
+                product = ProductBase(
+                    barcode=barcode,
+                    name=p.get("product_name") or p.get("product_name_fr") or "Produit inconnu",
+                    brand=p.get("brands", "") or "",
+                    image_url=p.get("image_front_small_url") or p.get("image_url") or "",
+                    category=(p.get("categories_tags") or [None])[0],
+                    quantity=p.get("quantity", "") or "",
+                )
     except Exception as e:
         logger.warning("OFF lookup exception barcode=%s err=%s", barcode, e)
-        return None
+
+    # 3. Stocker en cache (même si None → évite de re-interroger un produit inconnu)
+    try:
+        doc = {"barcode": barcode, "cached_at": _utc_now()}
+        if product:
+            doc.update(product.model_dump())
+            doc["found"] = True
+        else:
+            doc["found"] = False
+        await products_cache_col.update_one(
+            {"barcode": barcode}, {"$set": doc}, upsert=True
+        )
+    except Exception as e:
+        logger.warning("OFF cache write failed barcode=%s err=%s", barcode, e)
+
+    return product
 
 
 # -----------------------------------------------------------------------------
