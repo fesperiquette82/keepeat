@@ -1,5 +1,5 @@
 
-import React, { useEffect, useState, useCallback } from 'react';
+import React, { useEffect, useState, useCallback, useMemo } from 'react';
 import {
   View,
   Text,
@@ -64,6 +64,29 @@ const URGENCY_BG: Record<string, string> = {
   ok:      C.primaryLight,
 };
 
+// ─── Food categories ──────────────────────────────────────────────────────────
+
+type FoodCategory = 'tous' | 'frais' | 'proteines' | 'legumes' | 'feculents' | 'desserts' | 'boissons' | 'epicerie' | 'autres';
+
+interface CategoryDef {
+  key: FoodCategory;
+  emoji: string;
+  labelFr: string;
+  labelEn: string;
+}
+
+const CATEGORIES: CategoryDef[] = [
+  { key: 'tous',      emoji: '🏠', labelFr: 'Tous',       labelEn: 'All'      },
+  { key: 'frais',     emoji: '🥛', labelFr: 'Frais',      labelEn: 'Fresh'    },
+  { key: 'proteines', emoji: '🥩', labelFr: 'Protéines',  labelEn: 'Proteins' },
+  { key: 'legumes',   emoji: '🥕', labelFr: 'Légumes',    labelEn: 'Veggies'  },
+  { key: 'feculents', emoji: '🍞', labelFr: 'Féculents',  labelEn: 'Grains'   },
+  { key: 'desserts',  emoji: '🍰', labelFr: 'Desserts',   labelEn: 'Desserts' },
+  { key: 'boissons',  emoji: '🧃', labelFr: 'Boissons',   labelEn: 'Drinks'   },
+  { key: 'epicerie',  emoji: '🏪', labelFr: 'Épicerie',   labelEn: 'Pantry'   },
+  { key: 'autres',    emoji: '📦', labelFr: 'Autres',     labelEn: 'Other'    },
+];
+
 // ─── Main component ────────────────────────────────────────────────────────────
 
 export default function HomeScreen() {
@@ -76,6 +99,7 @@ export default function HomeScreen() {
   } = useStockStore();
   const { t, language } = useLanguageStore();
   const [refreshing, setRefreshing] = useState(false);
+  const [selectedCategory, setSelectedCategory] = useState<FoodCategory>('tous');
   const fr = language === 'fr';
 
   const loadData = useCallback(async () => {
@@ -110,10 +134,22 @@ export default function HomeScreen() {
     );
   };
 
-  // Groupement par urgence
-  const urgent = items.filter(i => { const d = getDaysUntil(i.expiry_date); return d !== null && d <= 2; });
-  const thisWeek = items.filter(i => { const d = getDaysUntil(i.expiry_date); return d !== null && d > 2 && d <= 7; });
-  const okItems = items.filter(i => { const d = getDaysUntil(i.expiry_date); return d === null || d > 7; });
+  // Filtrage par catégorie
+  const filteredItems = useMemo(() => {
+    if (selectedCategory === 'tous') return items;
+    return items.filter(i => (i.food_category ?? 'autres') === selectedCategory);
+  }, [items, selectedCategory]);
+
+  // Catégories présentes dans le stock (pour afficher seulement les pills utiles)
+  const presentCategories = useMemo(() => {
+    const cats = new Set(items.map(i => i.food_category ?? 'autres'));
+    return CATEGORIES.filter(c => c.key === 'tous' || cats.has(c.key));
+  }, [items]);
+
+  // Groupement par urgence (sur les items filtrés)
+  const urgent = filteredItems.filter(i => { const d = getDaysUntil(i.expiry_date); return d !== null && d <= 2; });
+  const thisWeek = filteredItems.filter(i => { const d = getDaysUntil(i.expiry_date); return d !== null && d > 2 && d <= 7; });
+  const okItems = filteredItems.filter(i => { const d = getDaysUntil(i.expiry_date); return d === null || d > 7; });
 
   // Message contextuel header
   const heroMsg = () => {
@@ -259,6 +295,33 @@ export default function HomeScreen() {
           <Text style={styles.statLbl}>{fr ? 'conso. cette sem.' : 'used this week'}</Text>
         </View>
       </View>
+
+      {/* Category filter pills */}
+      {presentCategories.length > 1 && (
+        <ScrollView
+          horizontal
+          showsHorizontalScrollIndicator={false}
+          style={styles.pillsRow}
+          contentContainerStyle={styles.pillsContent}
+        >
+          {presentCategories.map(cat => {
+            const active = selectedCategory === cat.key;
+            return (
+              <TouchableOpacity
+                key={cat.key}
+                style={[styles.pill, active && styles.pillActive]}
+                onPress={() => setSelectedCategory(cat.key)}
+                activeOpacity={0.7}
+              >
+                <Text style={styles.pillEmoji}>{cat.emoji}</Text>
+                <Text style={[styles.pillLabel, active && styles.pillLabelActive]}>
+                  {fr ? cat.labelFr : cat.labelEn}
+                </Text>
+              </TouchableOpacity>
+            );
+          })}
+        </ScrollView>
+      )}
 
       {isLoading && items.length === 0 ? (
         <ActivityIndicator size="large" color={C.primary} style={{ marginTop: 60 }} />
@@ -508,4 +571,34 @@ const styles = StyleSheet.create({
     shadowOffset: { width: 0, height: 6 },
     shadowOpacity: 0.35, shadowRadius: 10, elevation: 10,
   },
+
+  // Category filter pills
+  pillsRow: {
+    maxHeight: 52,
+    backgroundColor: C.card,
+    borderBottomWidth: 1,
+    borderBottomColor: C.border,
+  },
+  pillsContent: {
+    paddingHorizontal: 12,
+    paddingVertical: 8,
+    gap: 8,
+    flexDirection: 'row',
+    alignItems: 'center',
+  },
+  pill: {
+    flexDirection: 'row', alignItems: 'center',
+    gap: 5,
+    paddingHorizontal: 12, paddingVertical: 6,
+    borderRadius: 20,
+    backgroundColor: C.bg,
+    borderWidth: 1.5, borderColor: C.border,
+  },
+  pillActive: {
+    backgroundColor: C.primaryLight,
+    borderColor: C.primary,
+  },
+  pillEmoji: { fontSize: 14 },
+  pillLabel: { fontSize: 13, fontWeight: '600', color: C.textMid },
+  pillLabelActive: { color: C.primary, fontWeight: '700' },
 });

@@ -561,6 +561,7 @@ class StockItem(StockItemCreate):
     status: str  # active/consumed/thrown
     consumed_date: Optional[str] = None
     thrown_date: Optional[str] = None
+    food_category: Optional[str] = None  # frais/proteines/legumes/feculents/desserts/boissons/epicerie/autres
 
 
 class StockItemUpdate(BaseModel):
@@ -690,6 +691,115 @@ def infer_shelf_life(product: Optional[ProductBase]) -> ShelfLife:
         pantry_days=180,
         tips_fr="Adapter selon l’emballage et respecter la chaîne du froid.",
     )
+
+
+# -----------------------------------------------------------------------------
+# Food category heuristics (filtrage automatique par type)
+# -----------------------------------------------------------------------------
+
+# Mapping des tags OpenFoodFacts vers nos catégories standardisées
+_OFF_CATEGORY_MAP: dict[str, str] = {
+    # Boissons
+    "en:beverages": "boissons", "en:waters": "boissons", "en:sodas": "boissons",
+    "en:juices-and-nectars": "boissons", "en:coffees": "boissons", "en:teas": "boissons",
+    "en:plant-based-milks": "boissons", "en:fruit-juices": "boissons",
+    "fr:boissons": "boissons",
+    # Frais (laitier / frais)
+    "en:dairies": "frais", "en:milks": "frais", "en:cheeses": "frais",
+    "en:yogurts": "frais", "en:butters": "frais", "en:creams": "frais",
+    "en:eggs": "frais",
+    "fr:laits": "frais", "fr:yaourts": "frais", "fr:fromages": "frais",
+    "fr:produits-laitiers": "frais",
+    # Protéines
+    "en:meats": "proteines", "en:fish": "proteines", "en:seafoods": "proteines",
+    "en:poultry": "proteines", "en:deli-meats": "proteines",
+    "fr:viandes": "proteines", "fr:poissons": "proteines",
+    # Légumes & fruits
+    "en:vegetables": "legumes", "en:fruits": "legumes",
+    "en:fresh-vegetables": "legumes", "en:fresh-fruits": "legumes",
+    "fr:legumes": "legumes", "fr:fruits": "legumes",
+    # Féculents / Céréales
+    "en:pastas": "feculents", "en:rices": "feculents", "en:breads": "feculents",
+    "en:cereals-and-their-products": "feculents", "en:breakfast-cereals": "feculents",
+    "fr:pates": "feculents", "fr:riz": "feculents", "fr:pains": "feculents",
+    # Desserts
+    "en:sweet-snacks": "desserts", "en:chocolates": "desserts",
+    "en:biscuits-and-cakes": "desserts", "en:ice-creams": "desserts",
+    "en:confectioneries": "desserts", "en:desserts": "desserts",
+    "fr:desserts": "desserts", "fr:chocolats": "desserts",
+    # Épicerie
+    "en:condiments": "epicerie", "en:sauces": "epicerie", "en:spices": "epicerie",
+    "en:canned-foods": "epicerie", "en:soups": "epicerie",
+}
+
+# Mots-clés (dans name+brand) → catégorie
+_FOOD_CATEGORY_KEYWORDS: list[tuple[list[str], str]] = [
+    # Boissons (priorité haute — vérifier avant lait)
+    (["jus", "juice", "soda", "cola", "limonade", "lemonade", "thé", "café", "coffee", "tea",
+      "boisson", "drink", "smoothie", "sirop", "nectar", "biere", "beer", "wine", "vin",
+      "eau ", "water"], "boissons"),
+    # Frais — produits laitiers & œufs
+    (["yogurt", "yaourt", "fromage", "cheese", "beurre", "butter", "crème fraîche", "cream",
+      "kéfir", "skyr", "lait", "milk", "œuf", "oeuf", "egg"], "frais"),
+    # Protéines — viandes, poissons
+    (["poulet", "chicken", "bœuf", "boeuf", "beef", "porc", "pork", "agneau", "lamb",
+      "dinde", "turkey", "veau", "veal", "saumon", "salmon", "thon", "tuna",
+      "poisson", "fish", "crevette", "shrimp", "fruits de mer", "seafood",
+      "jambon", "ham", "saucisse", "sausage", "bacon", "viande", "meat",
+      "lardons", "merguez", "chipolata"], "proteines"),
+    # Légumes & fruits
+    (["tomate", "tomato", "carotte", "carrot", "courgette", "aubergine", "eggplant",
+      "poivron", "pepper", "champignon", "mushroom", "brocoli", "broccoli",
+      "épinard", "spinach", "chou", "cabbage", "oignon", "onion", "ail", "garlic",
+      "salade", "lettuce", "légume", "vegetable",
+      "pomme", "apple", "banane", "banana", "orange", "citron", "lemon",
+      "fraise", "strawberry", "framboise", "raspberry", "poire", "pear",
+      "raisin", "grape", "cerise", "cherry", "ananas", "pineapple",
+      "melon", "pastèque", "watermelon", "fruit", "avocat", "avocado"], "legumes"),
+    # Féculents & céréales
+    (["spaghetti", "tagliatelle", "penne", "macaroni", "fusilli", "pasta", "pâte",
+      "riz", "rice", "quinoa", "boulgour", "bulgur", "couscous", "semoule", "polenta",
+      "farine", "flour", "pain", "bread", "baguette", "brioche",
+      "céréale", "cereal", "muesli", "granola", "avoine", "oat", "blé", "wheat",
+      "biscotte", "crackers", "biscottes"], "feculents"),
+    # Desserts & confiseries
+    (["chocolat", "chocolate", "gâteau", "cake", "biscuit", "cookie",
+      "glace", "ice cream", "sorbet", "crème dessert", "mousse",
+      "confiture", "jam", "miel", "honey", "nutella", "pâte à tartiner",
+      "bonbon", "candy", "caramel", "tarte", "pie", "croissant",
+      "viennoiserie", "éclair", "madeleine", "brownie", "compote",
+      "sucette", "nougat", "praline", "dessert"], "desserts"),
+    # Épicerie
+    (["huile", "oil", "vinaigre", "vinegar", "sel", "poivre", "épice", "spice",
+      "sauce", "ketchup", "moutarde", "mustard", "mayonnaise",
+      "conserve", "soupe", "soup", "bouillon",
+      "lentille", "lentil", "haricot", "bean", "pois chiche", "chickpea",
+      "fève", "légumineuse"], "epicerie"),
+]
+
+
+def infer_food_category(product: Optional[ProductBase]) -> str:
+    """Infère la catégorie alimentaire standardisée à partir des données produit."""
+    if not product:
+        return "autres"
+
+    name = (product.name or "").lower()
+    brand = (product.brand or "").lower()
+    off_tag = (product.category or "").lower()
+
+    # 1. Vérifier le tag OFF en priorité (données structurées)
+    for tag, food_cat in _OFF_CATEGORY_MAP.items():
+        if tag in off_tag:
+            return food_cat
+
+    # 2. Fallback : recherche par mots-clés dans le nom/marque
+    blob = f"{name} {brand}"
+    for keywords, food_cat in _FOOD_CATEGORY_KEYWORDS:
+        for kw in keywords:
+            if kw in blob:
+                return food_cat
+
+    return "autres"
 
 
 # -----------------------------------------------------------------------------
@@ -945,6 +1055,7 @@ async def add_stock(
     doc["status"] = "active"
     doc["consumed_date"] = None
     doc["thrown_date"] = None
+    doc["food_category"] = infer_food_category(item)
 
     res = await stock_col.insert_one(doc)
     created = await stock_col.find_one({"_id": res.inserted_id})

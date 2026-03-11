@@ -24,6 +24,7 @@ export interface StockItem {
   brand?: string;
   image_url?: string;
   category?: string;
+  food_category?: string; // frais/proteines/legumes/feculents/desserts/boissons/epicerie/autres
   quantity?: string;
   expiry_date?: string;
   added_date: string;
