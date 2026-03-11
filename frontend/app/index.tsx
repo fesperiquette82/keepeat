@@ -18,6 +18,7 @@ import { useStockStore, StockItem } from '../store/stockStore';
 import { useLanguageStore } from '../store/languageStore';
 import { format, parseISO, differenceInDays } from 'date-fns';
 import { fr, enUS } from 'date-fns/locale';
+import { C, shadow, shadowSm } from '../utils/theme';
 
 export default function HomeScreen() {
   const router = useRouter();
@@ -40,21 +41,17 @@ export default function HomeScreen() {
   }, [loadData]);
 
   const getExpiryStatus = (expiryDate: string | null | undefined) => {
-    if (!expiryDate) return { status: 'unknown', color: '#666', text: t('noDate') };
-    
+    if (!expiryDate) return { status: 'unknown', color: C.textLight, bg: C.border + '40', text: t('noDate') };
+
     const today = new Date();
     today.setHours(0, 0, 0, 0);
     const expiry = parseISO(expiryDate);
     const daysUntil = differenceInDays(expiry, today);
-    
-    if (daysUntil < 0) {
-      return { status: 'expired', color: '#ef4444', text: t('expired') };
-    } else if (daysUntil === 0) {
-      return { status: 'today', color: '#f97316', text: t('today') };
-    } else if (daysUntil <= 2) {
-      return { status: 'soon', color: '#eab308', text: `${daysUntil}${t('daysLeft')}` };
-    }
-    return { status: 'ok', color: '#22c55e', text: `${daysUntil}${t('daysLeft')}` };
+
+    if (daysUntil < 0)  return { status: 'expired', color: C.red,    bg: C.redLight,    text: t('expired') };
+    if (daysUntil === 0) return { status: 'today',   color: C.orange, bg: C.orangeLight, text: t('today') };
+    if (daysUntil <= 2)  return { status: 'soon',    color: C.yellow, bg: C.yellowLight, text: `${daysUntil}${t('daysLeft')}` };
+    return                       { status: 'ok',      color: C.primary, bg: C.primaryLight, text: `${daysUntil}${t('daysLeft')}` };
   };
 
   const formatDate = (dateStr: string | null | undefined) => {
@@ -68,87 +65,72 @@ export default function HomeScreen() {
 
   const handleQuickAction = (item: StockItem, action: 'consume' | 'throw') => {
     const title = action === 'consume' ? t('markConsumed') : t('markThrown');
-    const message = action === 'consume' 
+    const message = action === 'consume'
       ? t('confirmConsume').replace('{name}', item.name)
       : t('confirmThrow').replace('{name}', item.name);
-    
-    Alert.alert(
-      title,
-      message,
-      [
-        { text: t('cancel'), style: 'cancel' },
-        {
-          text: t('confirm'),
-          style: action === 'throw' ? 'destructive' : 'default',
-          onPress: async () => {
-            if (action === 'consume') {
-              await markConsumed(item.id);
-            } else {
-              await markThrown(item.id);
-            }
-            await loadData();
-          },
+
+    Alert.alert(title, message, [
+      { text: t('cancel'), style: 'cancel' },
+      {
+        text: t('confirm'),
+        style: action === 'throw' ? 'destructive' : 'default',
+        onPress: async () => {
+          if (action === 'consume') await markConsumed(item.id);
+          else await markThrown(item.id);
+          await loadData();
         },
-      ]
-    );
+      },
+    ]);
   };
 
-  const renderStockItem = (item: StockItem, showPriority: boolean = false) => {
+  const renderStockItem = (item: StockItem) => {
     const expiryInfo = getExpiryStatus(item.expiry_date);
-    
+
     return (
-      <TouchableOpacity 
-        key={item.id} 
+      <TouchableOpacity
+        key={item.id}
         style={styles.itemCard}
         onPress={() => router.push({ pathname: '/edit-product', params: { id: item.id } })}
-        activeOpacity={0.7}
+        activeOpacity={0.85}
       >
+        {/* Barre colorée gauche */}
+        <View style={[styles.itemAccent, { backgroundColor: expiryInfo.color }]} />
+
         <View style={styles.itemContent}>
-          <View style={styles.itemHeader}>
-            <Text style={styles.itemName} numberOfLines={1}>{item.name}</Text>
-            {item.brand && <Text style={styles.itemBrand} numberOfLines={1}>{item.brand}</Text>}
-          </View>
-          
-          <View style={styles.itemDetails}>
-            <View style={[styles.expiryBadge, { backgroundColor: expiryInfo.color + '20' }]}>
-              <Ionicons name="calendar-outline" size={14} color={expiryInfo.color} />
-              <Text style={[styles.expiryText, { color: expiryInfo.color }]}>
+          <Text style={styles.itemName} numberOfLines={1}>{item.name}</Text>
+          {item.brand ? <Text style={styles.itemBrand} numberOfLines={1}>{item.brand}</Text> : null}
+
+          <View style={styles.itemFooter}>
+            <View style={[styles.expiryBadge, { backgroundColor: expiryInfo.bg }]}>
+              <Ionicons name="calendar-outline" size={13} color={expiryInfo.color} />
+              <Text style={[styles.expiryDate, { color: expiryInfo.color }]}>
                 {formatDate(item.expiry_date)}
               </Text>
             </View>
-            <Text style={[styles.statusText, { color: expiryInfo.color }]}>
-              {expiryInfo.text}
-            </Text>
+            <View style={[styles.statusPill, { backgroundColor: expiryInfo.bg }]}>
+              <Text style={[styles.statusText, { color: expiryInfo.color }]}>{expiryInfo.text}</Text>
+            </View>
           </View>
         </View>
-        
+
         <View style={styles.itemActions}>
           <TouchableOpacity
-            style={[styles.actionButton, styles.editButton]}
-            onPress={(e) => {
-              e.stopPropagation();
-              router.push({ pathname: '/edit-product', params: { id: item.id } });
-            }}
+            style={[styles.actionBtn, { backgroundColor: C.blueLight }]}
+            onPress={e => { e.stopPropagation(); router.push({ pathname: '/edit-product', params: { id: item.id } }); }}
           >
-            <Ionicons name="pencil" size={20} color="#3b82f6" />
+            <Ionicons name="pencil" size={18} color={C.blue} />
           </TouchableOpacity>
           <TouchableOpacity
-            style={[styles.actionButton, styles.consumeButton]}
-            onPress={(e) => {
-              e.stopPropagation();
-              handleQuickAction(item, 'consume');
-            }}
+            style={[styles.actionBtn, { backgroundColor: C.primaryLight }]}
+            onPress={e => { e.stopPropagation(); handleQuickAction(item, 'consume'); }}
           >
-            <Ionicons name="checkmark-circle" size={24} color="#22c55e" />
+            <Ionicons name="checkmark" size={20} color={C.primary} />
           </TouchableOpacity>
           <TouchableOpacity
-            style={[styles.actionButton, styles.throwButton]}
-            onPress={(e) => {
-              e.stopPropagation();
-              handleQuickAction(item, 'throw');
-            }}
+            style={[styles.actionBtn, { backgroundColor: C.redLight }]}
+            onPress={e => { e.stopPropagation(); handleQuickAction(item, 'throw'); }}
           >
-            <Ionicons name="trash" size={22} color="#ef4444" />
+            <Ionicons name="trash-outline" size={18} color={C.red} />
           </TouchableOpacity>
         </View>
       </TouchableOpacity>
@@ -159,50 +141,48 @@ export default function HomeScreen() {
     <SafeAreaView style={styles.container}>
       {/* Header */}
       <View style={styles.header}>
-        <View>
-          <Text style={styles.title}>KeepEat</Text>
-          <Text style={styles.subtitle}>{t('subtitle')}</Text>
+        <View style={styles.headerLeft}>
+          <View style={styles.logoCircle}>
+            <Ionicons name="leaf" size={20} color="#fff" />
+          </View>
+          <View>
+            <Text style={styles.title}>KeepEat</Text>
+            <Text style={styles.subtitle}>{t('subtitle')}</Text>
+          </View>
         </View>
-        <TouchableOpacity
-          style={styles.settingsButton}
-          onPress={() => router.push('/settings')}
-        >
-          <Ionicons name="settings-outline" size={24} color="#fff" />
+        <TouchableOpacity style={styles.settingsButton} onPress={() => router.push('/settings')}>
+          <Ionicons name="settings-outline" size={22} color={C.textMid} />
         </TouchableOpacity>
       </View>
 
       {/* Bandeau offline */}
       {(!isOnline || pendingMutations.length > 0) && (
         <View style={styles.offlineBanner}>
-          <Ionicons
-            name={isOnline ? 'sync-outline' : 'cloud-offline-outline'}
-            size={16}
-            color="#fff"
-          />
+          <Ionicons name={isOnline ? 'sync-outline' : 'cloud-offline-outline'} size={15} color="#fff" />
           <Text style={styles.offlineBannerText}>
             {!isOnline
               ? language === 'fr'
                 ? `Hors ligne${pendingMutations.length > 0 ? ` — ${pendingMutations.length} modification${pendingMutations.length > 1 ? 's' : ''} en attente` : ''}`
                 : `Offline${pendingMutations.length > 0 ? ` — ${pendingMutations.length} pending change${pendingMutations.length > 1 ? 's' : ''}` : ''}`
               : language === 'fr'
-              ? `Synchronisation en cours (${pendingMutations.length})…`
+              ? `Synchronisation (${pendingMutations.length})…`
               : `Syncing (${pendingMutations.length})…`}
           </Text>
         </View>
       )}
 
       {/* Stats Cards */}
-      <View style={styles.statsContainer}>
-        <View style={[styles.statCard, { backgroundColor: '#22c55e20' }]}>
-          <Text style={[styles.statNumber, { color: '#22c55e' }]}>{stats.total_items}</Text>
+      <View style={styles.statsRow}>
+        <View style={[styles.statCard, { borderTopColor: C.primary }]}>
+          <Text style={[styles.statNumber, { color: C.primary }]}>{stats.total_items}</Text>
           <Text style={styles.statLabel}>{t('inStock')}</Text>
         </View>
-        <View style={[styles.statCard, { backgroundColor: '#eab30820' }]}>
-          <Text style={[styles.statNumber, { color: '#eab308' }]}>{stats.expiring_soon}</Text>
+        <View style={[styles.statCard, { borderTopColor: C.yellow }]}>
+          <Text style={[styles.statNumber, { color: C.yellow }]}>{stats.expiring_soon}</Text>
           <Text style={styles.statLabel}>{t('expiringSoon')}</Text>
         </View>
-        <View style={[styles.statCard, { backgroundColor: '#ef444420' }]}>
-          <Text style={[styles.statNumber, { color: '#ef4444' }]}>{stats.expired}</Text>
+        <View style={[styles.statCard, { borderTopColor: C.red }]}>
+          <Text style={[styles.statNumber, { color: C.red }]}>{stats.expired}</Text>
           <Text style={styles.statLabel}>{t('expired')}</Text>
         </View>
       </View>
@@ -210,38 +190,43 @@ export default function HomeScreen() {
       <ScrollView
         style={styles.scrollView}
         contentContainerStyle={styles.scrollContent}
-        refreshControl={
-          <RefreshControl
-            refreshing={refreshing}
-            onRefresh={onRefresh}
-            tintColor="#22c55e"
-          />
-        }
+        refreshControl={<RefreshControl refreshing={refreshing} onRefresh={onRefresh} tintColor={C.primary} />}
       >
         {/* Priority Section */}
         {priorityItems.length > 0 && (
           <View style={styles.section}>
             <View style={styles.sectionHeader}>
-              <Ionicons name="warning" size={20} color="#f97316" />
+              <View style={[styles.sectionIconBg, { backgroundColor: C.orangeLight }]}>
+                <Ionicons name="flame" size={16} color={C.orange} />
+              </View>
               <Text style={styles.sectionTitle}>{t('consumeFirst')}</Text>
+              <View style={styles.countBadge}>
+                <Text style={styles.countBadgeText}>{priorityItems.length}</Text>
+              </View>
             </View>
-            {priorityItems.map((item: StockItem) => renderStockItem(item, true))}
+            {priorityItems.map((item: StockItem) => renderStockItem(item))}
           </View>
         )}
 
-        {/* All Items Section */}
+        {/* All Items */}
         <View style={styles.section}>
           <View style={styles.sectionHeader}>
-            <Ionicons name="cube-outline" size={20} color="#fff" />
+            <View style={[styles.sectionIconBg, { backgroundColor: C.primaryLight }]}>
+              <Ionicons name="cube-outline" size={16} color={C.primary} />
+            </View>
             <Text style={styles.sectionTitle}>{t('myStock')}</Text>
-            <Text style={styles.itemCount}>({items.length})</Text>
+            <View style={[styles.countBadge, { backgroundColor: C.primaryMid }]}>
+              <Text style={[styles.countBadgeText, { color: C.primary }]}>{items.length}</Text>
+            </View>
           </View>
-          
+
           {isLoading && items.length === 0 ? (
-            <ActivityIndicator size="large" color="#22c55e" style={styles.loader} />
+            <ActivityIndicator size="large" color={C.primary} style={styles.loader} />
           ) : items.length === 0 ? (
             <View style={styles.emptyState}>
-              <Ionicons name="basket-outline" size={64} color="#333" />
+              <View style={styles.emptyIcon}>
+                <Ionicons name="basket-outline" size={48} color={C.primary} />
+              </View>
               <Text style={styles.emptyText}>{t('emptyStock')}</Text>
               <Text style={styles.emptySubtext}>{t('scanToAdd')}</Text>
             </View>
@@ -251,199 +236,169 @@ export default function HomeScreen() {
         </View>
       </ScrollView>
 
-      {/* FAB - Add Button */}
-      <TouchableOpacity
-        style={styles.fab}
-        onPress={() => router.push('/scan')}
-      >
-        <Ionicons name="barcode-outline" size={28} color="#fff" />
+      {/* FAB */}
+      <TouchableOpacity style={styles.fab} onPress={() => router.push('/scan')}>
+        <Ionicons name="barcode-outline" size={26} color="#fff" />
       </TouchableOpacity>
     </SafeAreaView>
   );
 }
 
 const styles = StyleSheet.create({
-  container: {
-    flex: 1,
-    backgroundColor: '#0a0a0a',
-  },
-  offlineBanner: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 8,
-    backgroundColor: '#b45309',
-    paddingHorizontal: 16,
-    paddingVertical: 8,
-  },
-  offlineBannerText: {
-    color: '#fff',
-    fontSize: 13,
-    fontWeight: '500',
-    flex: 1,
-  },
+  container: { flex: 1, backgroundColor: C.bg },
+
   header: {
     flexDirection: 'row',
     justifyContent: 'space-between',
     alignItems: 'center',
     paddingHorizontal: 20,
-    paddingTop: 10,
-    paddingBottom: 15,
+    paddingTop: 12,
+    paddingBottom: 14,
+    backgroundColor: C.card,
+    ...shadowSm,
   },
-  title: {
-    fontSize: 28,
-    fontWeight: 'bold',
-    color: '#22c55e',
+  headerLeft: { flexDirection: 'row', alignItems: 'center', gap: 12 },
+  logoCircle: {
+    width: 38,
+    height: 38,
+    borderRadius: 19,
+    backgroundColor: C.primary,
+    alignItems: 'center',
+    justifyContent: 'center',
   },
-  subtitle: {
-    fontSize: 14,
-    color: '#888',
-    marginTop: 2,
-  },
+  title: { fontSize: 20, fontWeight: '800', color: C.text, letterSpacing: -0.3 },
+  subtitle: { fontSize: 12, color: C.textLight, marginTop: 1 },
   settingsButton: {
     padding: 8,
-    backgroundColor: '#1a1a1a',
+    backgroundColor: C.bg,
     borderRadius: 12,
+    borderWidth: 1,
+    borderColor: C.border,
   },
-  statsContainer: {
+
+  offlineBanner: {
     flexDirection: 'row',
-    paddingHorizontal: 20,
-    gap: 12,
-    marginBottom: 10,
+    alignItems: 'center',
+    gap: 8,
+    backgroundColor: C.offline,
+    paddingHorizontal: 16,
+    paddingVertical: 8,
+  },
+  offlineBannerText: { color: '#fff', fontSize: 13, fontWeight: '500', flex: 1 },
+
+  statsRow: {
+    flexDirection: 'row',
+    paddingHorizontal: 16,
+    paddingVertical: 14,
+    gap: 10,
   },
   statCard: {
     flex: 1,
-    padding: 12,
-    borderRadius: 12,
+    backgroundColor: C.card,
+    borderRadius: 14,
+    padding: 14,
     alignItems: 'center',
+    borderTopWidth: 3,
+    ...shadow,
   },
-  statNumber: {
-    fontSize: 24,
-    fontWeight: 'bold',
-  },
-  statLabel: {
-    fontSize: 11,
-    color: '#888',
-    marginTop: 4,
-    textAlign: 'center',
-  },
-  scrollView: {
-    flex: 1,
-  },
-  scrollContent: {
-    paddingHorizontal: 20,
-    paddingBottom: 100,
-  },
-  section: {
-    marginTop: 20,
-  },
+  statNumber: { fontSize: 26, fontWeight: '800' },
+  statLabel: { fontSize: 10, color: C.textMid, marginTop: 3, textAlign: 'center', fontWeight: '500' },
+
+  scrollView: { flex: 1 },
+  scrollContent: { paddingHorizontal: 16, paddingBottom: 110 },
+
+  section: { marginBottom: 8 },
   sectionHeader: {
     flexDirection: 'row',
     alignItems: 'center',
-    marginBottom: 12,
     gap: 8,
-  },
-  sectionTitle: {
-    fontSize: 18,
-    fontWeight: '600',
-    color: '#fff',
-  },
-  itemCount: {
-    fontSize: 14,
-    color: '#666',
-  },
-  itemCard: {
-    backgroundColor: '#1a1a1a',
-    borderRadius: 12,
-    padding: 14,
     marginBottom: 10,
-    flexDirection: 'row',
+    marginTop: 8,
+  },
+  sectionIconBg: {
+    width: 28,
+    height: 28,
+    borderRadius: 8,
     alignItems: 'center',
+    justifyContent: 'center',
   },
-  itemContent: {
-    flex: 1,
+  sectionTitle: { fontSize: 16, fontWeight: '700', color: C.text, flex: 1 },
+  countBadge: {
+    backgroundColor: '#F3F4F6',
+    borderRadius: 10,
+    paddingHorizontal: 8,
+    paddingVertical: 2,
   },
-  itemHeader: {
+  countBadgeText: { fontSize: 12, fontWeight: '700', color: C.textMid },
+
+  itemCard: {
+    backgroundColor: C.card,
+    borderRadius: 14,
     marginBottom: 8,
-  },
-  itemName: {
-    fontSize: 16,
-    fontWeight: '600',
-    color: '#fff',
-  },
-  itemBrand: {
-    fontSize: 13,
-    color: '#888',
-    marginTop: 2,
-  },
-  itemDetails: {
     flexDirection: 'row',
     alignItems: 'center',
-    gap: 10,
+    overflow: 'hidden',
+    ...shadow,
   },
+  itemAccent: { width: 4, alignSelf: 'stretch' },
+  itemContent: { flex: 1, paddingVertical: 12, paddingHorizontal: 12 },
+  itemName: { fontSize: 15, fontWeight: '700', color: C.text, marginBottom: 2 },
+  itemBrand: { fontSize: 12, color: C.textMid, marginBottom: 6 },
+  itemFooter: { flexDirection: 'row', alignItems: 'center', gap: 6 },
   expiryBadge: {
     flexDirection: 'row',
     alignItems: 'center',
     gap: 4,
-    paddingHorizontal: 8,
-    paddingVertical: 4,
-    borderRadius: 6,
+    paddingHorizontal: 7,
+    paddingVertical: 3,
+    borderRadius: 8,
   },
-  expiryText: {
-    fontSize: 12,
-    fontWeight: '500',
+  expiryDate: { fontSize: 11, fontWeight: '600' },
+  statusPill: {
+    paddingHorizontal: 7,
+    paddingVertical: 3,
+    borderRadius: 8,
   },
-  statusText: {
-    fontSize: 12,
-    fontWeight: '600',
-  },
-  itemActions: {
-    flexDirection: 'row',
-    gap: 8,
-  },
-  actionButton: {
-    padding: 8,
+  statusText: { fontSize: 11, fontWeight: '700' },
+
+  itemActions: { flexDirection: 'row', gap: 6, paddingRight: 12 },
+  actionBtn: {
+    width: 34,
+    height: 34,
     borderRadius: 10,
-  },
-  editButton: {
-    backgroundColor: '#3b82f615',
-  },
-  consumeButton: {
-    backgroundColor: '#22c55e15',
-  },
-  throwButton: {
-    backgroundColor: '#ef444415',
-  },
-  emptyState: {
-    alignItems: 'center',
-    paddingVertical: 40,
-  },
-  emptyText: {
-    fontSize: 18,
-    color: '#666',
-    marginTop: 16,
-  },
-  emptySubtext: {
-    fontSize: 14,
-    color: '#444',
-    marginTop: 4,
-  },
-  loader: {
-    marginVertical: 40,
-  },
-  fab: {
-    position: 'absolute',
-    bottom: 30,
-    right: 20,
-    width: 60,
-    height: 60,
-    borderRadius: 30,
-    backgroundColor: '#22c55e',
     alignItems: 'center',
     justifyContent: 'center',
-    shadowColor: '#22c55e',
-    shadowOffset: { width: 0, height: 4 },
-    shadowOpacity: 0.3,
-    shadowRadius: 8,
-    elevation: 8,
+  },
+
+  emptyState: { alignItems: 'center', paddingVertical: 50 },
+  emptyIcon: {
+    width: 88,
+    height: 88,
+    borderRadius: 44,
+    backgroundColor: C.primaryLight,
+    alignItems: 'center',
+    justifyContent: 'center',
+    marginBottom: 16,
+  },
+  emptyText: { fontSize: 17, fontWeight: '700', color: C.text, marginBottom: 4 },
+  emptySubtext: { fontSize: 14, color: C.textMid },
+
+  loader: { marginVertical: 40 },
+
+  fab: {
+    position: 'absolute',
+    bottom: 28,
+    right: 20,
+    width: 58,
+    height: 58,
+    borderRadius: 29,
+    backgroundColor: C.primary,
+    alignItems: 'center',
+    justifyContent: 'center',
+    shadowColor: C.primary,
+    shadowOffset: { width: 0, height: 6 },
+    shadowOpacity: 0.35,
+    shadowRadius: 10,
+    elevation: 10,
   },
 });
