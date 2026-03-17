@@ -1152,26 +1152,45 @@ async def get_priority_items(current_user: Dict[str, Any] = Depends(_get_current
 @api_router.get("/stats", response_model=StatsResponse)
 async def get_stats(current_user: Dict[str, Any] = Depends(_get_current_user)):
     uid = current_user["id"]
-    # active
-    total_items = await stock_col.count_documents({"user_id": uid, "status": "active"})
-
-    # expiring soon / expired among active
-    cursor = stock_col.find({"user_id": uid, "status": "active"})
-    active_docs = await cursor.to_list(length=2000)
-
-    expiring_soon = 0
-    expired = 0
-    for d in active_docs:
-        days = _days_until(d.get("expiry_date"))
-        if days is None:
-            continue
-        if days < 0:
-            expired += 1
-        elif days <= 3:
-            expiring_soon += 1
-
-    # week stats based on ISO timestamps we write (utc isoformat)
+    today_str = _utc_now().strftime("%Y-%m-%d")
+    in_3_days_str = (_utc_now() + timedelta(days=3)).strftime("%Y-%m-%d")
     week_ago = (_utc_now() - timedelta(days=7)).isoformat()
+
+    # Agrégation unique côté MongoDB — aucun document rapatrié en RAM
+    pipeline = [
+        {"$match": {"user_id": uid, "status": "active"}},
+        {
+            "$group": {
+                "_id": None,
+                "total": {"$sum": 1},
+                "expired": {
+                    "$sum": {
+                        "$cond": [
+                            {"$and": [
+                                {"$ne": ["$expiry_date", None]},
+                                {"$lt": ["$expiry_date", today_str]},
+                            ]},
+                            1, 0,
+                        ]
+                    }
+                },
+                "expiring_soon": {
+                    "$sum": {
+                        "$cond": [
+                            {"$and": [
+                                {"$ne": ["$expiry_date", None]},
+                                {"$gte": ["$expiry_date", today_str]},
+                                {"$lte": ["$expiry_date", in_3_days_str]},
+                            ]},
+                            1, 0,
+                        ]
+                    }
+                },
+            }
+        },
+    ]
+    agg = await stock_col.aggregate(pipeline).to_list(length=1)
+    counts = agg[0] if agg else {"total": 0, "expired": 0, "expiring_soon": 0}
 
     consumed_this_week = await stock_col.count_documents(
         {"user_id": uid, "status": "consumed", "consumed_date": {"$gte": week_ago}}
@@ -1181,9 +1200,9 @@ async def get_stats(current_user: Dict[str, Any] = Depends(_get_current_user)):
     )
 
     return StatsResponse(
-        total_items=total_items,
-        expiring_soon=expiring_soon,
-        expired=expired,
+        total_items=counts["total"],
+        expiring_soon=counts["expiring_soon"],
+        expired=counts["expired"],
         consumed_this_week=consumed_this_week,
         thrown_this_week=thrown_this_week,
     )
