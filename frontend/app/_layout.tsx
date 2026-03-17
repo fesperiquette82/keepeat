@@ -6,15 +6,14 @@ import ErrorBoundary from "../component/ErrorBoundary";
 import { useAuthStore } from '../store/authStore';
 import { useLanguageStore } from '../store/languageStore';
 import { requestNotificationPermissions, registerPushToken } from '../utils/notificationService';
+import { buildApiUrl } from '../utils/config';
 import { useNetworkSync } from '../utils/useNetworkSync';
-
-const API_URL = process.env.EXPO_PUBLIC_BACKEND_URL?.trim() || 'https://keepeat-backend.onrender.com';
 
 async function warmUpBackend(): Promise<void> {
   const controller = new AbortController();
   const timer = setTimeout(() => controller.abort(), 30_000);
   try {
-    await fetch(`${API_URL}/health`, { signal: controller.signal });
+    await fetch(buildApiUrl('/health'), { signal: controller.signal });
   } catch {
     // Best-effort
   } finally {

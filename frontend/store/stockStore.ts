@@ -8,9 +8,7 @@ import {
   cancelExpiryNotification,
   rescheduleAllNotifications,
 } from '../utils/notificationService';
-
-const DEFAULT_API_URL = 'https://keepeat-backend.onrender.com';
-const API_URL = process.env.EXPO_PUBLIC_BACKEND_URL?.trim() || DEFAULT_API_URL;
+import { buildApiUrl } from '../utils/config';
 
 const authHeaders = () => {
   const token = useAuthStore.getState().token;
@@ -134,7 +132,7 @@ export const useStockStore = create<StockStore>()(
         for (const mutation of [...pendingMutations]) {
           try {
             if (mutation.type === 'ADD') {
-              const res = await axios.post(`${API_URL}/api/stock`, mutation.payload, { headers: authHeaders() });
+              const res = await axios.post(buildApiUrl('/api/stock'), mutation.payload, { headers: authHeaders() });
               const realItem: StockItem = res.data;
               // Remplacer le tempId par le vrai ID dans le state local
               set(state => ({
@@ -144,11 +142,11 @@ export const useStockStore = create<StockStore>()(
               }));
               scheduleExpiryNotification(realItem);
             } else if (mutation.type === 'CONSUME') {
-              await axios.post(`${API_URL}/api/stock/${mutation.payload.itemId}/consume`, {}, { headers: authHeaders() });
+              await axios.post(buildApiUrl(`/api/stock/${mutation.payload.itemId}/consume`), {}, { headers: authHeaders() });
             } else if (mutation.type === 'THROW') {
-              await axios.post(`${API_URL}/api/stock/${mutation.payload.itemId}/throw`, {}, { headers: authHeaders() });
+              await axios.post(buildApiUrl(`/api/stock/${mutation.payload.itemId}/throw`), {}, { headers: authHeaders() });
             } else if (mutation.type === 'UPDATE') {
-              await axios.put(`${API_URL}/api/stock/${mutation.payload.itemId}`, mutation.payload.updates, { headers: authHeaders() });
+              await axios.put(buildApiUrl(`/api/stock/${mutation.payload.itemId}`), mutation.payload.updates, { headers: authHeaders() });
             }
             // Mutation réussie : la retirer de la queue
             remaining.splice(remaining.findIndex(m => m.id === mutation.id), 1);
@@ -174,7 +172,7 @@ export const useStockStore = create<StockStore>()(
       fetchStock: async () => {
         set(state => ({ loadingCount: state.loadingCount + 1, isLoading: true, error: null }));
         try {
-          const res = await axios.get(`${API_URL}/api/stock?status=active`, { headers: authHeaders() });
+          const res = await axios.get(buildApiUrl('/api/stock?status=active'), { headers: authHeaders() });
           const items: StockItem[] = res.data;
           set({ items });
           rescheduleAllNotifications(items);
@@ -194,7 +192,7 @@ export const useStockStore = create<StockStore>()(
       fetchPriorityItems: async () => {
         set(state => ({ loadingCount: state.loadingCount + 1, isLoading: true }));
         try {
-          const res = await axios.get(`${API_URL}/api/stock/priority`, { headers: authHeaders() });
+          const res = await axios.get(buildApiUrl('/api/stock/priority'), { headers: authHeaders() });
           set({ priorityItems: res.data });
         } catch {
           // Garder le cache en cas d'erreur réseau
@@ -209,7 +207,7 @@ export const useStockStore = create<StockStore>()(
       fetchStats: async () => {
         set(state => ({ loadingCount: state.loadingCount + 1, isLoading: true }));
         try {
-          const res = await axios.get(`${API_URL}/api/stats`, { headers: authHeaders() });
+          const res = await axios.get(buildApiUrl('/api/stats'), { headers: authHeaders() });
           set({ stats: res.data });
         } catch {
           // Garder les stats cachées en cas d'erreur réseau
@@ -248,7 +246,7 @@ export const useStockStore = create<StockStore>()(
 
         const { items, priorityItems, stats } = useStockStore.getState();
         try {
-          await axios.post(`${API_URL}/api/stock/${itemId}/consume`, {}, { headers: authHeaders() });
+          await axios.post(buildApiUrl(`/api/stock/${itemId}/consume`), {}, { headers: authHeaders() });
           const s = get();
           await Promise.all([s.fetchStock(), s.fetchPriorityItems(), s.fetchStats()]);
         } catch (err: any) {
@@ -294,7 +292,7 @@ export const useStockStore = create<StockStore>()(
 
         const { items, priorityItems, stats } = useStockStore.getState();
         try {
-          await axios.post(`${API_URL}/api/stock/${itemId}/throw`, {}, { headers: authHeaders() });
+          await axios.post(buildApiUrl(`/api/stock/${itemId}/throw`), {}, { headers: authHeaders() });
           const s = get();
           await Promise.all([s.fetchStock(), s.fetchPriorityItems(), s.fetchStats()]);
         } catch (err: any) {
@@ -314,7 +312,7 @@ export const useStockStore = create<StockStore>()(
 
       lookupProduct: async (barcode: string) => {
         try {
-          const res = await axios.get(`${API_URL}/api/product/${barcode}`);
+          const res = await axios.get(buildApiUrl(`/api/product/${barcode}`));
           return res.data;
         } catch {
           return null;
@@ -352,7 +350,7 @@ export const useStockStore = create<StockStore>()(
         }
 
         try {
-          const res = await axios.post(`${API_URL}/api/stock`, item, { headers: authHeaders() });
+          const res = await axios.post(buildApiUrl('/api/stock'), item, { headers: authHeaders() });
           const newItem: StockItem = res.data;
           const s = get();
           await Promise.all([s.fetchStock(), s.fetchPriorityItems(), s.fetchStats()]);
@@ -388,7 +386,7 @@ export const useStockStore = create<StockStore>()(
         }
 
         try {
-          const res = await axios.put(`${API_URL}/api/stock/${itemId}`, updates, { headers: authHeaders() });
+          const res = await axios.put(buildApiUrl(`/api/stock/${itemId}`), updates, { headers: authHeaders() });
           const updatedItem: StockItem = res.data;
           cancelExpiryNotification(itemId);
           scheduleExpiryNotification(updatedItem);

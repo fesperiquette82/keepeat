@@ -2,8 +2,7 @@ import { create } from 'zustand';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import * as SecureStore from 'expo-secure-store';
 import { unregisterPushToken } from '../utils/notificationService';
-
-const API_URL = process.env.EXPO_PUBLIC_BACKEND_URL?.trim() || 'https://keepeat-backend.onrender.com';
+import { buildApiUrl } from '../utils/config';
 
 const TOKEN_KEY = 'keepeat_token';
 const USER_KEY = 'keepeat_user';
@@ -35,7 +34,7 @@ interface AuthStore {
 }
 
 async function apiPost(endpoint: string, body: object): Promise<any> {
-  const response = await fetch(`${API_URL}/api/auth/${endpoint}`, {
+  const response = await fetch(buildApiUrl(`/api/auth/${endpoint}`), {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify(body),

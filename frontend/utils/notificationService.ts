@@ -4,8 +4,7 @@ import Constants from 'expo-constants';
 import { Platform } from 'react-native';
 import { parseISO } from 'date-fns';
 import { StockItem } from '../store/stockStore';
-
-const API_URL = process.env.EXPO_PUBLIC_BACKEND_URL?.trim() || 'https://keepeat-backend.onrender.com';
+import { buildApiUrl } from './config';
 const PUSH_TOKEN_KEY = 'keepeat_push_token';
 
 const NOTIF_IDS_KEY = 'keepeat_notification_ids';
@@ -75,7 +74,7 @@ export async function registerPushToken(authToken: string): Promise<void> {
     const cached = await AsyncStorage.getItem(PUSH_TOKEN_KEY);
     if (cached === expoPushToken) return;
 
-    await fetch(`${API_URL}/api/push-token`, {
+    await fetch(buildApiUrl('/api/push-token'), {
       method: 'POST',
       headers: {
         'Content-Type': 'application/json',
@@ -98,7 +97,7 @@ export async function unregisterPushToken(authToken: string): Promise<void> {
   try {
     const cached = await AsyncStorage.getItem(PUSH_TOKEN_KEY);
     if (!cached) return;
-    await fetch(`${API_URL}/api/push-token`, {
+    await fetch(buildApiUrl('/api/push-token'), {
       method: 'DELETE',
       headers: {
         'Content-Type': 'application/json',

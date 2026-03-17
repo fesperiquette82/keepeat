@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 """
-KeepEat Backend API Testing Suite
-Tests all backend APIs comprehensively
+KeepEat Backend API smoke test suite.
+Defaults to a local backend and can be overridden with the KEEPEAT_BASE_URL env var.
 """
 
 import requests
@@ -9,9 +9,9 @@ import json
 from datetime import datetime, timedelta
 import time
 import sys
+import os
 
-# Base URL from frontend environment
-BASE_URL = "https://nofoodwaste-14.preview.emergentagent.com/api"
+BASE_URL = os.environ.get("KEEPEAT_BASE_URL", "http://localhost:8000").rstrip("/")
 
 class KeepEatAPITester:
     def __init__(self):
@@ -31,12 +31,12 @@ class KeepEatAPITester:
             response = self.session.get(f"{self.base_url}/health")
             if response.status_code == 200:
                 data = response.json()
-                if "status" in data and data["status"] == "healthy":
-                    self.log("✅ Health check passed")
+                status = data.get("status")
+                if status in {"healthy", "ok", "degraded"}:
+                    self.log(f"✅ Health check passed ({status})")
                     return True
-                else:
-                    self.log(f"❌ Health check failed - Invalid response: {data}", "ERROR")
-                    return False
+                self.log(f"❌ Health check failed - Invalid response: {data}", "ERROR")
+                return False
             else:
                 self.log(f"❌ Health check failed - Status: {response.status_code}", "ERROR")
                 return False

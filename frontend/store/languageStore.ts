@@ -62,6 +62,19 @@ const translations: Translations = {
   consumedWeek: { fr: 'Consommés cette semaine', en: 'Consumed this week' },
   thrownWeek: { fr: 'Jetés cette semaine', en: 'Thrown away this week' },
 
+  // Settings / misc labels used in multiple screens
+  french: { fr: 'Français', en: 'French' },
+  english: { fr: 'Anglais', en: 'English' },
+  consumedThisWeek: { fr: 'Consommés cette semaine', en: 'Consumed this week' },
+  thrownThisWeek: { fr: 'Jetés cette semaine', en: 'Thrown away this week' },
+  about: { fr: 'À propos', en: 'About' },
+  version: { fr: 'Version', en: 'Version' },
+  name: { fr: 'Nom', en: 'Name' },
+  notes: { fr: 'Notes', en: 'Notes' },
+  apply: { fr: 'Appliquer', en: 'Apply' },
+  productFound: { fr: 'Produit trouvé', en: 'Product found' },
+  productNotFound: { fr: 'Produit introuvable', en: 'Product not found' },
+
   // Mentionnée dans index.tsx
   addManually: { fr: 'Ajouter', en: 'Add' },
 };

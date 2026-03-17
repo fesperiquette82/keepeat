@@ -13,8 +13,7 @@ import { Ionicons } from '@expo/vector-icons';
 import { useLanguageStore } from '../store/languageStore';
 import { useStockStore } from '../store/stockStore';
 import { useAuthStore } from '../store/authStore';
-
-const API_URL = process.env.EXPO_PUBLIC_BACKEND_URL ?? 'http://localhost:8000';
+import { buildApiUrl } from '../utils/config';
 
 export default function SettingsScreen() {
   const router = useRouter();
@@ -29,7 +28,7 @@ export default function SettingsScreen() {
     loadLanguage();
     fetchStats();
     if (token) {
-      fetch(`${API_URL}/api/recalls/status`, {
+      fetch(buildApiUrl('/api/recalls/status'), {
         headers: { Authorization: `Bearer ${token}` },
       })
         .then(r => r.json())
