@@ -265,12 +265,27 @@ async def _seed_default_user() -> None:
 @asynccontextmanager
 async def lifespan(app: FastAPI):
     await _seed_default_user()
-    # Index TTL sur user_alerts : auto-suppression après 30 jours
+
+    # ── Index TTL (auto-nettoyage) ─────────────────────────────────────────────
     await user_alerts_col.create_index("sent_at", expireAfterSeconds=30 * 24 * 3600)
-    # Index TTL sur products_cache : auto-suppression après 7 jours
     await products_cache_col.create_index("cached_at", expireAfterSeconds=7 * 24 * 3600)
-    # Index unique sur barcode pour lookup rapide
     await products_cache_col.create_index("barcode", unique=True)
+
+    # ── Index stock_col ────────────────────────────────────────────────────────
+    # Toutes les requêtes filtrent sur user_id+status ; ajout de expiry_date
+    # couvre l'agrégation stats + get_priority_items sans surcoût.
+    await stock_col.create_index([("user_id", 1), ("status", 1), ("expiry_date", 1)])
+    # Stats semaine : comptage consumed/thrown par date
+    await stock_col.create_index([("user_id", 1), ("status", 1), ("consumed_date", 1)])
+    await stock_col.create_index([("user_id", 1), ("status", 1), ("thrown_date", 1)])
+
+    # ── Index users_col ────────────────────────────────────────────────────────
+    # email : login, register, forgot-password, resend-verification, set-premium
+    await users_col.create_index("email", unique=True)
+    # Tokens à usage unique : sparse=True évite d'indexer les docs sans le champ
+    await users_col.create_index("verification_token", sparse=True)
+    await users_col.create_index("reset_token", sparse=True)
+
     # Lancer la boucle d'alertes en arrière-plan
     alert_task = asyncio.create_task(_alert_loop())
     yield
