@@ -124,10 +124,9 @@ export default function HomeScreen() {
         {
           text: t('confirm'),
           style: isConsume ? 'default' : 'destructive',
-          onPress: async () => {
-            if (isConsume) await markConsumed(item.id);
-            else await markThrown(item.id);
-            await loadData();
+          onPress: () => {
+            if (isConsume) markConsumed(item.id);
+            else markThrown(item.id);
           },
         },
       ]
