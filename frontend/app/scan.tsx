@@ -5,115 +5,33 @@ import {
   StyleSheet,
   TouchableOpacity,
   ActivityIndicator,
-  Alert,
   TextInput,
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { CameraView, useCameraPermissions } from 'expo-camera';
 import { useRouter } from 'expo-router';
 import { Ionicons } from '@expo/vector-icons';
-import { useStockStore } from '../store/stockStore';
 import { useLanguageStore } from '../store/languageStore';
 
 export default function ScanScreen() {
   const router = useRouter();
-  const { lookupProduct } = useStockStore();
   const { t } = useLanguageStore();
   const [permission, requestPermission] = useCameraPermissions();
   const [scanned, setScanned] = useState(false);
-  const [isSearching, setIsSearching] = useState(false);
   const [manualBarcode, setManualBarcode] = useState('');
   const [showManualInput, setShowManualInput] = useState(false);
 
-  const handleBarCodeScanned = async ({ data }: { type: string; data: string }) => {
-    if (scanned || isSearching) return;
-
+  // Navigate-first : navigation immédiate sans attendre le lookup API.
+  // Le lookup est effectué dans add-product.tsx (avec cache mémoire).
+  const handleBarCodeScanned = ({ data }: { type: string; data: string }) => {
+    if (scanned) return;
     setScanned(true);
-    setIsSearching(true);
-
-    try {
-      const result = await lookupProduct(data);
-
-      if (result && result.product) {
-        router.push({
-          pathname: '/add-product',
-          params: {
-            barcode: data,
-            name: result.product.name || '',
-            brand: result.product.brand || '',
-            image_url: result.product.image_url || '',
-            category: result.product.category || '',
-            quantity: result.product.quantity || '',
-            found: 'true',
-            shelf_life_category: result.shelf_life?.category_fr || '',
-            shelf_life_fridge: result.shelf_life?.refrigerator_days?.toString() || '',
-            shelf_life_freezer: result.shelf_life?.freezer_days?.toString() || '',
-            shelf_life_pantry: result.shelf_life?.pantry_days?.toString() || '',
-            shelf_life_tips: result.shelf_life?.tips_fr || '',
-          },
-        });
-      } else {
-        router.push({
-          pathname: '/add-product',
-          params: {
-            barcode: data,
-            found: 'false',
-            shelf_life_category: result?.shelf_life?.category_fr || '',
-            shelf_life_fridge: result?.shelf_life?.refrigerator_days?.toString() || '7',
-            shelf_life_tips: result?.shelf_life?.tips_fr || '',
-          },
-        });
-      }
-    } catch (error) {
-      Alert.alert('Erreur', 'Impossible de rechercher le produit');
-      setScanned(false);
-    } finally {
-      setIsSearching(false);
-    }
+    router.push({ pathname: '/add-product', params: { barcode: data } });
   };
 
-  const handleManualSearch = async () => {
+  const handleManualSearch = () => {
     if (!manualBarcode.trim()) return;
-
-    setIsSearching(true);
-    try {
-      const result = await lookupProduct(manualBarcode.trim());
-
-      if (result && result.product) {
-        router.push({
-          pathname: '/add-product',
-          params: {
-            barcode: manualBarcode.trim(),
-            name: result.product.name || '',
-            brand: result.product.brand || '',
-            image_url: result.product.image_url || '',
-            category: result.product.category || '',
-            quantity: result.product.quantity || '',
-            found: 'true',
-            shelf_life_category: result.shelf_life?.category_fr || '',
-            shelf_life_fridge: result.shelf_life?.refrigerator_days?.toString() || '',
-            shelf_life_freezer: result.shelf_life?.freezer_days?.toString() || '',
-            shelf_life_pantry: result.shelf_life?.pantry_days?.toString() || '',
-            shelf_life_tips: result.shelf_life?.tips_fr || '',
-          },
-        });
-      } else {
-        router.push({
-          pathname: '/add-product',
-          params: {
-            barcode: manualBarcode.trim(),
-            found: 'false',
-            shelf_life_category: result?.shelf_life?.category_fr || '',
-            shelf_life_fridge: result?.shelf_life?.refrigerator_days?.toString() || '7',
-            shelf_life_tips: result?.shelf_life?.tips_fr || '',
-          },
-        });
-      }
-    } catch (error) {
-      Alert.alert('Erreur', 'Impossible de rechercher le produit');
-    } finally {
-      setIsSearching(false);
-    }
+    router.push({ pathname: '/add-product', params: { barcode: manualBarcode.trim() } });
   };
 
   const handleManualAdd = () => {
@@ -180,12 +98,6 @@ export default function ScanScreen() {
               </View>
             </View>
 
-            {isSearching && (
-              <View style={styles.searchingOverlay}>
-                <ActivityIndicator size="large" color="#22c55e" />
-                <Text style={styles.searchingText}>{t('searching')}</Text>
-              </View>
-            )}
           </CameraView>
 
           <View style={styles.instructions}>
@@ -206,13 +118,9 @@ export default function ScanScreen() {
           <TouchableOpacity
             style={[styles.searchButton, !manualBarcode.trim() && styles.searchButtonDisabled]}
             onPress={handleManualSearch}
-            disabled={!manualBarcode.trim() || isSearching}
+            disabled={!manualBarcode.trim()}
           >
-            {isSearching ? (
-              <ActivityIndicator size="small" color="#fff" />
-            ) : (
-              <Text style={styles.searchButtonText}>{t('searching').replace('...', '')}</Text>
-            )}
+            <Text style={styles.searchButtonText}>{t('searching').replace('...', '')}</Text>
           </TouchableOpacity>
         </View>
       )}
@@ -234,7 +142,12 @@ export default function ScanScreen() {
           <Text style={styles.actionBtnText}>{t('addManually')}</Text>
         </TouchableOpacity>
 
-        {scanned && !isSearching && (
+        <TouchableOpacity style={styles.actionBtn} onPress={() => router.push('/scan-receipt' as any)}>
+          <Ionicons name="receipt-outline" size={24} color="#fff" />
+          <Text style={styles.actionBtnText}>Ticket</Text>
+        </TouchableOpacity>
+
+        {scanned && (
           <TouchableOpacity style={[styles.actionBtn, styles.rescanBtn]} onPress={() => setScanned(false)}>
             <Ionicons name="refresh" size={24} color="#22c55e" />
             <Text style={[styles.actionBtnText, { color: '#22c55e' }]}>Rescanner</Text>
@@ -283,14 +196,6 @@ const styles = StyleSheet.create({
   topRight: { top: 0, right: 0, borderTopWidth: 3, borderRightWidth: 3, borderTopRightRadius: 4 },
   bottomLeft: { bottom: 0, left: 0, borderBottomWidth: 3, borderLeftWidth: 3, borderBottomLeftRadius: 4 },
   bottomRight: { bottom: 0, right: 0, borderBottomWidth: 3, borderRightWidth: 3, borderBottomRightRadius: 4 },
-
-  searchingOverlay: {
-    ...StyleSheet.absoluteFillObject,
-    backgroundColor: 'rgba(0,0,0,0.8)',
-    justifyContent: 'center',
-    alignItems: 'center',
-  },
-  searchingText: { color: '#fff', fontSize: 16, marginTop: 12, fontWeight: '600' },
 
   instructions: { padding: 20, alignItems: 'center' },
   instructionsText: { color: 'rgba(255,255,255,0.7)', fontSize: 14, textAlign: 'center' },

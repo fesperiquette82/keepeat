@@ -30,12 +30,16 @@ export default function RootLayout() {
   // Surveillance de la connectivité réseau + sync automatique
   useNetworkSync();
 
-  // Initialisation au démarrage
+  // Initialisation au démarrage + keepalive Render.com toutes les 4 min
   useEffect(() => {
     warmUpBackend();
     loadAuth();
     loadLanguage();
     requestNotificationPermissions();
+    const keepAlive = setInterval(() => {
+      fetch(buildApiUrl('/health')).catch(() => {});
+    }, 4 * 60 * 1000);
+    return () => clearInterval(keepAlive);
   }, []);
 
   // Enregistrement du push token dès que l'utilisateur est authentifié

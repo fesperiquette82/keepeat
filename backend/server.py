@@ -253,15 +253,83 @@ async def _check_weekly_expiry_summary() -> None:
         logger.info("Weekly summary sent — user=%s items=%d", user_id, count)
 
 
+async def _check_daily_expiry_alert() -> None:
+    """Alerte quotidienne J-2 : produits expirant dans ≤2 jours, avec suggestion de recette."""
+    today = _utc_now().date()
+    in_2_days = (today + timedelta(days=2)).strftime("%Y-%m-%d")
+    today_str = today.strftime("%Y-%m-%d")
+
+    async for user_doc in users_col.find({"push_tokens": {"$exists": True, "$ne": []}}):
+        user_id = str(user_doc["_id"])
+        tokens: list[str] = user_doc.get("push_tokens", [])
+
+        # Dedup : une seule alerte J-2 par jour par utilisateur
+        alert_key = f"daily_expiry_{user_id}_{today_str}"
+        already_sent = await user_alerts_col.find_one({"user_id": user_id, "key": alert_key})
+        if already_sent:
+            continue
+
+        # Produits actifs expirant dans 0-2 jours
+        cursor = stock_col.find({
+            "user_id": user_id,
+            "status": "active",
+            "expiry_date": {"$nin": [None, ""], "$gte": today_str, "$lte": in_2_days},
+        }).sort("expiry_date", 1).limit(5)
+        urgent_items = await cursor.to_list(length=5)
+        if not urgent_items:
+            continue
+
+        names = [item["name"] for item in urgent_items]
+        count = len(names)
+
+        # Suggestion de recette via Spoonacular (best-effort, non bloquant)
+        recipe_hint = ""
+        spoonacular_key = os.environ.get("SPOONACULAR_KEY", "")
+        if spoonacular_key and names:
+            try:
+                async with httpx.AsyncClient(timeout=8) as hclient:
+                    r = await hclient.get(
+                        "https://api.spoonacular.com/recipes/findByIngredients",
+                        params={
+                            "ingredients": ",".join(names[:3]),
+                            "number": 1,
+                            "ranking": 2,
+                            "apiKey": spoonacular_key,
+                        },
+                    )
+                    if r.status_code == 200:
+                        results = r.json()
+                        if results:
+                            recipe_hint = f" → {results[0]['title']}"
+            except Exception:
+                pass
+
+        title = f"⏰ {count} produit{'s' if count > 1 else ''} à utiliser aujourd'hui"
+        body = ", ".join(names) + recipe_hint
+        await _send_expo_push(
+            tokens,
+            title=title,
+            body=body,
+            data={"type": "daily_expiry", "count": count},
+        )
+        await user_alerts_col.insert_one({
+            "user_id": user_id,
+            "key": alert_key,
+            "sent_at": _utc_now(),
+        })
+        logger.info("Daily expiry alert sent — user=%s items=%d recipe=%s", user_id, count, bool(recipe_hint))
+
+
 async def _alert_loop() -> None:
-    """Boucle de fond : vérifie toutes les 6h les rappels, l'inactivité et le résumé hebdomadaire."""
+    """Boucle de fond : vérifie toutes les 6h les rappels, l'inactivité et les résumés."""
     while True:
         await asyncio.sleep(6 * 3600)
         try:
             await _check_recalls_and_notify()
             await _check_inactivity_and_notify()
-            # Résumé hebdomadaire uniquement à 9h (±3h selon le cycle)
+            # Alertes matinales uniquement (heure UTC < 12)
             if _utc_now().hour < 12:
+                await _check_daily_expiry_alert()
                 await _check_weekly_expiry_summary()
         except Exception as exc:
             logger.error("Alert loop error: %s", exc)
@@ -1212,6 +1280,46 @@ async def get_priority_items(current_user: Dict[str, Any] = Depends(_get_current
     return [_serialize_mongo(d) for d in docs]
 
 
+@api_router.get("/stock/history")
+async def get_stock_history(
+    limit: int = Query(default=15, le=50),
+    current_user: Dict[str, Any] = Depends(_get_current_user),
+):
+    """Produits récemment consommés/jetés (60j), dédupliqués par nom — pour le réajout rapide."""
+    user_id = current_user["id"]
+    since = (_utc_now() - timedelta(days=60)).isoformat()
+    cursor = stock_col.find({
+        "user_id": user_id,
+        "status": {"$in": ["consumed", "thrown"]},
+        "added_date": {"$gte": since},
+    }).sort("added_date", -1).limit(200)
+    items = await cursor.to_list(length=200)
+
+    seen: set[str] = set()
+    result = []
+    for item in items:
+        key = item.get("name", "").lower().strip()
+        if not key or key in seen:
+            continue
+        seen.add(key)
+        result.append({
+            "name": item["name"],
+            "brand": item.get("brand") or "",
+            "image_url": item.get("image_url") or "",
+            "category": item.get("category") or "",
+            "food_category": item.get("food_category") or "",
+            "barcode": item.get("barcode") or "",
+            "shelf_life_fridge": item.get("shelf_life_fridge"),
+            "shelf_life_pantry": item.get("shelf_life_pantry"),
+            "shelf_life_freezer": item.get("shelf_life_freezer"),
+            "shelf_life_category": item.get("shelf_life_category") or "",
+            "shelf_life_tips": item.get("shelf_life_tips") or "",
+        })
+        if len(result) >= limit:
+            break
+    return result
+
+
 @api_router.get("/stats", response_model=StatsResponse)
 async def get_stats(current_user: Dict[str, Any] = Depends(_get_current_user)):
     uid = current_user["id"]
@@ -1404,6 +1512,115 @@ async def get_recipe_suggestions(
     except Exception as exc:
         logger.warning("Spoonacular request failed: %s", exc)
         return []
+
+
+# -----------------------------------------------------------------------------
+# OCR ticket de caisse (OpenAI GPT-4o-mini vision)
+# -----------------------------------------------------------------------------
+
+# Durées de conservation estimées par catégorie alimentaire
+_SHELF_BY_CATEGORY: dict[str, dict] = {
+    "frais":     {"fridge": 7,   "pantry": None, "freezer": None},
+    "proteines": {"fridge": 3,   "pantry": None, "freezer": 90},
+    "legumes":   {"fridge": 5,   "pantry": None, "freezer": 365},
+    "feculents": {"fridge": None, "pantry": 365,  "freezer": None},
+    "desserts":  {"fridge": 5,   "pantry": 180,  "freezer": 90},
+    "boissons":  {"fridge": 7,   "pantry": 365,  "freezer": None},
+    "epicerie":  {"fridge": None, "pantry": 365,  "freezer": None},
+    "autres":    {"fridge": None, "pantry": 365,  "freezer": None},
+}
+
+_RECEIPT_PROMPT = """Tu analyses une photo de ticket de caisse français.
+Extrait UNIQUEMENT les produits alimentaires visibles.
+
+Pour chaque produit retourne un objet JSON :
+- "name" : nom lisible et normalisé en français (ex: "Lait demi-écrémé bio 1L")
+- "category" : une valeur EXACTE parmi : frais, proteines, legumes, feculents, desserts, boissons, epicerie, autres
+
+Réponds UNIQUEMENT avec un tableau JSON valide, sans texte avant ou après.
+Si aucun produit alimentaire n'est visible, retourne [].
+Ignore les articles non alimentaires (ménager, hygiène, etc.)."""
+
+
+@api_router.post("/ocr/receipt")
+async def ocr_receipt(
+    request: Request,
+    current_user: Dict[str, Any] = Depends(_get_current_user),
+):
+    """Analyse un ticket de caisse via GPT-4o-mini vision et retourne la liste des produits alimentaires."""
+    openai_key = os.environ.get("KEEPEAT_OPENAI_TOKEN", "")
+    if not openai_key:
+        logger.warning("KEEPEAT_OPENAI_TOKEN non configuré — scan ticket désactivé")
+        return []
+
+    body = await request.json()
+    image_b64: str = body.get("image", "")
+    if not image_b64:
+        raise HTTPException(status_code=400, detail="Champ 'image' manquant")
+
+    try:
+        async with httpx.AsyncClient(timeout=30) as http:
+            r = await http.post(
+                "https://api.openai.com/v1/chat/completions",
+                headers={
+                    "Authorization": f"Bearer {openai_key}",
+                    "Content-Type": "application/json",
+                },
+                json={
+                    "model": "gpt-4o-mini",
+                    "max_tokens": 1024,
+                    "messages": [{
+                        "role": "user",
+                        "content": [
+                            {"type": "text", "text": _RECEIPT_PROMPT},
+                            {"type": "image_url", "image_url": {
+                                "url": f"data:image/jpeg;base64,{image_b64}",
+                                "detail": "low",
+                            }},
+                        ],
+                    }],
+                },
+            )
+            if r.status_code != 200:
+                logger.warning("OpenAI receipt OCR error %s: %s", r.status_code, r.text[:200])
+                return []
+            text = r.json()["choices"][0]["message"]["content"].strip()
+    except Exception as exc:
+        logger.warning("OpenAI request failed: %s", exc)
+        return []
+
+    # Nettoyage éventuel du bloc markdown
+    if "```" in text:
+        text = text.split("```")[1]
+        if text.startswith("json"):
+            text = text[4:]
+        text = text.strip().rstrip("```").strip()
+
+    try:
+        products: list[dict] = __import__("json").loads(text)
+    except Exception:
+        logger.warning("OCR receipt: JSON parse failed — raw=%s", text[:200])
+        return []
+
+    result = []
+    for p in products:
+        if not isinstance(p, dict) or not p.get("name"):
+            continue
+        cat = p.get("category", "autres")
+        if cat not in _SHELF_BY_CATEGORY:
+            cat = "autres"
+        shelf = _SHELF_BY_CATEGORY[cat]
+        result.append({
+            "name": p["name"],
+            "category": cat,
+            "food_category": cat,
+            "shelf_life_fridge":   shelf["fridge"],
+            "shelf_life_pantry":   shelf["pantry"],
+            "shelf_life_freezer":  shelf["freezer"],
+        })
+
+    logger.info("Receipt OCR — user=%s products=%d", current_user["id"], len(result))
+    return result
 
 
 # -----------------------------------------------------------------------------

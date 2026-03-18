@@ -42,10 +42,11 @@ export default function AddProductScreen() {
     shelf_life_tips?: string;
   }>();
 
-  const { addItem } = useStockStore();
+  const { addItem, lookupProduct } = useStockStore();
   const { t, language } = useLanguageStore();
   const [permission, requestPermission] = useCameraPermissions();
 
+  // Form fields
   const [name, setName] = useState(params.name || '');
   const [brand, setBrand] = useState(params.brand || '');
   const [quantity, setQuantity] = useState(params.quantity || '');
@@ -57,18 +58,46 @@ export default function AddProductScreen() {
   const [dateInputMode, setDateInputMode] = useState<DateInputMode>('auto');
   const [durationDays, setDurationDays] = useState('');
 
+  // Product metadata — initially from params, updated after async lookup
+  const [productFound, setProductFound] = useState(params.found !== 'false');
+  const [imageUrl, setImageUrl] = useState(params.image_url || '');
+  const [foodCategory, setFoodCategory] = useState(params.category || '');
+  const [shelfLifeCategory, setShelfLifeCategory] = useState(params.shelf_life_category || '');
+  const [shelfLifeFridge, setShelfLifeFridge]   = useState<number | null>(params.shelf_life_fridge  ? parseInt(params.shelf_life_fridge,  10) : null);
+  const [shelfLifeFreezer, setShelfLifeFreezer] = useState<number | null>(params.shelf_life_freezer ? parseInt(params.shelf_life_freezer, 10) : null);
+  const [shelfLifePantry, setShelfLifePantry]   = useState<number | null>(params.shelf_life_pantry  ? parseInt(params.shelf_life_pantry,  10) : null);
+  const [shelfLifeTips, setShelfLifeTips] = useState(params.shelf_life_tips || '');
+
+  // Async barcode lookup — fires when barcode is provided but product name is absent (navigate-first)
+  const [lookupLoading, setLookupLoading] = useState(() => !!params.barcode && !params.name);
+
+  useEffect(() => {
+    if (!params.barcode || params.name) return;
+    setLookupLoading(true);
+    lookupProduct(params.barcode).then((product) => {
+      if (product) {
+        setProductFound(true);
+        setName(product.name || '');
+        setBrand(product.brand || '');
+        setImageUrl(product.image_url || '');
+        setFoodCategory(product.category || '');
+        setShelfLifeCategory(product.shelf_life_category || '');
+        setShelfLifeFridge(product.shelf_life_fridge   ? parseInt(String(product.shelf_life_fridge),   10) : null);
+        setShelfLifeFreezer(product.shelf_life_freezer ? parseInt(String(product.shelf_life_freezer),  10) : null);
+        setShelfLifePantry(product.shelf_life_pantry   ? parseInt(String(product.shelf_life_pantry),   10) : null);
+        setShelfLifeTips(product.shelf_life_tips || '');
+      } else {
+        setProductFound(false);
+      }
+    }).finally(() => setLookupLoading(false));
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [params.barcode]);
+
   const ocr = useOcrDatePicker(language, !!permission?.granted, (date) => {
     setExpiryDate(date);
     setShowCameraModal(false);
   });
 
-  const productFound = params.found === 'true';
-
-  const shelfLifeCategory = params.shelf_life_category || '';
-  const shelfLifeFridge  = params.shelf_life_fridge  ? parseInt(params.shelf_life_fridge,  10) : null;
-  const shelfLifeFreezer = params.shelf_life_freezer ? parseInt(params.shelf_life_freezer, 10) : null;
-  const shelfLifePantry  = params.shelf_life_pantry  ? parseInt(params.shelf_life_pantry,  10) : null;
-  const shelfLifeTips = params.shelf_life_tips || '';
   const hasAutoSuggestions = !!(shelfLifeFridge || shelfLifeFreezer || shelfLifePantry);
 
   const autoSuggestions = useMemo(() => {
@@ -103,6 +132,27 @@ export default function AddProductScreen() {
     setExpiryDate(addDays(new Date(), days));
   };
 
+  // Quick save — no expiry date, navigate immediately
+  const handleQuickSave = async () => {
+    if (!name.trim()) return;
+    setIsSaving(true);
+    try {
+      await addItem({
+        barcode:   params.barcode || undefined,
+        name:      name.trim(),
+        brand:     brand.trim()    || undefined,
+        image_url: imageUrl        || undefined,
+        category:  foodCategory    || undefined,
+        quantity:  quantity.trim() || undefined,
+      });
+      router.replace('/');
+    } catch {
+      // silent — user can retry with full save
+    } finally {
+      setIsSaving(false);
+    }
+  };
+
   const handleSave = async () => {
     if (!name.trim()) {
       Alert.alert(
@@ -113,19 +163,17 @@ export default function AddProductScreen() {
     }
     setIsSaving(true);
     try {
-      const newItem = await addItem({
-        barcode:    params.barcode    || undefined,
-        name:       name.trim(),
-        brand:      brand.trim()      || undefined,
-        image_url:  params.image_url  || undefined,
-        category:   params.category   || undefined,
-        quantity:   quantity.trim()   || undefined,
+      await addItem({
+        barcode:     params.barcode  || undefined,
+        name:        name.trim(),
+        brand:       brand.trim()    || undefined,
+        image_url:   imageUrl        || undefined,
+        category:    foodCategory    || undefined,
+        quantity:    quantity.trim() || undefined,
         expiry_date: expiryDate ? format(expiryDate, 'yyyy-MM-dd') : undefined,
-        notes:      notes.trim()      || undefined,
+        notes:       notes.trim()    || undefined,
       });
-      if (newItem) {
-        Alert.alert(t('productAdded'), '', [{ text: 'OK', onPress: () => router.replace('/') }]);
-      }
+      router.replace('/');
     } catch {
       Alert.alert(
         language === 'fr' ? 'Erreur' : 'Error',
@@ -150,21 +198,33 @@ export default function AddProductScreen() {
 
         {params.barcode && (
           <View style={[styles.foundBadge, productFound ? styles.foundBadgeSuccess : styles.foundBadgeWarning]}>
-            <Ionicons name={productFound ? 'checkmark-circle' : 'alert-circle'} size={20}
-              color={productFound ? '#22c55e' : '#f97316'} />
+            {lookupLoading ? (
+              <ActivityIndicator size="small" color="#22c55e" />
+            ) : (
+              <Ionicons name={productFound ? 'checkmark-circle' : 'alert-circle'} size={20}
+                color={productFound ? '#22c55e' : '#f97316'} />
+            )}
             <Text style={[styles.foundBadgeText, { color: productFound ? '#22c55e' : '#f97316' }]}>
-              {productFound ? t('productFound') : t('productNotFound')}
+              {lookupLoading
+                ? (language === 'fr' ? 'Recherche du produit...' : 'Looking up product...')
+                : productFound ? t('productFound') : t('productNotFound')}
             </Text>
           </View>
         )}
 
         <View style={styles.inputGroup}>
           <Text style={styles.label}>{t('name')}</Text>
-          <TextInput
-            style={styles.input} value={name} onChangeText={setName}
-            placeholder={language === 'fr' ? 'Ex: Lait demi-écrémé' : 'Ex: Semi-skimmed milk'}
-            placeholderTextColor="#666" autoFocus={!productFound}
-          />
+          {lookupLoading ? (
+            <View style={[styles.input, styles.inputLoading]}>
+              <ActivityIndicator size="small" color="#555" />
+            </View>
+          ) : (
+            <TextInput
+              style={styles.input} value={name} onChangeText={setName}
+              placeholder={language === 'fr' ? 'Ex: Lait demi-écrémé' : 'Ex: Semi-skimmed milk'}
+              placeholderTextColor="#666" autoFocus={!productFound && !lookupLoading}
+            />
+          )}
         </View>
 
         <View style={styles.inputGroup}>
@@ -308,6 +368,19 @@ export default function AddProductScreen() {
           />
         </View>
 
+        {/* Quick save — no expiry date required */}
+        {name.trim() && !expiryDate && (
+          <TouchableOpacity
+            style={[styles.quickSaveBtn, isSaving && styles.saveBtnDisabled]}
+            onPress={handleQuickSave} disabled={isSaving}
+          >
+            <Ionicons name="flash" size={18} color="#f59e0b" />
+            <Text style={styles.quickSaveBtnText}>
+              {language === 'fr' ? 'Ajouter rapidement (sans date)' : 'Quick add (no date)'}
+            </Text>
+          </TouchableOpacity>
+        )}
+
         <TouchableOpacity
           style={[styles.saveBtn, isSaving && styles.saveBtnDisabled]}
           onPress={handleSave} disabled={isSaving}
@@ -382,6 +455,9 @@ const styles = StyleSheet.create({
     backgroundColor: '#111', borderColor: '#2a2a2a', borderWidth: 1,
     borderRadius: 12, color: '#fff', paddingHorizontal: 14, paddingVertical: 12, fontSize: 15,
   },
+  inputLoading: {
+    alignItems: 'center', justifyContent: 'center', height: 48,
+  },
   notesInput: { minHeight: 90, textAlignVertical: 'top' },
 
   modeSelector: { flexDirection: 'row', flexWrap: 'wrap', gap: 8, marginBottom: 10 },
@@ -436,6 +512,13 @@ const styles = StyleSheet.create({
     borderRadius: 10, paddingHorizontal: 10, paddingVertical: 8,
   },
   selectedDateText: { color: '#9bf2bd', fontSize: 13, fontWeight: '600' },
+
+  quickSaveBtn: {
+    marginTop: 4, marginBottom: 10, borderRadius: 12,
+    borderWidth: 1, borderColor: '#f59e0b55', backgroundColor: '#f59e0b15',
+    height: 46, alignItems: 'center', justifyContent: 'center', flexDirection: 'row', gap: 8,
+  },
+  quickSaveBtnText: { color: '#f59e0b', fontWeight: '700', fontSize: 14 },
 
   saveBtn: {
     marginTop: 10, borderRadius: 12, backgroundColor: '#22c55e',

@@ -15,6 +15,20 @@ const authHeaders = () => {
   return token ? { Authorization: `Bearer ${token}` } : {};
 };
 
+export interface HistoryItem {
+  name: string;
+  brand: string;
+  image_url: string;
+  category: string;
+  food_category: string;
+  barcode: string;
+  shelf_life_fridge: number | null;
+  shelf_life_pantry: number | null;
+  shelf_life_freezer: number | null;
+  shelf_life_category: string;
+  shelf_life_tips: string;
+}
+
 export interface StockItem {
   id: string;
   barcode?: string;
@@ -51,6 +65,9 @@ interface PendingMutation {
   timestamp: number;
 }
 
+// Cache barcode → résultat produit (session en mémoire, non persisté)
+const _barcodeCache: Record<string, any> = {};
+
 // Générateur d'UUID simple (ne dépend pas d'une lib externe)
 function uuid(): string {
   return 'xxxxxxxx-xxxx-4xxx-yxxx-xxxxxxxxxxxx'.replace(/[xy]/g, c => {
@@ -62,6 +79,7 @@ function uuid(): string {
 interface StockStore {
   items: StockItem[];
   priorityItems: StockItem[];
+  historyItems: HistoryItem[];
   stats: Stats;
   isLoading: boolean;
   loadingCount: number;
@@ -73,6 +91,7 @@ interface StockStore {
   fetchStock: () => Promise<void>;
   fetchPriorityItems: () => Promise<void>;
   fetchStats: () => Promise<void>;
+  fetchHistory: () => Promise<void>;
   markConsumed: (itemId: string) => Promise<void>;
   markThrown: (itemId: string) => Promise<void>;
   lookupProduct: (barcode: string) => Promise<any>;
@@ -96,6 +115,7 @@ export const useStockStore = create<StockStore>()(
     (set, get) => ({
       items: [],
       priorityItems: [],
+      historyItems: [],
       stats: {
         total_items: 0,
         expiring_soon: 0,
@@ -221,6 +241,15 @@ export const useStockStore = create<StockStore>()(
         }
       },
 
+      fetchHistory: async () => {
+        try {
+          const res = await axios.get(buildApiUrl('/api/stock/history?limit=15'), { headers: authHeaders() });
+          set({ historyItems: res.data });
+        } catch {
+          // Garder le cache en cas d'erreur réseau
+        }
+      },
+
       markConsumed: async (itemId: string) => {
         const { isOnline } = get();
 
@@ -313,8 +342,10 @@ export const useStockStore = create<StockStore>()(
       },
 
       lookupProduct: async (barcode: string) => {
+        if (_barcodeCache[barcode]) return _barcodeCache[barcode];
         try {
           const res = await axios.get(buildApiUrl(`/api/product/${barcode}`));
+          _barcodeCache[barcode] = res.data;
           return res.data;
         } catch {
           return null;
@@ -407,6 +438,7 @@ export const useStockStore = create<StockStore>()(
       partialize: (state) => ({
         items: state.items,
         priorityItems: state.priorityItems,
+        historyItems: state.historyItems,
         stats: state.stats,
         pendingMutations: state.pendingMutations,
       }),

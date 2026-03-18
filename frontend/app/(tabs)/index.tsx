@@ -14,7 +14,7 @@ import {
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { useRouter } from 'expo-router';
 import { Ionicons } from '@expo/vector-icons';
-import { useStockStore, StockItem } from '../../store/stockStore';
+import { useStockStore, StockItem, HistoryItem } from '../../store/stockStore';
 import { useLanguageStore } from '../../store/languageStore';
 import { useAuthStore } from '../../store/authStore';
 import { parseISO, differenceInDays, format } from 'date-fns';
@@ -74,8 +74,8 @@ export default function HomeScreen() {
   const router = useRouter();
   const { user } = useAuthStore();
   const {
-    items, stats,
-    fetchStock, fetchPriorityItems, fetchStats,
+    items, stats, historyItems,
+    fetchStock, fetchPriorityItems, fetchStats, fetchHistory,
     markConsumed, markThrown,
     isLoading, isOnline, pendingMutations,
   } = useStockStore();
@@ -91,8 +91,8 @@ export default function HomeScreen() {
   }, [user?.email]);
 
   const loadData = useCallback(async () => {
-    await Promise.all([fetchStock(), fetchPriorityItems(), fetchStats()]);
-  }, [fetchStock, fetchPriorityItems, fetchStats]);
+    await Promise.all([fetchStock(), fetchPriorityItems(), fetchStats(), fetchHistory()]);
+  }, [fetchStock, fetchPriorityItems, fetchStats, fetchHistory]);
 
   useEffect(() => { loadData(); }, [loadData]);
 
@@ -310,6 +310,54 @@ export default function HomeScreen() {
         </TouchableOpacity>
       </View>
 
+      {/* Réapprovisionner — scroll horizontal des produits récents */}
+      {historyItems.length > 0 && (
+        <View style={styles.historySection}>
+          <Text style={styles.historySectionTitle}>
+            {isFr ? '🔁 Réapprovisionner' : '🔁 Re-stock'}
+          </Text>
+          <ScrollView
+            horizontal
+            showsHorizontalScrollIndicator={false}
+            contentContainerStyle={styles.historyScroll}
+          >
+            {historyItems.map((item: HistoryItem, idx: number) => {
+              const emoji = CATEGORY_EMOJI[item.food_category] ?? '📦';
+              const params: Record<string, string> = { name: item.name, found: 'true' };
+              if (item.brand)              params.brand              = item.brand;
+              if (item.image_url)          params.image_url          = item.image_url;
+              if (item.category)           params.category           = item.category;
+              if (item.barcode)            params.barcode            = item.barcode;
+              if (item.shelf_life_fridge)  params.shelf_life_fridge  = String(item.shelf_life_fridge);
+              if (item.shelf_life_pantry)  params.shelf_life_pantry  = String(item.shelf_life_pantry);
+              if (item.shelf_life_freezer) params.shelf_life_freezer = String(item.shelf_life_freezer);
+              if (item.shelf_life_category) params.shelf_life_category = item.shelf_life_category;
+              if (item.shelf_life_tips)    params.shelf_life_tips    = item.shelf_life_tips;
+              return (
+                <TouchableOpacity
+                  key={`${item.name}_${idx}`}
+                  style={styles.historyCard}
+                  onPress={() => router.push({ pathname: '/add-product', params })}
+                  activeOpacity={0.8}
+                >
+                  {item.image_url ? (
+                    <Image source={{ uri: item.image_url }} style={styles.historyCardImg} />
+                  ) : (
+                    <View style={styles.historyCardImgPlaceholder}>
+                      <Text style={styles.historyCardEmoji}>{emoji}</Text>
+                    </View>
+                  )}
+                  <Text style={styles.historyCardName} numberOfLines={2}>{item.name}</Text>
+                  <View style={styles.historyCardPlusBtn}>
+                    <Ionicons name="add" size={14} color={C.primary} />
+                  </View>
+                </TouchableOpacity>
+              );
+            })}
+          </ScrollView>
+        </View>
+      )}
+
       {/* Category tabs */}
       <View style={styles.tabsRow}>
         {FILTER_TABS.map(tab => {
@@ -484,6 +532,65 @@ const styles = StyleSheet.create({
     borderColor: '#E8E5E0',
   },
   outlineBtnText: { color: C.textMid, fontSize: 13, fontWeight: '600' },
+
+  // ── History / Re-stock ──
+  historySection: {
+    backgroundColor: '#fff',
+    paddingTop: 10,
+    paddingBottom: 12,
+    borderBottomWidth: 1,
+    borderBottomColor: '#F0EDE8',
+  },
+  historySectionTitle: {
+    fontSize: 11,
+    fontWeight: '700',
+    color: C.textLight,
+    paddingHorizontal: 16,
+    marginBottom: 8,
+    textTransform: 'uppercase',
+    letterSpacing: 0.6,
+  },
+  historyScroll: {
+    paddingHorizontal: 16,
+    gap: 10,
+  },
+  historyCard: {
+    width: 76,
+    alignItems: 'center',
+    gap: 5,
+  },
+  historyCardImg: {
+    width: 56,
+    height: 56,
+    borderRadius: 12,
+    resizeMode: 'cover',
+  },
+  historyCardImgPlaceholder: {
+    width: 56,
+    height: 56,
+    borderRadius: 12,
+    backgroundColor: C.primaryLight,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  historyCardEmoji: { fontSize: 24 },
+  historyCardName: {
+    fontSize: 10,
+    color: C.text,
+    fontWeight: '600',
+    textAlign: 'center',
+    lineHeight: 13,
+  },
+  historyCardPlusBtn: {
+    width: 22,
+    height: 22,
+    borderRadius: 11,
+    backgroundColor: C.primaryLight,
+    borderWidth: 1,
+    borderColor: C.primaryMid,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
 
   // ── Category tabs ──
   tabsRow: {
