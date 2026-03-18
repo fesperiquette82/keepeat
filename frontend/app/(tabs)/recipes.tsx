@@ -1,3 +1,4 @@
+
 import React, { useEffect, useState, useCallback } from 'react';
 import {
   View,
@@ -16,6 +17,7 @@ import axios from 'axios';
 import { useAuthStore } from '../../store/authStore';
 import { useLanguageStore } from '../../store/languageStore';
 import { buildApiUrl } from '../../utils/config';
+import { C, shadowSm } from '../../utils/theme';
 
 interface RecipeSuggestion {
   id: number;
@@ -26,16 +28,26 @@ interface RecipeSuggestion {
   sourceUrl: string;
 }
 
+type FilterTab = 'tous' | 'urgents' | 'frigo' | 'placard';
+const FILTER_TABS: { key: FilterTab; labelFr: string; labelEn: string }[] = [
+  { key: 'tous',    labelFr: 'Tous',    labelEn: 'All'    },
+  { key: 'urgents', labelFr: 'Urgents', labelEn: 'Urgent' },
+  { key: 'frigo',   labelFr: 'Frigo',   labelEn: 'Fridge' },
+  { key: 'placard', labelFr: 'Placard', labelEn: 'Pantry' },
+];
+
 export default function RecipesScreen() {
   const { token } = useAuthStore();
   const { language } = useLanguageStore();
+  const isFr = language === 'fr';
 
-  const [recipes, setRecipes] = useState<RecipeSuggestion[]>([]);
-  const [isLoading, setIsLoading] = useState(true);
+  const [recipes, setRecipes]         = useState<RecipeSuggestion[]>([]);
+  const [isLoading, setIsLoading]     = useState(true);
   const [isRefreshing, setIsRefreshing] = useState(false);
-  const [error, setError] = useState<string | null>(null);
+  const [error, setError]             = useState<string | null>(null);
+  const [activeTab, setActiveTab]     = useState<FilterTab>('tous');
 
-  const t = (fr: string, en: string) => language === 'fr' ? fr : en;
+  const t = (fr: string, en: string) => isFr ? fr : en;
 
   const fetchRecipes = useCallback(async (silent = false) => {
     if (!token) return;
@@ -70,25 +82,48 @@ export default function RecipesScreen() {
 
   return (
     <SafeAreaView style={styles.container}>
+
+      {/* Header */}
       <View style={styles.header}>
-        <Text style={styles.headerTitle}>
-          {t('🍳 Recettes suggérées', '🍳 Suggested Recipes')}
-        </Text>
-        <Text style={styles.headerSubtitle}>
-          {t(
-            'Basées sur vos produits à consommer en priorité',
-            'Based on your priority products',
-          )}
-        </Text>
+        <View style={styles.headerLeft}>
+          <Text style={styles.headerTitle}>{t('Recettes 🌿', 'Recipes 🌿')}</Text>
+          <Text style={styles.headerSub}>{t('Inspirées de vos produits', 'Based on your products')}</Text>
+        </View>
+        {/* Decoration */}
+        <View style={styles.illustration} pointerEvents="none">
+          <Text style={styles.illustEmoji1}>🥗</Text>
+          <Text style={styles.illustEmoji2}>🧄</Text>
+          <Text style={styles.illustEmoji3}>🌿</Text>
+        </View>
+      </View>
+
+      {/* Category tabs */}
+      <View style={styles.tabsRow}>
+        {FILTER_TABS.map(tab => {
+          const active = activeTab === tab.key;
+          return (
+            <TouchableOpacity
+              key={tab.key}
+              style={styles.tab}
+              onPress={() => setActiveTab(tab.key)}
+              activeOpacity={0.7}
+            >
+              <Text style={[styles.tabText, active && styles.tabTextActive]}>
+                {isFr ? tab.labelFr : tab.labelEn}
+              </Text>
+              {active && <View style={styles.tabUnderline} />}
+            </TouchableOpacity>
+          );
+        })}
       </View>
 
       {isLoading ? (
         <View style={styles.center}>
-          <ActivityIndicator size="large" color="#22c55e" />
+          <ActivityIndicator size="large" color={C.primary} />
         </View>
       ) : error ? (
         <View style={styles.center}>
-          <Ionicons name="cloud-offline-outline" size={48} color="#666" />
+          <Ionicons name="cloud-offline-outline" size={48} color="#ccc" />
           <Text style={styles.errorText}>{error}</Text>
           <TouchableOpacity style={styles.retryBtn} onPress={() => fetchRecipes()}>
             <Text style={styles.retryBtnText}>{t('Réessayer', 'Retry')}</Text>
@@ -96,10 +131,8 @@ export default function RecipesScreen() {
         </View>
       ) : recipes.length === 0 ? (
         <View style={styles.center}>
-          <Ionicons name="restaurant-outline" size={56} color="#333" />
-          <Text style={styles.emptyTitle}>
-            {t('Aucune suggestion', 'No suggestions')}
-          </Text>
+          <Text style={styles.emptyEmoji}>🍳</Text>
+          <Text style={styles.emptyTitle}>{t('Aucune suggestion', 'No suggestions')}</Text>
           <Text style={styles.emptyText}>
             {t(
               'Ajoutez des produits avec une date de péremption proche pour obtenir des idées de recettes.',
@@ -109,70 +142,79 @@ export default function RecipesScreen() {
         </View>
       ) : (
         <ScrollView
-          style={styles.scrollView}
+          style={styles.scroll}
           contentContainerStyle={styles.scrollContent}
           refreshControl={
-            <RefreshControl
-              refreshing={isRefreshing}
-              onRefresh={handleRefresh}
-              tintColor="#22c55e"
-            />
+            <RefreshControl refreshing={isRefreshing} onRefresh={handleRefresh} tintColor={C.primary} />
           }
         >
-          {recipes.map((recipe) => (
-            <View key={recipe.id} style={styles.card}>
-              {recipe.image ? (
-                <Image source={{ uri: recipe.image }} style={styles.cardImage} />
-              ) : (
-                <View style={styles.cardImagePlaceholder}>
-                  <Ionicons name="restaurant-outline" size={40} color="#444" />
-                </View>
-              )}
-              <View style={styles.cardBody}>
-                <Text style={styles.cardTitle} numberOfLines={2}>
-                  {recipe.title}
-                </Text>
+          {/* Section header */}
+          <View style={styles.sectionHeader}>
+            <Text style={styles.sectionTitle}>
+              {t('Recettes avec vos urgences', 'Recipes with your urgent items')} 🗓️
+            </Text>
+            <TouchableOpacity hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}>
+              <Ionicons name="ellipsis-horizontal" size={16} color={C.textLight} />
+            </TouchableOpacity>
+          </View>
 
-                {recipe.usedIngredients.length > 0 && (
-                  <View style={styles.ingredientsRow}>
-                    {recipe.usedIngredients.map((ing) => (
-                      <View key={ing} style={styles.badgeUsed}>
-                        <Ionicons name="checkmark" size={11} color="#22c55e" />
-                        <Text style={styles.badgeUsedText}>{ing}</Text>
-                      </View>
-                    ))}
+          {recipes.map((recipe) => (
+            <TouchableOpacity
+              key={recipe.id}
+              style={styles.card}
+              onPress={() => openRecipe(recipe.sourceUrl)}
+              activeOpacity={0.88}
+            >
+              {/* Image */}
+              <View style={styles.cardImgWrap}>
+                {recipe.image ? (
+                  <Image source={{ uri: recipe.image }} style={styles.cardImg} />
+                ) : (
+                  <View style={styles.cardImgPlaceholder}>
+                    <Ionicons name="restaurant-outline" size={32} color="#ccc" />
                   </View>
                 )}
+                {/* Ingredient count badge */}
+                {recipe.usedIngredients.length > 0 && (
+                  <View style={styles.countBadge}>
+                    <Text style={styles.countBadgeText}>{recipe.usedIngredients.length}</Text>
+                  </View>
+                )}
+              </View>
 
-                {recipe.missedIngredients.length > 0 && (
+              {/* Body */}
+              <View style={styles.cardBody}>
+                <Text style={styles.cardTitle} numberOfLines={2}>{recipe.title}</Text>
+
+                {/* Used ingredients */}
+                {recipe.usedIngredients.length > 0 && (
                   <View style={styles.ingredientsRow}>
-                    {recipe.missedIngredients.slice(0, 3).map((ing) => (
-                      <View key={ing} style={styles.badgeMissed}>
-                        <Ionicons name="add-circle-outline" size={11} color="#888" />
-                        <Text style={styles.badgeMissedText}>{ing}</Text>
+                    {recipe.usedIngredients.slice(0, 3).map(ing => (
+                      <View key={ing} style={styles.badgeUsed}>
+                        <Ionicons name="checkmark" size={10} color={C.primary} />
+                        <Text style={styles.badgeUsedText} numberOfLines={1}>{ing}</Text>
                       </View>
                     ))}
-                    {recipe.missedIngredients.length > 3 && (
-                      <View style={styles.badgeMissed}>
-                        <Text style={styles.badgeMissedText}>
-                          +{recipe.missedIngredients.length - 3}
-                        </Text>
-                      </View>
+                    {recipe.usedIngredients.length > 3 && (
+                      <Text style={styles.badgeMore}>+{recipe.usedIngredients.length - 3}</Text>
                     )}
                   </View>
                 )}
 
-                <TouchableOpacity
-                  style={styles.viewBtn}
-                  onPress={() => openRecipe(recipe.sourceUrl)}
-                >
-                  <Text style={styles.viewBtnText}>
-                    {t('Voir la recette', 'View recipe')}
-                  </Text>
-                  <Ionicons name="open-outline" size={14} color="#22c55e" />
-                </TouchableOpacity>
+                {/* Footer: missing count + open */}
+                <View style={styles.cardFooter}>
+                  {recipe.missedIngredients.length > 0 && (
+                    <Text style={styles.missedText}>
+                      {recipe.missedIngredients.length} {t('manquant(s)', 'missing')}
+                    </Text>
+                  )}
+                  <View style={styles.viewBtn}>
+                    <Text style={styles.viewBtnText}>{t('Voir', 'View')}</Text>
+                    <Ionicons name="open-outline" size={12} color={C.primary} />
+                  </View>
+                </View>
               </View>
-            </View>
+            </TouchableOpacity>
           ))}
         </ScrollView>
       )}
@@ -181,94 +223,135 @@ export default function RecipesScreen() {
 }
 
 const styles = StyleSheet.create({
-  container: { flex: 1, backgroundColor: '#0a0a0a' },
+  container: { flex: 1, backgroundColor: '#F7F5F2' },
 
+  // ── Header ──
   header: {
+    flexDirection: 'row',
+    alignItems: 'flex-start',
     paddingHorizontal: 20,
     paddingTop: 16,
-    paddingBottom: 12,
-    borderBottomWidth: 1,
-    borderBottomColor: '#1a1a1a',
+    paddingBottom: 14,
+    backgroundColor: '#fff',
+    overflow: 'hidden',
   },
-  headerTitle: { fontSize: 22, fontWeight: '700', color: '#fff' },
-  headerSubtitle: { fontSize: 13, color: '#666', marginTop: 4 },
+  headerLeft: { flex: 1 },
+  headerTitle: { fontSize: 24, fontWeight: '800', color: '#1A1A1A' },
+  headerSub:   { fontSize: 13, color: C.textMid, marginTop: 3 },
 
-  center: {
-    flex: 1,
-    alignItems: 'center',
-    justifyContent: 'center',
-    padding: 32,
-    gap: 12,
+  illustration: { width: 80, height: 60, position: 'relative', marginRight: 4, marginTop: -4 },
+  illustEmoji1: { position: 'absolute', right: 0,  top: 0,  fontSize: 38 },
+  illustEmoji2: { position: 'absolute', right: 30, top: 10, fontSize: 24 },
+  illustEmoji3: { position: 'absolute', right: 10, top: 24, fontSize: 20 },
+
+  // ── Tabs ──
+  tabsRow: {
+    flexDirection: 'row',
+    backgroundColor: '#fff',
+    paddingHorizontal: 16,
+    borderBottomWidth: 1,
+    borderBottomColor: '#F0EDE8',
   },
-  errorText: { color: '#f97316', fontSize: 14, textAlign: 'center' },
-  retryBtn: {
-    backgroundColor: '#22c55e',
-    paddingHorizontal: 20,
+  tab: {
+    paddingHorizontal: 12,
     paddingVertical: 10,
-    borderRadius: 10,
-    marginTop: 8,
+    alignItems: 'center',
+    position: 'relative',
+  },
+  tabText:       { fontSize: 14, fontWeight: '600', color: C.textLight },
+  tabTextActive: { color: C.primary, fontWeight: '700' },
+  tabUnderline: {
+    position: 'absolute',
+    bottom: 0, left: 8, right: 8,
+    height: 2.5,
+    backgroundColor: C.primary,
+    borderRadius: 2,
+  },
+
+  // ── States ──
+  center: { flex: 1, alignItems: 'center', justifyContent: 'center', padding: 32, gap: 12 },
+  errorText: { color: C.orange, fontSize: 14, textAlign: 'center' },
+  retryBtn: {
+    backgroundColor: C.primary,
+    paddingHorizontal: 20, paddingVertical: 10,
+    borderRadius: 10, marginTop: 8,
   },
   retryBtnText: { color: '#fff', fontWeight: '600' },
-  emptyTitle: { fontSize: 18, fontWeight: '600', color: '#666', textAlign: 'center' },
-  emptyText: { fontSize: 14, color: '#444', textAlign: 'center', lineHeight: 20 },
+  emptyEmoji: { fontSize: 52, marginBottom: 4 },
+  emptyTitle: { fontSize: 17, fontWeight: '700', color: C.text, textAlign: 'center' },
+  emptyText:  { fontSize: 13, color: C.textMid, textAlign: 'center', lineHeight: 20 },
 
-  scrollView: { flex: 1 },
-  scrollContent: { padding: 16, gap: 16 },
+  // ── List ──
+  scroll: { flex: 1 },
+  scrollContent: { padding: 14, paddingBottom: 40, gap: 10 },
 
+  sectionHeader: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    marginBottom: 6,
+  },
+  sectionTitle: { fontSize: 15, fontWeight: '700', color: '#1A1A1A' },
+
+  // ── Recipe card ──
   card: {
-    backgroundColor: '#111',
-    borderRadius: 14,
+    flexDirection: 'row',
+    backgroundColor: '#fff',
+    borderRadius: 16,
     overflow: 'hidden',
+    ...shadowSm,
     borderWidth: 1,
-    borderColor: '#1e1e1e',
+    borderColor: '#F0EDE8',
   },
-  cardImage: { width: '100%', height: 180, backgroundColor: '#1a1a1a' },
-  cardImagePlaceholder: {
-    width: '100%',
-    height: 120,
-    backgroundColor: '#1a1a1a',
+  cardImgWrap: { position: 'relative' },
+  cardImg: { width: 100, height: 100, resizeMode: 'cover' },
+  cardImgPlaceholder: {
+    width: 100, height: 100,
+    backgroundColor: '#F0EDE8',
+    alignItems: 'center', justifyContent: 'center',
+  },
+  countBadge: {
+    position: 'absolute',
+    bottom: 6, left: 6,
+    backgroundColor: C.red,
+    borderRadius: 10,
+    paddingHorizontal: 6, paddingVertical: 2,
+    minWidth: 20,
     alignItems: 'center',
-    justifyContent: 'center',
   },
-  cardBody: { padding: 14, gap: 10 },
-  cardTitle: { fontSize: 16, fontWeight: '700', color: '#fff', lineHeight: 22 },
+  countBadgeText: { color: '#fff', fontSize: 11, fontWeight: '700' },
 
-  ingredientsRow: { flexDirection: 'row', flexWrap: 'wrap', gap: 6 },
+  cardBody: {
+    flex: 1,
+    padding: 10,
+    justifyContent: 'space-between',
+  },
+  cardTitle: { fontSize: 14, fontWeight: '700', color: '#1A1A1A', lineHeight: 19 },
+
+  ingredientsRow: { flexDirection: 'row', flexWrap: 'wrap', gap: 4, marginTop: 4 },
   badgeUsed: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 4,
-    backgroundColor: '#22c55e15',
-    borderRadius: 8,
-    paddingHorizontal: 8,
-    paddingVertical: 3,
-    borderWidth: 1,
-    borderColor: '#22c55e40',
+    flexDirection: 'row', alignItems: 'center', gap: 3,
+    backgroundColor: C.primaryLight,
+    borderRadius: 6,
+    paddingHorizontal: 6, paddingVertical: 2,
+    borderWidth: 1, borderColor: C.primaryMid,
   },
-  badgeUsedText: { fontSize: 12, color: '#22c55e', fontWeight: '500' },
-  badgeMissed: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 4,
-    backgroundColor: '#2a2a2a',
-    borderRadius: 8,
-    paddingHorizontal: 8,
-    paddingVertical: 3,
-  },
-  badgeMissedText: { fontSize: 12, color: '#888' },
+  badgeUsedText: { fontSize: 10, color: C.primary, fontWeight: '600', maxWidth: 60 },
+  badgeMore: { fontSize: 11, color: C.textLight, fontWeight: '600', alignSelf: 'center' },
 
-  viewBtn: {
+  cardFooter: {
     flexDirection: 'row',
     alignItems: 'center',
-    gap: 6,
-    alignSelf: 'flex-start',
-    paddingVertical: 6,
-    paddingHorizontal: 12,
-    borderRadius: 8,
-    borderWidth: 1,
-    borderColor: '#22c55e40',
-    backgroundColor: '#22c55e10',
-    marginTop: 4,
+    justifyContent: 'space-between',
+    marginTop: 6,
   },
-  viewBtnText: { fontSize: 13, color: '#22c55e', fontWeight: '600' },
+  missedText: { fontSize: 11, color: C.textLight },
+  viewBtn: {
+    flexDirection: 'row', alignItems: 'center', gap: 3,
+    paddingVertical: 4, paddingHorizontal: 8,
+    borderRadius: 8,
+    borderWidth: 1, borderColor: C.primaryMid,
+    backgroundColor: C.primaryLight,
+  },
+  viewBtnText: { fontSize: 12, color: C.primary, fontWeight: '600' },
 });

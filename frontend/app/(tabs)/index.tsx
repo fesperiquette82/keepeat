@@ -9,15 +9,17 @@ import {
   RefreshControl,
   ActivityIndicator,
   Alert,
+  Image,
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { useRouter } from 'expo-router';
 import { Ionicons } from '@expo/vector-icons';
-import { useStockStore, StockItem } from '../store/stockStore';
-import { useLanguageStore } from '../store/languageStore';
+import { useStockStore, StockItem } from '../../store/stockStore';
+import { useLanguageStore } from '../../store/languageStore';
+import { useAuthStore } from '../../store/authStore';
 import { parseISO, differenceInDays, format } from 'date-fns';
 import { fr as frLocale, enUS } from 'date-fns/locale';
-import { C, shadow, shadowSm } from '../utils/theme';
+import { C, shadowSm } from '../../utils/theme';
 
 // ─── Helpers ──────────────────────────────────────────────────────────────────
 
@@ -27,70 +29,50 @@ function getDaysUntil(expiryDate: string | null | undefined): number | null {
   return differenceInDays(parseISO(expiryDate), today);
 }
 
-function humanDate(expiryDate: string | null | undefined, lang: string): string {
+function expiryLabel(
+  expiryDate: string | null | undefined,
+  isFr: boolean,
+): { text: string; color: string } | null {
   const days = getDaysUntil(expiryDate);
-  if (days === null) return lang === 'fr' ? 'Sans date' : 'No date';
-  if (days < 0)  return lang === 'fr' ? 'Périmé !' : 'Expired!';
-  if (days === 0) return lang === 'fr' ? "Aujourd'hui !" : 'Today!';
-  if (days === 1) return lang === 'fr' ? 'Demain' : 'Tomorrow';
-  if (days <= 7) return lang === 'fr' ? `Dans ${days} jours` : `In ${days} days`;
+  if (days === null) return null;
+  if (days < 0)  return { text: isFr ? 'Périmé !' : 'Expired!', color: C.red };
+  if (days === 0) return { text: isFr ? "Expire aujourd'hui !" : 'Expires today!', color: C.red };
+  if (days === 1) return { text: isFr ? 'Expire demain' : 'Expires tomorrow', color: C.orange };
+  if (days <= 7)  return { text: isFr ? `Expire dans ${days} jours` : `Expires in ${days} days`, color: C.orange };
+  return null;
+}
+
+function shortDate(expiryDate: string | null | undefined, lang: string): string {
+  if (!expiryDate) return '';
   try {
-    return format(parseISO(expiryDate!), 'dd MMM', { locale: lang === 'fr' ? frLocale : enUS });
-  } catch { return expiryDate ?? ''; }
+    return format(parseISO(expiryDate), 'd MMM.', { locale: lang === 'fr' ? frLocale : enUS });
+  } catch { return ''; }
 }
 
-function getUrgencyLevel(days: number | null): 'expired' | 'today' | 'soon' | 'week' | 'ok' {
-  if (days === null) return 'ok';
-  if (days < 0)  return 'expired';
-  if (days === 0) return 'today';
-  if (days <= 2)  return 'soon';
-  if (days <= 7)  return 'week';
-  return 'ok';
-}
+// ─── Category tabs ────────────────────────────────────────────────────────────
 
-const URGENCY_COLOR: Record<string, string> = {
-  expired: C.red,
-  today:   C.orange,
-  soon:    C.yellow,
-  week:    '#8B5CF6',
-  ok:      C.primary,
-};
+type FilterTab = 'tous' | 'urgents' | 'frigo' | 'placard';
 
-const URGENCY_BG: Record<string, string> = {
-  expired: C.redLight,
-  today:   C.orangeLight,
-  soon:    C.yellowLight,
-  week:    '#F5F3FF',
-  ok:      C.primaryLight,
-};
-
-// ─── Food categories ──────────────────────────────────────────────────────────
-
-type FoodCategory = 'tous' | 'frais' | 'proteines' | 'legumes' | 'feculents' | 'desserts' | 'boissons' | 'epicerie' | 'autres';
-
-interface CategoryDef {
-  key: FoodCategory;
-  emoji: string;
-  labelFr: string;
-  labelEn: string;
-}
-
-const CATEGORIES: CategoryDef[] = [
-  { key: 'tous',      emoji: '🏠', labelFr: 'Tous',       labelEn: 'All'      },
-  { key: 'frais',     emoji: '🥛', labelFr: 'Frais',      labelEn: 'Fresh'    },
-  { key: 'proteines', emoji: '🥩', labelFr: 'Protéines',  labelEn: 'Proteins' },
-  { key: 'legumes',   emoji: '🥕', labelFr: 'Légumes',    labelEn: 'Veggies'  },
-  { key: 'feculents', emoji: '🍞', labelFr: 'Féculents',  labelEn: 'Grains'   },
-  { key: 'desserts',  emoji: '🍰', labelFr: 'Desserts',   labelEn: 'Desserts' },
-  { key: 'boissons',  emoji: '🧃', labelFr: 'Boissons',   labelEn: 'Drinks'   },
-  { key: 'epicerie',  emoji: '🏪', labelFr: 'Épicerie',   labelEn: 'Pantry'   },
-  { key: 'autres',    emoji: '📦', labelFr: 'Autres',     labelEn: 'Other'    },
+const FILTER_TABS: { key: FilterTab; labelFr: string; labelEn: string }[] = [
+  { key: 'tous',    labelFr: 'Tous',    labelEn: 'All'    },
+  { key: 'urgents', labelFr: 'Urgents', labelEn: 'Urgent' },
+  { key: 'frigo',   labelFr: 'Frigo',   labelEn: 'Fridge' },
+  { key: 'placard', labelFr: 'Placard', labelEn: 'Pantry' },
 ];
+
+const FRIGO_CATS    = new Set(['frais', 'proteines', 'legumes', 'boissons']);
+const PLACARD_CATS  = new Set(['feculents', 'desserts', 'epicerie', 'autres']);
+
+const CATEGORY_EMOJI: Record<string, string> = {
+  frais: '🥛', proteines: '🥩', legumes: '🥕', feculents: '🍞',
+  desserts: '🍰', boissons: '🧃', epicerie: '🏪', autres: '📦',
+};
 
 // ─── Main component ────────────────────────────────────────────────────────────
 
 export default function HomeScreen() {
   const router = useRouter();
+  const { user } = useAuthStore();
   const {
     items, stats,
     fetchStock, fetchPriorityItems, fetchStats,
@@ -98,9 +80,15 @@ export default function HomeScreen() {
     isLoading, isOnline, pendingMutations,
   } = useStockStore();
   const { t, language } = useLanguageStore();
-  const [refreshing, setRefreshing] = useState(false);
-  const [selectedCategory, setSelectedCategory] = useState<FoodCategory>('tous');
-  const fr = language === 'fr';
+  const [refreshing, setRefreshing]   = useState(false);
+  const [selectedTab, setSelectedTab] = useState<FilterTab>('tous');
+  const isFr = language === 'fr';
+
+  // Prénom depuis l'email
+  const firstName = useMemo(() => {
+    const raw = user?.email?.split('@')[0] ?? '';
+    return raw ? raw.charAt(0).toUpperCase() + raw.slice(1) : '';
+  }, [user?.email]);
 
   const loadData = useCallback(async () => {
     await Promise.all([fetchStock(), fetchPriorityItems(), fetchStats()]);
@@ -114,131 +102,137 @@ export default function HomeScreen() {
     setRefreshing(false);
   }, [loadData]);
 
-  const handleAction = (item: StockItem, action: 'consume' | 'throw') => {
-    const isConsume = action === 'consume';
+  const handleConsume = (item: StockItem) => {
     Alert.alert(
-      isConsume ? t('markConsumed') : t('markThrown'),
-      (isConsume ? t('confirmConsume') : t('confirmThrow')).replace('{name}', item.name),
+      t('markConsumed'),
+      t('confirmConsume').replace('{name}', item.name),
       [
         { text: t('cancel'), style: 'cancel' },
-        {
-          text: t('confirm'),
-          style: isConsume ? 'default' : 'destructive',
-          onPress: () => {
-            if (isConsume) markConsumed(item.id);
-            else markThrown(item.id);
-          },
-        },
+        { text: t('confirm'), onPress: () => markConsumed(item.id) },
       ]
     );
   };
 
-  // Filtrage par catégorie
-  const filteredItems = useMemo(() => {
-    if (selectedCategory === 'tous') return items;
-    return items.filter(i => (i.food_category ?? 'autres') === selectedCategory);
-  }, [items, selectedCategory]);
-
-  // Catégories présentes dans le stock (pour afficher seulement les pills utiles)
-  const presentCategories = useMemo(() => {
-    const cats = new Set(items.map(i => i.food_category ?? 'autres'));
-    return CATEGORIES.filter(c => c.key === 'tous' || cats.has(c.key));
-  }, [items]);
-
-  // Groupement par urgence (sur les items filtrés)
-  const urgent = filteredItems.filter(i => { const d = getDaysUntil(i.expiry_date); return d !== null && d <= 2; });
-  const thisWeek = filteredItems.filter(i => { const d = getDaysUntil(i.expiry_date); return d !== null && d > 2 && d <= 7; });
-  const okItems = filteredItems.filter(i => { const d = getDaysUntil(i.expiry_date); return d === null || d > 7; });
-
-  // Message contextuel header
-  const heroMsg = () => {
-    if (urgent.length > 0)
-      return fr
-        ? `⚠️ ${urgent.length} produit${urgent.length > 1 ? 's' : ''} à utiliser rapidement !`
-        : `⚠️ ${urgent.length} product${urgent.length > 1 ? 's' : ''} to use quickly!`;
-    if (thisWeek.length > 0)
-      return fr
-        ? `👀 ${thisWeek.length} produit${thisWeek.length > 1 ? 's' : ''} à surveiller cette semaine`
-        : `👀 ${thisWeek.length} product${thisWeek.length > 1 ? 's' : ''} to watch this week`;
-    if (items.length === 0)
-      return fr ? '🛒 Votre stock est vide' : '🛒 Your stock is empty';
-    return fr ? '✅ Tout est en ordre !' : '✅ Everything is fine!';
-  };
-
-  // ─── Item card ───────────────────────────────────────────────────────────────
-
-  const renderUrgentCard = (item: StockItem) => {
-    const days = getDaysUntil(item.expiry_date);
-    const level = getUrgencyLevel(days);
-    const color = URGENCY_COLOR[level];
-    const bg = URGENCY_BG[level];
-
-    return (
-      <TouchableOpacity
-        key={item.id}
-        style={[styles.urgentCard, { backgroundColor: bg, borderColor: color + '40' }]}
-        onPress={() => router.push({ pathname: '/edit-product', params: { id: item.id } })}
-        activeOpacity={0.85}
-      >
-        <View style={styles.urgentCardLeft}>
-          <View style={[styles.urgentDot, { backgroundColor: color }]} />
-          <View style={styles.urgentInfo}>
-            <Text style={styles.urgentName} numberOfLines={1}>{item.name}</Text>
-            {item.brand ? <Text style={styles.urgentBrand}>{item.brand}</Text> : null}
-          </View>
-        </View>
-        <View style={styles.urgentRight}>
-          <Text style={[styles.urgentDate, { color }]}>{humanDate(item.expiry_date, language)}</Text>
-          <View style={styles.urgentActions}>
-            <TouchableOpacity
-              style={[styles.urgentBtn, { backgroundColor: C.primary }]}
-              onPress={e => { e.stopPropagation(); handleAction(item, 'consume'); }}
-            >
-              <Ionicons name="checkmark" size={18} color="#fff" />
-            </TouchableOpacity>
-            <TouchableOpacity
-              style={[styles.urgentBtn, { backgroundColor: C.red }]}
-              onPress={e => { e.stopPropagation(); handleAction(item, 'throw'); }}
-            >
-              <Ionicons name="trash-outline" size={16} color="#fff" />
-            </TouchableOpacity>
-          </View>
-        </View>
-      </TouchableOpacity>
+  const handleThrow = (item: StockItem) => {
+    Alert.alert(
+      t('markThrown'),
+      t('confirmThrow').replace('{name}', item.name),
+      [
+        { text: t('cancel'), style: 'cancel' },
+        { text: t('confirm'), style: 'destructive', onPress: () => markThrown(item.id) },
+      ]
     );
   };
 
-  const renderCompactCard = (item: StockItem) => {
-    const days = getDaysUntil(item.expiry_date);
-    const level = getUrgencyLevel(days);
-    const color = URGENCY_COLOR[level];
+  // Filtrage par tab
+  const filteredItems = useMemo(() => {
+    switch (selectedTab) {
+      case 'urgents':
+        return items.filter(i => { const d = getDaysUntil(i.expiry_date); return d !== null && d <= 7; });
+      case 'frigo':
+        return items.filter(i => FRIGO_CATS.has(i.food_category ?? 'autres'));
+      case 'placard':
+        return items.filter(i => PLACARD_CATS.has(i.food_category ?? 'autres'));
+      default:
+        return items;
+    }
+  }, [items, selectedTab]);
+
+  // Message contextuel
+  const urgentCount = items.filter(i => { const d = getDaysUntil(i.expiry_date); return d !== null && d <= 7; }).length;
+  const heroMsg = () => {
+    if (urgentCount > 0)
+      return isFr
+        ? `${urgentCount} produit${urgentCount > 1 ? 's' : ''} expirent bientôt`
+        : `${urgentCount} product${urgentCount > 1 ? 's' : ''} expiring soon`;
+    if (items.length === 0)
+      return isFr ? 'Votre stock est vide 🛒' : 'Your stock is empty 🛒';
+    return isFr ? 'Tout est en ordre ✅' : 'Everything is fine ✅';
+  };
+
+  // ─── Product card ─────────────────────────────────────────────────────────
+
+  const renderCard = (item: StockItem) => {
+    const expiry  = expiryLabel(item.expiry_date, isFr);
+    const dateStr = shortDate(item.expiry_date, language);
+    const emoji   = CATEGORY_EMOJI[item.food_category ?? 'autres'] ?? '📦';
+    const placeholderBg = expiry
+      ? (expiry.color === C.red ? C.redLight : C.orangeLight)
+      : C.primaryLight;
 
     return (
       <TouchableOpacity
         key={item.id}
-        style={styles.compactCard}
+        style={styles.card}
         onPress={() => router.push({ pathname: '/edit-product', params: { id: item.id } })}
-        activeOpacity={0.85}
+        activeOpacity={0.88}
       >
-        <View style={[styles.compactAccent, { backgroundColor: color }]} />
-        <View style={styles.compactContent}>
-          <Text style={styles.compactName} numberOfLines={1}>{item.name}</Text>
-          {item.brand ? <Text style={styles.compactBrand} numberOfLines={1}>{item.brand}</Text> : null}
-        </View>
-        <Text style={[styles.compactDate, { color }]}>{humanDate(item.expiry_date, language)}</Text>
-        <View style={styles.compactActions}>
-          <TouchableOpacity
-            style={[styles.compactBtn, { backgroundColor: C.primaryLight }]}
-            onPress={e => { e.stopPropagation(); handleAction(item, 'consume'); }}
-          >
-            <Ionicons name="checkmark" size={16} color={C.primary} />
-          </TouchableOpacity>
-          <TouchableOpacity
-            style={[styles.compactBtn, { backgroundColor: C.redLight }]}
-            onPress={e => { e.stopPropagation(); handleAction(item, 'throw'); }}
-          >
-            <Ionicons name="trash-outline" size={14} color={C.red} />
-          </TouchableOpacity>
+        {/* Thumbnail */}
+        {item.image_url ? (
+          <Image source={{ uri: item.image_url }} style={styles.cardImg} />
+        ) : (
+          <View style={[styles.cardImgPlaceholder, { backgroundColor: placeholderBg }]}>
+            <Text style={styles.cardImgEmoji}>{emoji}</Text>
+          </View>
+        )}
+
+        {/* Body */}
+        <View style={styles.cardBody}>
+          {/* Top row: name + menu */}
+          <View style={styles.cardTopRow}>
+            <Text style={styles.cardName} numberOfLines={1}>{item.name}</Text>
+            <TouchableOpacity
+              style={styles.menuBtn}
+              onPress={() => router.push({ pathname: '/edit-product', params: { id: item.id } })}
+              hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
+            >
+              <Ionicons name="ellipsis-horizontal" size={16} color={C.textLight} />
+            </TouchableOpacity>
+          </View>
+
+          {/* Brand */}
+          {item.brand ? <Text style={styles.cardBrand} numberOfLines={1}>{item.brand}</Text> : null}
+
+          {/* Expiry row */}
+          {expiry ? (
+            <View style={styles.cardExpiryRow}>
+              <View style={[styles.expiryDot, { backgroundColor: expiry.color }]} />
+              <Text style={[styles.expiryText, { color: expiry.color }]} numberOfLines={1}>
+                {expiry.text}
+              </Text>
+              <TouchableOpacity
+                style={styles.consumePill}
+                onPress={() => handleConsume(item)}
+              >
+                <Ionicons name="checkmark" size={12} color="#fff" />
+                <Text style={styles.consumePillText}>{isFr ? 'Consommé' : 'Consumed'}</Text>
+              </TouchableOpacity>
+            </View>
+          ) : (
+            <View style={styles.cardExpiryRow}>
+              <TouchableOpacity
+                style={[styles.consumePill, styles.consumePillGhost]}
+                onPress={() => handleConsume(item)}
+              >
+                <Ionicons name="checkmark" size={12} color={C.primary} />
+                <Text style={[styles.consumePillText, { color: C.primary }]}>
+                  {isFr ? 'Consommé' : 'Consumed'}
+                </Text>
+              </TouchableOpacity>
+            </View>
+          )}
+
+          {/* Date + throw */}
+          <View style={styles.cardBottomRow}>
+            {dateStr ? <Text style={styles.cardDate}>{dateStr}</Text> : <View />}
+            <TouchableOpacity
+              style={styles.throwBtn}
+              onPress={() => handleThrow(item)}
+              hitSlop={{ top: 6, bottom: 6, left: 6, right: 6 }}
+            >
+              <Ionicons name="trash-outline" size={13} color={C.textLight} />
+            </TouchableOpacity>
+          </View>
         </View>
       </TouchableOpacity>
     );
@@ -252,76 +246,91 @@ export default function HomeScreen() {
       {/* Header */}
       <View style={styles.header}>
         <View style={styles.headerLeft}>
-          <View style={styles.logoCircle}>
-            <Ionicons name="leaf" size={18} color="#fff" />
-          </View>
-          <View>
-            <Text style={styles.greeting}>{fr ? 'Bonjour !' : 'Hello!'}</Text>
-            <Text style={styles.heroMsg}>{heroMsg()}</Text>
-          </View>
+          <Text style={styles.greeting}>
+            {isFr ? `Bonjour ${firstName} 👋` : `Hello ${firstName} 👋`}
+          </Text>
+          <Text style={styles.heroMsg}>{heroMsg()}</Text>
         </View>
+        {/* Decorative illustration */}
+        <View style={styles.illustration} pointerEvents="none">
+          <Text style={styles.illustEmoji1}>🥕</Text>
+          <Text style={styles.illustEmoji2}>🫙</Text>
+          <Text style={styles.illustEmoji3}>🌿</Text>
+        </View>
+        {/* Settings icon */}
         <TouchableOpacity style={styles.settingsBtn} onPress={() => router.push('/settings')}>
-          <Ionicons name="settings-outline" size={20} color={C.textMid} />
+          <Ionicons name="settings-outline" size={19} color={C.textMid} />
         </TouchableOpacity>
       </View>
 
       {/* Offline banner */}
       {(!isOnline || pendingMutations.length > 0) && (
         <View style={styles.offlineBanner}>
-          <Ionicons name={isOnline ? 'sync-outline' : 'cloud-offline-outline'} size={14} color="#fff" />
+          <Ionicons name={isOnline ? 'sync-outline' : 'cloud-offline-outline'} size={13} color="#fff" />
           <Text style={styles.offlineText}>
-            {!isOnline
-              ? fr ? 'Hors ligne' : 'Offline'
-              : fr ? `Sync en cours…` : `Syncing…`}
+            {!isOnline ? (isFr ? 'Hors ligne' : 'Offline') : (isFr ? 'Synchronisation…' : 'Syncing…')}
           </Text>
         </View>
       )}
 
-      {/* Stats bar */}
-      <View style={styles.statsBar}>
-        <View style={styles.statPill}>
+      {/* Stat cards */}
+      <View style={styles.statsRow}>
+        <View style={[styles.statCard, { backgroundColor: C.primaryLight }]}>
+          <Text style={styles.statEmoji}>🧺</Text>
           <Text style={[styles.statNum, { color: C.primary }]}>{stats.total_items}</Text>
-          <Text style={styles.statLbl}>{fr ? 'en stock' : 'in stock'}</Text>
+          <Text style={styles.statLbl}>{isFr ? 'Produits' : 'Products'}</Text>
         </View>
-        <View style={styles.statDivider} />
-        <View style={styles.statPill}>
-          <Text style={[styles.statNum, { color: C.red }]}>{stats.expired + (stats.expiring_soon ?? 0)}</Text>
-          <Text style={styles.statLbl}>{fr ? 'urgents' : 'urgent'}</Text>
+        <View style={[styles.statCard, { backgroundColor: '#FEF2F2' }]}>
+          <Text style={styles.statEmoji}>⚠️</Text>
+          <Text style={[styles.statNum, { color: C.red }]}>
+            {stats.expired + (stats.expiring_soon ?? 0)}
+          </Text>
+          <Text style={styles.statLbl}>{isFr ? 'Urgents' : 'Urgent'}</Text>
         </View>
-        <View style={styles.statDivider} />
-        <View style={styles.statPill}>
-          <Text style={[styles.statNum, { color: '#8B5CF6' }]}>{stats.consumed_this_week}</Text>
-          <Text style={styles.statLbl}>{fr ? 'conso. cette sem.' : 'used this week'}</Text>
+        <View style={[styles.statCard, { backgroundColor: '#F5F3FF' }]}>
+          <Text style={styles.statEmoji}>🍽️</Text>
+          <Text style={[styles.statNum, { color: '#7C3AED' }]}>{stats.consumed_this_week}</Text>
+          <Text style={styles.statLbl}>{isFr ? 'Consommés\ncette sem.' : 'Used\nthis week'}</Text>
         </View>
       </View>
 
-      {/* Category filter pills */}
-      {presentCategories.length > 1 && (
-        <ScrollView
-          horizontal
-          showsHorizontalScrollIndicator={false}
-          style={styles.pillsRow}
-          contentContainerStyle={styles.pillsContent}
-        >
-          {presentCategories.map(cat => {
-            const active = selectedCategory === cat.key;
-            return (
-              <TouchableOpacity
-                key={cat.key}
-                style={[styles.pill, active && styles.pillActive]}
-                onPress={() => setSelectedCategory(cat.key)}
-                activeOpacity={0.7}
-              >
-                <Text style={styles.pillEmoji}>{cat.emoji}</Text>
-                <Text style={[styles.pillLabel, active && styles.pillLabelActive]}>
-                  {fr ? cat.labelFr : cat.labelEn}
-                </Text>
-              </TouchableOpacity>
-            );
-          })}
-        </ScrollView>
-      )}
+      {/* Action buttons */}
+      <View style={styles.actionsRow}>
+        <TouchableOpacity style={styles.scanBtn} onPress={() => router.push('/scan')}>
+          <Ionicons name="camera-outline" size={18} color="#fff" />
+          <Text style={styles.scanBtnText}>{isFr ? 'Scanner' : 'Scan'}</Text>
+        </TouchableOpacity>
+        <TouchableOpacity style={styles.outlineBtn} onPress={() => router.push('/add-product' as any)}>
+          <Ionicons name="add" size={17} color={C.textMid} />
+          <Text style={styles.outlineBtnText}>{isFr ? 'Ajouter' : 'Add'}</Text>
+        </TouchableOpacity>
+        <TouchableOpacity style={styles.outlineBtn} onPress={() => router.push('/recipes' as any)}>
+          <Ionicons name="book-outline" size={15} color={C.textMid} />
+          <Text style={styles.outlineBtnText}>{isFr ? 'Recettes' : 'Recipes'}</Text>
+        </TouchableOpacity>
+      </View>
 
+      {/* Category tabs */}
+      <View style={styles.tabsRow}>
+        {FILTER_TABS.map(tab => {
+          const active = selectedTab === tab.key;
+          return (
+            <TouchableOpacity
+              key={tab.key}
+              style={styles.tab}
+              onPress={() => setSelectedTab(tab.key)}
+              activeOpacity={0.7}
+            >
+              <Text style={[styles.tabText, active && styles.tabTextActive]}>
+                {isFr ? tab.labelFr : tab.labelEn}
+              </Text>
+              {active && <View style={styles.tabUnderline} />}
+            </TouchableOpacity>
+          );
+        })}
+      </View>
+
+      {/* Content */}
       {isLoading && items.length === 0 ? (
         <ActivityIndicator size="large" color={C.primary} style={{ marginTop: 60 }} />
       ) : (
@@ -330,96 +339,43 @@ export default function HomeScreen() {
           contentContainerStyle={styles.scrollContent}
           refreshControl={<RefreshControl refreshing={refreshing} onRefresh={onRefresh} tintColor={C.primary} />}
         >
-
-          {/* Section urgente */}
-          {urgent.length > 0 && (
-            <View style={styles.section}>
-              <View style={styles.sectionHeader}>
-                <View style={[styles.sectionIcon, { backgroundColor: C.redLight }]}>
-                  <Ionicons name="flame" size={14} color={C.red} />
+          {filteredItems.length > 0
+            ? filteredItems.map(item => renderCard(item))
+            : !isLoading && (
+              <View style={styles.emptyState}>
+                <View style={styles.emptyIcon}>
+                  <Ionicons name="basket-outline" size={44} color={C.primary} />
                 </View>
-                <Text style={[styles.sectionTitle, { color: C.red }]}>
-                  {fr ? 'À utiliser maintenant' : 'Use now'}
+                <Text style={styles.emptyTitle}>
+                  {isFr ? 'Aucun produit' : 'No products'}
                 </Text>
-                <View style={[styles.badge, { backgroundColor: C.redLight }]}>
-                  <Text style={[styles.badgeText, { color: C.red }]}>{urgent.length}</Text>
-                </View>
-              </View>
-              {urgent.map(item => renderUrgentCard(item))}
-            </View>
-          )}
-
-          {/* Section cette semaine */}
-          {thisWeek.length > 0 && (
-            <View style={styles.section}>
-              <View style={styles.sectionHeader}>
-                <View style={[styles.sectionIcon, { backgroundColor: '#F5F3FF' }]}>
-                  <Ionicons name="time-outline" size={14} color="#8B5CF6" />
-                </View>
-                <Text style={[styles.sectionTitle, { color: '#8B5CF6' }]}>
-                  {fr ? 'À surveiller cette semaine' : 'Watch this week'}
+                <Text style={styles.emptySubtitle}>
+                  {selectedTab === 'tous'
+                    ? (isFr ? 'Scannez un produit pour démarrer' : 'Scan a product to get started')
+                    : (isFr ? 'Aucun produit dans cette catégorie' : 'No products in this category')}
                 </Text>
-                <View style={[styles.badge, { backgroundColor: '#F5F3FF' }]}>
-                  <Text style={[styles.badgeText, { color: '#8B5CF6' }]}>{thisWeek.length}</Text>
-                </View>
+                {selectedTab === 'tous' && (
+                  <TouchableOpacity style={styles.emptyBtn} onPress={() => router.push('/scan')}>
+                    <Ionicons name="camera-outline" size={18} color="#fff" />
+                    <Text style={styles.emptyBtnText}>{isFr ? 'Scanner un produit' : 'Scan a product'}</Text>
+                  </TouchableOpacity>
+                )}
               </View>
-              {thisWeek.map(item => renderCompactCard(item))}
-            </View>
-          )}
+            )
+          }
 
-          {/* Tout le stock */}
-          {okItems.length > 0 && (
-            <View style={styles.section}>
-              <View style={styles.sectionHeader}>
-                <View style={[styles.sectionIcon, { backgroundColor: C.primaryLight }]}>
-                  <Ionicons name="cube-outline" size={14} color={C.primary} />
-                </View>
-                <Text style={[styles.sectionTitle, { color: C.primary }]}>
-                  {fr ? 'En stock' : 'In stock'}
-                </Text>
-                <View style={[styles.badge, { backgroundColor: C.primaryMid }]}>
-                  <Text style={[styles.badgeText, { color: C.primary }]}>{okItems.length}</Text>
-                </View>
-              </View>
-              {okItems.map(item => renderCompactCard(item))}
-            </View>
-          )}
-
-          {/* Empty state */}
-          {items.length === 0 && !isLoading && (
-            <View style={styles.emptyState}>
-              <View style={styles.emptyIcon}>
-                <Ionicons name="basket-outline" size={44} color={C.primary} />
-              </View>
-              <Text style={styles.emptyTitle}>{fr ? 'Votre stock est vide' : 'Your stock is empty'}</Text>
-              <Text style={styles.emptySubtitle}>
-                {fr ? 'Scannez un code-barres pour ajouter un produit' : 'Scan a barcode to add a product'}
-              </Text>
-              <TouchableOpacity style={styles.emptyBtn} onPress={() => router.push('/scan')}>
-                <Ionicons name="barcode-outline" size={18} color="#fff" />
-                <Text style={styles.emptyBtnText}>{fr ? 'Scanner un produit' : 'Scan a product'}</Text>
-              </TouchableOpacity>
-            </View>
-          )}
-
-          {/* Anti-gaspi motivation */}
-          {stats.consumed_this_week > 0 && (
+          {/* Motivation */}
+          {stats.consumed_this_week > 0 && filteredItems.length > 0 && (
             <View style={styles.motivationBanner}>
               <Text style={styles.motivationText}>
-                🌱 {fr
-                  ? `Bravo ! Vous avez consommé ${stats.consumed_this_week} produit${stats.consumed_this_week > 1 ? 's' : ''} cette semaine.`
-                  : `Well done! You used ${stats.consumed_this_week} product${stats.consumed_this_week > 1 ? 's' : ''} this week.`}
+                🌱 {isFr
+                  ? `Bravo ! ${stats.consumed_this_week} produit${stats.consumed_this_week > 1 ? 's' : ''} consommé${stats.consumed_this_week > 1 ? 's' : ''} cette semaine.`
+                  : `Well done! ${stats.consumed_this_week} product${stats.consumed_this_week > 1 ? 's' : ''} used this week.`}
               </Text>
             </View>
           )}
-
         </ScrollView>
       )}
-
-      {/* FAB */}
-      <TouchableOpacity style={styles.fab} onPress={() => router.push('/scan')}>
-        <Ionicons name="barcode-outline" size={24} color="#fff" />
-      </TouchableOpacity>
 
     </SafeAreaView>
   );
@@ -428,30 +384,39 @@ export default function HomeScreen() {
 // ─── Styles ───────────────────────────────────────────────────────────────────
 
 const styles = StyleSheet.create({
-  container: { flex: 1, backgroundColor: C.bg },
+  container: { flex: 1, backgroundColor: '#F7F5F2' },
 
+  // ── Header ──
   header: {
     flexDirection: 'row',
-    justifyContent: 'space-between',
-    alignItems: 'center',
+    alignItems: 'flex-start',
     paddingHorizontal: 20,
-    paddingVertical: 14,
-    backgroundColor: C.card,
-    ...shadowSm,
+    paddingTop: 16,
+    paddingBottom: 14,
+    backgroundColor: '#fff',
+    overflow: 'hidden',
   },
-  headerLeft: { flexDirection: 'row', alignItems: 'center', gap: 12, flex: 1 },
-  logoCircle: {
-    width: 36, height: 36, borderRadius: 18,
-    backgroundColor: C.primary,
-    alignItems: 'center', justifyContent: 'center',
-  },
-  greeting: { fontSize: 13, color: C.textMid, fontWeight: '600' },
-  heroMsg: { fontSize: 14, color: C.text, fontWeight: '700', marginTop: 1, flexShrink: 1 },
+  headerLeft: { flex: 1 },
+  greeting: { fontSize: 24, fontWeight: '800', color: '#1A1A1A', lineHeight: 30 },
+  heroMsg:  { fontSize: 13, color: C.textMid, marginTop: 3 },
   settingsBtn: {
-    padding: 8, backgroundColor: C.bg, borderRadius: 12,
-    borderWidth: 1, borderColor: C.border,
+    padding: 7, backgroundColor: '#F7F5F2', borderRadius: 10,
+    borderWidth: 1, borderColor: '#E8E5E0', marginTop: 2,
+    zIndex: 10,
   },
 
+  // Decorative illustration
+  illustration: {
+    width: 80, height: 60,
+    position: 'relative',
+    marginRight: 8,
+    marginTop: -4,
+  },
+  illustEmoji1: { position: 'absolute', right: 0,  top: 0,  fontSize: 38 },
+  illustEmoji2: { position: 'absolute', right: 28, top: 12, fontSize: 28 },
+  illustEmoji3: { position: 'absolute', right: 8,  top: 26, fontSize: 22 },
+
+  // ── Offline ──
   offlineBanner: {
     flexDirection: 'row', alignItems: 'center', gap: 6,
     backgroundColor: '#92400E',
@@ -459,145 +424,195 @@ const styles = StyleSheet.create({
   },
   offlineText: { color: '#fff', fontSize: 12, fontWeight: '600' },
 
-  statsBar: {
+  // ── Stat cards ──
+  statsRow: {
     flexDirection: 'row',
-    backgroundColor: C.card,
-    marginHorizontal: 16,
-    marginTop: 12,
-    borderRadius: 16,
-    paddingVertical: 12,
+    paddingHorizontal: 16,
+    paddingTop: 14,
+    paddingBottom: 0,
+    gap: 10,
+    backgroundColor: '#fff',
+  },
+  statCard: {
+    flex: 1,
+    borderRadius: 14,
+    paddingVertical: 10,
     paddingHorizontal: 8,
     alignItems: 'center',
-    ...shadow,
+    gap: 1,
   },
-  statPill: { flex: 1, alignItems: 'center' },
-  statNum: { fontSize: 22, fontWeight: '800' },
-  statLbl: { fontSize: 10, color: C.textLight, fontWeight: '600', marginTop: 1, textAlign: 'center' },
-  statDivider: { width: 1, height: 30, backgroundColor: C.border },
+  statEmoji: { fontSize: 22, marginBottom: 2 },
+  statNum:   { fontSize: 20, fontWeight: '800' },
+  statLbl:   { fontSize: 10, color: C.textMid, fontWeight: '500', textAlign: 'center', lineHeight: 14 },
 
+  // ── Action buttons ──
+  actionsRow: {
+    flexDirection: 'row',
+    paddingHorizontal: 16,
+    paddingVertical: 12,
+    gap: 8,
+    backgroundColor: '#fff',
+    borderBottomWidth: 1,
+    borderBottomColor: '#F0EDE8',
+  },
+  scanBtn: {
+    flex: 2,
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    gap: 6,
+    backgroundColor: C.primary,
+    borderRadius: 22,
+    paddingVertical: 11,
+    shadowColor: C.primary,
+    shadowOffset: { width: 0, height: 3 },
+    shadowOpacity: 0.28,
+    shadowRadius: 6,
+    elevation: 4,
+  },
+  scanBtnText: { color: '#fff', fontSize: 14, fontWeight: '700' },
+  outlineBtn: {
+    flex: 1,
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    gap: 4,
+    backgroundColor: '#fff',
+    borderRadius: 22,
+    paddingVertical: 11,
+    borderWidth: 1.5,
+    borderColor: '#E8E5E0',
+  },
+  outlineBtnText: { color: C.textMid, fontSize: 13, fontWeight: '600' },
+
+  // ── Category tabs ──
+  tabsRow: {
+    flexDirection: 'row',
+    backgroundColor: '#fff',
+    paddingHorizontal: 16,
+    paddingBottom: 0,
+  },
+  tab: {
+    paddingHorizontal: 12,
+    paddingVertical: 10,
+    alignItems: 'center',
+    position: 'relative',
+  },
+  tabText: { fontSize: 14, fontWeight: '600', color: C.textLight },
+  tabTextActive: { color: C.primary, fontWeight: '700' },
+  tabUnderline: {
+    position: 'absolute',
+    bottom: 0,
+    left: 8,
+    right: 8,
+    height: 2.5,
+    backgroundColor: C.primary,
+    borderRadius: 2,
+  },
+
+  // ── List ──
   scroll: { flex: 1 },
-  scrollContent: { paddingHorizontal: 16, paddingTop: 12, paddingBottom: 110 },
+  scrollContent: { padding: 14, paddingBottom: 40, gap: 10 },
 
-  section: { marginBottom: 16 },
-  sectionHeader: {
-    flexDirection: 'row', alignItems: 'center',
-    gap: 8, marginBottom: 10,
-  },
-  sectionIcon: {
-    width: 26, height: 26, borderRadius: 8,
-    alignItems: 'center', justifyContent: 'center',
-  },
-  sectionTitle: { fontSize: 14, fontWeight: '800', flex: 1 },
-  badge: {
-    borderRadius: 10, paddingHorizontal: 8, paddingVertical: 2,
-  },
-  badgeText: { fontSize: 12, fontWeight: '800' },
-
-  // Carte urgente (grande, colorée)
-  urgentCard: {
-    borderRadius: 16, borderWidth: 1,
-    padding: 14, marginBottom: 8,
-    flexDirection: 'row', alignItems: 'center',
-    ...shadow,
-  },
-  urgentCardLeft: { flex: 1, flexDirection: 'row', alignItems: 'center', gap: 10 },
-  urgentDot: { width: 10, height: 10, borderRadius: 5 },
-  urgentInfo: { flex: 1 },
-  urgentName: { fontSize: 16, fontWeight: '800', color: C.text },
-  urgentBrand: { fontSize: 12, color: C.textMid, marginTop: 2 },
-  urgentRight: { alignItems: 'flex-end', gap: 8 },
-  urgentDate: { fontSize: 13, fontWeight: '800' },
-  urgentActions: { flexDirection: 'row', gap: 6 },
-  urgentBtn: {
-    width: 34, height: 34, borderRadius: 10,
-    alignItems: 'center', justifyContent: 'center',
-  },
-
-  // Carte compacte (standard)
-  compactCard: {
-    backgroundColor: C.card,
-    borderRadius: 12, marginBottom: 6,
-    flexDirection: 'row', alignItems: 'center',
+  // ── Product card ──
+  card: {
+    flexDirection: 'row',
+    backgroundColor: '#fff',
+    borderRadius: 16,
     overflow: 'hidden',
     ...shadowSm,
+    borderWidth: 1,
+    borderColor: '#F0EDE8',
   },
-  compactAccent: { width: 4, alignSelf: 'stretch' },
-  compactContent: { flex: 1, paddingVertical: 10, paddingHorizontal: 10 },
-  compactName: { fontSize: 14, fontWeight: '700', color: C.text },
-  compactBrand: { fontSize: 11, color: C.textMid, marginTop: 1 },
-  compactDate: { fontSize: 12, fontWeight: '700', paddingHorizontal: 6 },
-  compactActions: { flexDirection: 'row', gap: 4, paddingRight: 10 },
-  compactBtn: {
-    width: 30, height: 30, borderRadius: 8,
-    alignItems: 'center', justifyContent: 'center',
+  cardImg: {
+    width: 80,
+    height: 90,
+    resizeMode: 'cover',
   },
+  cardImgPlaceholder: {
+    width: 80,
+    height: 90,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  cardImgEmoji: { fontSize: 32 },
 
-  // Empty state
-  emptyState: { alignItems: 'center', paddingVertical: 50 },
+  cardBody: {
+    flex: 1,
+    paddingTop: 10,
+    paddingRight: 10,
+    paddingLeft: 10,
+    paddingBottom: 8,
+    justifyContent: 'space-between',
+  },
+  cardTopRow: {
+    flexDirection: 'row',
+    alignItems: 'flex-start',
+    justifyContent: 'space-between',
+  },
+  cardName: { fontSize: 14, fontWeight: '700', color: '#1A1A1A', flex: 1, marginRight: 4 },
+  menuBtn: { padding: 2 },
+
+  cardBrand: { fontSize: 12, color: C.textMid, marginTop: 1 },
+
+  cardExpiryRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 5,
+    marginTop: 4,
+    flexWrap: 'nowrap',
+  },
+  expiryDot: { width: 6, height: 6, borderRadius: 3, flexShrink: 0 },
+  expiryText: { fontSize: 12, fontWeight: '600', flex: 1 },
+
+  consumePill: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 4,
+    backgroundColor: C.primary,
+    borderRadius: 20,
+    paddingHorizontal: 10,
+    paddingVertical: 4,
+    flexShrink: 0,
+  },
+  consumePillGhost: {
+    backgroundColor: C.primaryLight,
+    borderWidth: 1,
+    borderColor: C.primaryMid,
+  },
+  consumePillText: { fontSize: 11, fontWeight: '700', color: '#fff' },
+
+  cardBottomRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    marginTop: 4,
+  },
+  cardDate:  { fontSize: 11, color: C.textLight },
+  throwBtn:  { padding: 2 },
+
+  // ── Empty state ──
+  emptyState: { alignItems: 'center', paddingVertical: 60 },
   emptyIcon: {
     width: 80, height: 80, borderRadius: 40,
     backgroundColor: C.primaryLight,
     alignItems: 'center', justifyContent: 'center', marginBottom: 16,
   },
-  emptyTitle: { fontSize: 18, fontWeight: '800', color: C.text, marginBottom: 6 },
-  emptySubtitle: { fontSize: 14, color: C.textMid, textAlign: 'center', marginBottom: 24 },
+  emptyTitle:    { fontSize: 17, fontWeight: '700', color: C.text, marginBottom: 6 },
+  emptySubtitle: { fontSize: 13, color: C.textMid, textAlign: 'center', marginBottom: 24 },
   emptyBtn: {
     flexDirection: 'row', alignItems: 'center', gap: 8,
     backgroundColor: C.primary, borderRadius: 14,
-    paddingHorizontal: 24, paddingVertical: 14,
-    shadowColor: C.primary,
-    shadowOffset: { width: 0, height: 4 },
-    shadowOpacity: 0.25, shadowRadius: 8, elevation: 5,
+    paddingHorizontal: 22, paddingVertical: 13,
   },
-  emptyBtnText: { color: '#fff', fontSize: 15, fontWeight: '800' },
+  emptyBtnText: { color: '#fff', fontSize: 14, fontWeight: '700' },
 
-  // Motivation
+  // ── Motivation ──
   motivationBanner: {
     backgroundColor: C.primaryLight,
     borderRadius: 14, padding: 14,
-    marginTop: 8,
+    marginTop: 4,
     borderWidth: 1, borderColor: C.primaryMid,
   },
   motivationText: { fontSize: 13, color: '#166534', fontWeight: '600', textAlign: 'center' },
-
-  // FAB
-  fab: {
-    position: 'absolute', bottom: 28, right: 20,
-    width: 56, height: 56, borderRadius: 28,
-    backgroundColor: C.primary,
-    alignItems: 'center', justifyContent: 'center',
-    shadowColor: C.primary,
-    shadowOffset: { width: 0, height: 6 },
-    shadowOpacity: 0.35, shadowRadius: 10, elevation: 10,
-  },
-
-  // Category filter pills
-  pillsRow: {
-    maxHeight: 52,
-    backgroundColor: C.card,
-    borderBottomWidth: 1,
-    borderBottomColor: C.border,
-  },
-  pillsContent: {
-    paddingHorizontal: 12,
-    paddingVertical: 8,
-    gap: 8,
-    flexDirection: 'row',
-    alignItems: 'center',
-  },
-  pill: {
-    flexDirection: 'row', alignItems: 'center',
-    gap: 5,
-    paddingHorizontal: 12, paddingVertical: 6,
-    borderRadius: 20,
-    backgroundColor: C.bg,
-    borderWidth: 1.5, borderColor: C.border,
-  },
-  pillActive: {
-    backgroundColor: C.primaryLight,
-    borderColor: C.primary,
-  },
-  pillEmoji: { fontSize: 14 },
-  pillLabel: { fontSize: 13, fontWeight: '600', color: C.textMid },
-  pillLabelActive: { color: C.primary, fontWeight: '700' },
 });

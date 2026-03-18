@@ -1,3 +1,4 @@
+
 import React, { useEffect, useState } from 'react';
 import {
   View,
@@ -13,6 +14,7 @@ import axios from 'axios';
 import { useAuthStore } from '../../store/authStore';
 import { useLanguageStore } from '../../store/languageStore';
 import { buildApiUrl } from '../../utils/config';
+import { C, shadowSm } from '../../utils/theme';
 
 interface MonthlyStats {
   month: string;   // "YYYY-MM"
@@ -21,10 +23,10 @@ interface MonthlyStats {
   score: number;   // 0-100
 }
 
-function scoreLabel(score: number, fr: boolean): { text: string; icon: string; color: string } {
-  if (score >= 80) return { text: fr ? 'Excellent' : 'Excellent', icon: '🌱', color: '#22c55e' };
-  if (score >= 60) return { text: fr ? 'Bien'      : 'Good',      icon: '👍', color: '#84cc16' };
-  return              { text: fr ? 'À améliorer' : 'Needs work', icon: '💪', color: '#f97316' };
+function scoreLabel(score: number, isFr: boolean): { text: string; icon: string; color: string } {
+  if (score >= 80) return { text: isFr ? 'Excellent' : 'Excellent', icon: '🌱', color: '#16a34a' };
+  if (score >= 60) return { text: isFr ? 'Bien'      : 'Good',      icon: '👍', color: '#65a30d' };
+  return              { text: isFr ? 'À améliorer' : 'Needs work', icon: '💪', color: C.orange };
 }
 
 function formatMonth(month: string, lang: string): string {
@@ -39,10 +41,10 @@ export default function StatsScreen() {
   const isFr = language === 'fr';
   const t = (fr: string, en: string) => isFr ? fr : en;
 
-  const [data, setData] = useState<MonthlyStats[]>([]);
-  const [isLoading, setIsLoading] = useState(true);
+  const [data, setData]                 = useState<MonthlyStats[]>([]);
+  const [isLoading, setIsLoading]       = useState(true);
   const [isRefreshing, setIsRefreshing] = useState(false);
-  const [error, setError] = useState<string | null>(null);
+  const [error, setError]               = useState<string | null>(null);
 
   const fetchStats = async (silent = false) => {
     if (!token) return;
@@ -68,28 +70,31 @@ export default function StatsScreen() {
 
   const handleRefresh = () => { setIsRefreshing(true); fetchStats(true); };
 
-  // Mois courant = dernier élément
   const currentMonth = data.length > 0 ? data[data.length - 1] : null;
   const maxBar = data.length > 0 ? Math.max(...data.map(d => d.consumed + d.thrown), 1) : 1;
 
   return (
     <SafeAreaView style={styles.container}>
+
+      {/* Header */}
       <View style={styles.header}>
-        <Text style={styles.headerTitle}>
-          {t('📊 Score anti-gaspillage', '📊 Waste Score')}
-        </Text>
-        <Text style={styles.headerSubtitle}>
-          {t('6 derniers mois', 'Last 6 months')}
-        </Text>
+        <View style={styles.headerLeft}>
+          <Text style={styles.headerTitle}>{t('Score anti-gaspillage 📊', 'Waste Score 📊')}</Text>
+          <Text style={styles.headerSub}>{t('6 derniers mois', 'Last 6 months')}</Text>
+        </View>
+        <View style={styles.illustration} pointerEvents="none">
+          <Text style={styles.illustEmoji1}>📊</Text>
+          <Text style={styles.illustEmoji2}>🌱</Text>
+        </View>
       </View>
 
       {isLoading ? (
         <View style={styles.center}>
-          <ActivityIndicator size="large" color="#22c55e" />
+          <ActivityIndicator size="large" color={C.primary} />
         </View>
       ) : error ? (
         <View style={styles.center}>
-          <Ionicons name="cloud-offline-outline" size={48} color="#666" />
+          <Ionicons name="cloud-offline-outline" size={48} color="#ccc" />
           <Text style={styles.errorText}>{error}</Text>
         </View>
       ) : (
@@ -97,30 +102,31 @@ export default function StatsScreen() {
           style={styles.scroll}
           contentContainerStyle={styles.scrollContent}
           refreshControl={
-            <RefreshControl refreshing={isRefreshing} onRefresh={handleRefresh} tintColor="#22c55e" />
+            <RefreshControl refreshing={isRefreshing} onRefresh={handleRefresh} tintColor={C.primary} />
           }
         >
           {/* Score du mois courant */}
           {currentMonth && (() => {
             const label = scoreLabel(currentMonth.score, isFr);
-            const totalMonth = currentMonth.consumed + currentMonth.thrown;
+            const total = currentMonth.consumed + currentMonth.thrown;
             return (
               <View style={styles.scoreCard}>
-                <Text style={styles.scoreCardLabel}>
+                <Text style={styles.scoreCardMonth}>
                   {t('Ce mois-ci', 'This month')} · {formatMonth(currentMonth.month, language)}
                 </Text>
                 <View style={styles.scoreRow}>
                   <Text style={[styles.scoreNumber, { color: label.color }]}>
-                    {currentMonth.score === 0 && totalMonth === 0 ? '—' : `${currentMonth.score}%`}
+                    {total === 0 ? '—' : `${currentMonth.score}%`}
                   </Text>
                   <View style={styles.scoreRight}>
                     <Text style={styles.scoreEmoji}>{label.icon}</Text>
                     <Text style={[styles.scoreLabel, { color: label.color }]}>{label.text}</Text>
                   </View>
                 </View>
-                {totalMonth > 0 ? (
+                {total > 0 ? (
                   <Text style={styles.scoreSummary}>
-                    {currentMonth.consumed} {t('produit(s) sauvé(s)', 'product(s) saved')}{currentMonth.thrown > 0 ? ` · ${currentMonth.thrown} ${t('jeté(s)', 'wasted')}` : ''}
+                    {currentMonth.consumed} {t('produit(s) sauvé(s)', 'product(s) saved')}
+                    {currentMonth.thrown > 0 ? ` · ${currentMonth.thrown} ${t('jeté(s)', 'wasted')}` : ''}
                   </Text>
                 ) : (
                   <Text style={styles.scoreSummary}>
@@ -134,21 +140,21 @@ export default function StatsScreen() {
           {/* Légende */}
           <View style={styles.legendRow}>
             <View style={styles.legendItem}>
-              <View style={[styles.legendDot, { backgroundColor: '#22c55e' }]} />
+              <View style={[styles.legendDot, { backgroundColor: C.primary }]} />
               <Text style={styles.legendText}>{t('Consommé', 'Consumed')}</Text>
             </View>
             <View style={styles.legendItem}>
-              <View style={[styles.legendDot, { backgroundColor: '#ef4444' }]} />
+              <View style={[styles.legendDot, { backgroundColor: C.red }]} />
               <Text style={styles.legendText}>{t('Jeté', 'Wasted')}</Text>
             </View>
           </View>
 
           {/* Barres mensuelles */}
-          <View style={styles.barsContainer}>
+          <View style={styles.barsCard}>
             {data.map((m) => {
               const total = m.consumed + m.thrown;
               const consumedRatio = total > 0 ? m.consumed / maxBar : 0;
-              const thrownRatio = total > 0 ? m.thrown / maxBar : 0;
+              const thrownRatio   = total > 0 ? m.thrown   / maxBar : 0;
               const isCurrentMonth = m.month === currentMonth?.month;
 
               return (
@@ -163,22 +169,16 @@ export default function StatsScreen() {
                       <View style={styles.barEmpty} />
                     ) : (
                       <>
-                        <View style={[styles.barFill, { flex: consumedRatio, backgroundColor: '#22c55e' }]} />
-                        <View style={[styles.barFill, { flex: thrownRatio, backgroundColor: '#ef4444' }]} />
+                        <View style={[styles.barFill, { flex: consumedRatio, backgroundColor: C.primary }]} />
+                        <View style={[styles.barFill, { flex: thrownRatio,   backgroundColor: C.red }]} />
                         <View style={{ flex: 1 - consumedRatio - thrownRatio }} />
                       </>
                     )}
                   </View>
                   <View style={styles.barNumbers}>
-                    {m.consumed > 0 && (
-                      <Text style={styles.barConsumed}>{m.consumed}</Text>
-                    )}
-                    {m.thrown > 0 && (
-                      <Text style={styles.barThrown}>{m.thrown}</Text>
-                    )}
-                    {total === 0 && (
-                      <Text style={styles.barNone}>—</Text>
-                    )}
+                    {m.consumed > 0 && <Text style={styles.barConsumed}>{m.consumed}</Text>}
+                    {m.thrown   > 0 && <Text style={styles.barThrown}>{m.thrown}</Text>}
+                    {total === 0     && <Text style={styles.barNone}>—</Text>}
                   </View>
                 </View>
               );
@@ -187,7 +187,7 @@ export default function StatsScreen() {
 
           {/* Info */}
           <View style={styles.infoBox}>
-            <Ionicons name="information-circle-outline" size={16} color="#555" />
+            <Ionicons name="information-circle-outline" size={15} color={C.textLight} />
             <Text style={styles.infoText}>
               {t(
                 'Le score représente le % de produits consommés avant péremption.',
@@ -202,92 +202,93 @@ export default function StatsScreen() {
 }
 
 const styles = StyleSheet.create({
-  container: { flex: 1, backgroundColor: '#0a0a0a' },
+  container: { flex: 1, backgroundColor: '#F7F5F2' },
 
+  // ── Header ──
   header: {
+    flexDirection: 'row',
+    alignItems: 'flex-start',
     paddingHorizontal: 20,
     paddingTop: 16,
-    paddingBottom: 12,
-    borderBottomWidth: 1,
-    borderBottomColor: '#1a1a1a',
+    paddingBottom: 14,
+    backgroundColor: '#fff',
+    overflow: 'hidden',
   },
-  headerTitle: { fontSize: 22, fontWeight: '700', color: '#fff' },
-  headerSubtitle: { fontSize: 13, color: '#666', marginTop: 4 },
+  headerLeft: { flex: 1 },
+  headerTitle: { fontSize: 24, fontWeight: '800', color: '#1A1A1A' },
+  headerSub:   { fontSize: 13, color: C.textMid, marginTop: 3 },
+
+  illustration: { width: 70, height: 52, position: 'relative', marginRight: 4, marginTop: -2 },
+  illustEmoji1: { position: 'absolute', right: 0,  top: 0,  fontSize: 36 },
+  illustEmoji2: { position: 'absolute', right: 28, top: 14, fontSize: 22 },
 
   center: { flex: 1, alignItems: 'center', justifyContent: 'center', padding: 32, gap: 12 },
-  errorText: { color: '#f97316', fontSize: 14, textAlign: 'center' },
+  errorText: { color: C.orange, fontSize: 14, textAlign: 'center' },
 
   scroll: { flex: 1 },
-  scrollContent: { padding: 20, gap: 20, paddingBottom: 40 },
+  scrollContent: { padding: 16, gap: 14, paddingBottom: 40 },
 
-  // Score card
+  // ── Score card ──
   scoreCard: {
-    backgroundColor: '#111',
-    borderRadius: 16,
+    backgroundColor: '#fff',
+    borderRadius: 18,
     padding: 20,
     borderWidth: 1,
-    borderColor: '#1e1e1e',
+    borderColor: '#F0EDE8',
     gap: 8,
+    ...shadowSm,
   },
-  scoreCardLabel: { fontSize: 13, color: '#666', fontWeight: '500' },
-  scoreRow: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between' },
-  scoreNumber: { fontSize: 52, fontWeight: '800', lineHeight: 60 },
-  scoreRight: { alignItems: 'flex-end', gap: 4 },
-  scoreEmoji: { fontSize: 32 },
-  scoreLabel: { fontSize: 16, fontWeight: '700' },
-  scoreSummary: { fontSize: 13, color: '#888' },
+  scoreCardMonth: { fontSize: 13, color: C.textMid, fontWeight: '500' },
+  scoreRow:       { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between' },
+  scoreNumber:    { fontSize: 52, fontWeight: '800', lineHeight: 60 },
+  scoreRight:     { alignItems: 'flex-end', gap: 4 },
+  scoreEmoji:     { fontSize: 32 },
+  scoreLabel:     { fontSize: 16, fontWeight: '700' },
+  scoreSummary:   { fontSize: 13, color: C.textMid },
 
-  // Légende
-  legendRow: { flexDirection: 'row', gap: 20 },
+  // ── Legend ──
+  legendRow: { flexDirection: 'row', gap: 16 },
   legendItem: { flexDirection: 'row', alignItems: 'center', gap: 6 },
-  legendDot: { width: 10, height: 10, borderRadius: 5 },
-  legendText: { fontSize: 13, color: '#888' },
+  legendDot:  { width: 10, height: 10, borderRadius: 5 },
+  legendText: { fontSize: 12, color: C.textMid },
 
-  // Barres
-  barsContainer: {
-    backgroundColor: '#111',
-    borderRadius: 16,
+  // ── Bars ──
+  barsCard: {
+    backgroundColor: '#fff',
+    borderRadius: 18,
     padding: 16,
     borderWidth: 1,
-    borderColor: '#1e1e1e',
+    borderColor: '#F0EDE8',
     gap: 14,
+    ...shadowSm,
   },
-  barRow: { flexDirection: 'row', alignItems: 'center', gap: 10 },
+  barRow:   { flexDirection: 'row', alignItems: 'center', gap: 10 },
   barLabel: {
-    width: 34,
-    fontSize: 11,
-    color: '#555',
-    fontWeight: '600',
-    textAlign: 'center',
-    lineHeight: 14,
+    width: 34, fontSize: 11, color: C.textLight,
+    fontWeight: '600', textAlign: 'center', lineHeight: 14,
   },
-  barLabelActive: { color: '#22c55e' },
-  barYear: { fontSize: 10, color: '#444' },
+  barLabelActive: { color: C.primary },
+  barYear:  { fontSize: 10, color: C.textLight },
   barTrack: {
-    flex: 1,
-    height: 22,
-    backgroundColor: '#1a1a1a',
+    flex: 1, height: 22,
+    backgroundColor: '#F0EDE8',
     borderRadius: 6,
     flexDirection: 'row',
     overflow: 'hidden',
   },
-  barFill: { height: '100%' },
-  barEmpty: { flex: 1, backgroundColor: '#1a1a1a' },
+  barFill:    { height: '100%' },
+  barEmpty:   { flex: 1, backgroundColor: '#F0EDE8' },
   barNumbers: { width: 50, flexDirection: 'row', justifyContent: 'flex-end', gap: 4 },
-  barConsumed: { fontSize: 12, color: '#22c55e', fontWeight: '600' },
-  barThrown: { fontSize: 12, color: '#ef4444', fontWeight: '600' },
-  barNone: { fontSize: 12, color: '#333' },
+  barConsumed: { fontSize: 12, color: C.primary, fontWeight: '600' },
+  barThrown:   { fontSize: 12, color: C.red,     fontWeight: '600' },
+  barNone:     { fontSize: 12, color: C.textLight },
 
-  // Info
+  // ── Info ──
   infoBox: {
-    flexDirection: 'row',
-    gap: 8,
-    alignItems: 'flex-start',
-    backgroundColor: '#111',
-    borderRadius: 10,
-    padding: 12,
-    borderWidth: 1,
-    borderColor: '#1e1e1e',
+    flexDirection: 'row', gap: 8, alignItems: 'flex-start',
+    backgroundColor: '#fff',
+    borderRadius: 12, padding: 12,
+    borderWidth: 1, borderColor: '#F0EDE8',
   },
-  infoText: { flex: 1, fontSize: 12, color: '#555', lineHeight: 18 },
+  infoText: { flex: 1, fontSize: 12, color: C.textLight, lineHeight: 18 },
 });
