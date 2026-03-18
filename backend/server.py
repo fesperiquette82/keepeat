@@ -209,13 +209,60 @@ async def _check_inactivity_and_notify() -> None:
         logger.info("Inactivity alert sent — user=%s items=%d", user_id, nb)
 
 
+async def _check_weekly_expiry_summary() -> None:
+    """Envoie un résumé hebdomadaire des produits urgents (expiry <= 7j)."""
+    today = _utc_now().date()
+    in_7_days = (today + timedelta(days=7)).strftime("%Y-%m-%d")
+    today_str = today.strftime("%Y-%m-%d")
+    iso_week = today.isocalendar()[1]  # numéro de semaine ISO
+
+    async for user_doc in users_col.find({"push_tokens": {"$exists": True, "$ne": []}}):
+        user_id = str(user_doc["_id"])
+        tokens: list[str] = user_doc.get("push_tokens", [])
+
+        # Dedup : une seule notif par semaine ISO
+        alert_key = f"weekly_{user_id}_{today.year}_{iso_week}"
+        already_sent = await user_alerts_col.find_one({"user_id": user_id, "key": alert_key})
+        if already_sent:
+            continue
+
+        # Produits actifs expirant dans les 7 prochains jours
+        cursor = stock_col.find({
+            "user_id": user_id,
+            "status": "active",
+            "expiry_date": {"$nin": [None, ""], "$gte": today_str, "$lte": in_7_days},
+        }).sort("expiry_date", 1).limit(5)
+        urgent_items = await cursor.to_list(length=5)
+        if not urgent_items:
+            continue
+
+        names = [item["name"] for item in urgent_items]
+        count = len(names)
+        body = f"{'Produit' if count == 1 else 'Produits'} à consommer : {', '.join(names)}"
+        await _send_expo_push(
+            tokens,
+            title=f"📦 {count} produit{'s' if count > 1 else ''} à consommer cette semaine",
+            body=body,
+            data={"type": "weekly_summary"},
+        )
+        await user_alerts_col.insert_one({
+            "user_id": user_id,
+            "key": alert_key,
+            "sent_at": _utc_now(),
+        })
+        logger.info("Weekly summary sent — user=%s items=%d", user_id, count)
+
+
 async def _alert_loop() -> None:
-    """Boucle de fond : vérifie toutes les 6h les rappels et l'inactivité."""
+    """Boucle de fond : vérifie toutes les 6h les rappels, l'inactivité et le résumé hebdomadaire."""
     while True:
         await asyncio.sleep(6 * 3600)
         try:
             await _check_recalls_and_notify()
             await _check_inactivity_and_notify()
+            # Résumé hebdomadaire uniquement à 9h (±3h selon le cycle)
+            if _utc_now().hour < 12:
+                await _check_weekly_expiry_summary()
         except Exception as exc:
             logger.error("Alert loop error: %s", exc)
 
@@ -381,6 +428,7 @@ JWT_ALGORITHM = "HS256"
 JWT_EXPIRE_DAYS = 30
 
 ADMIN_KEY = os.getenv("ADMIN_KEY", "")
+SPOONACULAR_KEY = os.getenv("SPOONACULAR_KEY", "")
 
 pwd_context = CryptContext(schemes=["bcrypt"], deprecated="auto")
 http_bearer = HTTPBearer(auto_error=False)
@@ -1279,6 +1327,135 @@ async def get_recalls_status(
     if doc and doc.get("checked_at"):
         last_check = doc["checked_at"].replace(tzinfo=timezone.utc).isoformat()
     return {"last_check": last_check}
+
+
+# -----------------------------------------------------------------------------
+# Recettes (Spoonacular)
+# -----------------------------------------------------------------------------
+
+@api_router.get("/recipes/suggestions")
+async def get_recipe_suggestions(
+    current_user: Dict[str, Any] = Depends(_get_current_user),
+):
+    """Suggère des recettes basées sur les produits actifs expirant dans les 7 prochains jours."""
+    if not SPOONACULAR_KEY:
+        return []
+
+    uid = current_user["id"]
+    in_7_days = (_utc_now().date() + timedelta(days=7)).strftime("%Y-%m-%d")
+    today_str = _utc_now().strftime("%Y-%m-%d")
+
+    cursor = stock_col.find({
+        "user_id": uid,
+        "status": "active",
+        "expiry_date": {"$nin": [None, ""], "$gte": today_str, "$lte": in_7_days},
+    }).sort("expiry_date", 1).limit(10)
+    items = await cursor.to_list(length=10)
+
+    if not items:
+        return []
+
+    ingredients = ",".join(item["name"] for item in items)
+
+    try:
+        async with httpx.AsyncClient(timeout=15) as http:
+            r = await http.get(
+                "https://api.spoonacular.com/recipes/findByIngredients",
+                params={
+                    "ingredients": ingredients,
+                    "number": 5,
+                    "ranking": 2,
+                    "ignorePantry": "true",
+                    "apiKey": SPOONACULAR_KEY,
+                },
+            )
+            if r.status_code != 200:
+                logger.warning("Spoonacular findByIngredients returned %s", r.status_code)
+                return []
+            recipes_raw = r.json()
+
+        results = []
+        for rec in recipes_raw:
+            recipe_id = rec.get("id")
+            source_url = f"https://spoonacular.com/recipes/{recipe_id}"
+            # Récupérer l'URL source réelle
+            try:
+                async with httpx.AsyncClient(timeout=10) as http2:
+                    info_r = await http2.get(
+                        f"https://api.spoonacular.com/recipes/{recipe_id}/information",
+                        params={"apiKey": SPOONACULAR_KEY},
+                    )
+                    if info_r.status_code == 200:
+                        info = info_r.json()
+                        source_url = info.get("sourceUrl") or source_url
+            except Exception:
+                pass  # Fallback sur l'URL générique
+
+            results.append({
+                "id": recipe_id,
+                "title": rec.get("title", ""),
+                "image": rec.get("image", ""),
+                "usedIngredients": [i["name"] for i in rec.get("usedIngredients", [])],
+                "missedIngredients": [i["name"] for i in rec.get("missedIngredients", [])],
+                "sourceUrl": source_url,
+            })
+        return results
+
+    except Exception as exc:
+        logger.warning("Spoonacular request failed: %s", exc)
+        return []
+
+
+# -----------------------------------------------------------------------------
+# Stats mensuelles (score anti-gaspillage)
+# -----------------------------------------------------------------------------
+
+@api_router.get("/stats/monthly")
+async def get_monthly_stats(
+    months: int = Query(default=6, ge=1, le=24),
+    current_user: Dict[str, Any] = Depends(_get_current_user),
+):
+    """Retourne les stats mensuelles (consommé/jeté/score) sur les N derniers mois."""
+    uid = current_user["id"]
+
+    # Générer la liste des N derniers mois (YYYY-MM)
+    today = _utc_now().date()
+    month_list = []
+    for i in range(months - 1, -1, -1):
+        # Premier jour du mois i mois en arrière
+        target = today.replace(day=1) - timedelta(days=i * 30)
+        month_list.append(target.strftime("%Y-%m"))
+
+    # Agrégation consommés par mois
+    consumed_pipeline = [
+        {"$match": {"user_id": uid, "status": "consumed", "consumed_date": {"$nin": [None, ""]}}},
+        {"$group": {"_id": {"$substr": ["$consumed_date", 0, 7]}, "count": {"$sum": 1}}},
+    ]
+    thrown_pipeline = [
+        {"$match": {"user_id": uid, "status": "thrown", "thrown_date": {"$nin": [None, ""]}}},
+        {"$group": {"_id": {"$substr": ["$thrown_date", 0, 7]}, "count": {"$sum": 1}}},
+    ]
+
+    consumed_agg = await stock_col.aggregate(consumed_pipeline).to_list(length=100)
+    thrown_agg = await stock_col.aggregate(thrown_pipeline).to_list(length=100)
+
+    consumed_by_month = {doc["_id"]: doc["count"] for doc in consumed_agg}
+    thrown_by_month = {doc["_id"]: doc["count"] for doc in thrown_agg}
+
+    result = []
+    for month in month_list:
+        consumed = consumed_by_month.get(month, 0)
+        thrown = thrown_by_month.get(month, 0)
+        total = consumed + thrown
+        score = round(consumed / total * 100) if total > 0 else 0
+        result.append({
+            "month": month,
+            "consumed": consumed,
+            "thrown": thrown,
+            "score": score,
+        })
+
+    return result
 
 
 # Wire routes

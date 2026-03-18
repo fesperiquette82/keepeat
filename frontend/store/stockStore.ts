@@ -27,6 +27,8 @@ export interface StockItem {
   expiry_date?: string;
   added_date: string;
   status: string;
+  consumed_date?: string;
+  thrown_date?: string;
   notes?: string;
   _pending?: boolean; // item créé offline, pas encore syncé
 }

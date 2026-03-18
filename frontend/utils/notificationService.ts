@@ -41,6 +41,11 @@ export async function requestNotificationPermissions(): Promise<boolean> {
       importance: Notifications.AndroidImportance.DEFAULT,
       sound: 'default',
     });
+    await Notifications.setNotificationChannelAsync('weekly-summary', {
+      name: 'Résumé hebdomadaire',
+      importance: Notifications.AndroidImportance.DEFAULT,
+      sound: 'default',
+    });
   }
 
   const { status: existing } = await Notifications.getPermissionsAsync();
