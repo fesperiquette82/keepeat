@@ -2,7 +2,7 @@
  * Hook partagé pour la logique OCR de dates de péremption.
  * Utilisé par add-product.tsx et edit-product.tsx.
  */
-import { useRef, useState } from 'react';
+import React, { useRef, useState } from 'react';
 import { Alert } from 'react-native';
 import { CameraView } from 'expo-camera';
 import { format, parseISO } from 'date-fns';
