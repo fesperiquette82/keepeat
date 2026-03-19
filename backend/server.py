@@ -1553,8 +1553,18 @@ async def get_recipe_suggestions(
                 ingredient_names.append(en)
             if len(ingredient_names) >= 5:
                 break
+        # Si tous les produits ont mappé vers le même ingrédient, compléter avec le fallback
+        if len(ingredient_names) < 2:
+            for extra in _FALLBACK_INGREDIENTS.get(recipe_filter, _FALLBACK_INGREDIENTS["all"]):
+                if extra not in seen:
+                    seen.add(extra)
+                    ingredient_names.append(extra)
+                if len(ingredient_names) >= 3:
+                    break
     else:
         ingredient_names = _FALLBACK_INGREDIENTS.get(recipe_filter, _FALLBACK_INGREDIENTS["all"])
+
+    logger.info("Recipes suggestions: filter=%s ingredients=%s is_fallback=%s", recipe_filter, ingredient_names, is_fallback)
 
     # ── Étape 1 : pour chaque ingrédient, récupérer les repas correspondants ──
     meal_counts: dict[str, int] = {}
@@ -1566,21 +1576,26 @@ async def get_recipe_suggestions(
                 params={"i": ingredient},
             )
             if r.status_code == 200:
-                for m in (r.json().get("meals") or []):
+                meals_found = r.json().get("meals") or []
+                logger.info("TheMealDB filter(%s): %d results", ingredient, len(meals_found))
+                for m in meals_found:
                     mid = m.get("idMeal", "")
                     if mid:
                         meal_counts[mid] = meal_counts.get(mid, 0) + 1
-        except Exception:
-            pass
+            else:
+                logger.warning("TheMealDB filter(%s): HTTP %d", ingredient, r.status_code)
+        except Exception as e:
+            logger.warning("TheMealDB filter(%s) error: %s", ingredient, e)
 
     try:
-        async with httpx.AsyncClient(timeout=10) as http:
+        async with httpx.AsyncClient(timeout=15) as http:
             await asyncio.gather(*[_fetch_filter(http, name) for name in ingredient_names])
     except Exception as exc:
-        logger.warning("TheMealDB filter error: %s", exc)
+        logger.warning("TheMealDB filter gather error: %s", exc)
         return []
 
     if not meal_counts:
+        logger.warning("TheMealDB: no meal_counts for ingredients=%s", ingredient_names)
         return []
 
     # ── Étape 2 : top 5 repas, récupérer les détails en parallèle ──
@@ -1607,15 +1622,16 @@ async def get_recipe_suggestions(
                         "sourceUrl": m.get("strSource") or f"https://www.themealdb.com/meal/{meal_id}",
                         "is_fallback": is_fallback,
                     })
-        except Exception:
-            pass
+        except Exception as e:
+            logger.warning("TheMealDB lookup(%s) error: %s", meal_id, e)
 
     try:
-        async with httpx.AsyncClient(timeout=10) as http:
+        async with httpx.AsyncClient(timeout=15) as http:
             await asyncio.gather(*[_fetch_detail(http, mid) for mid in top_ids])
     except Exception as exc:
-        logger.warning("TheMealDB lookup error: %s", exc)
+        logger.warning("TheMealDB lookup gather error: %s", exc)
 
+    logger.info("Recipes suggestions: returning %d recipes", len(results))
     return sorted(results, key=lambda r: meal_counts.get(str(r["id"]), 0), reverse=True)
 
 
