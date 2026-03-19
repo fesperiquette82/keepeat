@@ -170,6 +170,41 @@ export default function HomeScreen() {
     return { text: isFr ? '✅ Tout est sous contrôle' : '✅ Everything under control' };
   };
 
+  // À faire maintenant — items contextuels
+  const todoItems = useMemo(() => {
+    const list: { emoji: string; label: string; action: () => void; color: string }[] = [];
+    if (expiredCount > 0) {
+      list.push({
+        emoji: '⛔',
+        label: isFr
+          ? `Jeter ou consommer ${expiredCount} produit${expiredCount > 1 ? 's' : ''} périmé${expiredCount > 1 ? 's' : ''}`
+          : `Discard or use ${expiredCount} expired product${expiredCount > 1 ? 's' : ''}`,
+        action: () => setSelectedTab('urgents'),
+        color: '#ef4444',
+      });
+    }
+    const nonExpiredUrgent = urgentCount - expiredCount;
+    if (nonExpiredUrgent > 0) {
+      list.push({
+        emoji: '⏰',
+        label: isFr
+          ? `Consommer ${nonExpiredUrgent} produit${nonExpiredUrgent > 1 ? 's' : ''} avant expiration`
+          : `Use ${nonExpiredUrgent} product${nonExpiredUrgent > 1 ? 's' : ''} before expiry`,
+        action: () => setSelectedTab('urgents'),
+        color: '#f97316',
+      });
+    }
+    if (items.length > 0) {
+      list.push({
+        emoji: '🍳',
+        label: isFr ? 'Voir les recettes avec mon stock' : 'See recipes with my stock',
+        action: () => router.push('/(tabs)/recipes' as any),
+        color: C.primary,
+      });
+    }
+    return list;
+  }, [expiredCount, urgentCount, items.length, isFr]);
+
   // ─── Product card ─────────────────────────────────────────────────────────
 
   const renderCard = (item: StockItem) => {
@@ -294,15 +329,7 @@ export default function HomeScreen() {
           <Text style={styles.greeting}>
             {isFr ? `Bonjour ${firstName} 👋` : `Hello ${firstName} 👋`}
           </Text>
-          {(() => { const h = heroMsg(); return <Text style={[styles.heroMsg, h.color ? { color: h.color } : {}]}>{h.text}</Text>; })()}
         </View>
-        {/* Decorative illustration */}
-        <View style={styles.illustration} pointerEvents="none">
-          <Text style={styles.illustEmoji1}>🥕</Text>
-          <Text style={styles.illustEmoji2}>🫙</Text>
-          <Text style={styles.illustEmoji3}>🌿</Text>
-        </View>
-        {/* Settings icon */}
         <TouchableOpacity style={styles.settingsBtn} onPress={() => router.push('/settings')}>
           <Ionicons name="settings-outline" size={19} color={C.textMid} />
         </TouchableOpacity>
@@ -318,24 +345,60 @@ export default function HomeScreen() {
         </View>
       )}
 
-      {/* Stat cards */}
+      {/* Hero card contextuelle */}
+      {(() => {
+        const h = heroMsg();
+        const isExpired = expiredCount > 0;
+        const isUrgent  = urgentCount > 0;
+        const bgColor     = isExpired ? '#FEF2F2' : isUrgent ? '#FFF7ED' : items.length === 0 ? '#F7F5F2' : '#F0FDF4';
+        const borderColor = isExpired ? '#FECACA' : isUrgent ? '#FED7AA' : items.length === 0 ? '#E8E5E0' : '#BBF7D0';
+        const iconColor   = h.color ?? '#16a34a';
+        const iconName: any = isExpired ? 'warning' : isUrgent ? 'time-outline' : items.length === 0 ? 'cart-outline' : 'checkmark-circle';
+        const ctaLabel = isExpired
+          ? (isFr ? 'Voir les périmés →' : 'See expired →')
+          : isUrgent
+            ? (isFr ? 'Voir les urgents →' : 'See urgent →')
+            : items.length === 0
+              ? (isFr ? 'Scanner maintenant →' : 'Scan now →')
+              : (isFr ? 'Voir les recettes →' : 'See recipes →');
+        const ctaAction = isExpired || isUrgent
+          ? () => setSelectedTab('urgents')
+          : items.length === 0
+            ? () => router.push('/scan')
+            : () => router.push('/(tabs)/recipes' as any);
+        return (
+          <View style={[styles.heroCard, { backgroundColor: bgColor, borderColor }]}>
+            <Ionicons name={iconName} size={26} color={iconColor} style={styles.heroCardIcon} />
+            <View style={styles.heroCardBody}>
+              <Text style={[styles.heroCardText, { color: iconColor }]}>{h.text}</Text>
+              <TouchableOpacity onPress={ctaAction}>
+                <Text style={[styles.heroCardCta, { color: iconColor }]}>{ctaLabel}</Text>
+              </TouchableOpacity>
+            </View>
+          </View>
+        );
+      })()}
+
+      {/* Stat insights */}
       <View style={styles.statsRow}>
         <View style={[styles.statCard, { backgroundColor: C.primaryLight }]}>
           <Text style={styles.statEmoji}>🧺</Text>
           <Text style={[styles.statNum, { color: C.primary }]}>{stats.total_items}</Text>
-          <Text style={styles.statLbl}>{isFr ? 'Produits' : 'Products'}</Text>
+          <Text style={styles.statLbl}>{isFr ? 'En stock' : 'In stock'}</Text>
         </View>
         <View style={[styles.statCard, { backgroundColor: '#FEF2F2' }]}>
           <Text style={styles.statEmoji}>⚠️</Text>
           <Text style={[styles.statNum, { color: C.red }]}>
-            {stats.expired + (stats.expiring_soon ?? 0)}
+            {expiredCount + urgentCount}
           </Text>
-          <Text style={styles.statLbl}>{isFr ? 'Urgents' : 'Urgent'}</Text>
+          <Text style={styles.statLbl}>{isFr ? 'À surveiller' : 'To watch'}</Text>
         </View>
-        <View style={[styles.statCard, { backgroundColor: '#F5F3FF' }]}>
-          <Text style={styles.statEmoji}>🍽️</Text>
-          <Text style={[styles.statNum, { color: '#7C3AED' }]}>{stats.consumed_this_week}</Text>
-          <Text style={styles.statLbl}>{isFr ? 'Consommés\ncette sem.' : 'Used\nthis week'}</Text>
+        <View style={[styles.statCard, { backgroundColor: '#F0FDF4' }]}>
+          <Text style={styles.statEmoji}>💶</Text>
+          <Text style={[styles.statNum, { color: '#16a34a' }]}>
+            ~{Math.round(stats.consumed_this_week * 2.5)}€
+          </Text>
+          <Text style={styles.statLbl}>{isFr ? 'Sauvés\ncette sem.' : 'Saved\nthis week'}</Text>
         </View>
       </View>
 
@@ -343,7 +406,10 @@ export default function HomeScreen() {
       <View style={styles.actionsRow}>
         <TouchableOpacity style={styles.scanBtnLarge} onPress={() => router.push('/scan')}>
           <Ionicons name="scan-outline" size={22} color="#fff" />
-          <Text style={styles.scanBtnLargeText}>{isFr ? 'Scanner un produit' : 'Scan a product'}</Text>
+          <View style={styles.scanBtnTextBlock}>
+            <Text style={styles.scanBtnLargeText}>{isFr ? 'Scanner un produit' : 'Scan a product'}</Text>
+            <Text style={styles.scanBtnSubText}>{isFr ? 'Code-barres, ticket ou date' : 'Barcode, receipt or date'}</Text>
+          </View>
         </TouchableOpacity>
         <View style={styles.actionsBtnsRow}>
           <TouchableOpacity style={styles.outlineBtn} onPress={() => router.push('/add-product' as any)}>
@@ -356,6 +422,27 @@ export default function HomeScreen() {
           </TouchableOpacity>
         </View>
       </View>
+
+      {/* À faire maintenant */}
+      {todoItems.length > 0 && (
+        <View style={styles.todoSection}>
+          <Text style={styles.todoSectionTitle}>
+            {isFr ? '✅ À faire maintenant' : '✅ To do now'}
+          </Text>
+          {todoItems.map((todo, idx) => (
+            <TouchableOpacity
+              key={idx}
+              style={styles.todoItem}
+              onPress={todo.action}
+              activeOpacity={0.7}
+            >
+              <Text style={styles.todoItemEmoji}>{todo.emoji}</Text>
+              <Text style={[styles.todoItemLabel, { color: todo.color }]}>{todo.label}</Text>
+              <Ionicons name="chevron-forward" size={14} color={todo.color} />
+            </TouchableOpacity>
+          ))}
+        </View>
+      )}
 
       {/* Réapprovisionner — scroll horizontal des produits récents */}
       {historyItems.length > 0 && (
@@ -491,32 +578,37 @@ const styles = StyleSheet.create({
   // ── Header ──
   header: {
     flexDirection: 'row',
-    alignItems: 'flex-start',
+    alignItems: 'center',
     paddingHorizontal: 20,
     paddingTop: 16,
     paddingBottom: 14,
     backgroundColor: '#fff',
-    overflow: 'hidden',
   },
   headerLeft: { flex: 1 },
-  greeting: { fontSize: 24, fontWeight: '800', color: '#1A1A1A', lineHeight: 30 },
-  heroMsg:  { fontSize: 13, color: C.textMid, marginTop: 3 },
+  greeting: { fontSize: 22, fontWeight: '800', color: '#1A1A1A', lineHeight: 28 },
   settingsBtn: {
     padding: 7, backgroundColor: '#F7F5F2', borderRadius: 10,
-    borderWidth: 1, borderColor: '#E8E5E0', marginTop: 2,
-    zIndex: 10,
+    borderWidth: 1, borderColor: '#E8E5E0',
   },
 
-  // Decorative illustration
-  illustration: {
-    width: 80, height: 60,
-    position: 'relative',
-    marginRight: 8,
-    marginTop: -4,
+  // ── Hero card ──
+  heroCard: {
+    marginHorizontal: 16,
+    marginTop: 12,
+    marginBottom: 4,
+    borderRadius: 16,
+    borderWidth: 1.5,
+    flexDirection: 'row',
+    alignItems: 'center',
+    paddingHorizontal: 14,
+    paddingVertical: 14,
+    gap: 12,
+    backgroundColor: '#fff',
   },
-  illustEmoji1: { position: 'absolute', right: 0,  top: 0,  fontSize: 38 },
-  illustEmoji2: { position: 'absolute', right: 28, top: 12, fontSize: 28 },
-  illustEmoji3: { position: 'absolute', right: 8,  top: 26, fontSize: 22 },
+  heroCardIcon: { flexShrink: 0 },
+  heroCardBody: { flex: 1, gap: 4 },
+  heroCardText: { fontSize: 14, fontWeight: '700', lineHeight: 19 },
+  heroCardCta:  { fontSize: 12, fontWeight: '600', opacity: 0.85, marginTop: 2 },
 
   // ── Offline ──
   offlineBanner: {
@@ -572,6 +664,8 @@ const styles = StyleSheet.create({
     elevation: 5,
   },
   scanBtnLargeText: { color: '#fff', fontSize: 16, fontWeight: '800', letterSpacing: 0.3 },
+  scanBtnTextBlock: { gap: 1 },
+  scanBtnSubText: { color: 'rgba(255,255,255,0.72)', fontSize: 11, fontWeight: '500' },
   actionsBtnsRow: {
     flexDirection: 'row',
     gap: 8,
@@ -589,6 +683,38 @@ const styles = StyleSheet.create({
     borderColor: '#E8E5E0',
   },
   outlineBtnText: { color: C.textMid, fontSize: 13, fontWeight: '600' },
+
+  // ── À faire maintenant ──
+  todoSection: {
+    backgroundColor: '#fff',
+    paddingHorizontal: 16,
+    paddingTop: 10,
+    paddingBottom: 12,
+    borderBottomWidth: 1,
+    borderBottomColor: '#F0EDE8',
+    gap: 6,
+  },
+  todoSectionTitle: {
+    fontSize: 11,
+    fontWeight: '700',
+    color: C.textLight,
+    textTransform: 'uppercase',
+    letterSpacing: 0.6,
+    marginBottom: 2,
+  },
+  todoItem: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 10,
+    paddingVertical: 9,
+    paddingHorizontal: 12,
+    backgroundColor: '#FAFAFA',
+    borderRadius: 10,
+    borderWidth: 1,
+    borderColor: '#F0EDE8',
+  },
+  todoItemEmoji: { fontSize: 16 },
+  todoItemLabel: { flex: 1, fontSize: 13, fontWeight: '600' },
 
   // ── History / Re-stock ──
   historySection: {
