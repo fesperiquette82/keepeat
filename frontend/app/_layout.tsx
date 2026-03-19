@@ -2,6 +2,7 @@ import { Slot, useRouter, useSegments } from 'expo-router';
 import { StatusBar } from 'expo-status-bar';
 import React, { useEffect } from 'react';
 import { View, StyleSheet } from 'react-native';
+import { GestureHandlerRootView } from 'react-native-gesture-handler';
 import ErrorBoundary from "../component/ErrorBoundary";
 import { useAuthStore } from '../store/authStore';
 import { useLanguageStore } from '../store/languageStore';
@@ -66,12 +67,14 @@ export default function RootLayout() {
   }, [user, isLoaded, segments]);
 
   return (
-    <ErrorBoundary>
-      <View style={styles.container}>
-        <StatusBar style="dark" />
-        <Slot />
-      </View>
-    </ErrorBoundary>
+    <GestureHandlerRootView style={{ flex: 1 }}>
+      <ErrorBoundary>
+        <View style={styles.container}>
+          <StatusBar style="dark" />
+          <Slot />
+        </View>
+      </ErrorBoundary>
+    </GestureHandlerRootView>
   );
 }
 
