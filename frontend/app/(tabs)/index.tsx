@@ -18,6 +18,7 @@ import { useStockStore, StockItem, HistoryItem } from '../../store/stockStore';
 import { useLanguageStore } from '../../store/languageStore';
 import { useAuthStore } from '../../store/authStore';
 import { parseISO, differenceInDays, format } from 'date-fns';
+import Swipeable from 'react-native-gesture-handler/Swipeable';
 import { fr as frLocale, enUS } from 'date-fns/locale';
 import { C, shadowSm } from '../../utils/theme';
 
@@ -160,81 +161,106 @@ export default function HomeScreen() {
       ? (expiry.color === C.red ? C.redLight : C.orangeLight)
       : C.primaryLight;
 
+    // Swipe droite → consommer (vert à gauche)
+    const leftActions = () => (
+      <View style={styles.swipeConsumeAction}>
+        <Ionicons name="checkmark-circle" size={28} color="#fff" />
+        <Text style={styles.swipeActionText}>{isFr ? 'Consommé' : 'Used'}</Text>
+      </View>
+    );
+
+    // Swipe gauche → jeter (rouge à droite)
+    const rightActions = () => (
+      <View style={styles.swipeThrowAction}>
+        <Ionicons name="trash" size={24} color="#fff" />
+        <Text style={styles.swipeActionText}>{isFr ? 'Jeté' : 'Thrown'}</Text>
+      </View>
+    );
+
     return (
-      <TouchableOpacity
+      <Swipeable
         key={item.id}
-        style={styles.card}
-        onPress={() => router.push({ pathname: '/edit-product', params: { id: item.id } })}
-        activeOpacity={0.88}
+        renderLeftActions={leftActions}
+        renderRightActions={rightActions}
+        onSwipeableOpen={(direction) => {
+          if (direction === 'left') markConsumed(item.id);
+          else markThrown(item.id);
+        }}
       >
-        {/* Thumbnail */}
-        {item.image_url ? (
-          <Image source={{ uri: item.image_url }} style={styles.cardImg} />
-        ) : (
-          <View style={[styles.cardImgPlaceholder, { backgroundColor: placeholderBg }]}>
-            <Text style={styles.cardImgEmoji}>{emoji}</Text>
-          </View>
-        )}
-
-        {/* Body */}
-        <View style={styles.cardBody}>
-          {/* Top row: name + menu */}
-          <View style={styles.cardTopRow}>
-            <Text style={styles.cardName} numberOfLines={1}>{item.name}</Text>
-            <TouchableOpacity
-              style={styles.menuBtn}
-              onPress={() => router.push({ pathname: '/edit-product', params: { id: item.id } })}
-              hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
-            >
-              <Ionicons name="ellipsis-horizontal" size={16} color={C.textLight} />
-            </TouchableOpacity>
-          </View>
-
-          {/* Brand */}
-          {item.brand ? <Text style={styles.cardBrand} numberOfLines={1}>{item.brand}</Text> : null}
-
-          {/* Expiry row */}
-          {expiry ? (
-            <View style={styles.cardExpiryRow}>
-              <View style={[styles.expiryDot, { backgroundColor: expiry.color }]} />
-              <Text style={[styles.expiryText, { color: expiry.color }]} numberOfLines={1}>
-                {expiry.text}
-              </Text>
-              <TouchableOpacity
-                style={styles.consumePill}
-                onPress={() => handleConsume(item)}
-              >
-                <Ionicons name="checkmark" size={12} color="#fff" />
-                <Text style={styles.consumePillText}>{isFr ? 'Consommé' : 'Consumed'}</Text>
-              </TouchableOpacity>
-            </View>
+        <TouchableOpacity
+          style={styles.card}
+          onPress={() => router.push({ pathname: '/edit-product', params: { id: item.id } })}
+          activeOpacity={0.88}
+        >
+          {/* Thumbnail */}
+          {item.image_url ? (
+            <Image source={{ uri: item.image_url }} style={styles.cardImg} />
           ) : (
-            <View style={styles.cardExpiryRow}>
-              <TouchableOpacity
-                style={[styles.consumePill, styles.consumePillGhost]}
-                onPress={() => handleConsume(item)}
-              >
-                <Ionicons name="checkmark" size={12} color={C.primary} />
-                <Text style={[styles.consumePillText, { color: C.primary }]}>
-                  {isFr ? 'Consommé' : 'Consumed'}
-                </Text>
-              </TouchableOpacity>
+            <View style={[styles.cardImgPlaceholder, { backgroundColor: placeholderBg }]}>
+              <Text style={styles.cardImgEmoji}>{emoji}</Text>
             </View>
           )}
 
-          {/* Date + throw */}
-          <View style={styles.cardBottomRow}>
-            {dateStr ? <Text style={styles.cardDate}>{dateStr}</Text> : <View />}
-            <TouchableOpacity
-              style={styles.throwBtn}
-              onPress={() => handleThrow(item)}
-              hitSlop={{ top: 6, bottom: 6, left: 6, right: 6 }}
-            >
-              <Ionicons name="trash-outline" size={13} color={C.textLight} />
-            </TouchableOpacity>
+          {/* Body */}
+          <View style={styles.cardBody}>
+            {/* Top row: name + menu */}
+            <View style={styles.cardTopRow}>
+              <Text style={styles.cardName} numberOfLines={1}>{item.name}</Text>
+              <TouchableOpacity
+                style={styles.menuBtn}
+                onPress={() => router.push({ pathname: '/edit-product', params: { id: item.id } })}
+                hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
+              >
+                <Ionicons name="ellipsis-horizontal" size={16} color={C.textLight} />
+              </TouchableOpacity>
+            </View>
+
+            {/* Brand */}
+            {item.brand ? <Text style={styles.cardBrand} numberOfLines={1}>{item.brand}</Text> : null}
+
+            {/* Expiry row */}
+            {expiry ? (
+              <View style={styles.cardExpiryRow}>
+                <View style={[styles.expiryDot, { backgroundColor: expiry.color }]} />
+                <Text style={[styles.expiryText, { color: expiry.color }]} numberOfLines={1}>
+                  {expiry.text}
+                </Text>
+                <TouchableOpacity
+                  style={styles.consumePill}
+                  onPress={() => handleConsume(item)}
+                >
+                  <Ionicons name="checkmark" size={12} color="#fff" />
+                  <Text style={styles.consumePillText}>{isFr ? 'Consommé' : 'Consumed'}</Text>
+                </TouchableOpacity>
+              </View>
+            ) : (
+              <View style={styles.cardExpiryRow}>
+                <TouchableOpacity
+                  style={[styles.consumePill, styles.consumePillGhost]}
+                  onPress={() => handleConsume(item)}
+                >
+                  <Ionicons name="checkmark" size={12} color={C.primary} />
+                  <Text style={[styles.consumePillText, { color: C.primary }]}>
+                    {isFr ? 'Consommé' : 'Consumed'}
+                  </Text>
+                </TouchableOpacity>
+              </View>
+            )}
+
+            {/* Date + throw */}
+            <View style={styles.cardBottomRow}>
+              {dateStr ? <Text style={styles.cardDate}>{dateStr}</Text> : <View />}
+              <TouchableOpacity
+                style={styles.throwBtn}
+                onPress={() => handleThrow(item)}
+                hitSlop={{ top: 6, bottom: 6, left: 6, right: 6 }}
+              >
+                <Ionicons name="trash-outline" size={13} color={C.textLight} />
+              </TouchableOpacity>
+            </View>
           </View>
-        </View>
-      </TouchableOpacity>
+        </TouchableOpacity>
+      </Swipeable>
     );
   };
 
@@ -296,18 +322,20 @@ export default function HomeScreen() {
 
       {/* Action buttons */}
       <View style={styles.actionsRow}>
-        <TouchableOpacity style={styles.scanBtn} onPress={() => router.push('/scan')}>
-          <Ionicons name="camera-outline" size={18} color="#fff" />
-          <Text style={styles.scanBtnText}>{isFr ? 'Scanner' : 'Scan'}</Text>
+        <TouchableOpacity style={styles.scanBtnLarge} onPress={() => router.push('/scan')}>
+          <Ionicons name="scan-outline" size={22} color="#fff" />
+          <Text style={styles.scanBtnLargeText}>{isFr ? 'Scanner un produit' : 'Scan a product'}</Text>
         </TouchableOpacity>
-        <TouchableOpacity style={styles.outlineBtn} onPress={() => router.push('/add-product' as any)}>
-          <Ionicons name="add" size={17} color={C.textMid} />
-          <Text style={styles.outlineBtnText}>{isFr ? 'Ajouter' : 'Add'}</Text>
-        </TouchableOpacity>
-        <TouchableOpacity style={styles.outlineBtn} onPress={() => router.push('/recipes' as any)}>
-          <Ionicons name="book-outline" size={15} color={C.textMid} />
-          <Text style={styles.outlineBtnText}>{isFr ? 'Recettes' : 'Recipes'}</Text>
-        </TouchableOpacity>
+        <View style={styles.actionsBtnsRow}>
+          <TouchableOpacity style={styles.outlineBtn} onPress={() => router.push('/add-product' as any)}>
+            <Ionicons name="add" size={17} color={C.textMid} />
+            <Text style={styles.outlineBtnText}>{isFr ? 'Ajouter' : 'Add'}</Text>
+          </TouchableOpacity>
+          <TouchableOpacity style={styles.outlineBtn} onPress={() => router.push('/recipes' as any)}>
+            <Ionicons name="book-outline" size={15} color={C.textMid} />
+            <Text style={styles.outlineBtnText}>{isFr ? 'Recettes' : 'Recipes'}</Text>
+          </TouchableOpacity>
+        </View>
       </View>
 
       {/* Réapprovisionner — scroll horizontal des produits récents */}
@@ -369,9 +397,16 @@ export default function HomeScreen() {
               onPress={() => setSelectedTab(tab.key)}
               activeOpacity={0.7}
             >
-              <Text style={[styles.tabText, active && styles.tabTextActive]}>
-                {isFr ? tab.labelFr : tab.labelEn}
-              </Text>
+              <View style={styles.tabLabelRow}>
+                <Text style={[styles.tabText, active && styles.tabTextActive]}>
+                  {isFr ? tab.labelFr : tab.labelEn}
+                </Text>
+                {tab.key === 'urgents' && urgentCount > 0 && (
+                  <View style={styles.urgentBadge}>
+                    <Text style={styles.urgentBadgeText}>{urgentCount}</Text>
+                  </View>
+                )}
+              </View>
               {active && <View style={styles.tabUnderline} />}
             </TouchableOpacity>
           );
@@ -495,7 +530,7 @@ const styles = StyleSheet.create({
 
   // ── Action buttons ──
   actionsRow: {
-    flexDirection: 'row',
+    flexDirection: 'column',
     paddingHorizontal: 16,
     paddingVertical: 12,
     gap: 8,
@@ -503,22 +538,25 @@ const styles = StyleSheet.create({
     borderBottomWidth: 1,
     borderBottomColor: '#F0EDE8',
   },
-  scanBtn: {
-    flex: 2,
+  scanBtnLarge: {
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'center',
-    gap: 6,
+    gap: 8,
     backgroundColor: C.primary,
     borderRadius: 22,
-    paddingVertical: 11,
+    paddingVertical: 15,
     shadowColor: C.primary,
-    shadowOffset: { width: 0, height: 3 },
-    shadowOpacity: 0.28,
-    shadowRadius: 6,
-    elevation: 4,
+    shadowOffset: { width: 0, height: 4 },
+    shadowOpacity: 0.32,
+    shadowRadius: 8,
+    elevation: 5,
   },
-  scanBtnText: { color: '#fff', fontSize: 14, fontWeight: '700' },
+  scanBtnLargeText: { color: '#fff', fontSize: 16, fontWeight: '800', letterSpacing: 0.3 },
+  actionsBtnsRow: {
+    flexDirection: 'row',
+    gap: 8,
+  },
   outlineBtn: {
     flex: 1,
     flexDirection: 'row',
@@ -722,4 +760,42 @@ const styles = StyleSheet.create({
     borderWidth: 1, borderColor: C.primaryMid,
   },
   motivationText: { fontSize: 13, color: '#166534', fontWeight: '600', textAlign: 'center' },
+
+  // ── Swipe actions ──
+  swipeConsumeAction: {
+    width: 90,
+    backgroundColor: C.primary,
+    justifyContent: 'center',
+    alignItems: 'center',
+    gap: 4,
+    borderTopLeftRadius: 16,
+    borderBottomLeftRadius: 16,
+  },
+  swipeThrowAction: {
+    width: 90,
+    backgroundColor: C.red,
+    justifyContent: 'center',
+    alignItems: 'center',
+    gap: 4,
+    borderTopRightRadius: 16,
+    borderBottomRightRadius: 16,
+  },
+  swipeActionText: { color: '#fff', fontSize: 11, fontWeight: '700' },
+
+  // ── Urgent badge sur onglet ──
+  tabLabelRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 5,
+  },
+  urgentBadge: {
+    minWidth: 18,
+    height: 18,
+    borderRadius: 9,
+    backgroundColor: C.red,
+    alignItems: 'center',
+    justifyContent: 'center',
+    paddingHorizontal: 4,
+  },
+  urgentBadgeText: { color: '#fff', fontSize: 10, fontWeight: '800' },
 });

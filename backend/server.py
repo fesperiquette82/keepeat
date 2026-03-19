@@ -1441,29 +1441,54 @@ async def get_recalls_status(
 # Recettes (Spoonacular)
 # -----------------------------------------------------------------------------
 
+_FRIGO_CATS   = ["frais", "proteines", "legumes", "boissons"]
+_PLACARD_CATS = ["feculents", "desserts", "epicerie", "autres"]
+
+
 @api_router.get("/recipes/suggestions")
 async def get_recipe_suggestions(
+    recipe_filter: str = Query("urgent", alias="filter"),
     current_user: Dict[str, Any] = Depends(_get_current_user),
 ):
-    """Suggère des recettes basées sur les produits actifs expirant dans les 7 prochains jours."""
+    """Suggère des recettes basées sur les produits actifs du stock.
+    filter: urgent (≤7j) | all (tout le stock) | frigo | placard
+    """
     if not SPOONACULAR_KEY:
         return []
 
     uid = current_user["id"]
-    in_7_days = (_utc_now().date() + timedelta(days=7)).strftime("%Y-%m-%d")
     today_str = _utc_now().strftime("%Y-%m-%d")
 
-    cursor = stock_col.find({
-        "user_id": uid,
-        "status": "active",
-        "expiry_date": {"$nin": [None, ""], "$gte": today_str, "$lte": in_7_days},
-    }).sort("expiry_date", 1).limit(10)
-    items = await cursor.to_list(length=10)
+    match: dict = {"user_id": uid, "status": "active"}
+    if recipe_filter == "urgent":
+        in_7_days = (_utc_now().date() + timedelta(days=7)).strftime("%Y-%m-%d")
+        match["expiry_date"] = {"$nin": [None, ""], "$gte": today_str, "$lte": in_7_days}
+    elif recipe_filter == "frigo":
+        match["food_category"] = {"$in": _FRIGO_CATS}
+    elif recipe_filter == "placard":
+        match["food_category"] = {"$in": _PLACARD_CATS}
+    # "all" : aucun filtre supplémentaire — tout le stock actif
+
+    # Tri : produits avec date de péremption en premier (les plus urgents),
+    # puis produits sans date. MongoDB met les null avant les dates en tri
+    # croissant — on corrige avec un champ _no_expiry calculé.
+    pipeline = [
+        {"$match": match},
+        {"$addFields": {
+            "_no_expiry": {"$cond": [
+                {"$or": [{"$eq": ["$expiry_date", None]}, {"$eq": ["$expiry_date", ""]}]},
+                1, 0,
+            ]},
+        }},
+        {"$sort": {"_no_expiry": 1, "expiry_date": 1}},
+        {"$limit": 15},
+    ]
+    items = await stock_col.aggregate(pipeline).to_list(length=15)
 
     if not items:
         return []
 
-    ingredients = ",".join(item["name"] for item in items)
+    ingredients = ",".join(item["name"] for item in items[:10])
 
     try:
         async with httpx.AsyncClient(timeout=15) as http:

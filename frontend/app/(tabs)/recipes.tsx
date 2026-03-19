@@ -36,6 +36,27 @@ const FILTER_TABS: { key: FilterTab; labelFr: string; labelEn: string }[] = [
   { key: 'placard', labelFr: 'Placard', labelEn: 'Pantry' },
 ];
 
+const TAB_TO_FILTER: Record<FilterTab, string> = {
+  tous:    'all',
+  urgents: 'urgent',
+  frigo:   'frigo',
+  placard: 'placard',
+};
+
+const SECTION_TITLES: Record<FilterTab, { fr: string; en: string }> = {
+  tous:    { fr: 'Recettes avec votre stock 🧺',    en: 'Recipes from your stock 🧺'      },
+  urgents: { fr: 'Recettes avec vos urgences 🗓️',  en: 'Recipes with your urgent items 🗓️' },
+  frigo:   { fr: 'Recettes avec le frigo ❄️',       en: 'Fridge recipes ❄️'                },
+  placard: { fr: 'Recettes avec le placard 🏪',     en: 'Pantry recipes 🏪'                },
+};
+
+const EMPTY_TEXTS: Record<FilterTab, { fr: string; en: string }> = {
+  tous:    { fr: 'Votre stock est vide ou aucune recette trouvée.', en: 'Your stock is empty or no recipes found.'   },
+  urgents: { fr: 'Aucun produit urgent. Bravo ! 🎉',               en: 'No urgent items. Well done! 🎉'             },
+  frigo:   { fr: 'Aucun produit au frigo dans le stock.',           en: 'No fridge products in your stock.'          },
+  placard: { fr: 'Aucun produit au placard dans le stock.',         en: 'No pantry products in your stock.'          },
+};
+
 export default function RecipesScreen() {
   const { token } = useAuthStore();
   const { language } = useLanguageStore();
@@ -49,12 +70,13 @@ export default function RecipesScreen() {
 
   const t = (fr: string, en: string) => isFr ? fr : en;
 
-  const fetchRecipes = useCallback(async (silent = false) => {
+  const fetchRecipes = useCallback(async (tab: FilterTab, silent = false) => {
     if (!token) return;
     if (!silent) setIsLoading(true);
     setError(null);
     try {
-      const res = await axios.get(buildApiUrl('/api/recipes/suggestions'), {
+      const filter = TAB_TO_FILTER[tab];
+      const res = await axios.get(buildApiUrl(`/api/recipes/suggestions?filter=${filter}`), {
         headers: { Authorization: `Bearer ${token}` },
       });
       setRecipes(res.data);
@@ -69,11 +91,11 @@ export default function RecipesScreen() {
     }
   }, [token, language]);
 
-  useEffect(() => { fetchRecipes(); }, [fetchRecipes]);
+  useEffect(() => { fetchRecipes(activeTab); }, [fetchRecipes, activeTab]);
 
   const handleRefresh = () => {
     setIsRefreshing(true);
-    fetchRecipes(true);
+    fetchRecipes(activeTab, true);
   };
 
   const openRecipe = (url: string) => {
@@ -134,10 +156,7 @@ export default function RecipesScreen() {
           <Text style={styles.emptyEmoji}>🍳</Text>
           <Text style={styles.emptyTitle}>{t('Aucune suggestion', 'No suggestions')}</Text>
           <Text style={styles.emptyText}>
-            {t(
-              'Ajoutez des produits avec une date de péremption proche pour obtenir des idées de recettes.',
-              'Add products with a near expiry date to get recipe ideas.',
-            )}
+            {isFr ? EMPTY_TEXTS[activeTab].fr : EMPTY_TEXTS[activeTab].en}
           </Text>
         </View>
       ) : (
@@ -151,11 +170,8 @@ export default function RecipesScreen() {
           {/* Section header */}
           <View style={styles.sectionHeader}>
             <Text style={styles.sectionTitle}>
-              {t('Recettes avec vos urgences', 'Recipes with your urgent items')} 🗓️
+              {isFr ? SECTION_TITLES[activeTab].fr : SECTION_TITLES[activeTab].en}
             </Text>
-            <TouchableOpacity hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}>
-              <Ionicons name="ellipsis-horizontal" size={16} color={C.textLight} />
-            </TouchableOpacity>
           </View>
 
           {recipes.map((recipe) => (
