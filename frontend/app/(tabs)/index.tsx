@@ -284,7 +284,7 @@ export default function HomeScreen() {
                   onPress={() => handleConsume(item)}
                 >
                   <Ionicons name="checkmark" size={12} color="#fff" />
-                  <Text style={styles.consumePillText}>{isFr ? 'Consommé' : 'Consumed'}</Text>
+                  <Text style={styles.consumePillText}>{isFr ? 'Consommer' : 'Mark used'}</Text>
                 </TouchableOpacity>
               </View>
             ) : (
@@ -295,7 +295,7 @@ export default function HomeScreen() {
                 >
                   <Ionicons name="checkmark" size={12} color={C.primary} />
                   <Text style={[styles.consumePillText, { color: C.primary }]}>
-                    {isFr ? 'Consommé' : 'Consumed'}
+                    {isFr ? 'Consommer' : 'Mark used'}
                   </Text>
                 </TouchableOpacity>
               </View>
