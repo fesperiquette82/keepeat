@@ -20,6 +20,7 @@ from bson import ObjectId
 from dotenv import load_dotenv
 from fastapi import APIRouter, Depends, FastAPI, Header, HTTPException, Query, Request, status
 from fastapi.middleware.cors import CORSMiddleware
+from fastapi.responses import HTMLResponse
 from fastapi.security import HTTPAuthorizationCredentials, HTTPBearer
 from jose import JWTError, jwt
 from motor.motor_asyncio import AsyncIOMotorClient
@@ -973,12 +974,12 @@ async def register(body: UserCreate):
     }
     await users_col.insert_one(doc)
 
-    deep_link = f"keepeat://verify-email?token={verification_token}"
+    redirect_link = f"{_BACKEND_URL}/redirect/verify-email?token={verification_token}"
     html_body = f"""
     <div style="font-family:Arial,sans-serif;max-width:600px;margin:auto;padding:24px">
       <h2 style="color:#4CAF50">Bienvenue sur KeepEat !</h2>
       <p>Merci de vous être inscrit. Cliquez sur le bouton ci-dessous pour confirmer votre adresse email.</p>
-      <a href="{deep_link}" style="display:inline-block;padding:14px 28px;background:#4CAF50;color:#fff;text-decoration:none;border-radius:8px;font-weight:bold;margin:16px 0">
+      <a href="{redirect_link}" style="display:inline-block;padding:14px 28px;background:#4CAF50;color:#fff;text-decoration:none;border-radius:8px;font-weight:bold;margin:16px 0">
         Confirmer mon email
       </a>
       <p style="color:#888;font-size:12px">Ce lien expire dans 24 heures. Si vous n'avez pas créé de compte, ignorez cet email.</p>
@@ -1057,12 +1058,12 @@ async def resend_verification(body: ResendVerificationBody):
                 "verification_token_exp": (_utc_now() + timedelta(hours=24)).isoformat(),
             }},
         )
-        deep_link = f"keepeat://verify-email?token={new_token}"
+        redirect_link = f"{_BACKEND_URL}/redirect/verify-email?token={new_token}"
         html_body = f"""
         <div style="font-family:Arial,sans-serif;max-width:600px;margin:auto;padding:24px">
           <h2 style="color:#4CAF50">Confirmation de votre email KeepEat</h2>
           <p>Voici votre nouveau lien de confirmation :</p>
-          <a href="{deep_link}" style="display:inline-block;padding:14px 28px;background:#4CAF50;color:#fff;text-decoration:none;border-radius:8px;font-weight:bold;margin:16px 0">
+          <a href="{redirect_link}" style="display:inline-block;padding:14px 28px;background:#4CAF50;color:#fff;text-decoration:none;border-radius:8px;font-weight:bold;margin:16px 0">
             Confirmer mon email
           </a>
           <p style="color:#888;font-size:12px">Ce lien expire dans 24 heures.</p>
@@ -1085,12 +1086,12 @@ async def forgot_password(body: ForgotPasswordBody):
                 "reset_token_exp": (_utc_now() + timedelta(hours=1)).isoformat(),
             }},
         )
-        deep_link = f"keepeat://reset-password?token={reset_token}"
+        redirect_link = f"{_BACKEND_URL}/redirect/reset-password?token={reset_token}"
         html_body = f"""
         <div style="font-family:Arial,sans-serif;max-width:600px;margin:auto;padding:24px">
           <h2 style="color:#4CAF50">Réinitialisation de votre mot de passe KeepEat</h2>
           <p>Vous avez demandé à réinitialiser votre mot de passe. Cliquez ci-dessous :</p>
-          <a href="{deep_link}" style="display:inline-block;padding:14px 28px;background:#FF6B35;color:#fff;text-decoration:none;border-radius:8px;font-weight:bold;margin:16px 0">
+          <a href="{redirect_link}" style="display:inline-block;padding:14px 28px;background:#FF6B35;color:#fff;text-decoration:none;border-radius:8px;font-weight:bold;margin:16px 0">
             Réinitialiser mon mot de passe
           </a>
           <p style="color:#888;font-size:12px">Ce lien expire dans 1 heure. Si vous n'avez pas fait cette demande, ignorez cet email.</p>
@@ -2046,6 +2047,63 @@ async def get_predictions(
         {"id": str(i["_id"]), "name": i["name"], "category": i.get("food_category", "")}
         for i in items
     ]
+
+
+# Redirect pages (deep link fallback for email clients)
+# -----------------------------------------------------------------------------
+_BACKEND_URL = os.getenv("BACKEND_URL", "https://keepeat-backend.onrender.com")
+
+
+def _redirect_html(title: str, icon: str, heading: str, description: str, deep_link: str) -> str:
+    return f"""<!DOCTYPE html>
+<html lang="fr"><head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>{title}</title>
+  <style>
+    *{{box-sizing:border-box;margin:0;padding:0}}
+    body{{font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif;background:#0a0a0a;color:#fff;display:flex;align-items:center;justify-content:center;min-height:100vh;padding:24px}}
+    .card{{background:#111;border:1px solid #2a2a2a;border-radius:16px;padding:40px 32px;max-width:420px;width:100%;text-align:center}}
+    .icon{{font-size:52px;margin-bottom:20px}}
+    h1{{font-size:22px;font-weight:700;margin-bottom:12px}}
+    p{{color:#888;font-size:14px;line-height:1.6;margin-bottom:28px}}
+    .btn{{display:block;background:#22c55e;color:#fff;text-decoration:none;border-radius:12px;padding:16px 24px;font-weight:700;font-size:16px;margin-bottom:16px}}
+    .note{{color:#555;font-size:12px;line-height:1.5}}
+  </style>
+</head><body>
+  <div class="card">
+    <div class="icon">{icon}</div>
+    <h1>{heading}</h1>
+    <p>{description}</p>
+    <a href="{deep_link}" class="btn">Ouvrir KeepEat</a>
+    <p class="note">Si l'application ne s'ouvre pas automatiquement, assurez-vous qu'elle est installée sur votre appareil mobile.</p>
+  </div>
+  <script>setTimeout(function(){{window.location.href="{deep_link}";}},600);</script>
+</body></html>"""
+
+
+@app.get("/redirect/reset-password", response_class=HTMLResponse, include_in_schema=False)
+async def redirect_reset_password(token: str = Query(...)):
+    deep_link = f"keepeat://reset-password?token={token}"
+    return _redirect_html(
+        title="KeepEat — Réinitialisation du mot de passe",
+        icon="🔒",
+        heading="Réinitialiser votre mot de passe",
+        description="Cliquez sur le bouton ci-dessous pour ouvrir l'application KeepEat et choisir un nouveau mot de passe.",
+        deep_link=deep_link,
+    )
+
+
+@app.get("/redirect/verify-email", response_class=HTMLResponse, include_in_schema=False)
+async def redirect_verify_email(token: str = Query(...)):
+    deep_link = f"keepeat://verify-email?token={token}"
+    return _redirect_html(
+        title="KeepEat — Confirmation de l'email",
+        icon="✉️",
+        heading="Confirmer votre adresse email",
+        description="Cliquez sur le bouton ci-dessous pour ouvrir l'application KeepEat et confirmer votre adresse email.",
+        deep_link=deep_link,
+    )
 
 
 # Wire routes
