@@ -10,6 +10,8 @@ on:
 jobs:
   build:
     runs-on: ubuntu-latest
+    env:
+      FORCE_JAVASCRIPT_ACTIONS_TO_NODE24: true
 
     steps:
       - name: Checkout repository
@@ -18,7 +20,7 @@ jobs:
       - name: Setup Node.js
         uses: actions/setup-node@v4
         with:
-          node-version: "20"
+          node-version: "22"
           cache: "npm"
           cache-dependency-path: frontend/package-lock.json
 
@@ -86,11 +88,12 @@ jobs:
           EXPO_PUBLIC_BACKEND_URL: ${{ secrets.EXPO_PUBLIC_BACKEND_URL }}
         run: ./gradlew assembleRelease --no-daemon
 
-      - name: Upload APK artifact (debug)
-        uses: actions/upload-artifact@v4
-        with:
-          name: app-debug-apk
-          path: frontend/android/app/build/outputs/apk/debug/app-debug.apk
+      # Upload debug APK (commenté car le build debug est désactivé ci-dessus)
+      # - name: Upload APK artifact (debug)
+      #   uses: actions/upload-artifact@v4
+      #   with:
+      #     name: app-debug-apk
+      #     path: frontend/android/app/build/outputs/apk/debug/app-debug.apk
 
       - name: Upload APK artifact (release)
         uses: actions/upload-artifact@v4
