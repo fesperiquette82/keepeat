@@ -1,5 +1,5 @@
 
-import React, { useEffect, useState, useCallback } from 'react';
+import React, { useEffect, useState, useCallback, useMemo } from 'react';
 import {
   View,
   Text,
@@ -17,6 +17,7 @@ import axios from 'axios';
 import { useRouter } from 'expo-router';
 import { useAuthStore } from '../../store/authStore';
 import { useLanguageStore } from '../../store/languageStore';
+import { useStockStore } from '../../store/stockStore';
 import { buildApiUrl } from '../../utils/config';
 import { C, shadowSm } from '../../utils/theme';
 
@@ -63,6 +64,7 @@ export default function RecipesScreen() {
   const router = useRouter();
   const { token } = useAuthStore();
   const { language } = useLanguageStore();
+  const { items } = useStockStore();
   const isFr = language === 'fr';
 
   const [recipes, setRecipes]         = useState<RecipeSuggestion[]>([]);
@@ -72,6 +74,26 @@ export default function RecipesScreen() {
   const [activeTab, setActiveTab]     = useState<FilterTab>('tous');
 
   const t = (fr: string, en: string) => isFr ? fr : en;
+
+  // Produits urgents (≤7 jours) pour la bannière contextuelle
+  const urgentItems = useMemo(() => {
+    const now = new Date();
+    now.setHours(0, 0, 0, 0);
+    return items
+      .filter(item => {
+        if (!item.expiry_date) return false;
+        const exp = new Date(item.expiry_date);
+        exp.setHours(0, 0, 0, 0);
+        const diff = Math.round((exp.getTime() - now.getTime()) / 86400000);
+        return diff <= 7;
+      })
+      .sort((a, b) => {
+        const da = new Date(a.expiry_date!).getTime();
+        const db = new Date(b.expiry_date!).getTime();
+        return da - db;
+      })
+      .slice(0, 4);
+  }, [items]);
 
   const fetchRecipes = useCallback(async (tab: FilterTab, silent = false) => {
     if (!token) return;
@@ -150,7 +172,7 @@ export default function RecipesScreen() {
         <View style={styles.center}>
           <Ionicons name="cloud-offline-outline" size={48} color="#ccc" />
           <Text style={styles.errorText}>{error}</Text>
-          <TouchableOpacity style={styles.retryBtn} onPress={() => fetchRecipes()}>
+          <TouchableOpacity style={styles.retryBtn} onPress={() => fetchRecipes(activeTab)}>
             <Text style={styles.retryBtnText}>{t('Réessayer', 'Retry')}</Text>
           </TouchableOpacity>
         </View>
@@ -198,6 +220,35 @@ export default function RecipesScreen() {
             <RefreshControl refreshing={isRefreshing} onRefresh={handleRefresh} tintColor={C.primary} />
           }
         >
+          {/* Bannière contextuelle urgents */}
+          {activeTab === 'urgents' && urgentItems.length > 0 && !recipes[0]?.is_fallback && (
+            <View style={styles.urgentBanner}>
+              <Ionicons name="time-outline" size={15} color={C.orange} />
+              <View style={styles.urgentBannerBody}>
+                <Text style={styles.urgentBannerLabel}>
+                  {isFr ? 'À utiliser avant expiration :' : 'To use before expiry:'}
+                </Text>
+                <Text style={styles.urgentBannerNames}>
+                  {urgentItems.map(item => {
+                    const now = new Date();
+                    now.setHours(0, 0, 0, 0);
+                    const exp = new Date(item.expiry_date!);
+                    exp.setHours(0, 0, 0, 0);
+                    const d = Math.round((exp.getTime() - now.getTime()) / 86400000);
+                    const tag = d < 0
+                      ? (isFr ? 'périmé' : 'expired')
+                      : d === 0
+                        ? (isFr ? "aujourd'hui" : 'today')
+                        : d === 1
+                          ? (isFr ? 'demain' : 'tomorrow')
+                          : (isFr ? `dans ${d}j` : `in ${d}d`);
+                    return `${item.name.split(' ').slice(0, 2).join(' ')} (${tag})`;
+                  }).join('  ·  ')}
+                </Text>
+              </View>
+            </View>
+          )}
+
           {/* Section header */}
           {recipes[0]?.is_fallback ? (
             <View style={[styles.sectionHeader, styles.fallbackHeader]}>
@@ -418,4 +469,21 @@ const styles = StyleSheet.create({
     backgroundColor: C.primaryLight,
   },
   viewBtnText: { fontSize: 12, color: C.primary, fontWeight: '600' },
+
+  // ── Urgent context banner ──
+  urgentBanner: {
+    flexDirection: 'row',
+    alignItems: 'flex-start',
+    gap: 8,
+    backgroundColor: '#FFF7ED',
+    borderWidth: 1,
+    borderColor: '#FED7AA',
+    borderRadius: 12,
+    paddingHorizontal: 12,
+    paddingVertical: 10,
+    marginBottom: 10,
+  },
+  urgentBannerBody: { flex: 1, gap: 3 },
+  urgentBannerLabel: { fontSize: 12, fontWeight: '700', color: C.orange },
+  urgentBannerNames: { fontSize: 12, color: '#92400e', lineHeight: 18 },
 });

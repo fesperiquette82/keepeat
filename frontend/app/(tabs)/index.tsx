@@ -272,34 +272,24 @@ export default function HomeScreen() {
             {/* Brand */}
             {item.brand ? <Text style={styles.cardBrand} numberOfLines={1}>{item.brand}</Text> : null}
 
-            {/* Expiry row */}
+            {/* Expiry row — pill uniquement si ≤1 jour */}
             {expiry ? (
               <View style={styles.cardExpiryRow}>
                 <View style={[styles.expiryDot, { backgroundColor: expiry.color }]} />
                 <Text style={[styles.expiryText, { color: expiry.color }]} numberOfLines={1}>
                   {expiry.text}
                 </Text>
-                <TouchableOpacity
-                  style={styles.consumePill}
-                  onPress={() => handleConsume(item)}
-                >
-                  <Ionicons name="checkmark" size={12} color="#fff" />
-                  <Text style={styles.consumePillText}>{isFr ? 'Consommer' : 'Mark used'}</Text>
-                </TouchableOpacity>
+                {(getDaysUntil(item.expiry_date) ?? 99) <= 1 && (
+                  <TouchableOpacity
+                    style={styles.consumePill}
+                    onPress={() => handleConsume(item)}
+                  >
+                    <Ionicons name="checkmark" size={12} color="#fff" />
+                    <Text style={styles.consumePillText}>{isFr ? 'Consommer' : 'Mark used'}</Text>
+                  </TouchableOpacity>
+                )}
               </View>
-            ) : (
-              <View style={styles.cardExpiryRow}>
-                <TouchableOpacity
-                  style={[styles.consumePill, styles.consumePillGhost]}
-                  onPress={() => handleConsume(item)}
-                >
-                  <Ionicons name="checkmark" size={12} color={C.primary} />
-                  <Text style={[styles.consumePillText, { color: C.primary }]}>
-                    {isFr ? 'Consommer' : 'Mark used'}
-                  </Text>
-                </TouchableOpacity>
-              </View>
-            )}
+            ) : null}
 
             {/* Date + throw */}
             <View style={styles.cardBottomRow}>
@@ -378,29 +368,6 @@ export default function HomeScreen() {
           </View>
         );
       })()}
-
-      {/* Stat insights */}
-      <View style={styles.statsRow}>
-        <View style={[styles.statCard, { backgroundColor: C.primaryLight }]}>
-          <Text style={styles.statEmoji}>🧺</Text>
-          <Text style={[styles.statNum, { color: C.primary }]}>{stats.total_items}</Text>
-          <Text style={styles.statLbl}>{isFr ? 'En stock' : 'In stock'}</Text>
-        </View>
-        <View style={[styles.statCard, { backgroundColor: '#FEF2F2' }]}>
-          <Text style={styles.statEmoji}>⚠️</Text>
-          <Text style={[styles.statNum, { color: C.red }]}>
-            {expiredCount + urgentCount}
-          </Text>
-          <Text style={styles.statLbl}>{isFr ? 'À surveiller' : 'To watch'}</Text>
-        </View>
-        <View style={[styles.statCard, { backgroundColor: '#F0FDF4' }]}>
-          <Text style={styles.statEmoji}>💶</Text>
-          <Text style={[styles.statNum, { color: '#16a34a' }]}>
-            ~{Math.round(stats.consumed_this_week * 2.5)}€
-          </Text>
-          <Text style={styles.statLbl}>{isFr ? 'Sauvés\ncette sem.' : 'Saved\nthis week'}</Text>
-        </View>
-      </View>
 
       {/* Action buttons */}
       <View style={styles.actionsRow}>
