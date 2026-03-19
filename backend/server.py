@@ -1452,6 +1452,13 @@ _FALLBACK_INGREDIENTS: dict[str, list[str]] = {
     "placard": ["pasta", "rice", "lentils"],
 }
 
+# Recettes de secours absolu — utilisées quand TheMealDB est complètement inaccessible
+_EMERGENCY_RECIPES: list[dict] = [
+    {"id": -1, "title": "Pâtes à l'ail et huile d'olive",  "image": "", "usedIngredients": [], "missedIngredients": [], "sourceUrl": "https://www.themealdb.com", "is_fallback": True},
+    {"id": -2, "title": "Omelette aux herbes fraîches",      "image": "", "usedIngredients": [], "missedIngredients": [], "sourceUrl": "https://www.themealdb.com", "is_fallback": True},
+    {"id": -3, "title": "Riz sauté aux légumes de saison",  "image": "", "usedIngredients": [], "missedIngredients": [], "sourceUrl": "https://www.themealdb.com", "is_fallback": True},
+]
+
 # Fallback par catégorie → ingrédient anglais TheMealDB
 _CATEGORY_TO_EN: dict[str, str] = {
     "frais":     "milk",
@@ -1592,7 +1599,7 @@ async def get_recipe_suggestions(
             await asyncio.gather(*[_fetch_filter(http, name) for name in ingredient_names])
     except Exception as exc:
         logger.warning("TheMealDB filter gather error: %s", exc)
-        return []
+        # Ne pas return ici — laisser le fallback prendre le relais
 
     if not meal_counts:
         # TheMealDB n'a rien retourné pour nos ingrédients réels (timeout Render / rate-limit).
@@ -1603,26 +1610,12 @@ async def get_recipe_suggestions(
         ingredient_names = fallback_ings
         try:
             async with httpx.AsyncClient(timeout=15) as http2:
-                async def _fetch_filter2(client: httpx.AsyncClient, ingredient: str) -> None:
-                    try:
-                        r = await client.get(
-                            "https://www.themealdb.com/api/json/v1/1/filter.php",
-                            params={"i": ingredient},
-                        )
-                        if r.status_code == 200:
-                            for m in (r.json().get("meals") or []):
-                                mid = m.get("idMeal", "")
-                                if mid:
-                                    meal_counts[mid] = meal_counts.get(mid, 0) + 1
-                    except Exception as e:
-                        logger.warning("TheMealDB fallback filter(%s) error: %s", ingredient, e)
-                await asyncio.gather(*[_fetch_filter2(http2, name) for name in ingredient_names])
+                await asyncio.gather(*[_fetch_filter(http2, name) for name in ingredient_names])
         except Exception as exc:
             logger.warning("TheMealDB fallback gather error: %s", exc)
-            return []
         if not meal_counts:
-            logger.warning("TheMealDB: no results even with fallback ingredients=%s", ingredient_names)
-            return []
+            logger.warning("TheMealDB: complètement inaccessible, retour recettes d'urgence")
+            return _EMERGENCY_RECIPES
 
     # ── Étape 2 : top 5 repas, récupérer les détails en parallèle ──
     top_ids = sorted(meal_counts, key=lambda k: meal_counts[k], reverse=True)[:5]
