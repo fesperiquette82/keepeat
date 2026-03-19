@@ -949,8 +949,7 @@ async def health():
 # -----------------------------------------------------------------------------
 
 @api_router.post("/auth/register", response_model=RegisterResponse, status_code=201)
-@limiter.limit("5/minute")
-async def register(request: Request, body: UserCreate):
+async def register(body: UserCreate):
     _validate_password(body.password)
 
     existing = await users_col.find_one({"email": body.email.lower()})
@@ -987,8 +986,7 @@ async def register(request: Request, body: UserCreate):
 
 
 @api_router.post("/auth/login", response_model=TokenResponse)
-@limiter.limit("10/minute")
-async def login(request: Request, body: UserLogin):
+async def login(body: UserLogin):
     doc = await users_col.find_one({"email": body.email.lower()})
     if not doc or not _verify_password(body.password, doc["hashed_password"]):
         raise HTTPException(status_code=401, detail="Invalid email or password")
@@ -1044,8 +1042,7 @@ async def verify_email(body: VerifyEmailBody):
 
 
 @api_router.post("/auth/resend-verification")
-@limiter.limit("3/minute")
-async def resend_verification(request: Request, body: ResendVerificationBody):
+async def resend_verification(body: ResendVerificationBody):
     doc = await users_col.find_one({"email": body.email.lower(), "email_verified": False})
     if doc:
         new_token = secrets.token_urlsafe(32)
@@ -1073,8 +1070,7 @@ async def resend_verification(request: Request, body: ResendVerificationBody):
 
 
 @api_router.post("/auth/forgot-password")
-@limiter.limit("3/minute")
-async def forgot_password(request: Request, body: ForgotPasswordBody):
+async def forgot_password(body: ForgotPasswordBody):
     doc = await users_col.find_one({"email": body.email.lower()})
     if doc:
         reset_token = secrets.token_urlsafe(32)
@@ -1101,8 +1097,7 @@ async def forgot_password(request: Request, body: ForgotPasswordBody):
 
 
 @api_router.post("/auth/reset-password")
-@limiter.limit("5/minute")
-async def reset_password(request: Request, body: ResetPasswordBody):
+async def reset_password(body: ResetPasswordBody):
     _validate_password(body.new_password)
 
     doc = await users_col.find_one({"reset_token": body.token})
