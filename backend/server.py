@@ -1450,12 +1450,9 @@ async def get_recipe_suggestions(
     recipe_filter: str = Query("urgent", alias="filter"),
     current_user: Dict[str, Any] = Depends(_get_current_user),
 ):
-    """Suggère des recettes basées sur les produits actifs du stock.
-    filter: urgent (≤7j) | all (tout le stock) | frigo | placard
+    """Suggère des recettes via TheMealDB (gratuit, sans clé API).
+    filter: urgent (≤7j) | all | frigo | placard
     """
-    if not SPOONACULAR_KEY:
-        return []
-
     uid = current_user["id"]
     today_str = _utc_now().strftime("%Y-%m-%d")
 
@@ -1467,11 +1464,8 @@ async def get_recipe_suggestions(
         match["food_category"] = {"$in": _FRIGO_CATS}
     elif recipe_filter == "placard":
         match["food_category"] = {"$in": _PLACARD_CATS}
-    # "all" : aucun filtre supplémentaire — tout le stock actif
+    # "all" : aucun filtre supplémentaire
 
-    # Tri : produits avec date de péremption en premier (les plus urgents),
-    # puis produits sans date. MongoDB met les null avant les dates en tri
-    # croissant — on corrige avec un champ _no_expiry calculé.
     pipeline = [
         {"$match": match},
         {"$addFields": {
@@ -1488,55 +1482,68 @@ async def get_recipe_suggestions(
     if not items:
         return []
 
-    ingredients = ",".join(item["name"] for item in items[:10])
+    ingredient_names = [item["name"] for item in items[:5]]
+
+    # ── Étape 1 : pour chaque ingrédient, récupérer les repas correspondants ──
+    meal_counts: dict[str, int] = {}
+
+    async def _fetch_filter(client: httpx.AsyncClient, ingredient: str) -> None:
+        try:
+            r = await client.get(
+                "https://www.themealdb.com/api/json/v1/1/filter.php",
+                params={"i": ingredient},
+            )
+            if r.status_code == 200:
+                for m in (r.json().get("meals") or []):
+                    mid = m.get("idMeal", "")
+                    if mid:
+                        meal_counts[mid] = meal_counts.get(mid, 0) + 1
+        except Exception:
+            pass
 
     try:
-        async with httpx.AsyncClient(timeout=15) as http:
-            r = await http.get(
-                "https://api.spoonacular.com/recipes/findByIngredients",
-                params={
-                    "ingredients": ingredients,
-                    "number": 5,
-                    "ranking": 2,
-                    "ignorePantry": "true",
-                    "apiKey": SPOONACULAR_KEY,
-                },
-            )
-            if r.status_code != 200:
-                logger.warning("Spoonacular findByIngredients returned %s", r.status_code)
-                return []
-            recipes_raw = r.json()
-
-        results = []
-        for rec in recipes_raw:
-            recipe_id = rec.get("id")
-            source_url = f"https://spoonacular.com/recipes/{recipe_id}"
-            # Récupérer l'URL source réelle
-            try:
-                async with httpx.AsyncClient(timeout=10) as http2:
-                    info_r = await http2.get(
-                        f"https://api.spoonacular.com/recipes/{recipe_id}/information",
-                        params={"apiKey": SPOONACULAR_KEY},
-                    )
-                    if info_r.status_code == 200:
-                        info = info_r.json()
-                        source_url = info.get("sourceUrl") or source_url
-            except Exception:
-                pass  # Fallback sur l'URL générique
-
-            results.append({
-                "id": recipe_id,
-                "title": rec.get("title", ""),
-                "image": rec.get("image", ""),
-                "usedIngredients": [i["name"] for i in rec.get("usedIngredients", [])],
-                "missedIngredients": [i["name"] for i in rec.get("missedIngredients", [])],
-                "sourceUrl": source_url,
-            })
-        return results
-
+        async with httpx.AsyncClient(timeout=10) as http:
+            await asyncio.gather(*[_fetch_filter(http, name) for name in ingredient_names])
     except Exception as exc:
-        logger.warning("Spoonacular request failed: %s", exc)
+        logger.warning("TheMealDB filter error: %s", exc)
         return []
+
+    if not meal_counts:
+        return []
+
+    # ── Étape 2 : top 5 repas, récupérer les détails en parallèle ──
+    top_ids = sorted(meal_counts, key=lambda k: meal_counts[k], reverse=True)[:5]
+    results: list[dict] = []
+
+    async def _fetch_detail(client: httpx.AsyncClient, meal_id: str) -> None:
+        try:
+            r = await client.get(
+                "https://www.themealdb.com/api/json/v1/1/lookup.php",
+                params={"i": meal_id},
+            )
+            if r.status_code == 200:
+                meals = (r.json().get("meals") or [])
+                if meals:
+                    m = meals[0]
+                    score = meal_counts.get(meal_id, 0)
+                    results.append({
+                        "id": int(meal_id),
+                        "title": m.get("strMeal", ""),
+                        "image": m.get("strMealThumb", ""),
+                        "usedIngredients": ingredient_names[:score],
+                        "missedIngredients": [],
+                        "sourceUrl": m.get("strSource") or f"https://www.themealdb.com/meal/{meal_id}",
+                    })
+        except Exception:
+            pass
+
+    try:
+        async with httpx.AsyncClient(timeout=10) as http:
+            await asyncio.gather(*[_fetch_detail(http, mid) for mid in top_ids])
+    except Exception as exc:
+        logger.warning("TheMealDB lookup error: %s", exc)
+
+    return sorted(results, key=lambda r: meal_counts.get(str(r["id"]), 0), reverse=True)
 
 
 # -----------------------------------------------------------------------------

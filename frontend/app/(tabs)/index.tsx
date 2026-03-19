@@ -18,7 +18,7 @@ import { useStockStore, StockItem, HistoryItem } from '../../store/stockStore';
 import { useLanguageStore } from '../../store/languageStore';
 import { useAuthStore } from '../../store/authStore';
 import { parseISO, differenceInDays, format } from 'date-fns';
-import Swipeable from 'react-native-gesture-handler/Swipeable';
+import ReanimatedSwipeable from 'react-native-gesture-handler/ReanimatedSwipeable';
 import { fr as frLocale, enUS } from 'date-fns/locale';
 import { C, shadowSm } from '../../utils/theme';
 
@@ -197,7 +197,7 @@ export default function HomeScreen() {
     );
 
     return (
-      <Swipeable
+      <ReanimatedSwipeable
         key={item.id}
         renderLeftActions={leftActions}
         renderRightActions={rightActions}
@@ -279,7 +279,7 @@ export default function HomeScreen() {
             </View>
           </View>
         </TouchableOpacity>
-      </Swipeable>
+      </ReanimatedSwipeable>
     );
   };
 
