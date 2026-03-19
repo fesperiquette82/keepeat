@@ -27,6 +27,7 @@ interface RecipeSuggestion {
   usedIngredients: string[];
   missedIngredients: string[];
   sourceUrl: string;
+  is_fallback?: boolean;
 }
 
 type FilterTab = 'tous' | 'urgents' | 'frigo' | 'placard';
@@ -198,11 +199,20 @@ export default function RecipesScreen() {
           }
         >
           {/* Section header */}
-          <View style={styles.sectionHeader}>
-            <Text style={styles.sectionTitle}>
-              {isFr ? SECTION_TITLES[activeTab].fr : SECTION_TITLES[activeTab].en}
-            </Text>
-          </View>
+          {recipes[0]?.is_fallback ? (
+            <View style={[styles.sectionHeader, styles.fallbackHeader]}>
+              <Ionicons name="sparkles-outline" size={15} color="#7c3aed" />
+              <Text style={styles.sectionTitleFallback}>
+                {t('Suggestions populaires 🌍', 'Popular suggestions 🌍')}
+              </Text>
+            </View>
+          ) : (
+            <View style={styles.sectionHeader}>
+              <Text style={styles.sectionTitle}>
+                {isFr ? SECTION_TITLES[activeTab].fr : SECTION_TITLES[activeTab].en}
+              </Text>
+            </View>
+          )}
 
           {recipes.map((recipe) => (
             <TouchableOpacity
@@ -343,7 +353,9 @@ const styles = StyleSheet.create({
     justifyContent: 'space-between',
     marginBottom: 6,
   },
-  sectionTitle: { fontSize: 15, fontWeight: '700', color: '#1A1A1A' },
+  sectionTitle:         { fontSize: 15, fontWeight: '700', color: '#1A1A1A' },
+  fallbackHeader:       { flexDirection: 'row', alignItems: 'center', gap: 6, backgroundColor: '#f3e8ff', borderRadius: 10, paddingHorizontal: 10, paddingVertical: 6 },
+  sectionTitleFallback: { fontSize: 13, fontWeight: '700', color: '#7c3aed' },
 
   // ── Recipe card ──
   card: {

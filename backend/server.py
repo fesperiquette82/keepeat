@@ -1444,6 +1444,68 @@ async def get_recalls_status(
 _FRIGO_CATS   = ["frais", "proteines", "legumes", "boissons"]
 _PLACARD_CATS = ["feculents", "desserts", "epicerie", "autres"]
 
+# Ingrédients de fallback par filtre (utilisés quand le stock du filtre est vide)
+_FALLBACK_INGREDIENTS: dict[str, list[str]] = {
+    "urgent":  ["chicken", "pasta", "egg"],
+    "all":     ["chicken", "pasta", "egg"],
+    "frigo":   ["chicken", "milk", "egg"],
+    "placard": ["pasta", "rice", "lentils"],
+}
+
+# Fallback par catégorie → ingrédient anglais TheMealDB
+_CATEGORY_TO_EN: dict[str, str] = {
+    "frais":     "milk",
+    "proteines": "chicken",
+    "legumes":   "tomato",
+    "feculents": "pasta",
+    "desserts":  "chocolate",
+    "boissons":  "milk",
+    "epicerie":  "garlic",
+    "autres":    "egg",
+}
+
+# Dictionnaire FR → EN pour les aliments courants (mots composés en premier)
+_FR_EN: dict[str, str] = {
+    "pomme de terre": "potato", "pommes de terre": "potato",
+    "sauce tomate": "tomato", "petits pois": "peas",
+    "pois chiche": "chickpeas", "patate douce": "sweet potato",
+    "poulet": "chicken", "boeuf": "beef", "porc": "pork",
+    "veau": "veal", "agneau": "lamb", "dinde": "turkey",
+    "saumon": "salmon", "thon": "tuna", "cabillaud": "cod",
+    "crevettes": "shrimp", "jambon": "ham", "lardons": "bacon",
+    "saucisse": "sausage", "merguez": "sausage",
+    "lait": "milk", "beurre": "butter", "fromage": "cheese",
+    "oeuf": "egg", "oeufs": "egg",
+    "yaourt": "yogurt", "creme": "cream",
+    "mozzarella": "mozzarella", "parmesan": "parmesan",
+    "tomate": "tomato", "carotte": "carrot", "oignon": "onion",
+    "ail": "garlic", "echalote": "shallot", "courgette": "zucchini",
+    "aubergine": "aubergine", "poivron": "pepper",
+    "epinard": "spinach", "brocoli": "broccoli",
+    "champignon": "mushroom", "poireau": "leek",
+    "haricot": "green beans", "lentille": "lentils", "lentilles": "lentils",
+    "pates": "pasta", "riz": "rice", "pain": "bread", "farine": "flour",
+    "quinoa": "quinoa", "semoule": "semolina",
+    "pomme": "apple", "banane": "banana", "citron": "lemon",
+    "orange": "orange", "fraise": "strawberry", "fraises": "strawberry",
+    "mangue": "mango", "ananas": "pineapple", "avocat": "avocado",
+    "huile": "olive oil", "vinaigre": "vinegar", "moutarde": "mustard",
+    "chocolat": "chocolate", "sucre": "sugar", "miel": "honey",
+}
+
+import unicodedata as _ud
+
+def _fr_to_en_ingredient(name: str, category: str = "autres") -> str:
+    """Convertit un nom de produit français en ingrédient anglais pour TheMealDB."""
+    norm = _ud.normalize("NFD", name.lower())
+    norm = "".join(c for c in norm if _ud.category(c) != "Mn")
+    for fr_word in sorted(_FR_EN, key=len, reverse=True):
+        fr_norm = _ud.normalize("NFD", fr_word)
+        fr_norm = "".join(c for c in fr_norm if _ud.category(c) != "Mn")
+        if fr_norm in norm:
+            return _FR_EN[fr_word]
+    return _CATEGORY_TO_EN.get(category, "chicken")
+
 
 @api_router.get("/recipes/suggestions")
 async def get_recipe_suggestions(
@@ -1479,10 +1541,20 @@ async def get_recipe_suggestions(
     ]
     items = await stock_col.aggregate(pipeline).to_list(length=15)
 
-    if not items:
-        return []
-
-    ingredient_names = [item["name"] for item in items[:5]]
+    is_fallback = not items
+    if items:
+        # Convertir les noms français → anglais pour TheMealDB
+        seen: set[str] = set()
+        ingredient_names: list[str] = []
+        for item in items[:10]:
+            en = _fr_to_en_ingredient(item.get("name", ""), item.get("food_category", "autres"))
+            if en not in seen:
+                seen.add(en)
+                ingredient_names.append(en)
+            if len(ingredient_names) >= 5:
+                break
+    else:
+        ingredient_names = _FALLBACK_INGREDIENTS.get(recipe_filter, _FALLBACK_INGREDIENTS["all"])
 
     # ── Étape 1 : pour chaque ingrédient, récupérer les repas correspondants ──
     meal_counts: dict[str, int] = {}
@@ -1530,9 +1602,10 @@ async def get_recipe_suggestions(
                         "id": int(meal_id),
                         "title": m.get("strMeal", ""),
                         "image": m.get("strMealThumb", ""),
-                        "usedIngredients": ingredient_names[:score],
+                        "usedIngredients": [] if is_fallback else ingredient_names[:score],
                         "missedIngredients": [],
                         "sourceUrl": m.get("strSource") or f"https://www.themealdb.com/meal/{meal_id}",
+                        "is_fallback": is_fallback,
                     })
         except Exception:
             pass
