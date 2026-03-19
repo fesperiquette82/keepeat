@@ -531,26 +531,30 @@ def _validate_password(password: str) -> None:
 
 
 async def _send_email(to: str, subject: str, html_body: str) -> None:
-    """Envoie un email HTML via Brevo SMTP relay (aiosmtplib)."""
-    smtp_login = os.getenv("BREVO_SMTP_LOGIN")
-    if not smtp_login:
-        logger.warning("Email non envoyé vers %s : BREVO_SMTP_LOGIN non configuré", to)
+    """Envoie un email HTML via Brevo API HTTP (port 443, jamais bloqué par les hébergeurs)."""
+    api_key = os.getenv("BREVO_API_KEY")
+    if not api_key:
+        logger.warning("Email non envoyé vers %s : BREVO_API_KEY non configuré", to)
         return
-    msg = MIMEMultipart("alternative")
-    msg["Subject"] = subject
-    msg["From"] = f"{os.getenv('MAIL_FROM_NAME', 'KeepEat')} <{os.getenv('MAIL_FROM', 'noreply@keepeat.app')}>"
-    msg["To"] = to
-    msg.attach(MIMEText(html_body, "html", "utf-8"))
+    sender_email = os.getenv("MAIL_FROM", "fesperiquette@hotmail.com")
+    sender_name  = os.getenv("MAIL_FROM_NAME", "KeepEat")
+    payload = {
+        "sender":     {"name": sender_name, "email": sender_email},
+        "to":         [{"email": to}],
+        "subject":    subject,
+        "htmlContent": html_body,
+    }
     try:
-        await aiosmtplib.send(
-            msg,
-            hostname=os.getenv("BREVO_SMTP_HOST", "smtp-relay.brevo.com"),
-            port=int(os.getenv("BREVO_SMTP_PORT", "587")),
-            username=smtp_login,
-            password=os.getenv("BREVO_SMTP_PASSWORD", ""),
-            start_tls=True,
-        )
-        logger.info("Email envoyé à %s : %s", to, subject)
+        async with httpx.AsyncClient(timeout=15) as client:
+            r = await client.post(
+                "https://api.brevo.com/v3/smtp/email",
+                headers={"api-key": api_key, "Content-Type": "application/json"},
+                json=payload,
+            )
+        if r.status_code in (200, 201):
+            logger.info("Email envoyé à %s : %s", to, subject)
+        else:
+            logger.error("Échec envoi email à %s : HTTP %s — %s", to, r.status_code, r.text[:200])
     except Exception as e:
         logger.error("Échec envoi email à %s : %s", to, e)
 
