@@ -141,14 +141,33 @@ export default function HomeScreen() {
 
   // Message contextuel
   const urgentCount = items.filter(i => { const d = getDaysUntil(i.expiry_date); return d !== null && d <= 7; }).length;
-  const heroMsg = () => {
+  const expiredCount = items.filter(i => { const d = getDaysUntil(i.expiry_date); return d !== null && d < 0; }).length;
+
+  const heroMsg = (): { text: string; color?: string } => {
+    if (expiredCount > 0)
+      return {
+        text: isFr
+          ? `⛔ ${expiredCount} produit${expiredCount > 1 ? 's' : ''} périmé${expiredCount > 1 ? 's' : ''} !`
+          : `⛔ ${expiredCount} expired product${expiredCount > 1 ? 's' : ''}!`,
+        color: '#ef4444',
+      };
     if (urgentCount > 0)
-      return isFr
-        ? `${urgentCount} produit${urgentCount > 1 ? 's' : ''} expirent bientôt`
-        : `${urgentCount} product${urgentCount > 1 ? 's' : ''} expiring soon`;
+      return {
+        text: isFr
+          ? `⚠️ ${urgentCount} produit${urgentCount > 1 ? 's' : ''} à consommer rapidement`
+          : `⚠️ ${urgentCount} product${urgentCount > 1 ? 's' : ''} to use soon`,
+        color: '#f97316',
+      };
+    if (stats.consumed_this_week > 0)
+      return {
+        text: isFr
+          ? `🌱 ${stats.consumed_this_week} sauvé${stats.consumed_this_week > 1 ? 's' : ''} cette semaine · ~${Math.round(stats.consumed_this_week * 2.5)}€`
+          : `🌱 ${stats.consumed_this_week} saved this week · ~${Math.round(stats.consumed_this_week * 2.5)}€`,
+        color: '#16a34a',
+      };
     if (items.length === 0)
-      return isFr ? 'Votre stock est vide 🛒' : 'Your stock is empty 🛒';
-    return isFr ? 'Tout est en ordre ✅' : 'Everything is fine ✅';
+      return { text: isFr ? 'Votre stock est vide 🛒' : 'Your stock is empty 🛒' };
+    return { text: isFr ? '✅ Tout est sous contrôle' : '✅ Everything under control' };
   };
 
   // ─── Product card ─────────────────────────────────────────────────────────
@@ -275,7 +294,7 @@ export default function HomeScreen() {
           <Text style={styles.greeting}>
             {isFr ? `Bonjour ${firstName} 👋` : `Hello ${firstName} 👋`}
           </Text>
-          <Text style={styles.heroMsg}>{heroMsg()}</Text>
+          {(() => { const h = heroMsg(); return <Text style={[styles.heroMsg, h.color ? { color: h.color } : {}]}>{h.text}</Text>; })()}
         </View>
         {/* Decorative illustration */}
         <View style={styles.illustration} pointerEvents="none">

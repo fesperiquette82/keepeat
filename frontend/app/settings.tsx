@@ -6,14 +6,18 @@ import {
   TouchableOpacity,
   ScrollView,
   Alert,
+  Switch,
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { useRouter } from 'expo-router';
 import { Ionicons } from '@expo/vector-icons';
+import AsyncStorage from '@react-native-async-storage/async-storage';
 import { useLanguageStore } from '../store/languageStore';
 import { useStockStore } from '../store/stockStore';
 import { useAuthStore } from '../store/authStore';
 import { buildApiUrl } from '../utils/config';
+
+const ALERT_PREFS_KEY = 'keepeat_alert_prefs';
 
 export default function SettingsScreen() {
   const router = useRouter();
@@ -21,6 +25,10 @@ export default function SettingsScreen() {
   const { stats, fetchStats } = useStockStore();
   const { user, logout, token } = useAuthStore();
   const [lastRecallCheck, setLastRecallCheck] = useState<string | null>(null);
+  const [alertJ2,       setAlertJ2]       = useState(true);
+  const [alertJ0,       setAlertJ0]       = useState(true);
+  const [alertWeekly,   setAlertWeekly]   = useState(false);
+  const [alertRecall,   setAlertRecall]   = useState(true);
 
   const fr = language === 'fr';
 
@@ -35,7 +43,22 @@ export default function SettingsScreen() {
         .then(data => setLastRecallCheck(data.last_check ?? null))
         .catch(() => {});
     }
+    AsyncStorage.getItem(ALERT_PREFS_KEY).then(raw => {
+      if (!raw) return;
+      try {
+        const prefs = JSON.parse(raw);
+        if (prefs.alertJ2     !== undefined) setAlertJ2(prefs.alertJ2);
+        if (prefs.alertJ0     !== undefined) setAlertJ0(prefs.alertJ0);
+        if (prefs.alertWeekly !== undefined) setAlertWeekly(prefs.alertWeekly);
+        if (prefs.alertRecall !== undefined) setAlertRecall(prefs.alertRecall);
+      } catch {}
+    });
   }, []);
+
+  const saveAlertPrefs = (patch: object) => {
+    const current = { alertJ2, alertJ0, alertWeekly, alertRecall, ...patch };
+    AsyncStorage.setItem(ALERT_PREFS_KEY, JSON.stringify(current)).catch(() => {});
+  };
 
   const formatLastCheck = (iso: string | null): string => {
     if (!iso) return fr ? 'Jamais effectuée' : 'Never performed';
@@ -183,43 +206,87 @@ export default function SettingsScreen() {
         <View style={styles.section}>
           <Text style={styles.sectionTitle}>{fr ? 'Alertes push' : 'Push alerts'}</Text>
           <View style={styles.alertsCard}>
+
+            {/* J-2 */}
             <View style={styles.alertRow}>
-              <View style={[styles.alertIconWrapper, { backgroundColor: '#f59e0b20' }]}>
-                <Ionicons name="alert-circle-outline" size={22} color="#f59e0b" />
+              <View style={[styles.alertIconWrapper, { backgroundColor: '#f97316' + '20' }]}>
+                <Ionicons name="alarm-outline" size={22} color="#f97316" />
               </View>
               <View style={styles.alertInfo}>
-                <Text style={styles.alertTitle}>
-                  {fr ? 'Produits rappelés' : 'Recalled products'}
-                </Text>
-                <Text style={styles.alertDesc}>
-                  {fr
-                    ? 'Vérification toutes les 6h sur rappel.conso.gouv.fr'
-                    : 'Checked every 6h on rappel.conso.gouv.fr'}
-                </Text>
-                <Text style={styles.alertLastCheck}>
-                  {fr ? 'Dernière vérification : ' : 'Last check: '}
-                  <Text style={styles.alertLastCheckValue}>{formatLastCheck(lastRecallCheck)}</Text>
-                </Text>
+                <Text style={styles.alertTitle}>{fr ? 'Alerte J-2' : '2 days before'}</Text>
+                <Text style={styles.alertDesc}>{fr ? 'Notifie 2 jours avant la date de péremption' : 'Notify 2 days before expiry'}</Text>
               </View>
+              <Switch
+                value={alertJ2}
+                onValueChange={v => { setAlertJ2(v); saveAlertPrefs({ alertJ2: v }); }}
+                trackColor={{ false: '#E5E7EB', true: '#86efac' }}
+                thumbColor={alertJ2 ? '#22c55e' : '#9CA3AF'}
+              />
             </View>
 
             <View style={styles.alertDivider} />
 
+            {/* J-0 */}
             <View style={styles.alertRow}>
-              <View style={[styles.alertIconWrapper, { backgroundColor: '#3b82f620' }]}>
-                <Ionicons name="time-outline" size={22} color="#3b82f6" />
+              <View style={[styles.alertIconWrapper, { backgroundColor: '#ef444420' }]}>
+                <Ionicons name="alert-circle-outline" size={22} color="#ef4444" />
               </View>
               <View style={styles.alertInfo}>
-                <Text style={styles.alertTitle}>
-                  {fr ? 'Inactivité' : 'Inactivity'}
-                </Text>
+                <Text style={styles.alertTitle}>{fr ? "Alerte J-0 (aujourd'hui)" : 'Expiry day alert'}</Text>
+                <Text style={styles.alertDesc}>{fr ? "Notifie le jour même de la péremption" : 'Notify on the expiry day'}</Text>
+              </View>
+              <Switch
+                value={alertJ0}
+                onValueChange={v => { setAlertJ0(v); saveAlertPrefs({ alertJ0: v }); }}
+                trackColor={{ false: '#E5E7EB', true: '#86efac' }}
+                thumbColor={alertJ0 ? '#22c55e' : '#9CA3AF'}
+              />
+            </View>
+
+            <View style={styles.alertDivider} />
+
+            {/* Récap hebdo */}
+            <View style={styles.alertRow}>
+              <View style={[styles.alertIconWrapper, { backgroundColor: '#7c3aed20' }]}>
+                <Ionicons name="bar-chart-outline" size={22} color="#7c3aed" />
+              </View>
+              <View style={styles.alertInfo}>
+                <Text style={styles.alertTitle}>{fr ? 'Récap hebdomadaire' : 'Weekly summary'}</Text>
+                <Text style={styles.alertDesc}>{fr ? 'Bilan du gaspillage chaque lundi matin' : 'Waste recap every Monday morning'}</Text>
+              </View>
+              <Switch
+                value={alertWeekly}
+                onValueChange={v => { setAlertWeekly(v); saveAlertPrefs({ alertWeekly: v }); }}
+                trackColor={{ false: '#E5E7EB', true: '#86efac' }}
+                thumbColor={alertWeekly ? '#22c55e' : '#9CA3AF'}
+              />
+            </View>
+
+            <View style={styles.alertDivider} />
+
+            {/* Rappels produits */}
+            <View style={styles.alertRow}>
+              <View style={[styles.alertIconWrapper, { backgroundColor: '#f59e0b20' }]}>
+                <Ionicons name="shield-checkmark-outline" size={22} color="#f59e0b" />
+              </View>
+              <View style={styles.alertInfo}>
+                <Text style={styles.alertTitle}>{fr ? 'Rappels produits' : 'Product recalls'}</Text>
                 <Text style={styles.alertDesc}>
-                  {fr
-                    ? 'Rappel si aucune action sur votre stock depuis 7 jours'
-                    : 'Reminder if no stock action in 7 days'}
+                  {fr ? 'Vérification toutes les 6h · rappel.conso.gouv.fr' : 'Checked every 6h · rappel.conso.gouv.fr'}
+                </Text>
+                <Text style={styles.alertLastCheck}>
+                  {fr ? 'Dernière vérif. : ' : 'Last check: '}
+                  <Text style={styles.alertLastCheckValue}>{formatLastCheck(lastRecallCheck)}</Text>
                 </Text>
               </View>
+              <Switch
+                value={alertRecall}
+                onValueChange={v => { setAlertRecall(v); saveAlertPrefs({ alertRecall: v }); }}
+                trackColor={{ false: '#E5E7EB', true: '#86efac' }}
+                thumbColor={alertRecall ? '#22c55e' : '#9CA3AF'}
+              />
             </View>
+
           </View>
         </View>
 
@@ -545,7 +612,7 @@ const styles = StyleSheet.create({
   },
   alertRow: {
     flexDirection: 'row',
-    alignItems: 'flex-start',
+    alignItems: 'center',
     gap: 12,
   },
   alertIconWrapper: {

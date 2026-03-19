@@ -14,6 +14,7 @@ import {
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { Ionicons } from '@expo/vector-icons';
 import axios from 'axios';
+import { useRouter } from 'expo-router';
 import { useAuthStore } from '../../store/authStore';
 import { useLanguageStore } from '../../store/languageStore';
 import { buildApiUrl } from '../../utils/config';
@@ -58,6 +59,7 @@ const EMPTY_TEXTS: Record<FilterTab, { fr: string; en: string }> = {
 };
 
 export default function RecipesScreen() {
+  const router = useRouter();
   const { token } = useAuthStore();
   const { language } = useLanguageStore();
   const isFr = language === 'fr';
@@ -153,11 +155,39 @@ export default function RecipesScreen() {
         </View>
       ) : recipes.length === 0 ? (
         <View style={styles.center}>
-          <Text style={styles.emptyEmoji}>🍳</Text>
-          <Text style={styles.emptyTitle}>{t('Aucune suggestion', 'No suggestions')}</Text>
-          <Text style={styles.emptyText}>
-            {isFr ? EMPTY_TEXTS[activeTab].fr : EMPTY_TEXTS[activeTab].en}
-          </Text>
+          {activeTab === 'urgents' ? (
+            <>
+              <Text style={styles.emptyEmoji}>🎉</Text>
+              <Text style={styles.emptyTitle}>{t('Aucun urgent', 'Nothing urgent')}</Text>
+              <Text style={styles.emptyText}>{t('Bravo ! Aucun produit ne périme dans les 7 jours.', 'Great! No products expiring in the next 7 days.')}</Text>
+              <TouchableOpacity style={styles.emptyBtn} onPress={() => setActiveTab('tous')}>
+                <Ionicons name="restaurant-outline" size={16} color="#fff" />
+                <Text style={styles.emptyBtnText}>{t('Voir toutes les recettes', 'See all recipes')}</Text>
+              </TouchableOpacity>
+            </>
+          ) : activeTab === 'tous' ? (
+            <>
+              <Text style={styles.emptyEmoji}>🛒</Text>
+              <Text style={styles.emptyTitle}>{t('Stock vide', 'Empty stock')}</Text>
+              <Text style={styles.emptyText}>{t('Ajoutez des produits à votre stock pour obtenir des suggestions.', 'Add products to your stock to get recipe suggestions.')}</Text>
+              <TouchableOpacity style={styles.emptyBtn} onPress={() => router.push('/scan' as any)}>
+                <Ionicons name="scan-outline" size={16} color="#fff" />
+                <Text style={styles.emptyBtnText}>{t('Scanner un produit', 'Scan a product')}</Text>
+              </TouchableOpacity>
+            </>
+          ) : (
+            <>
+              <Text style={styles.emptyEmoji}>🍳</Text>
+              <Text style={styles.emptyTitle}>{t('Aucune suggestion', 'No suggestions')}</Text>
+              <Text style={styles.emptyText}>
+                {isFr ? EMPTY_TEXTS[activeTab].fr : EMPTY_TEXTS[activeTab].en}
+              </Text>
+              <TouchableOpacity style={styles.emptyBtn} onPress={() => setActiveTab('tous')}>
+                <Ionicons name="restaurant-outline" size={16} color="#fff" />
+                <Text style={styles.emptyBtnText}>{t('Voir toutes les recettes', 'See all recipes')}</Text>
+              </TouchableOpacity>
+            </>
+          )}
         </View>
       ) : (
         <ScrollView
@@ -296,6 +326,12 @@ const styles = StyleSheet.create({
   emptyEmoji: { fontSize: 52, marginBottom: 4 },
   emptyTitle: { fontSize: 17, fontWeight: '700', color: C.text, textAlign: 'center' },
   emptyText:  { fontSize: 13, color: C.textMid, textAlign: 'center', lineHeight: 20 },
+  emptyBtn: {
+    flexDirection: 'row', alignItems: 'center', gap: 8,
+    backgroundColor: C.primary, borderRadius: 14,
+    paddingHorizontal: 20, paddingVertical: 12, marginTop: 16,
+  },
+  emptyBtnText: { color: '#fff', fontSize: 14, fontWeight: '700' },
 
   // ── List ──
   scroll: { flex: 1 },
