@@ -1652,41 +1652,65 @@ async def ocr_receipt(
 # Stats mensuelles (score anti-gaspillage)
 # -----------------------------------------------------------------------------
 
+_SAVINGS_BY_CATEGORY: dict[str, float] = {
+    "frais":     3.0,
+    "proteines": 5.0,
+    "legumes":   2.0,
+    "feculents": 1.5,
+    "desserts":  2.5,
+    "boissons":  2.0,
+    "epicerie":  2.0,
+    "autres":    2.0,
+}
+_DEFAULT_SAVINGS = 2.5  # € par produit si catégorie inconnue
+
 @api_router.get("/stats/monthly")
 async def get_monthly_stats(
     months: int = Query(default=6, ge=1, le=24),
     current_user: Dict[str, Any] = Depends(_get_current_user),
 ):
-    """Retourne les stats mensuelles (consommé/jeté/score) sur les N derniers mois."""
+    """Retourne les stats mensuelles (consommé/jeté/score/saved_euros) sur les N derniers mois."""
     uid = current_user["id"]
 
     # Générer la liste des N derniers mois (YYYY-MM)
     today = _utc_now().date()
     month_list = []
     for i in range(months - 1, -1, -1):
-        # Premier jour du mois i mois en arrière
         target = today.replace(day=1) - timedelta(days=i * 30)
         month_list.append(target.strftime("%Y-%m"))
 
-    # Agrégation consommés par mois
+    # Agrégation consommés par mois (+ catégorie pour estimer les économies)
     consumed_pipeline = [
         {"$match": {"user_id": uid, "status": "consumed", "consumed_date": {"$nin": [None, ""]}}},
-        {"$group": {"_id": {"$substr": ["$consumed_date", 0, 7]}, "count": {"$sum": 1}}},
+        {"$group": {
+            "_id": {"month": {"$substr": ["$consumed_date", 0, 7]}, "cat": "$food_category"},
+            "count": {"$sum": 1},
+        }},
     ]
     thrown_pipeline = [
         {"$match": {"user_id": uid, "status": "thrown", "thrown_date": {"$nin": [None, ""]}}},
         {"$group": {"_id": {"$substr": ["$thrown_date", 0, 7]}, "count": {"$sum": 1}}},
     ]
 
-    consumed_agg = await stock_col.aggregate(consumed_pipeline).to_list(length=100)
+    consumed_agg = await stock_col.aggregate(consumed_pipeline).to_list(length=500)
     thrown_agg = await stock_col.aggregate(thrown_pipeline).to_list(length=100)
 
-    consumed_by_month = {doc["_id"]: doc["count"] for doc in consumed_agg}
+    # consumed_by_month : { "YYYY-MM": { total_count, saved_euros } }
+    consumed_by_month: dict[str, dict] = {}
+    for doc in consumed_agg:
+        month = doc["_id"]["month"]
+        cat = (doc["_id"].get("cat") or "").lower()
+        coeff = _SAVINGS_BY_CATEGORY.get(cat, _DEFAULT_SAVINGS)
+        entry = consumed_by_month.setdefault(month, {"count": 0, "euros": 0.0})
+        entry["count"] += doc["count"]
+        entry["euros"] += doc["count"] * coeff
+
     thrown_by_month = {doc["_id"]: doc["count"] for doc in thrown_agg}
 
     result = []
     for month in month_list:
-        consumed = consumed_by_month.get(month, 0)
+        c_entry = consumed_by_month.get(month, {"count": 0, "euros": 0.0})
+        consumed = c_entry["count"]
         thrown = thrown_by_month.get(month, 0)
         total = consumed + thrown
         score = round(consumed / total * 100) if total > 0 else 0
@@ -1695,6 +1719,7 @@ async def get_monthly_stats(
             "consumed": consumed,
             "thrown": thrown,
             "score": score,
+            "saved_euros": round(c_entry["euros"], 1),
         })
 
     return result

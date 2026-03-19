@@ -20,7 +20,8 @@ interface MonthlyStats {
   month: string;   // "YYYY-MM"
   consumed: number;
   thrown: number;
-  score: number;   // 0-100
+  score: number;       // 0-100
+  saved_euros: number; // estimation €
 }
 
 function scoreLabel(score: number, isFr: boolean): { text: string; icon: string; color: string } {
@@ -124,10 +125,20 @@ export default function StatsScreen() {
                   </View>
                 </View>
                 {total > 0 ? (
-                  <Text style={styles.scoreSummary}>
-                    {currentMonth.consumed} {t('produit(s) sauvé(s)', 'product(s) saved')}
-                    {currentMonth.thrown > 0 ? ` · ${currentMonth.thrown} ${t('jeté(s)', 'wasted')}` : ''}
-                  </Text>
+                  <>
+                    <Text style={styles.scoreSummary}>
+                      {currentMonth.consumed} {t('produit(s) sauvé(s)', 'product(s) saved')}
+                      {currentMonth.thrown > 0 ? ` · ${currentMonth.thrown} ${t('jeté(s)', 'wasted')}` : ''}
+                    </Text>
+                    {currentMonth.saved_euros > 0 && (
+                      <View style={styles.savingsRow}>
+                        <Text style={styles.savingsEmoji}>💶</Text>
+                        <Text style={styles.savingsText}>
+                          ~{currentMonth.saved_euros.toFixed(1)}€ {t('économisés ce mois', 'saved this month')}
+                        </Text>
+                      </View>
+                    )}
+                  </>
                 ) : (
                   <Text style={styles.scoreSummary}>
                     {t('Aucune donnée ce mois-ci', 'No data this month')}
@@ -245,6 +256,9 @@ const styles = StyleSheet.create({
   scoreEmoji:     { fontSize: 32 },
   scoreLabel:     { fontSize: 16, fontWeight: '700' },
   scoreSummary:   { fontSize: 13, color: C.textMid },
+  savingsRow:     { flexDirection: 'row', alignItems: 'center', gap: 6, marginTop: 2 },
+  savingsEmoji:   { fontSize: 16 },
+  savingsText:    { fontSize: 13, color: '#16a34a', fontWeight: '600' },
 
   // ── Legend ──
   legendRow: { flexDirection: 'row', gap: 16 },
