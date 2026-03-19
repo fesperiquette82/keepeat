@@ -32,11 +32,12 @@ export default function RootLayout() {
   // Surveillance de la connectivité réseau + sync automatique
   useNetworkSync();
 
-  // Mode immersive Android : cache la barre de navigation système
+  // Barre de navigation Android toujours visible, fond blanc
   useEffect(() => {
     if (Platform.OS === 'android') {
-      NavigationBar.setVisibilityAsync('hidden');
-      NavigationBar.setBehaviorAsync('overlay-swipe');
+      NavigationBar.setVisibilityAsync('visible');
+      NavigationBar.setBackgroundColorAsync('#ffffff');
+      NavigationBar.setButtonStyleAsync('dark');
     }
   }, []);
 

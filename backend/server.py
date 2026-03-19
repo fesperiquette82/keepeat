@@ -1595,8 +1595,34 @@ async def get_recipe_suggestions(
         return []
 
     if not meal_counts:
-        logger.warning("TheMealDB: no meal_counts for ingredients=%s", ingredient_names)
-        return []
+        # TheMealDB n'a rien retourné pour nos ingrédients réels (timeout Render / rate-limit).
+        # On retente avec des ingrédients de secours connus pour toujours fonctionner.
+        fallback_ings = _FALLBACK_INGREDIENTS.get(recipe_filter, _FALLBACK_INGREDIENTS["all"])
+        logger.info("TheMealDB: no results for %s, retrying with fallback=%s", ingredient_names, fallback_ings)
+        is_fallback = True
+        ingredient_names = fallback_ings
+        try:
+            async with httpx.AsyncClient(timeout=15) as http2:
+                async def _fetch_filter2(client: httpx.AsyncClient, ingredient: str) -> None:
+                    try:
+                        r = await client.get(
+                            "https://www.themealdb.com/api/json/v1/1/filter.php",
+                            params={"i": ingredient},
+                        )
+                        if r.status_code == 200:
+                            for m in (r.json().get("meals") or []):
+                                mid = m.get("idMeal", "")
+                                if mid:
+                                    meal_counts[mid] = meal_counts.get(mid, 0) + 1
+                    except Exception as e:
+                        logger.warning("TheMealDB fallback filter(%s) error: %s", ingredient, e)
+                await asyncio.gather(*[_fetch_filter2(http2, name) for name in ingredient_names])
+        except Exception as exc:
+            logger.warning("TheMealDB fallback gather error: %s", exc)
+            return []
+        if not meal_counts:
+            logger.warning("TheMealDB: no results even with fallback ingredients=%s", ingredient_names)
+            return []
 
     # ── Étape 2 : top 5 repas, récupérer les détails en parallèle ──
     top_ids = sorted(meal_counts, key=lambda k: meal_counts[k], reverse=True)[:5]
