@@ -1,8 +1,9 @@
 import { Slot, useRouter, useSegments } from 'expo-router';
 import { StatusBar } from 'expo-status-bar';
 import React, { useEffect } from 'react';
-import { View, StyleSheet } from 'react-native';
+import { View, StyleSheet, Platform } from 'react-native';
 import { GestureHandlerRootView } from 'react-native-gesture-handler';
+import * as NavigationBar from 'expo-navigation-bar';
 import ErrorBoundary from "../component/ErrorBoundary";
 import { useAuthStore } from '../store/authStore';
 import { useLanguageStore } from '../store/languageStore';
@@ -30,6 +31,14 @@ export default function RootLayout() {
 
   // Surveillance de la connectivité réseau + sync automatique
   useNetworkSync();
+
+  // Mode immersive Android : cache la barre de navigation système
+  useEffect(() => {
+    if (Platform.OS === 'android') {
+      NavigationBar.setVisibilityAsync('hidden');
+      NavigationBar.setBehaviorAsync('overlay-swipe');
+    }
+  }, []);
 
   // Initialisation au démarrage + keepalive Render.com toutes les 4 min
   useEffect(() => {
