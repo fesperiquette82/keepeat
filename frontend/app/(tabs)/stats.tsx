@@ -7,10 +7,12 @@ import {
   ScrollView,
   ActivityIndicator,
   RefreshControl,
+  TouchableOpacity,
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { Ionicons } from '@expo/vector-icons';
 import axios from 'axios';
+import { useRouter } from 'expo-router';
 import { useAuthStore } from '../../store/authStore';
 import { useLanguageStore } from '../../store/languageStore';
 import { buildApiUrl } from '../../utils/config';
@@ -22,6 +24,18 @@ interface MonthlyStats {
   thrown: number;
   score: number;       // 0-100
   saved_euros: number; // estimation €
+}
+
+interface GamifData {
+  total_consumed: number;
+  total_thrown: number;
+  total_saved_euros: number;
+  current_streak: number;
+  level_index: number;
+  level_name: string;
+  level_emoji: string;
+  progress_to_next: number;
+  next_level: string | null;
 }
 
 function scoreLabel(score: number, isFr: boolean): { text: string; icon: string; color: string } {
@@ -37,12 +51,14 @@ function formatMonth(month: string, lang: string): string {
 }
 
 export default function StatsScreen() {
+  const router = useRouter();
   const { token } = useAuthStore();
   const { language } = useLanguageStore();
   const isFr = language === 'fr';
   const t = (fr: string, en: string) => isFr ? fr : en;
 
   const [data, setData]                 = useState<MonthlyStats[]>([]);
+  const [gamif, setGamif]               = useState<GamifData | null>(null);
   const [isLoading, setIsLoading]       = useState(true);
   const [isRefreshing, setIsRefreshing] = useState(false);
   const [error, setError]               = useState<string | null>(null);
@@ -52,10 +68,16 @@ export default function StatsScreen() {
     if (!silent) setIsLoading(true);
     setError(null);
     try {
-      const res = await axios.get(buildApiUrl('/api/stats/monthly?months=6'), {
-        headers: { Authorization: `Bearer ${token}` },
-      });
-      setData(res.data);
+      const [monthly, gamifRes] = await Promise.all([
+        axios.get(buildApiUrl('/api/stats/monthly?months=6'), {
+          headers: { Authorization: `Bearer ${token}` },
+        }),
+        axios.get(buildApiUrl('/api/gamification'), {
+          headers: { Authorization: `Bearer ${token}` },
+        }),
+      ]);
+      setData(monthly.data);
+      setGamif(gamifRes.data);
     } catch {
       setError(t(
         'Impossible de charger les stats. Vérifiez votre connexion.',
@@ -106,6 +128,40 @@ export default function StatsScreen() {
             <RefreshControl refreshing={isRefreshing} onRefresh={handleRefresh} tintColor={C.primary} />
           }
         >
+          {/* Carte niveau gamification */}
+          {gamif && (
+            <View style={styles.levelCard}>
+              <View style={styles.levelTop}>
+                <Text style={styles.levelEmoji}>{gamif.level_emoji}</Text>
+                <View style={styles.levelInfo}>
+                  <Text style={styles.levelName}>{gamif.level_name}</Text>
+                  {gamif.next_level && (
+                    <Text style={styles.levelNext}>
+                      {isFr ? `→ ${gamif.next_level}` : `→ ${gamif.next_level}`}
+                    </Text>
+                  )}
+                </View>
+                <View style={styles.levelBadge}>
+                  <Text style={styles.levelBadgeText}>Lvl {gamif.level_index + 1}</Text>
+                </View>
+              </View>
+              {/* Barre de progression */}
+              <View style={styles.levelBarTrack}>
+                <View style={[styles.levelBarFill, { width: `${Math.round(gamif.progress_to_next * 100)}%` as any }]} />
+              </View>
+              <View style={styles.levelBottom}>
+                <Text style={styles.levelStat}>
+                  {gamif.current_streak > 0
+                    ? `🔥 ${gamif.current_streak} ${isFr ? 'j sans gaspillage' : 'd without waste'}`
+                    : (isFr ? '💪 Zéro gaspi aujourd\'hui !' : '💪 No waste today!')}
+                </Text>
+                <Text style={styles.levelStat}>
+                  {`🌱 ~${gamif.total_saved_euros}€ ${isFr ? 'sauvés au total' : 'saved total'}`}
+                </Text>
+              </View>
+            </View>
+          )}
+
           {/* Score du mois courant */}
           {currentMonth && (() => {
             const label = scoreLabel(currentMonth.score, isFr);
@@ -238,6 +294,42 @@ const styles = StyleSheet.create({
 
   scroll: { flex: 1 },
   scrollContent: { padding: 16, gap: 14, paddingBottom: 40 },
+
+  // ── Level card ──
+  levelCard: {
+    backgroundColor: '#fff',
+    borderRadius: 18,
+    padding: 16,
+    borderWidth: 1,
+    borderColor: '#E8E5FF',
+    gap: 12,
+    ...shadowSm,
+  },
+  levelTop: { flexDirection: 'row', alignItems: 'center', gap: 12 },
+  levelEmoji: { fontSize: 32 },
+  levelInfo: { flex: 1 },
+  levelName: { fontSize: 17, fontWeight: '800', color: '#1A1A1A' },
+  levelNext: { fontSize: 12, color: C.textLight, marginTop: 2 },
+  levelBadge: {
+    backgroundColor: '#EDE9FE',
+    borderRadius: 10,
+    paddingHorizontal: 10,
+    paddingVertical: 4,
+  },
+  levelBadgeText: { fontSize: 12, fontWeight: '700', color: '#7c3aed' },
+  levelBarTrack: {
+    height: 8,
+    backgroundColor: '#F0EDE8',
+    borderRadius: 4,
+    overflow: 'hidden',
+  },
+  levelBarFill: {
+    height: '100%',
+    backgroundColor: '#7c3aed',
+    borderRadius: 4,
+  },
+  levelBottom: { flexDirection: 'row', justifyContent: 'space-between' },
+  levelStat: { fontSize: 12, color: C.textMid, fontWeight: '500' },
 
   // ── Score card ──
   scoreCard: {

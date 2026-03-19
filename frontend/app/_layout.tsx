@@ -7,7 +7,8 @@ import * as NavigationBar from 'expo-navigation-bar';
 import ErrorBoundary from "../component/ErrorBoundary";
 import { useAuthStore } from '../store/authStore';
 import { useLanguageStore } from '../store/languageStore';
-import { requestNotificationPermissions, registerPushToken } from '../utils/notificationService';
+import { useStockStore } from '../store/stockStore';
+import { requestNotificationPermissions, registerPushToken, checkAndNotifyUrgentOnOpen } from '../utils/notificationService';
 import { buildApiUrl } from '../utils/config';
 import { useNetworkSync } from '../utils/useNetworkSync';
 
@@ -28,6 +29,7 @@ export default function RootLayout() {
   const segments = useSegments();
   const { user, token, isLoaded, loadAuth } = useAuthStore();
   const { loadLanguage } = useLanguageStore();
+  const { items } = useStockStore();
 
   // Surveillance de la connectivité réseau + sync automatique
   useNetworkSync();
@@ -53,10 +55,13 @@ export default function RootLayout() {
     return () => clearInterval(keepAlive);
   }, []);
 
-  // Enregistrement du push token dès que l'utilisateur est authentifié
+  // Enregistrement du push token + notif locale urgente au démarrage
   useEffect(() => {
     if (user && token) {
       registerPushToken(token);
+      if (items.length > 0) {
+        checkAndNotifyUrgentOnOpen(items);
+      }
     }
   }, [user?.id]);
 

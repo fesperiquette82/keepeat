@@ -17,6 +17,8 @@ import { Ionicons } from '@expo/vector-icons';
 import { useStockStore, StockItem, HistoryItem } from '../../store/stockStore';
 import { useLanguageStore } from '../../store/languageStore';
 import { useAuthStore } from '../../store/authStore';
+import axios from 'axios';
+import { buildApiUrl } from '../../utils/config';
 import { parseISO, differenceInDays, format } from 'date-fns';
 import ReanimatedSwipeable from 'react-native-gesture-handler/ReanimatedSwipeable';
 import { fr as frLocale, enUS } from 'date-fns/locale';
@@ -71,9 +73,18 @@ const CATEGORY_EMOJI: Record<string, string> = {
 
 // ─── Main component ────────────────────────────────────────────────────────────
 
+interface GamifData {
+  level_name: string;
+  level_emoji: string;
+  level_index: number;
+  progress_to_next: number;
+  current_streak: number;
+  next_level: string | null;
+}
+
 export default function HomeScreen() {
   const router = useRouter();
-  const { user } = useAuthStore();
+  const { user, token } = useAuthStore();
   const {
     items, stats, historyItems,
     fetchStock, fetchPriorityItems, fetchStats, fetchHistory,
@@ -83,6 +94,8 @@ export default function HomeScreen() {
   const { t, language } = useLanguageStore();
   const [refreshing, setRefreshing]   = useState(false);
   const [selectedTab, setSelectedTab] = useState<FilterTab>('tous');
+  const [gamif, setGamif]             = useState<GamifData | null>(null);
+  const [riskyItemIds, setRiskyItemIds] = useState<Set<string>>(new Set());
   const isFr = language === 'fr';
 
   // Prénom depuis l'email
@@ -96,6 +109,21 @@ export default function HomeScreen() {
   }, [fetchStock, fetchPriorityItems, fetchStats, fetchHistory]);
 
   useEffect(() => { loadData(); }, [loadData]);
+
+  // Gamification + prédictions — chargement silencieux en parallèle
+  useEffect(() => {
+    if (!token) return;
+    Promise.allSettled([
+      axios.get(buildApiUrl('/api/gamification'), { headers: { Authorization: `Bearer ${token}` } }),
+      axios.get(buildApiUrl('/api/predictions'), { headers: { Authorization: `Bearer ${token}` } }),
+    ]).then(([gamifRes, predRes]) => {
+      if (gamifRes.status === 'fulfilled') setGamif(gamifRes.value.data);
+      if (predRes.status === 'fulfilled') {
+        const ids = new Set<string>((predRes.value.data as { id: string }[]).map(p => p.id));
+        setRiskyItemIds(ids);
+      }
+    });
+  }, [token]);
 
   const onRefresh = useCallback(async () => {
     setRefreshing(true);
@@ -257,9 +285,14 @@ export default function HomeScreen() {
 
           {/* Body */}
           <View style={styles.cardBody}>
-            {/* Top row: name + menu */}
+            {/* Top row: name + menu + badge risque */}
             <View style={styles.cardTopRow}>
               <Text style={styles.cardName} numberOfLines={1}>{item.name}</Text>
+              {riskyItemIds.has(item.id) && (
+                <View style={styles.riskyBadge}>
+                  <Text style={styles.riskyBadgeText}>{isFr ? '⚠️ à risque' : '⚠️ risk'}</Text>
+                </View>
+              )}
               <TouchableOpacity
                 style={styles.menuBtn}
                 onPress={() => router.push({ pathname: '/edit-product', params: { id: item.id } })}
@@ -335,49 +368,129 @@ export default function HomeScreen() {
         </View>
       )}
 
-      {/* Hero card contextuelle */}
+      {/* Hero card — urgence (ligne 1) + économie (ligne 2) */}
       {(() => {
-        const h = heroMsg();
         const isExpired = expiredCount > 0;
         const isUrgent  = urgentCount > 0;
+        const hasUrgence = isExpired || isUrgent;
+        const hasEco     = stats.consumed_this_week > 0;
+
         const bgColor     = isExpired ? '#FEF2F2' : isUrgent ? '#FFF7ED' : items.length === 0 ? '#F7F5F2' : '#F0FDF4';
         const borderColor = isExpired ? '#FECACA' : isUrgent ? '#FED7AA' : items.length === 0 ? '#E8E5E0' : '#BBF7D0';
-        const iconColor   = h.color ?? '#16a34a';
+        const urgColor    = isExpired ? '#ef4444' : '#f97316';
         const iconName: any = isExpired ? 'warning' : isUrgent ? 'time-outline' : items.length === 0 ? 'cart-outline' : 'checkmark-circle';
-        const ctaLabel = isExpired
-          ? (isFr ? 'Voir les périmés →' : 'See expired →')
-          : isUrgent
-            ? (isFr ? 'Voir les urgents →' : 'See urgent →')
-            : items.length === 0
-              ? (isFr ? 'Scanner maintenant →' : 'Scan now →')
-              : (isFr ? 'Voir les recettes →' : 'See recipes →');
-        const ctaAction = isExpired || isUrgent
-          ? () => setSelectedTab('urgents')
-          : items.length === 0
-            ? () => router.push('/scan')
-            : () => router.push('/(tabs)/recipes' as any);
+        const iconColor   = isExpired ? '#ef4444' : isUrgent ? '#f97316' : items.length === 0 ? '#9ca3af' : '#16a34a';
+
+        const urgenceText = isExpired
+          ? (isFr ? `⛔ ${expiredCount} produit${expiredCount > 1 ? 's' : ''} périmé${expiredCount > 1 ? 's' : ''}` : `⛔ ${expiredCount} expired product${expiredCount > 1 ? 's' : ''}`)
+          : (isFr ? `⚠️ ${urgentCount} produit${urgentCount > 1 ? 's' : ''} à consommer rapidement` : `⚠️ ${urgentCount} product${urgentCount > 1 ? 's' : ''} to use soon`);
+
+        const ctaUrgenceLabel = isExpired ? (isFr ? 'Voir →' : 'See →') : (isFr ? 'Voir →' : 'See →');
+        const ctaUrgenceAction = () => setSelectedTab('urgents');
+
+        const fallbackText  = items.length === 0
+          ? (isFr ? '🛒 Votre stock est vide' : '🛒 Your stock is empty')
+          : (isFr ? '✅ Tout est sous contrôle' : '✅ Everything under control');
+        const fallbackColor = items.length === 0 ? '#9ca3af' : '#16a34a';
+        const fallbackCta   = items.length === 0
+          ? (isFr ? 'Scanner maintenant →' : 'Scan now →')
+          : (isFr ? 'Voir les recettes →' : 'See recipes →');
+        const fallbackAction = items.length === 0
+          ? () => router.push('/scan')
+          : () => router.push('/(tabs)/recipes' as any);
+
         return (
           <View style={[styles.heroCard, { backgroundColor: bgColor, borderColor }]}>
-            <Ionicons name={iconName} size={26} color={iconColor} style={styles.heroCardIcon} />
-            <View style={styles.heroCardBody}>
-              <Text style={[styles.heroCardText, { color: iconColor }]}>{h.text}</Text>
-              <TouchableOpacity onPress={ctaAction}>
-                <Text style={[styles.heroCardCta, { color: iconColor }]}>{ctaLabel}</Text>
-              </TouchableOpacity>
+            <Ionicons name={iconName} size={24} color={iconColor} style={styles.heroCardIcon} />
+            <View style={[styles.heroCardBody, { gap: hasUrgence && hasEco ? 6 : 2 }]}>
+              {/* Ligne urgence */}
+              {hasUrgence ? (
+                <View style={styles.heroRow}>
+                  <Text style={[styles.heroCardText, { color: urgColor, flex: 1 }]} numberOfLines={1}>
+                    {urgenceText}
+                  </Text>
+                  <TouchableOpacity onPress={ctaUrgenceAction}>
+                    <Text style={[styles.heroCardCta, { color: urgColor }]}>{ctaUrgenceLabel}</Text>
+                  </TouchableOpacity>
+                </View>
+              ) : (
+                /* Fallback si aucun urgent */
+                <View style={styles.heroRow}>
+                  <Text style={[styles.heroCardText, { color: fallbackColor, flex: 1 }]}>
+                    {fallbackText}
+                  </Text>
+                  {!hasEco && (
+                    <TouchableOpacity onPress={fallbackAction}>
+                      <Text style={[styles.heroCardCta, { color: fallbackColor }]}>{fallbackCta}</Text>
+                    </TouchableOpacity>
+                  )}
+                </View>
+              )}
+              {/* Ligne économie */}
+              {hasEco && (
+                <View style={styles.heroRow}>
+                  <Text style={[styles.heroCardText, { color: '#16a34a', flex: 1 }]}>
+                    {isFr
+                      ? `💶 ~${Math.round(stats.consumed_this_week * 2.5)}€ économisés cette semaine`
+                      : `💶 ~${Math.round(stats.consumed_this_week * 2.5)}€ saved this week`}
+                  </Text>
+                </View>
+              )}
             </View>
           </View>
         );
       })()}
 
+      {/* Widget gamification compact */}
+      {gamif && (
+        <TouchableOpacity
+          style={styles.gamifWidget}
+          onPress={() => router.push('/(tabs)/stats' as any)}
+          activeOpacity={0.8}
+        >
+          <Text style={styles.gamifEmoji}>{gamif.level_emoji}</Text>
+          <Text style={styles.gamifName}>{gamif.level_name}</Text>
+          {/* Barre de progression */}
+          <View style={styles.gamifBarTrack}>
+            <View style={[styles.gamifBarFill, { flex: gamif.progress_to_next }]} />
+            <View style={{ flex: 1 - gamif.progress_to_next }} />
+          </View>
+          {gamif.current_streak > 0 && (
+            <Text style={styles.gamifStreak}>🔥 {gamif.current_streak}j</Text>
+          )}
+          <Ionicons name="chevron-forward" size={12} color={C.textLight} />
+        </TouchableOpacity>
+      )}
+
       {/* Action buttons */}
       <View style={styles.actionsRow}>
-        <TouchableOpacity style={styles.scanBtnLarge} onPress={() => router.push('/scan')}>
-          <Ionicons name="scan-outline" size={22} color="#fff" />
-          <View style={styles.scanBtnTextBlock}>
-            <Text style={styles.scanBtnLargeText}>{isFr ? 'Scanner un produit' : 'Scan a product'}</Text>
-            <Text style={styles.scanBtnSubText}>{isFr ? 'Code-barres, ticket ou date' : 'Barcode, receipt or date'}</Text>
-          </View>
-        </TouchableOpacity>
+        {urgentCount > 0 ? (
+          <TouchableOpacity
+            style={[styles.scanBtnLarge, { backgroundColor: expiredCount > 0 ? '#ef4444' : C.orange }]}
+            onPress={() => setSelectedTab('urgents')}
+          >
+            <Ionicons name="time-outline" size={22} color="#fff" />
+            <View style={styles.scanBtnTextBlock}>
+              <Text style={styles.scanBtnLargeText}>
+                {isFr ? 'Gérer les urgents' : 'Handle urgent items'}
+              </Text>
+              <Text style={styles.scanBtnSubText}>
+                {isFr ? `${urgentCount} produit${urgentCount > 1 ? 's' : ''} à traiter` : `${urgentCount} item${urgentCount > 1 ? 's' : ''} to handle`}
+              </Text>
+            </View>
+            <View style={styles.urgentBadge}>
+              <Text style={styles.urgentBadgeText}>{urgentCount}</Text>
+            </View>
+          </TouchableOpacity>
+        ) : (
+          <TouchableOpacity style={styles.scanBtnLarge} onPress={() => router.push('/scan')}>
+            <Ionicons name="scan-outline" size={22} color="#fff" />
+            <View style={styles.scanBtnTextBlock}>
+              <Text style={styles.scanBtnLargeText}>{isFr ? 'Scanner un produit' : 'Scan a product'}</Text>
+              <Text style={styles.scanBtnSubText}>{isFr ? 'Code-barres, ticket ou date' : 'Barcode, receipt or date'}</Text>
+            </View>
+          </TouchableOpacity>
+        )}
         <View style={styles.actionsBtnsRow}>
           <TouchableOpacity style={styles.outlineBtn} onPress={() => router.push('/add-product' as any)}>
             <Ionicons name="add" size={17} color={C.textMid} />
@@ -576,6 +689,45 @@ const styles = StyleSheet.create({
   heroCardBody: { flex: 1, gap: 4 },
   heroCardText: { fontSize: 14, fontWeight: '700', lineHeight: 19 },
   heroCardCta:  { fontSize: 12, fontWeight: '600', opacity: 0.85, marginTop: 2 },
+  heroRow:      { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', gap: 8 },
+
+  // ── Gamification widget ──
+  gamifWidget: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 8,
+    marginHorizontal: 16,
+    marginTop: 8,
+    backgroundColor: '#F3F0FF',
+    borderRadius: 12,
+    paddingHorizontal: 12,
+    paddingVertical: 8,
+    borderWidth: 1,
+    borderColor: '#E8E5FF',
+  },
+  gamifEmoji:    { fontSize: 16 },
+  gamifName:     { fontSize: 12, fontWeight: '700', color: '#7c3aed' },
+  gamifBarTrack: {
+    flex: 1,
+    height: 5,
+    backgroundColor: '#DDD6FE',
+    borderRadius: 3,
+    flexDirection: 'row',
+    overflow: 'hidden',
+  },
+  gamifBarFill:  { height: '100%', backgroundColor: '#7c3aed', borderRadius: 3 },
+  gamifStreak:   { fontSize: 11, fontWeight: '600', color: C.orange },
+
+  // ── Badge risque prédiction ──
+  riskyBadge: {
+    backgroundColor: '#FFF7ED',
+    borderRadius: 6,
+    paddingHorizontal: 5,
+    paddingVertical: 2,
+    borderWidth: 1,
+    borderColor: '#FED7AA',
+  },
+  riskyBadgeText: { fontSize: 9, fontWeight: '700', color: C.orange },
 
   // ── Offline ──
   offlineBanner: {
@@ -631,8 +783,18 @@ const styles = StyleSheet.create({
     elevation: 5,
   },
   scanBtnLargeText: { color: '#fff', fontSize: 16, fontWeight: '800', letterSpacing: 0.3 },
-  scanBtnTextBlock: { gap: 1 },
+  scanBtnTextBlock: { flex: 1, gap: 1 },
   scanBtnSubText: { color: 'rgba(255,255,255,0.72)', fontSize: 11, fontWeight: '500' },
+  urgentBadge: {
+    backgroundColor: 'rgba(255,255,255,0.25)',
+    borderRadius: 12,
+    minWidth: 26,
+    height: 26,
+    alignItems: 'center',
+    justifyContent: 'center',
+    paddingHorizontal: 6,
+  },
+  urgentBadgeText: { color: '#fff', fontSize: 13, fontWeight: '800' },
   actionsBtnsRow: {
     flexDirection: 'row',
     gap: 8,

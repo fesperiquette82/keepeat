@@ -175,6 +175,49 @@ export async function cancelExpiryNotification(itemId: string): Promise<void> {
   }
 }
 
+const OPEN_NOTIF_KEY_PREFIX = 'keepeat_open_notif_';
+
+/**
+ * Déclenche une notif locale (une fois par jour) si des produits expirent aujourd'hui ou demain.
+ * À appeler au démarrage quand l'utilisateur est connecté et que le stock est chargé.
+ */
+export async function checkAndNotifyUrgentOnOpen(items: StockItem[]): Promise<void> {
+  const today = new Date().toISOString().slice(0, 10);
+  const KEY = `${OPEN_NOTIF_KEY_PREFIX}${today}`;
+  try {
+    const already = await AsyncStorage.getItem(KEY);
+    if (already) return;
+
+    const urgent = items.filter(i => {
+      if (!i.expiry_date || i.status !== 'active') return false;
+      const d = differenceInDays(parseISO(i.expiry_date), new Date());
+      return d <= 1;
+    });
+    if (!urgent.length) return;
+
+    const { status } = await Notifications.getPermissionsAsync();
+    if (status !== 'granted') return;
+
+    const names = urgent.slice(0, 3).map(i => i.name).join(', ');
+    await Notifications.scheduleNotificationAsync({
+      content: {
+        title: '⏰ Produits à utiliser maintenant',
+        body: `${names} expire${urgent.length > 1 ? 'nt' : ''} aujourd\'hui ou demain`,
+        sound: 'default',
+        data: { type: 'urgent_open' },
+      },
+      trigger: {
+        type: Notifications.SchedulableTriggerInputTypes.TIME_INTERVAL,
+        seconds: 3,
+        channelId: 'expiry-alerts',
+      },
+    });
+    await AsyncStorage.setItem(KEY, '1');
+  } catch (err) {
+    console.warn('[Notifications] checkAndNotifyUrgentOnOpen error:', err);
+  }
+}
+
 export async function rescheduleAllNotifications(items: StockItem[]): Promise<void> {
   try {
     await Notifications.cancelAllScheduledNotificationsAsync();

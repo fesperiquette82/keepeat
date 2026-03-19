@@ -2,6 +2,7 @@
 from __future__ import annotations
 
 import asyncio
+import json
 import logging
 import os
 import re
@@ -282,29 +283,28 @@ async def _check_daily_expiry_alert() -> None:
         names = [item["name"] for item in urgent_items]
         count = len(names)
 
-        # Suggestion de recette via Spoonacular (best-effort, non bloquant)
+        # Suggestion de recette via TheMealDB (gratuit, sans clé)
         recipe_hint = ""
-        spoonacular_key = os.environ.get("SPOONACULAR_KEY", "")
-        if spoonacular_key and names:
+        if names:
             try:
-                async with httpx.AsyncClient(timeout=8) as hclient:
+                en_ingredient = _fr_to_en_ingredient(names[0], "autres")
+                async with httpx.AsyncClient(timeout=6) as hclient:
                     r = await hclient.get(
-                        "https://api.spoonacular.com/recipes/findByIngredients",
-                        params={
-                            "ingredients": ",".join(names[:3]),
-                            "number": 1,
-                            "ranking": 2,
-                            "apiKey": spoonacular_key,
-                        },
+                        "https://www.themealdb.com/api/json/v1/1/filter.php",
+                        params={"i": en_ingredient},
                     )
                     if r.status_code == 200:
-                        results = r.json()
-                        if results:
-                            recipe_hint = f" → {results[0]['title']}"
+                        meals = (r.json().get("meals") or [])
+                        if meals:
+                            recipe_hint = f" → Recette : {meals[0]['strMeal']}"
             except Exception:
                 pass
 
-        title = f"⏰ {count} produit{'s' if count > 1 else ''} à utiliser aujourd'hui"
+        first = names[0]
+        if count == 1:
+            title = f"⏰ {first} expire {'aujourd\'hui' if today_str <= in_2_days else 'bientôt'}"
+        else:
+            title = f"⏰ {count} produits à utiliser maintenant"
         body = ", ".join(names) + recipe_hint
         await _send_expo_push(
             tokens,
@@ -1845,6 +1845,215 @@ async def get_monthly_stats(
         })
 
     return result
+
+
+# ── Gamification ──────────────────────────────────────────────────────────────
+
+_LEVELS = [
+    (0,   "Débutant",          "🌱", 10),
+    (10,  "Éco-citoyen",       "♻️",  30),
+    (30,  "Chasseur de gaspi", "🎯", 60),
+    (60,  "Expert anti-gaspi", "⭐", 100),
+    (100, "Champion 🌍",       "🏆", None),
+]
+
+
+async def _compute_streak(uid: str) -> int:
+    """Nombre de jours consécutifs depuis aujourd'hui sans aucun item jeté."""
+    today = _utc_now().date()
+    streak = 0
+    for i in range(60):
+        day = today - timedelta(days=i)
+        day_str = day.strftime("%Y-%m-%d")
+        thrown_today = await stock_col.count_documents({
+            "user_id": uid,
+            "status": "thrown",
+            "thrown_date": {"$regex": f"^{day_str}"},
+        })
+        if thrown_today > 0:
+            break
+        streak += 1
+    return streak
+
+
+@api_router.get("/gamification")
+async def get_gamification(
+    current_user: Dict[str, Any] = Depends(_get_current_user),
+):
+    """Retourne les données de gamification : niveau, streak, économies totales."""
+    uid = current_user["id"]
+
+    total_consumed, total_thrown, consumed_docs = await asyncio.gather(
+        stock_col.count_documents({"user_id": uid, "status": "consumed"}),
+        stock_col.count_documents({"user_id": uid, "status": "thrown"}),
+        stock_col.find({"user_id": uid, "status": "consumed"}, {"food_category": 1}).to_list(length=10000),
+    )
+    streak = await _compute_streak(uid)
+
+    total_saved = sum(
+        _SAVINGS_BY_CATEGORY.get((d.get("food_category") or "").lower(), _DEFAULT_SAVINGS)
+        for d in consumed_docs
+    )
+
+    # Niveau basé sur total_consumed
+    level_index = 0
+    for i, (threshold, _n, _e, _nt) in enumerate(_LEVELS):
+        if total_consumed >= threshold:
+            level_index = i
+    current_threshold, level_name, level_emoji, next_threshold = _LEVELS[level_index]
+
+    if next_threshold is not None:
+        progress = (total_consumed - current_threshold) / max(next_threshold - current_threshold, 1)
+        next_level = _LEVELS[level_index + 1][1] if level_index + 1 < len(_LEVELS) else None
+    else:
+        progress = 1.0
+        next_level = None
+
+    return {
+        "total_consumed":    total_consumed,
+        "total_thrown":      total_thrown,
+        "total_saved_euros": round(total_saved, 1),
+        "current_streak":    streak,
+        "level_index":       level_index,
+        "level_name":        level_name,
+        "level_emoji":       level_emoji,
+        "progress_to_next":  round(min(progress, 1.0), 3),
+        "next_level":        next_level,
+    }
+
+
+# ── Recettes IA (OpenAI GPT-4o-mini) ─────────────────────────────────────────
+
+_AI_RECIPE_PROMPT = """Tu es un chef cuisinier créatif. L'utilisateur a ces produits dans son frigo/placard :
+
+{ingredients}
+
+Génère exactement 3 recettes originales en utilisant UNIQUEMENT ces ingrédients (tu peux en utiliser un sous-ensemble).
+Réponds UNIQUEMENT en JSON valide (pas de markdown), dans ce format :
+[
+  {{
+    "title": "Nom de la recette",
+    "ingredients_used": ["ingrédient 1", "ingrédient 2"],
+    "instructions_summary": "Instructions en 2-3 phrases maximum.",
+    "prep_time_min": 15
+  }}
+]
+Langue : français. Maximum 80 mots par instructions_summary."""
+
+# Cache en mémoire (uid -> {recipes, created_at})
+_ai_recipe_cache: dict[str, dict] = {}
+
+
+@api_router.get("/recipes/ai")
+async def get_ai_recipes(
+    current_user: Dict[str, Any] = Depends(_get_current_user),
+):
+    """Génère 3 recettes personnalisées via GPT-4o-mini basées sur le stock de l'utilisateur."""
+    uid = current_user["id"]
+    openai_key = os.environ.get("KEEPEAT_OPENAI_TOKEN", "")
+    if not openai_key:
+        raise HTTPException(status_code=503, detail="IA non configurée")
+
+    # Cache 1h par utilisateur
+    cached = _ai_recipe_cache.get(uid)
+    if cached and (_utc_now() - cached["created_at"]).total_seconds() < 3600:
+        return cached["recipes"]
+
+    items = await stock_col.find(
+        {"user_id": uid, "status": "active"},
+    ).sort("expiry_date", 1).limit(8).to_list(length=8)
+
+    if not items:
+        return []
+
+    ingredients_list = "\n".join(
+        f"- {i['name']}" + (f" ({i.get('food_category', '')})" if i.get('food_category') else "")
+        for i in items
+    )
+    prompt = _AI_RECIPE_PROMPT.format(ingredients=ingredients_list)
+
+    try:
+        async with httpx.AsyncClient(timeout=30) as http:
+            r = await http.post(
+                "https://api.openai.com/v1/chat/completions",
+                headers={
+                    "Authorization": f"Bearer {openai_key}",
+                    "Content-Type": "application/json",
+                },
+                json={
+                    "model": "gpt-4o-mini",
+                    "max_tokens": 800,
+                    "messages": [{"role": "user", "content": prompt}],
+                },
+            )
+            if r.status_code != 200:
+                logger.warning("OpenAI recipes/ai error %s: %s", r.status_code, r.text[:200])
+                raise HTTPException(status_code=502, detail="Erreur IA externe")
+            text = r.json()["choices"][0]["message"]["content"].strip()
+    except HTTPException:
+        raise
+    except Exception as exc:
+        logger.warning("OpenAI recipes/ai request failed: %s", exc)
+        raise HTTPException(status_code=502, detail="Erreur réseau IA")
+
+    # Nettoyage du bloc markdown éventuel
+    if "```" in text:
+        parts = text.split("```")
+        text = parts[1] if len(parts) > 1 else parts[0]
+        if text.startswith("json"):
+            text = text[4:]
+        text = text.strip().rstrip("```").strip()
+
+    try:
+        recipes = json.loads(text)
+    except Exception:
+        logger.warning("OpenAI recipes/ai invalid JSON: %s", text[:200])
+        raise HTTPException(status_code=502, detail="Réponse IA invalide")
+
+    for recipe in recipes:
+        recipe["is_ai"] = True
+
+    _ai_recipe_cache[uid] = {"recipes": recipes, "created_at": _utc_now()}
+    logger.info("AI recipes generated — user=%s count=%d", uid, len(recipes))
+    return recipes
+
+
+# ── Prévisions de consommation ────────────────────────────────────────────────
+
+@api_router.get("/predictions")
+async def get_predictions(
+    current_user: Dict[str, Any] = Depends(_get_current_user),
+):
+    """Retourne les items actifs dont la catégorie a un taux de gaspillage > 40% dans l'historique."""
+    uid = current_user["id"]
+
+    pipeline = [
+        {"$match": {"user_id": uid, "status": {"$in": ["consumed", "thrown"]}}},
+        {"$group": {
+            "_id": "$food_category",
+            "consumed": {"$sum": {"$cond": [{"$eq": ["$status", "consumed"]}, 1, 0]}},
+            "thrown":   {"$sum": {"$cond": [{"$eq": ["$status", "thrown"]},   1, 0]}},
+        }},
+    ]
+    stats_agg = await stock_col.aggregate(pipeline).to_list(length=20)
+    risky_cats: set[str] = set()
+    for s in stats_agg:
+        total = s["consumed"] + s["thrown"]
+        if total >= 3 and s["thrown"] / total > 0.4:  # seuil minimum de 3 données
+            risky_cats.add(s["_id"])
+
+    if not risky_cats:
+        return []
+
+    items = await stock_col.find(
+        {"user_id": uid, "status": "active", "food_category": {"$in": list(risky_cats)}},
+        {"_id": 1, "name": 1, "food_category": 1},
+    ).to_list(length=30)
+
+    return [
+        {"id": str(i["_id"]), "name": i["name"], "category": i.get("food_category", "")}
+        for i in items
+    ]
 
 
 # Wire routes

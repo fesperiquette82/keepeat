@@ -29,14 +29,19 @@ interface RecipeSuggestion {
   missedIngredients: string[];
   sourceUrl: string;
   is_fallback?: boolean;
+  is_ai?: boolean;
+  ingredients_used?: string[];
+  instructions_summary?: string;
+  prep_time_min?: number;
 }
 
-type FilterTab = 'tous' | 'urgents' | 'frigo' | 'placard';
+type FilterTab = 'tous' | 'urgents' | 'frigo' | 'placard' | 'ai';
 const FILTER_TABS: { key: FilterTab; labelFr: string; labelEn: string }[] = [
   { key: 'tous',    labelFr: 'Tous',    labelEn: 'All'    },
   { key: 'urgents', labelFr: 'Urgents', labelEn: 'Urgent' },
   { key: 'frigo',   labelFr: 'Frigo',   labelEn: 'Fridge' },
   { key: 'placard', labelFr: 'Placard', labelEn: 'Pantry' },
+  { key: 'ai',      labelFr: '✨ IA',   labelEn: '✨ AI'  },
 ];
 
 const TAB_TO_FILTER: Record<FilterTab, string> = {
@@ -44,6 +49,7 @@ const TAB_TO_FILTER: Record<FilterTab, string> = {
   urgents: 'urgent',
   frigo:   'frigo',
   placard: 'placard',
+  ai:      'ai',
 };
 
 const SECTION_TITLES: Record<FilterTab, { fr: string; en: string }> = {
@@ -51,6 +57,7 @@ const SECTION_TITLES: Record<FilterTab, { fr: string; en: string }> = {
   urgents: { fr: 'Recettes avec vos urgences 🗓️',  en: 'Recipes with your urgent items 🗓️' },
   frigo:   { fr: 'Recettes avec le frigo ❄️',       en: 'Fridge recipes ❄️'                },
   placard: { fr: 'Recettes avec le placard 🏪',     en: 'Pantry recipes 🏪'                },
+  ai:      { fr: 'Recettes IA personnalisées ✨',   en: 'AI personalized recipes ✨'        },
 };
 
 const EMPTY_TEXTS: Record<FilterTab, { fr: string; en: string }> = {
@@ -58,6 +65,7 @@ const EMPTY_TEXTS: Record<FilterTab, { fr: string; en: string }> = {
   urgents: { fr: 'Aucun produit urgent. Bravo ! 🎉',               en: 'No urgent items. Well done! 🎉'             },
   frigo:   { fr: 'Aucun produit au frigo dans le stock.',           en: 'No fridge products in your stock.'          },
   placard: { fr: 'Aucun produit au placard dans le stock.',         en: 'No pantry products in your stock.'          },
+  ai:      { fr: 'Stock vide — ajoutez des produits pour générer des recettes IA.', en: 'Empty stock — add products to generate AI recipes.' },
 };
 
 export default function RecipesScreen() {
@@ -72,6 +80,7 @@ export default function RecipesScreen() {
   const [isRefreshing, setIsRefreshing] = useState(false);
   const [error, setError]             = useState<string | null>(null);
   const [activeTab, setActiveTab]     = useState<FilterTab>('tous');
+  const [previewRecipes, setPreviewRecipes] = useState<RecipeSuggestion[]>([]);
 
   const t = (fr: string, en: string) => isFr ? fr : en;
 
@@ -100,11 +109,30 @@ export default function RecipesScreen() {
     if (!silent) setIsLoading(true);
     setError(null);
     try {
-      const filter = TAB_TO_FILTER[tab];
-      const res = await axios.get(buildApiUrl(`/api/recipes/suggestions?filter=${filter}`), {
+      const url = tab === 'ai'
+        ? buildApiUrl('/api/recipes/ai')
+        : buildApiUrl(`/api/recipes/suggestions?filter=${TAB_TO_FILTER[tab]}`);
+      const res = await axios.get(url, {
         headers: { Authorization: `Bearer ${token}` },
       });
-      setRecipes(res.data);
+      // Normaliser les recettes IA au même format
+      if (tab === 'ai') {
+        const aiRecipes = (res.data as any[]).map((r, i) => ({
+          id: -(i + 1),
+          title: r.title,
+          image: '',
+          usedIngredients: r.ingredients_used ?? [],
+          missedIngredients: [],
+          sourceUrl: '',
+          is_ai: true,
+          ingredients_used: r.ingredients_used ?? [],
+          instructions_summary: r.instructions_summary ?? '',
+          prep_time_min: r.prep_time_min ?? null,
+        }));
+        setRecipes(aiRecipes);
+      } else {
+        setRecipes(res.data);
+      }
     } catch {
       setError(t(
         'Impossible de charger les recettes. Vérifiez votre connexion.',
@@ -117,6 +145,27 @@ export default function RecipesScreen() {
   }, [token, language]);
 
   useEffect(() => { fetchRecipes(activeTab); }, [fetchRecipes, activeTab]);
+
+  // Chargement silencieux des 3 recettes preview (urgent en priorité, all en fallback)
+  useEffect(() => {
+    if (!token) return;
+    const load = async () => {
+      try {
+        let res = await axios.get(buildApiUrl('/api/recipes/suggestions?filter=urgent'), {
+          headers: { Authorization: `Bearer ${token}` },
+        });
+        if ((res.data as RecipeSuggestion[]).length > 0) {
+          setPreviewRecipes((res.data as RecipeSuggestion[]).slice(0, 3));
+          return;
+        }
+        res = await axios.get(buildApiUrl('/api/recipes/suggestions?filter=all'), {
+          headers: { Authorization: `Bearer ${token}` },
+        });
+        setPreviewRecipes((res.data as RecipeSuggestion[]).slice(0, 3));
+      } catch { /* silencieux */ }
+    };
+    load();
+  }, [token]);
 
   const handleRefresh = () => {
     setIsRefreshing(true);
@@ -143,6 +192,39 @@ export default function RecipesScreen() {
           <Text style={styles.illustEmoji3}>🌿</Text>
         </View>
       </View>
+
+      {/* Preview 3 recettes — chargement silencieux */}
+      {previewRecipes.length > 0 && (
+        <View style={styles.previewSection}>
+          <Text style={styles.previewTitle}>
+            {isFr ? '✨ Suggérées pour vous' : '✨ Suggested for you'}
+          </Text>
+          <ScrollView
+            horizontal
+            showsHorizontalScrollIndicator={false}
+            contentContainerStyle={styles.previewScroll}
+          >
+            {previewRecipes.map(recipe => (
+              <TouchableOpacity
+                key={recipe.id}
+                style={styles.previewCard}
+                onPress={() => openRecipe(recipe.sourceUrl)}
+                activeOpacity={0.85}
+              >
+                {recipe.image ? (
+                  <Image source={{ uri: recipe.image }} style={styles.previewCardImg} />
+                ) : (
+                  <View style={[styles.previewCardImg, styles.previewCardImgPlaceholder]}>
+                    <Ionicons name="restaurant-outline" size={28} color="#ccc" />
+                  </View>
+                )}
+                <View style={styles.previewCardOverlay} />
+                <Text style={styles.previewCardTitle} numberOfLines={2}>{recipe.title}</Text>
+              </TouchableOpacity>
+            ))}
+          </ScrollView>
+        </View>
+      )}
 
       {/* Category tabs */}
       <View style={styles.tabsRow}>
@@ -268,21 +350,25 @@ export default function RecipesScreen() {
           {recipes.map((recipe) => (
             <TouchableOpacity
               key={recipe.id}
-              style={styles.card}
-              onPress={() => openRecipe(recipe.sourceUrl)}
-              activeOpacity={0.88}
+              style={[styles.card, recipe.is_ai && styles.cardAi]}
+              onPress={() => recipe.sourceUrl ? openRecipe(recipe.sourceUrl) : null}
+              activeOpacity={recipe.sourceUrl ? 0.88 : 1}
             >
               {/* Image */}
               <View style={styles.cardImgWrap}>
                 {recipe.image ? (
                   <Image source={{ uri: recipe.image }} style={styles.cardImg} />
                 ) : (
-                  <View style={styles.cardImgPlaceholder}>
-                    <Ionicons name="restaurant-outline" size={32} color="#ccc" />
+                  <View style={[styles.cardImgPlaceholder, recipe.is_ai && { backgroundColor: '#EDE9FE' }]}>
+                    <Ionicons name={recipe.is_ai ? 'sparkles' : 'restaurant-outline'} size={32} color={recipe.is_ai ? '#7c3aed' : '#ccc'} />
                   </View>
                 )}
-                {/* Ingredient count badge */}
-                {recipe.usedIngredients.length > 0 && (
+                {/* Badge count ou badge IA */}
+                {recipe.is_ai ? (
+                  <View style={styles.aiBadge}>
+                    <Text style={styles.aiBadgeText}>IA</Text>
+                  </View>
+                ) : recipe.usedIngredients.length > 0 && (
                   <View style={styles.countBadge}>
                     <Text style={styles.countBadgeText}>{recipe.usedIngredients.length}</Text>
                   </View>
@@ -293,13 +379,20 @@ export default function RecipesScreen() {
               <View style={styles.cardBody}>
                 <Text style={styles.cardTitle} numberOfLines={2}>{recipe.title}</Text>
 
+                {/* Résumé instructions (IA seulement) */}
+                {recipe.is_ai && recipe.instructions_summary && (
+                  <Text style={styles.aiInstructions} numberOfLines={3}>
+                    {recipe.instructions_summary}
+                  </Text>
+                )}
+
                 {/* Used ingredients */}
                 {recipe.usedIngredients.length > 0 && (
                   <View style={styles.ingredientsRow}>
                     {recipe.usedIngredients.slice(0, 3).map(ing => (
-                      <View key={ing} style={styles.badgeUsed}>
-                        <Ionicons name="checkmark" size={10} color={C.primary} />
-                        <Text style={styles.badgeUsedText} numberOfLines={1}>{ing}</Text>
+                      <View key={ing} style={[styles.badgeUsed, recipe.is_ai && styles.badgeUsedAi]}>
+                        <Ionicons name="checkmark" size={10} color={recipe.is_ai ? '#7c3aed' : C.primary} />
+                        <Text style={[styles.badgeUsedText, recipe.is_ai && { color: '#7c3aed' }]} numberOfLines={1}>{ing}</Text>
                       </View>
                     ))}
                     {recipe.usedIngredients.length > 3 && (
@@ -308,17 +401,22 @@ export default function RecipesScreen() {
                   </View>
                 )}
 
-                {/* Footer: missing count + open */}
+                {/* Footer */}
                 <View style={styles.cardFooter}>
-                  {recipe.missedIngredients.length > 0 && (
+                  {recipe.prep_time_min && (
+                    <Text style={styles.missedText}>⏱ {recipe.prep_time_min} min</Text>
+                  )}
+                  {!recipe.is_ai && recipe.missedIngredients.length > 0 && (
                     <Text style={styles.missedText}>
                       {recipe.missedIngredients.length} {t('manquant(s)', 'missing')}
                     </Text>
                   )}
-                  <View style={styles.viewBtn}>
-                    <Text style={styles.viewBtnText}>{t('Voir', 'View')}</Text>
-                    <Ionicons name="open-outline" size={12} color={C.primary} />
-                  </View>
+                  {!recipe.is_ai && recipe.sourceUrl && (
+                    <View style={styles.viewBtn}>
+                      <Text style={styles.viewBtnText}>{t('Voir', 'View')}</Text>
+                      <Ionicons name="open-outline" size={12} color={C.primary} />
+                    </View>
+                  )}
                 </View>
               </View>
             </TouchableOpacity>
@@ -469,6 +567,64 @@ const styles = StyleSheet.create({
     backgroundColor: C.primaryLight,
   },
   viewBtnText: { fontSize: 12, color: C.primary, fontWeight: '600' },
+
+  // ── IA card ──
+  cardAi: { borderColor: '#E8E5FF', borderWidth: 1.5 },
+  aiBadge: {
+    position: 'absolute',
+    top: 6, left: 6,
+    backgroundColor: '#7c3aed',
+    borderRadius: 6,
+    paddingHorizontal: 6, paddingVertical: 2,
+  },
+  aiBadgeText:    { fontSize: 10, fontWeight: '800', color: '#fff' },
+  aiInstructions: { fontSize: 12, color: C.textMid, lineHeight: 17, marginBottom: 2 },
+  badgeUsedAi:    { backgroundColor: '#EDE9FE' },
+
+  // ── Preview recettes ──
+  previewSection: {
+    backgroundColor: '#fff',
+    paddingTop: 12,
+    paddingBottom: 4,
+    borderBottomWidth: 1,
+    borderBottomColor: '#F0EDE8',
+  },
+  previewTitle: {
+    fontSize: 13,
+    fontWeight: '700',
+    color: '#1A1A1A',
+    paddingHorizontal: 16,
+    marginBottom: 10,
+  },
+  previewScroll: { paddingHorizontal: 16, gap: 10, paddingBottom: 12 },
+  previewCard: {
+    width: 120,
+    height: 120,
+    borderRadius: 14,
+    overflow: 'hidden',
+    position: 'relative',
+    ...shadowSm,
+  },
+  previewCardImg: { width: 120, height: 120, resizeMode: 'cover' },
+  previewCardImgPlaceholder: {
+    backgroundColor: '#F0EDE8',
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  previewCardOverlay: {
+    ...StyleSheet.absoluteFillObject,
+    backgroundColor: 'rgba(0,0,0,0.38)',
+  },
+  previewCardTitle: {
+    position: 'absolute',
+    bottom: 8,
+    left: 8,
+    right: 8,
+    fontSize: 11,
+    fontWeight: '700',
+    color: '#fff',
+    lineHeight: 15,
+  },
 
   // ── Urgent context banner ──
   urgentBanner: {
