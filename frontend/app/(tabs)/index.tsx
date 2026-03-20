@@ -198,41 +198,6 @@ export default function HomeScreen() {
     return { text: isFr ? '✅ Tout est sous contrôle' : '✅ Everything under control' };
   };
 
-  // À faire maintenant — items contextuels
-  const todoItems = useMemo(() => {
-    const list: { emoji: string; label: string; action: () => void; color: string }[] = [];
-    if (expiredCount > 0) {
-      list.push({
-        emoji: '⛔',
-        label: isFr
-          ? `Jeter ou consommer ${expiredCount} produit${expiredCount > 1 ? 's' : ''} périmé${expiredCount > 1 ? 's' : ''}`
-          : `Discard or use ${expiredCount} expired product${expiredCount > 1 ? 's' : ''}`,
-        action: () => setSelectedTab('urgents'),
-        color: '#ef4444',
-      });
-    }
-    const nonExpiredUrgent = urgentCount - expiredCount;
-    if (nonExpiredUrgent > 0) {
-      list.push({
-        emoji: '⏰',
-        label: isFr
-          ? `Consommer ${nonExpiredUrgent} produit${nonExpiredUrgent > 1 ? 's' : ''} avant expiration`
-          : `Use ${nonExpiredUrgent} product${nonExpiredUrgent > 1 ? 's' : ''} before expiry`,
-        action: () => setSelectedTab('urgents'),
-        color: '#f97316',
-      });
-    }
-    if (items.length > 0) {
-      list.push({
-        emoji: '🍳',
-        label: isFr ? 'Voir les recettes avec mon stock' : 'See recipes with my stock',
-        action: () => router.push('/(tabs)/recipes' as any),
-        color: C.primary,
-      });
-    }
-    return list;
-  }, [expiredCount, urgentCount, items.length, isFr]);
-
   // ─── Product card ─────────────────────────────────────────────────────────
 
   const renderCard = (item: StockItem) => {
@@ -351,6 +316,17 @@ export default function HomeScreen() {
         <View style={styles.headerLeft}>
           <Text style={styles.greeting}>
             {isFr ? `Bonjour ${firstName} 👋` : `Hello ${firstName} 👋`}
+          </Text>
+          <Text style={styles.headerSub}>
+            {items.length === 0
+              ? (isFr ? 'Votre stock est vide 🛒' : 'Your stock is empty 🛒')
+              : stats.consumed_this_week > 0
+                ? (isFr
+                    ? `${items.length} produit${items.length > 1 ? 's' : ''} en stock · ~${Math.round(stats.consumed_this_week * 2.5)}€ sauvés`
+                    : `${items.length} product${items.length > 1 ? 's' : ''} in stock · ~${Math.round(stats.consumed_this_week * 2.5)}€ saved`)
+                : (isFr
+                    ? `${items.length} produit${items.length > 1 ? 's' : ''} en stock`
+                    : `${items.length} product${items.length > 1 ? 's' : ''} in stock`)}
           </Text>
         </View>
         <TouchableOpacity style={styles.settingsBtn} onPress={() => router.push('/settings')}>
@@ -503,27 +479,6 @@ export default function HomeScreen() {
         </View>
       </View>
 
-      {/* À faire maintenant */}
-      {todoItems.length > 0 && (
-        <View style={styles.todoSection}>
-          <Text style={styles.todoSectionTitle}>
-            {isFr ? '✅ À faire maintenant' : '✅ To do now'}
-          </Text>
-          {todoItems.map((todo, idx) => (
-            <TouchableOpacity
-              key={idx}
-              style={styles.todoItem}
-              onPress={todo.action}
-              activeOpacity={0.7}
-            >
-              <Text style={styles.todoItemEmoji}>{todo.emoji}</Text>
-              <Text style={[styles.todoItemLabel, { color: todo.color }]}>{todo.label}</Text>
-              <Ionicons name="chevron-forward" size={14} color={todo.color} />
-            </TouchableOpacity>
-          ))}
-        </View>
-      )}
-
       {/* Réapprovisionner — scroll horizontal des produits récents */}
       {historyItems.length > 0 && (
         <View style={styles.historySection}>
@@ -660,12 +615,13 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     alignItems: 'center',
     paddingHorizontal: 20,
-    paddingTop: 16,
-    paddingBottom: 14,
+    paddingTop: 12,
+    paddingBottom: 8,
     backgroundColor: '#fff',
   },
   headerLeft: { flex: 1 },
-  greeting: { fontSize: 22, fontWeight: '800', color: '#1A1A1A', lineHeight: 28 },
+  greeting: { fontSize: 18, fontWeight: '700', color: '#1A1A1A', lineHeight: 24 },
+  headerSub: { fontSize: 13, color: C.textMid, marginTop: 2 },
   settingsBtn: {
     padding: 7, backgroundColor: '#F7F5F2', borderRadius: 10,
     borderWidth: 1, borderColor: '#E8E5E0',
@@ -698,24 +654,24 @@ const styles = StyleSheet.create({
     gap: 8,
     marginHorizontal: 16,
     marginTop: 8,
-    backgroundColor: '#F3F0FF',
+    backgroundColor: C.primaryLight,
     borderRadius: 12,
     paddingHorizontal: 12,
     paddingVertical: 8,
     borderWidth: 1,
-    borderColor: '#E8E5FF',
+    borderColor: C.primaryMid,
   },
   gamifEmoji:    { fontSize: 16 },
-  gamifName:     { fontSize: 12, fontWeight: '700', color: '#7c3aed' },
+  gamifName:     { fontSize: 12, fontWeight: '700', color: C.primary },
   gamifBarTrack: {
     flex: 1,
     height: 5,
-    backgroundColor: '#DDD6FE',
+    backgroundColor: C.primaryMid,
     borderRadius: 3,
     flexDirection: 'row',
     overflow: 'hidden',
   },
-  gamifBarFill:  { height: '100%', backgroundColor: '#7c3aed', borderRadius: 3 },
+  gamifBarFill:  { height: '100%', backgroundColor: C.primary, borderRadius: 3 },
   gamifStreak:   { fontSize: 11, fontWeight: '600', color: C.orange },
 
   // ── Badge risque prédiction ──
@@ -765,8 +721,7 @@ const styles = StyleSheet.create({
     paddingVertical: 12,
     gap: 8,
     backgroundColor: '#fff',
-    borderBottomWidth: 1,
-    borderBottomColor: '#F0EDE8',
+    marginBottom: 8,
   },
   scanBtnLarge: {
     flexDirection: 'row',
@@ -813,45 +768,12 @@ const styles = StyleSheet.create({
   },
   outlineBtnText: { color: C.textMid, fontSize: 13, fontWeight: '600' },
 
-  // ── À faire maintenant ──
-  todoSection: {
-    backgroundColor: '#fff',
-    paddingHorizontal: 16,
-    paddingTop: 10,
-    paddingBottom: 12,
-    borderBottomWidth: 1,
-    borderBottomColor: '#F0EDE8',
-    gap: 6,
-  },
-  todoSectionTitle: {
-    fontSize: 11,
-    fontWeight: '700',
-    color: C.textLight,
-    textTransform: 'uppercase',
-    letterSpacing: 0.6,
-    marginBottom: 2,
-  },
-  todoItem: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 10,
-    paddingVertical: 9,
-    paddingHorizontal: 12,
-    backgroundColor: '#FAFAFA',
-    borderRadius: 10,
-    borderWidth: 1,
-    borderColor: '#F0EDE8',
-  },
-  todoItemEmoji: { fontSize: 16 },
-  todoItemLabel: { flex: 1, fontSize: 13, fontWeight: '600' },
-
   // ── History / Re-stock ──
   historySection: {
     backgroundColor: '#fff',
     paddingTop: 10,
     paddingBottom: 12,
-    borderBottomWidth: 1,
-    borderBottomColor: '#F0EDE8',
+    marginBottom: 8,
   },
   historySectionTitle: {
     fontSize: 11,

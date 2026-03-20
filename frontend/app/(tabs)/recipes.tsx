@@ -334,7 +334,7 @@ export default function RecipesScreen() {
           {/* Section header */}
           {recipes[0]?.is_fallback ? (
             <View style={[styles.sectionHeader, styles.fallbackHeader]}>
-              <Ionicons name="sparkles-outline" size={15} color="#7c3aed" />
+              <Ionicons name="sparkles-outline" size={15} color={C.primary} />
               <Text style={styles.sectionTitleFallback}>
                 {t('Suggestions populaires 🌍', 'Popular suggestions 🌍')}
               </Text>
@@ -359,8 +359,8 @@ export default function RecipesScreen() {
                 {recipe.image ? (
                   <Image source={{ uri: recipe.image }} style={styles.cardImg} />
                 ) : (
-                  <View style={[styles.cardImgPlaceholder, recipe.is_ai && { backgroundColor: '#EDE9FE' }]}>
-                    <Ionicons name={recipe.is_ai ? 'sparkles' : 'restaurant-outline'} size={32} color={recipe.is_ai ? '#7c3aed' : '#ccc'} />
+                  <View style={[styles.cardImgPlaceholder, recipe.is_ai && { backgroundColor: C.primaryLight }]}>
+                    <Ionicons name={recipe.is_ai ? 'sparkles' : 'restaurant-outline'} size={32} color={recipe.is_ai ? C.primary : '#ccc'} />
                   </View>
                 )}
                 {/* Badge count ou badge IA */}
@@ -391,8 +391,8 @@ export default function RecipesScreen() {
                   <View style={styles.ingredientsRow}>
                     {recipe.usedIngredients.slice(0, 3).map(ing => (
                       <View key={ing} style={[styles.badgeUsed, recipe.is_ai && styles.badgeUsedAi]}>
-                        <Ionicons name="checkmark" size={10} color={recipe.is_ai ? '#7c3aed' : C.primary} />
-                        <Text style={[styles.badgeUsedText, recipe.is_ai && { color: '#7c3aed' }]} numberOfLines={1}>{ing}</Text>
+                        <Ionicons name="checkmark" size={10} color={C.primary} />
+                        <Text style={styles.badgeUsedText} numberOfLines={1}>{ing}</Text>
                       </View>
                     ))}
                     {recipe.usedIngredients.length > 3 && (
@@ -503,8 +503,8 @@ const styles = StyleSheet.create({
     marginBottom: 6,
   },
   sectionTitle:         { fontSize: 15, fontWeight: '700', color: '#1A1A1A' },
-  fallbackHeader:       { flexDirection: 'row', alignItems: 'center', gap: 6, backgroundColor: '#f3e8ff', borderRadius: 10, paddingHorizontal: 10, paddingVertical: 6 },
-  sectionTitleFallback: { fontSize: 13, fontWeight: '700', color: '#7c3aed' },
+  fallbackHeader:       { flexDirection: 'row', alignItems: 'center', gap: 6, backgroundColor: C.primaryLight, borderRadius: 10, paddingHorizontal: 10, paddingVertical: 6 },
+  sectionTitleFallback: { fontSize: 13, fontWeight: '700', color: C.primary },
 
   // ── Recipe card ──
   card: {
@@ -526,7 +526,7 @@ const styles = StyleSheet.create({
   countBadge: {
     position: 'absolute',
     bottom: 6, left: 6,
-    backgroundColor: C.red,
+    backgroundColor: C.primary,
     borderRadius: 10,
     paddingHorizontal: 6, paddingVertical: 2,
     minWidth: 20,
@@ -569,17 +569,17 @@ const styles = StyleSheet.create({
   viewBtnText: { fontSize: 12, color: C.primary, fontWeight: '600' },
 
   // ── IA card ──
-  cardAi: { borderColor: '#E8E5FF', borderWidth: 1.5 },
+  cardAi: { borderColor: C.primaryMid, borderWidth: 1.5 },
   aiBadge: {
     position: 'absolute',
     top: 6, left: 6,
-    backgroundColor: '#7c3aed',
+    backgroundColor: '#1F2937',
     borderRadius: 6,
     paddingHorizontal: 6, paddingVertical: 2,
   },
   aiBadgeText:    { fontSize: 10, fontWeight: '800', color: '#fff' },
   aiInstructions: { fontSize: 12, color: C.textMid, lineHeight: 17, marginBottom: 2 },
-  badgeUsedAi:    { backgroundColor: '#EDE9FE' },
+  badgeUsedAi:    { backgroundColor: C.primaryLight },
 
   // ── Preview recettes ──
   previewSection: {

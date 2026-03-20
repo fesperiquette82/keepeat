@@ -18,6 +18,7 @@ export const C = {
   blue:         '#3B82F6',
   blueLight:    '#EFF6FF',
   offline:      '#92400E',
+  cardBorder:   '#EBEBEB',   // bordure unifiée (remplace le mix #F0EDE8 / #E8E5FF)
 };
 
 export const shadow = {

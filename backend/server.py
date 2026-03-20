@@ -386,6 +386,7 @@ async def lifespan(app: FastAPI):
     await user_alerts_col.create_index("sent_at", expireAfterSeconds=30 * 24 * 3600)
     await products_cache_col.create_index("cached_at", expireAfterSeconds=7 * 24 * 3600)
     await products_cache_col.create_index("barcode", unique=True)
+    await community_recipes_col.create_index("created_at")
 
     # ── Index stock_col ────────────────────────────────────────────────────────
     # Toutes les requêtes filtrent sur user_id+status ; ajout de expiry_date
@@ -486,6 +487,7 @@ users_col = db["users"]
 user_alerts_col = db["user_alerts"]      # alertes envoyées (dedup, TTL 30j)
 app_state_col = db["app_state"]          # état global de l'app (last_recall_check, ...)
 products_cache_col = db["products_cache"]  # cache OFF (TTL 7j)
+community_recipes_col = db["community_recipes"]  # recettes générées par IA (partagées)
 
 # -----------------------------------------------------------------------------
 # Auth configuration
@@ -1438,40 +1440,69 @@ async def get_recalls_status(
 
 
 # -----------------------------------------------------------------------------
-# Recettes (Spoonacular)
+# Recettes — base française embarquée
 # -----------------------------------------------------------------------------
 
 _FRIGO_CATS   = ["frais", "proteines", "legumes", "boissons"]
 _PLACARD_CATS = ["feculents", "desserts", "epicerie", "autres"]
 
-# Ingrédients de fallback par filtre (utilisés quand le stock du filtre est vide)
-_FALLBACK_INGREDIENTS: dict[str, list[str]] = {
-    "urgent":  ["chicken", "pasta", "egg"],
-    "all":     ["chicken", "pasta", "egg"],
-    "frigo":   ["chicken", "milk", "egg"],
-    "placard": ["pasta", "rice", "lentils"],
-}
-
-# Recettes de secours absolu — utilisées quand TheMealDB est complètement inaccessible
-_EMERGENCY_RECIPES: list[dict] = [
-    {"id": -1, "title": "Pâtes à l'ail et huile d'olive",  "image": "", "usedIngredients": [], "missedIngredients": [], "sourceUrl": "https://www.themealdb.com", "is_fallback": True},
-    {"id": -2, "title": "Omelette aux herbes fraîches",      "image": "", "usedIngredients": [], "missedIngredients": [], "sourceUrl": "https://www.themealdb.com", "is_fallback": True},
-    {"id": -3, "title": "Riz sauté aux légumes de saison",  "image": "", "usedIngredients": [], "missedIngredients": [], "sourceUrl": "https://www.themealdb.com", "is_fallback": True},
+# Base de ~40 recettes françaises simples et saines
+_FRENCH_RECIPE_DB: list[dict] = [
+    # Pâtes
+    {"id": "fr001", "title": "Pâtes carbonara maison",         "category": "placard", "ingredients": ["pates", "lardons", "oeuf", "parmesan", "creme"]},
+    {"id": "fr002", "title": "Pâtes à la bolognaise",          "category": "placard", "ingredients": ["pates", "boeuf", "tomate", "oignon", "ail"]},
+    {"id": "fr003", "title": "Pâtes au pesto maison",          "category": "placard", "ingredients": ["pates", "basilic", "parmesan", "ail", "huile"]},
+    {"id": "fr004", "title": "Gratin de pâtes au fromage",     "category": "placard", "ingredients": ["pates", "fromage", "lait", "beurre", "farine"]},
+    {"id": "fr035", "title": "Minestrone de légumes",          "category": "placard", "ingredients": ["tomate", "courgette", "carotte", "oignon", "pates"]},
+    # Riz / féculents
+    {"id": "fr005", "title": "Riz sauté aux légumes",          "category": "placard", "ingredients": ["riz", "carotte", "oignon", "ail", "huile"]},
+    {"id": "fr006", "title": "Riz au lait maison",             "category": "placard", "ingredients": ["riz", "lait", "sucre"]},
+    {"id": "fr007", "title": "Risotto aux champignons",        "category": "placard", "ingredients": ["riz", "champignon", "oignon", "ail", "parmesan"]},
+    {"id": "fr041", "title": "Taboulé maison",                 "category": "placard", "ingredients": ["semoule", "tomate", "concombre", "oignon", "citron"]},
+    # Oeufs
+    {"id": "fr008", "title": "Omelette aux herbes",            "category": "frigo",   "ingredients": ["oeuf", "beurre"]},
+    {"id": "fr009", "title": "Oeufs brouillés crémeux",        "category": "frigo",   "ingredients": ["oeuf", "beurre", "creme"]},
+    {"id": "fr010", "title": "Quiche lorraine",                "category": "frigo",   "ingredients": ["oeuf", "lardons", "creme", "fromage"]},
+    {"id": "fr011", "title": "Frittata aux légumes",           "category": "frigo",   "ingredients": ["oeuf", "courgette", "poivron", "oignon"]},
+    {"id": "fr037", "title": "Crêpes sucrées",                 "category": "placard", "ingredients": ["farine", "oeuf", "lait", "sucre", "beurre"]},
+    # Poulet
+    {"id": "fr012", "title": "Poulet rôti aux herbes",         "category": "frigo",   "ingredients": ["poulet", "ail", "citron", "huile"]},
+    {"id": "fr013", "title": "Sauté de poulet aux légumes",    "category": "frigo",   "ingredients": ["poulet", "carotte", "oignon", "ail", "tomate"]},
+    {"id": "fr014", "title": "Poulet au curry doux",           "category": "frigo",   "ingredients": ["poulet", "curry", "oignon", "tomate", "creme"]},
+    {"id": "fr015", "title": "Poulet à la moutarde",           "category": "frigo",   "ingredients": ["poulet", "moutarde", "creme", "oignon"]},
+    # Poisson
+    {"id": "fr016", "title": "Saumon grillé citron-herbes",    "category": "frigo",   "ingredients": ["saumon", "citron", "huile"]},
+    {"id": "fr017", "title": "Cabillaud en papillote",         "category": "frigo",   "ingredients": ["cabillaud", "citron", "tomate"]},
+    {"id": "fr018", "title": "Salade niçoise au thon",         "category": "frigo",   "ingredients": ["thon", "tomate", "oeuf", "haricot", "oignon"]},
+    # Légumes
+    {"id": "fr019", "title": "Ratatouille provençale",         "category": "frigo",   "ingredients": ["courgette", "aubergine", "tomate", "poivron", "oignon"]},
+    {"id": "fr020", "title": "Gratin dauphinois",              "category": "frigo",   "ingredients": ["pomme de terre", "creme", "ail", "fromage"]},
+    {"id": "fr021", "title": "Poêlée de courgettes à l'ail",   "category": "frigo",   "ingredients": ["courgette", "ail", "huile"]},
+    {"id": "fr022", "title": "Carottes glacées au miel",       "category": "frigo",   "ingredients": ["carotte", "miel", "beurre"]},
+    {"id": "fr023", "title": "Soupe de légumes maison",        "category": "frigo",   "ingredients": ["carotte", "pomme de terre", "oignon", "poireau"]},
+    {"id": "fr024", "title": "Velouté de courgettes",          "category": "frigo",   "ingredients": ["courgette", "oignon", "creme"]},
+    {"id": "fr025", "title": "Purée de carottes",              "category": "frigo",   "ingredients": ["carotte", "beurre", "creme"]},
+    {"id": "fr036", "title": "Soupe à l'oignon gratinée",      "category": "frigo",   "ingredients": ["oignon", "pain", "fromage", "beurre"]},
+    {"id": "fr042", "title": "Salade composée",                "category": "frigo",   "ingredients": ["tomate", "concombre", "oignon", "huile", "vinaigre"]},
+    # Légumineuses
+    {"id": "fr026", "title": "Lentilles à la française",       "category": "placard", "ingredients": ["lentilles", "lardons", "carotte", "oignon", "ail"]},
+    {"id": "fr027", "title": "Curry de pois chiches",          "category": "placard", "ingredients": ["pois chiches", "tomate", "oignon", "ail", "curry"]},
+    {"id": "fr028", "title": "Salade de lentilles vinaigrette","category": "placard", "ingredients": ["lentilles", "oignon", "moutarde", "vinaigre"]},
+    # Viande rouge
+    {"id": "fr029", "title": "Hachis parmentier",              "category": "frigo",   "ingredients": ["boeuf", "pomme de terre", "oignon", "lait", "beurre"]},
+    {"id": "fr030", "title": "Steak haché sauce tomate",       "category": "frigo",   "ingredients": ["boeuf", "tomate", "oignon", "ail"]},
+    {"id": "fr031", "title": "Porc sauté aux légumes",         "category": "frigo",   "ingredients": ["porc", "carotte", "oignon", "ail"]},
+    # Fromage / charcuterie
+    {"id": "fr032", "title": "Croque-monsieur",                "category": "frigo",   "ingredients": ["pain", "jambon", "fromage", "beurre"]},
+    {"id": "fr033", "title": "Tarte tomate mozzarella",        "category": "frigo",   "ingredients": ["tomate", "mozzarella", "oeuf", "creme"]},
+    {"id": "fr034", "title": "Salade caprese",                 "category": "frigo",   "ingredients": ["tomate", "mozzarella", "huile"]},
+    # Desserts
+    {"id": "fr038", "title": "Mousse au chocolat",             "category": "frigo",   "ingredients": ["chocolat", "oeuf", "sucre", "beurre"]},
+    {"id": "fr039", "title": "Tarte aux pommes",               "category": "placard", "ingredients": ["pomme", "farine", "beurre", "sucre", "oeuf"]},
+    {"id": "fr040", "title": "Yaourt maison",                  "category": "frigo",   "ingredients": ["lait", "yaourt"]},
 ]
 
-# Fallback par catégorie → ingrédient anglais TheMealDB
-_CATEGORY_TO_EN: dict[str, str] = {
-    "frais":     "milk",
-    "proteines": "chicken",
-    "legumes":   "tomato",
-    "feculents": "pasta",
-    "desserts":  "chocolate",
-    "boissons":  "milk",
-    "epicerie":  "garlic",
-    "autres":    "egg",
-}
-
-# Dictionnaire FR → EN pour les aliments courants (mots composés en premier)
+# Dictionnaire FR → EN pour les alertes quotidiennes (daily alert, _check_daily_expiry_alert)
 _FR_EN: dict[str, str] = {
     "pomme de terre": "potato", "pommes de terre": "potato",
     "sauce tomate": "tomato", "petits pois": "peas",
@@ -1502,8 +1533,14 @@ _FR_EN: dict[str, str] = {
 
 import unicodedata as _ud
 
+_CATEGORY_TO_EN: dict[str, str] = {
+    "frais": "milk", "proteines": "chicken", "legumes": "tomato",
+    "feculents": "pasta", "desserts": "chocolate", "boissons": "milk",
+    "epicerie": "garlic", "autres": "egg",
+}
+
 def _fr_to_en_ingredient(name: str, category: str = "autres") -> str:
-    """Convertit un nom de produit français en ingrédient anglais pour TheMealDB."""
+    """Convertit un nom de produit français en ingrédient anglais (pour les alertes quotidiennes)."""
     norm = _ud.normalize("NFD", name.lower())
     norm = "".join(c for c in norm if _ud.category(c) != "Mn")
     for fr_word in sorted(_FR_EN, key=len, reverse=True):
@@ -1514,17 +1551,119 @@ def _fr_to_en_ingredient(name: str, category: str = "autres") -> str:
     return _CATEGORY_TO_EN.get(category, "chicken")
 
 
+_RECIPE_MATCH_THRESHOLD = 0.2  # Sous ce score → aucune correspondance utile → fallback IA
+
+_AI_SUGGEST_PROMPT = """\
+Tu es un chef cuisinier français. Génère 1 recette simple et saine avec ces ingrédients :
+{ingredients}
+
+Retourne UNIQUEMENT ce JSON (sans markdown, sans explication) :
+{{"title": "nom de la recette en français", "ingredients_keywords": ["mot1", "mot2"], "instructions_summary": "..."}}
+
+Règles :
+- Cuisine française du quotidien, saine, max 6 étapes simples
+- ingredients_keywords : mots-clés courts en français minuscules (ex: "poulet", "tomate")
+- instructions_summary : max 80 mots
+"""
+
+
+async def _generate_ai_recipe(stock_names: list[str], openai_key: str) -> dict | None:
+    """Appelle GPT-4o-mini pour générer 1 recette française depuis les ingrédients du stock.
+    Retourne None en cas d'échec ou si KEEPEAT_OPENAI_TOKEN n'est pas configuré.
+    """
+    prompt = _AI_SUGGEST_PROMPT.format(ingredients="\n".join(f"- {n}" for n in stock_names))
+    try:
+        async with httpx.AsyncClient(timeout=20) as http:
+            r = await http.post(
+                "https://api.openai.com/v1/chat/completions",
+                headers={"Authorization": f"Bearer {openai_key}", "Content-Type": "application/json"},
+                json={"model": "gpt-4o-mini", "max_tokens": 350,
+                      "messages": [{"role": "user", "content": prompt}]},
+            )
+            if r.status_code != 200:
+                logger.warning("OpenAI suggest recipe error %s: %s", r.status_code, r.text[:200])
+                return None
+            text = r.json()["choices"][0]["message"]["content"].strip()
+    except Exception as exc:
+        logger.warning("OpenAI suggest recipe failed: %s", exc)
+        return None
+
+    if "```" in text:
+        parts = text.split("```")
+        text = parts[1] if len(parts) > 1 else parts[0]
+        if text.startswith("json"):
+            text = text[4:]
+        text = text.strip().rstrip("```").strip()
+
+    try:
+        data = json.loads(text)
+        if not isinstance(data.get("title"), str) or not isinstance(data.get("ingredients_keywords"), list):
+            logger.warning("OpenAI suggest recipe invalid structure: %s", text[:200])
+            return None
+        return data
+    except Exception:
+        logger.warning("OpenAI suggest recipe invalid JSON: %s", text[:200])
+        return None
+
+
+def _normalize_fr(text: str) -> str:
+    """Minuscule + suppression des accents."""
+    n = _ud.normalize("NFD", text.lower())
+    return "".join(c for c in n if _ud.category(c) != "Mn")
+
+
+def _match_recipe_to_stock(
+    recipe: dict,
+    norm_stock: list[str],
+    norm_urgent: set[str],
+    boost_urgent: bool,
+) -> tuple[float, list[str], list[str]]:
+    """Retourne (score, ingrédients_utilisés, ingrédients_manquants).
+
+    Score = nb_ingrédients_trouvés / nb_total + bonus urgence.
+    Correspondance bidirectionnelle : le mot-clé recette dans le nom produit OU vice-versa.
+    """
+    used: list[str] = []
+    missed: list[str] = []
+    has_urgent_match = False
+
+    for ing in recipe["ingredients"]:
+        norm_ing = _normalize_fr(ing)
+        ing_words = [w for w in norm_ing.split() if len(w) > 2]
+        found = False
+        for ns in norm_stock:
+            if norm_ing in ns or any(w in ns for w in ing_words):
+                found = True
+                if ing not in used:
+                    used.append(ing)
+                if boost_urgent and any(norm_ing in nu or nu in norm_ing for nu in norm_urgent):
+                    has_urgent_match = True
+                break
+        if not found:
+            missed.append(ing)
+
+    n_total = len(recipe["ingredients"])
+    if n_total == 0:
+        return 0.0, [], []
+
+    score = len(used) / n_total
+    if has_urgent_match:
+        score += 0.3  # Boost si au moins un ingrédient urgent est utilisé
+    return score, used, missed
+
+
 @api_router.get("/recipes/suggestions")
 async def get_recipe_suggestions(
     recipe_filter: str = Query("urgent", alias="filter"),
     current_user: Dict[str, Any] = Depends(_get_current_user),
 ):
-    """Suggère des recettes via TheMealDB (gratuit, sans clé API).
+    """Suggère des recettes depuis la base française embarquée.
     filter: urgent (≤7j) | all | frigo | placard
     """
     uid = current_user["id"]
     today_str = _utc_now().strftime("%Y-%m-%d")
 
+    # Récupérer les items actifs selon le filtre
     match: dict = {"user_id": uid, "status": "active"}
     if recipe_filter == "urgent":
         in_7_days = (_utc_now().date() + timedelta(days=7)).strftime("%Y-%m-%d")
@@ -1533,125 +1672,131 @@ async def get_recipe_suggestions(
         match["food_category"] = {"$in": _FRIGO_CATS}
     elif recipe_filter == "placard":
         match["food_category"] = {"$in": _PLACARD_CATS}
-    # "all" : aucun filtre supplémentaire
 
     pipeline = [
         {"$match": match},
-        {"$addFields": {
-            "_no_expiry": {"$cond": [
-                {"$or": [{"$eq": ["$expiry_date", None]}, {"$eq": ["$expiry_date", ""]}]},
-                1, 0,
-            ]},
-        }},
+        {"$addFields": {"_no_expiry": {"$cond": [{"$or": [{"$eq": ["$expiry_date", None]}, {"$eq": ["$expiry_date", ""]}]}, 1, 0]}}},
         {"$sort": {"_no_expiry": 1, "expiry_date": 1}},
-        {"$limit": 15},
+        {"$limit": 20},
     ]
-    items = await stock_col.aggregate(pipeline).to_list(length=15)
+    items = await stock_col.aggregate(pipeline).to_list(length=20)
 
-    is_fallback = not items
-    if items:
-        # Convertir les noms français → anglais pour TheMealDB
-        seen: set[str] = set()
-        ingredient_names: list[str] = []
-        for item in items[:10]:
-            en = _fr_to_en_ingredient(item.get("name", ""), item.get("food_category", "autres"))
-            if en not in seen:
-                seen.add(en)
-                ingredient_names.append(en)
-            if len(ingredient_names) >= 5:
-                break
-        # Si tous les produits ont mappé vers le même ingrédient, compléter avec le fallback
-        if len(ingredient_names) < 2:
-            for extra in _FALLBACK_INGREDIENTS.get(recipe_filter, _FALLBACK_INGREDIENTS["all"]):
-                if extra not in seen:
-                    seen.add(extra)
-                    ingredient_names.append(extra)
-                if len(ingredient_names) >= 3:
-                    break
+    # Noms du stock normalisés pour la correspondance
+    stock_names = [i.get("name", "") for i in items if i.get("name")]
+    norm_stock = [_normalize_fr(n) for n in stock_names]
+
+    # Ingrédients urgents (≤2j) pour le boost de pertinence
+    norm_urgent: set[str] = set()
+    if recipe_filter == "urgent" and items:
+        in_2_days = (_utc_now().date() + timedelta(days=2)).strftime("%Y-%m-%d")
+        for item in items:
+            ed = item.get("expiry_date", "")
+            if ed and ed <= in_2_days:
+                norm_urgent.add(_normalize_fr(item.get("name", "")))
+
+    boost_urgent = recipe_filter == "urgent"
+
+    # Filtrer les recettes candidates par catégorie
+    if recipe_filter == "frigo":
+        base_candidates = [r for r in _FRENCH_RECIPE_DB if r["category"] == "frigo"]
+    elif recipe_filter == "placard":
+        base_candidates = [r for r in _FRENCH_RECIPE_DB if r["category"] == "placard"]
     else:
-        ingredient_names = _FALLBACK_INGREDIENTS.get(recipe_filter, _FALLBACK_INGREDIENTS["all"])
+        base_candidates = _FRENCH_RECIPE_DB
 
-    logger.info("Recipes suggestions: filter=%s ingredients=%s is_fallback=%s", recipe_filter, ingredient_names, is_fallback)
+    # Charger les recettes IA communautaires (partagées, persistantes) — toujours incluses
+    community_docs = await community_recipes_col.find({}).sort("created_at", -1).limit(200).to_list(length=200)
+    community_extras = [
+        {
+            "id": str(d["_id"]),
+            "title": d["title"],
+            "category": "all",
+            "ingredients": d.get("ingredients_keywords", []),
+            "is_ai": True,
+            "instructions_summary": d.get("instructions_summary", ""),
+        }
+        for d in community_docs
+    ]
+    candidates = base_candidates + community_extras
 
-    # ── Étape 1 : pour chaque ingrédient, récupérer les repas correspondants ──
-    meal_counts: dict[str, int] = {}
+    # Si le stock est vide, retourner les premières recettes sans score
+    if not stock_names:
+        top5 = candidates[:5]
+        logger.info("Recipes suggestions: stock vide, retour top5 par défaut filter=%s", recipe_filter)
+        return [
+            {
+                "id": r["id"],
+                "title": r["title"],
+                "image": "",
+                "usedIngredients": [],
+                "missedIngredients": r["ingredients"],
+                "sourceUrl": "https://www.marmiton.org/recettes/recherche.aspx?aqt=" + r["title"].replace(" ", "+"),
+                "is_fallback": True,
+            }
+            for r in top5
+        ]
 
-    async def _fetch_filter(client: httpx.AsyncClient, ingredient: str) -> None:
-        try:
-            r = await client.get(
-                "https://www.themealdb.com/api/json/v1/1/filter.php",
-                params={"i": ingredient},
-            )
-            if r.status_code == 200:
-                meals_found = r.json().get("meals") or []
-                logger.info("TheMealDB filter(%s): %d results", ingredient, len(meals_found))
-                for m in meals_found:
-                    mid = m.get("idMeal", "")
-                    if mid:
-                        meal_counts[mid] = meal_counts.get(mid, 0) + 1
-            else:
-                logger.warning("TheMealDB filter(%s): HTTP %d", ingredient, r.status_code)
-        except Exception as e:
-            logger.warning("TheMealDB filter(%s) error: %s", ingredient, e)
+    # Scorer toutes les recettes
+    scored = []
+    for recipe in candidates:
+        score, used, missed = _match_recipe_to_stock(recipe, norm_stock, norm_urgent, boost_urgent)
+        scored.append((score, recipe, used, missed))
 
-    try:
-        async with httpx.AsyncClient(timeout=15) as http:
-            await asyncio.gather(*[_fetch_filter(http, name) for name in ingredient_names])
-    except Exception as exc:
-        logger.warning("TheMealDB filter gather error: %s", exc)
-        # Ne pas return ici — laisser le fallback prendre le relais
+    scored.sort(key=lambda x: x[0], reverse=True)
+    best_score = scored[0][0] if scored else 0.0
 
-    if not meal_counts:
-        # TheMealDB n'a rien retourné pour nos ingrédients réels (timeout Render / rate-limit).
-        # On retente avec des ingrédients de secours connus pour toujours fonctionner.
-        fallback_ings = _FALLBACK_INGREDIENTS.get(recipe_filter, _FALLBACK_INGREDIENTS["all"])
-        logger.info("TheMealDB: no results for %s, retrying with fallback=%s", ingredient_names, fallback_ings)
-        is_fallback = True
-        ingredient_names = fallback_ings
-        try:
-            async with httpx.AsyncClient(timeout=15) as http2:
-                await asyncio.gather(*[_fetch_filter(http2, name) for name in ingredient_names])
-        except Exception as exc:
-            logger.warning("TheMealDB fallback gather error: %s", exc)
-        if not meal_counts:
-            logger.warning("TheMealDB: complètement inaccessible, retour recettes d'urgence")
-            return _EMERGENCY_RECIPES
-
-    # ── Étape 2 : top 5 repas, récupérer les détails en parallèle ──
-    top_ids = sorted(meal_counts, key=lambda k: meal_counts[k], reverse=True)[:5]
-    results: list[dict] = []
-
-    async def _fetch_detail(client: httpx.AsyncClient, meal_id: str) -> None:
-        try:
-            r = await client.get(
-                "https://www.themealdb.com/api/json/v1/1/lookup.php",
-                params={"i": meal_id},
-            )
-            if r.status_code == 200:
-                meals = (r.json().get("meals") or [])
-                if meals:
-                    m = meals[0]
-                    score = meal_counts.get(meal_id, 0)
-                    results.append({
-                        "id": int(meal_id),
-                        "title": m.get("strMeal", ""),
-                        "image": m.get("strMealThumb", ""),
-                        "usedIngredients": [] if is_fallback else ingredient_names[:score],
-                        "missedIngredients": [],
-                        "sourceUrl": m.get("strSource") or f"https://www.themealdb.com/meal/{meal_id}",
-                        "is_fallback": is_fallback,
+    # Fallback IA : générer une recette si aucune correspondance suffisante
+    if best_score < _RECIPE_MATCH_THRESHOLD:
+        openai_key = os.environ.get("KEEPEAT_OPENAI_TOKEN", "")
+        if openai_key:
+            logger.info("Recipes suggestions: best_score=%.2f < %.2f → génération IA", best_score, _RECIPE_MATCH_THRESHOLD)
+            ai_data = await _generate_ai_recipe(stock_names[:8], openai_key)
+            if ai_data:
+                new_id = f"ai_{int(_utc_now().timestamp())}"
+                try:
+                    await community_recipes_col.insert_one({
+                        "_id": new_id,
+                        "title": ai_data["title"],
+                        "ingredients_keywords": ai_data["ingredients_keywords"],
+                        "instructions_summary": ai_data.get("instructions_summary", ""),
+                        "created_at": _utc_now(),
                     })
-        except Exception as e:
-            logger.warning("TheMealDB lookup(%s) error: %s", meal_id, e)
+                    logger.info("Recette IA sauvegardée en base : %s", ai_data["title"])
+                except Exception as exc:
+                    logger.warning("community_recipes insert failed: %s", exc)
 
-    try:
-        async with httpx.AsyncClient(timeout=15) as http:
-            await asyncio.gather(*[_fetch_detail(http, mid) for mid in top_ids])
-    except Exception as exc:
-        logger.warning("TheMealDB lookup gather error: %s", exc)
+                ai_recipe_obj = {
+                    "id": new_id,
+                    "title": ai_data["title"],
+                    "category": "all",
+                    "ingredients": ai_data["ingredients_keywords"],
+                    "is_ai": True,
+                    "instructions_summary": ai_data.get("instructions_summary", ""),
+                }
+                ai_score, ai_used, ai_missed = _match_recipe_to_stock(ai_recipe_obj, norm_stock, norm_urgent, boost_urgent)
+                # Placer la recette IA en tête (score minimum = best_score + 0.1)
+                scored.insert(0, (max(ai_score, best_score + 0.1), ai_recipe_obj, ai_used, ai_missed))
+                scored.sort(key=lambda x: x[0], reverse=True)
 
-    logger.info("Recipes suggestions: returning %d recipes", len(results))
-    return sorted(results, key=lambda r: meal_counts.get(str(r["id"]), 0), reverse=True)
+    top5 = scored[:5]
+
+    logger.info(
+        "Recipes suggestions: filter=%s stock=%s top5=%s",
+        recipe_filter, stock_names[:5], [r["title"] for _, r, _, _ in top5],
+    )
+    return [
+        {
+            "id": recipe["id"],
+            "title": recipe["title"],
+            "image": "",
+            "usedIngredients": used,
+            "missedIngredients": missed,
+            "sourceUrl": "https://www.marmiton.org/recettes/recherche.aspx?aqt=" + recipe["title"].replace(" ", "+"),
+            "is_fallback": len(used) == 0,
+            **({"instructions_summary": recipe.get("instructions_summary", ""), "is_ai": True} if recipe.get("is_ai") else {}),
+        }
+        for _, recipe, used, missed in top5
+    ]
 
 
 # -----------------------------------------------------------------------------
