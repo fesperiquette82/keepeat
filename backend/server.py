@@ -1554,16 +1554,19 @@ def _fr_to_en_ingredient(name: str, category: str = "autres") -> str:
 _RECIPE_MATCH_THRESHOLD = 0.2  # Sous ce score → aucune correspondance utile → fallback IA
 
 _AI_SUGGEST_PROMPT = """\
-Tu es un chef cuisinier français. Génère 1 recette simple et saine avec ces ingrédients :
+Tu es un chef cuisinier français spécialisé en cuisine du quotidien. \
+Génère 1 recette de cuisine FRANÇAISE simple et saine avec ces ingrédients :
 {ingredients}
 
 Retourne UNIQUEMENT ce JSON (sans markdown, sans explication) :
 {{"title": "nom de la recette en français", "ingredients_keywords": ["mot1", "mot2"], "instructions_summary": "..."}}
 
-Règles :
-- Cuisine française du quotidien, saine, max 6 étapes simples
+Règles IMPÉRATIVES :
+- Recette de cuisine FRANÇAISE du quotidien (brasserie, bistrot, maison) — PAS de cuisine étrangère
+- Simple : max 6 étapes, temps total < 45 min, ingrédients disponibles dans tout supermarché français
+- Saine : éviter les fritures, privilégier légumes et protéines
 - ingredients_keywords : mots-clés courts en français minuscules (ex: "poulet", "tomate")
-- instructions_summary : max 80 mots
+- instructions_summary : max 80 mots, en français
 """
 
 
@@ -1606,6 +1609,39 @@ async def _generate_ai_recipe(stock_names: list[str], openai_key: str) -> dict |
         return None
 
 
+# Synonymes et variantes produits → mot-clé recette
+# Permet de matcher "Gruyère" → "fromage", "Steak haché" → "boeuf", "Spaghetti" → "pates", etc.
+_ING_EXPAND: dict[str, list[str]] = {
+    "fromage":        ["gruyere", "emmental", "comte", "cheddar", "camembert", "brie", "chevre",
+                       "roquefort", "raclette", "tomme", "mimolette", "coulommiers", "maroilles",
+                       "reblochon", "munster", "ossau", "beaufort", "feta", "ricotta"],
+    "boeuf":          ["steak", "hache", "bifteck", "entrecote", "bavette", "rumsteck", "bourguignon",
+                       "viande", "tartare", "roti", "braise"],
+    "lardons":        ["bacon", "poitrine", "pancetta", "fumee", "allumettes"],
+    "creme":          ["fraiche", "fleurette", "liquide", "epaisse", "semi-epaisse", "entiere"],
+    "pates":          ["spaghetti", "penne", "fusilli", "tagliatelle", "linguine", "rigatoni",
+                       "macaroni", "farfalle", "coquillette", "vermicelle", "lasagne", "gnocchi"],
+    "poulet":         ["blanc", "cuisse", "escalope", "filet", "aiguillette", "cocotte"],
+    "porc":           ["cochon", "longe", "chop", "filet mignon", "cote", "rillette"],
+    "saumon":         ["pavé", "truite"],
+    "pomme de terre": ["patate", "vitelotte", "ratte", "charlotte", "grenaille"],
+    "riz":            ["basmati", "arborio", "rond", "long"],
+    "oeuf":           ["oeufs", "oeuf"],
+    "tomate":         ["tomates", "cherry", "cerises", "concassee", "pelees"],
+    "carotte":        ["carottes"],
+    "champignon":     ["champignons", "shiitake", "portobello", "girolles", "cèpes", "cepes"],
+    "oignon":         ["oignons", "echalote", "echalotes", "cive", "ciboulette"],
+    "ail":            ["gousses"],
+    "poisson":        ["merlu", "lieu", "daurade", "bar", "sole", "cabillaud", "tilapia", "pangasius"],
+    "lentilles":      ["lentille", "beluga", "corail", "verte", "puy"],
+    "pois chiches":   ["pois chiche", "chickpeas"],
+    "courgette":      ["courgettes", "zucchini"],
+    "aubergine":      ["aubergines"],
+    "poivron":        ["poivrons", "capsicum"],
+    "concombre":      ["concombres"],
+}
+
+
 def _normalize_fr(text: str) -> str:
     """Minuscule + suppression des accents."""
     n = _ud.normalize("NFD", text.lower())
@@ -1630,9 +1666,13 @@ def _match_recipe_to_stock(
     for ing in recipe["ingredients"]:
         norm_ing = _normalize_fr(ing)
         ing_words = [w for w in norm_ing.split() if len(w) > 2]
+        # Synonymes/variantes produits (ex: "fromage" → gruyere, emmental…)
+        synonyms = [_normalize_fr(s) for s in _ING_EXPAND.get(ing, [])]
         found = False
         for ns in norm_stock:
-            if norm_ing in ns or any(w in ns for w in ing_words):
+            if (norm_ing in ns
+                    or any(w in ns for w in ing_words)
+                    or any(syn in ns for syn in synonyms)):
                 found = True
                 if ing not in used:
                     used.append(ing)
@@ -2062,21 +2102,25 @@ async def get_gamification(
 
 # ── Recettes IA (OpenAI GPT-4o-mini) ─────────────────────────────────────────
 
-_AI_RECIPE_PROMPT = """Tu es un chef cuisinier créatif. L'utilisateur a ces produits dans son frigo/placard :
+_AI_RECIPE_PROMPT = """Tu es un chef cuisinier français spécialisé en cuisine du quotidien. \
+L'utilisateur a ces produits dans son frigo/placard :
 
 {ingredients}
 
-Génère exactement 3 recettes originales en utilisant UNIQUEMENT ces ingrédients (tu peux en utiliser un sous-ensemble).
+Génère exactement 3 recettes de cuisine FRANÇAISE simple et saine en utilisant ces ingrédients \
+(tu peux utiliser un sous-ensemble). Inspiration : cuisine bourgeoise française, brasserie, bistrot, \
+plats familiaux. PAS de cuisine étrangère ni de recettes complexes.
+
 Réponds UNIQUEMENT en JSON valide (pas de markdown), dans ce format :
 [
   {{
-    "title": "Nom de la recette",
+    "title": "Nom de la recette en français",
     "ingredients_used": ["ingrédient 1", "ingrédient 2"],
-    "instructions_summary": "Instructions en 2-3 phrases maximum.",
-    "prep_time_min": 15
+    "instructions_summary": "Instructions simples en 2-3 phrases, max 80 mots.",
+    "prep_time_min": 20
   }}
 ]
-Langue : français. Maximum 80 mots par instructions_summary."""
+Langue : français. Recettes simples (< 45 min), saines, sans friture."""
 
 # Cache en mémoire (uid -> {recipes, created_at})
 _ai_recipe_cache: dict[str, dict] = {}
