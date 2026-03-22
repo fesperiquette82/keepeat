@@ -303,7 +303,8 @@ async def _check_daily_expiry_alert() -> None:
 
         first = names[0]
         if count == 1:
-            title = f"⏰ {first} expire {'aujourd\'hui' if today_str <= in_2_days else 'bientôt'}"
+            when_label = "aujourd'hui" if today_str <= in_2_days else "bientôt"
+            title = f"⏰ {first} expire {when_label}"
         else:
             title = f"⏰ {count} produits à utiliser maintenant"
         body = ", ".join(names) + recipe_hint

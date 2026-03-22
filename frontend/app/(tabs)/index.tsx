@@ -454,8 +454,8 @@ export default function HomeScreen() {
                 {isFr ? `${urgentCount} produit${urgentCount > 1 ? 's' : ''} à traiter` : `${urgentCount} item${urgentCount > 1 ? 's' : ''} to handle`}
               </Text>
             </View>
-            <View style={styles.urgentBadge}>
-              <Text style={styles.urgentBadgeText}>{urgentCount}</Text>
+            <View style={styles.tabUrgentBadge}>
+              <Text style={styles.tabUrgentBadgeText}>{urgentCount}</Text>
             </View>
           </TouchableOpacity>
         ) : (
@@ -543,8 +543,8 @@ export default function HomeScreen() {
                   {isFr ? tab.labelFr : tab.labelEn}
                 </Text>
                 {tab.key === 'urgents' && urgentCount > 0 && (
-                  <View style={styles.urgentBadge}>
-                    <Text style={styles.urgentBadgeText}>{urgentCount}</Text>
+                  <View style={styles.tabUrgentBadge}>
+                    <Text style={styles.tabUrgentBadgeText}>{urgentCount}</Text>
                   </View>
                 )}
               </View>
@@ -984,7 +984,7 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     gap: 5,
   },
-  urgentBadge: {
+  tabUrgentBadge: {
     minWidth: 18,
     height: 18,
     borderRadius: 9,
@@ -993,5 +993,5 @@ const styles = StyleSheet.create({
     justifyContent: 'center',
     paddingHorizontal: 4,
   },
-  urgentBadgeText: { color: '#fff', fontSize: 10, fontWeight: '800' },
+  tabUrgentBadgeText: { color: '#fff', fontSize: 10, fontWeight: '800' },
 });
