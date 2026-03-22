@@ -2,7 +2,7 @@ import * as Notifications from 'expo-notifications';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import Constants from 'expo-constants';
 import { Platform } from 'react-native';
-import { parseISO } from 'date-fns';
+import { differenceInDays, parseISO } from 'date-fns';
 import { StockItem } from '../store/stockStore';
 import { buildApiUrl } from './config';
 const PUSH_TOKEN_KEY = 'keepeat_push_token';
