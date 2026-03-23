@@ -1,4 +1,4 @@
-import React, { useEffect, useState } from 'react';
+import React, { useEffect, useMemo, useState } from 'react';
 import {
   View,
   Text,
@@ -21,9 +21,15 @@ const ALERT_PREFS_KEY = 'keepeat_alert_prefs';
 
 export default function SettingsScreen() {
   const router = useRouter();
-  const { language, setLanguage, t, loadLanguage } = useLanguageStore();
-  const { stats, fetchStats } = useStockStore();
-  const { user, logout, token } = useAuthStore();
+  const language = useLanguageStore(state => state.language);
+  const setLanguage = useLanguageStore(state => state.setLanguage);
+  const t = useLanguageStore(state => state.t);
+  const loadLanguage = useLanguageStore(state => state.loadLanguage);
+  const stats = useStockStore(state => state.stats);
+  const fetchStats = useStockStore(state => state.fetchStats);
+  const user = useAuthStore(state => state.user);
+  const logout = useAuthStore(state => state.logout);
+  const token = useAuthStore(state => state.token);
   const [lastRecallCheck, setLastRecallCheck] = useState<string | null>(null);
   const [alertJ2,       setAlertJ2]       = useState(true);
   const [alertJ0,       setAlertJ0]       = useState(true);
@@ -31,6 +37,17 @@ export default function SettingsScreen() {
   const [alertRecall,   setAlertRecall]   = useState(true);
 
   const fr = language === 'fr';
+  const loadAlertPrefs = useMemo(() => async () => {
+    const raw = await AsyncStorage.getItem(ALERT_PREFS_KEY);
+    if (!raw) return;
+    try {
+      const prefs = JSON.parse(raw);
+      if (prefs.alertJ2     !== undefined) setAlertJ2(prefs.alertJ2);
+      if (prefs.alertJ0     !== undefined) setAlertJ0(prefs.alertJ0);
+      if (prefs.alertWeekly !== undefined) setAlertWeekly(prefs.alertWeekly);
+      if (prefs.alertRecall !== undefined) setAlertRecall(prefs.alertRecall);
+    } catch {}
+  }, []);
 
   useEffect(() => {
     loadLanguage();
@@ -43,17 +60,8 @@ export default function SettingsScreen() {
         .then(data => setLastRecallCheck(data.last_check ?? null))
         .catch(() => {});
     }
-    AsyncStorage.getItem(ALERT_PREFS_KEY).then(raw => {
-      if (!raw) return;
-      try {
-        const prefs = JSON.parse(raw);
-        if (prefs.alertJ2     !== undefined) setAlertJ2(prefs.alertJ2);
-        if (prefs.alertJ0     !== undefined) setAlertJ0(prefs.alertJ0);
-        if (prefs.alertWeekly !== undefined) setAlertWeekly(prefs.alertWeekly);
-        if (prefs.alertRecall !== undefined) setAlertRecall(prefs.alertRecall);
-      } catch {}
-    });
-  }, []);
+    loadAlertPrefs().catch(() => {});
+  }, [fetchStats, loadAlertPrefs, loadLanguage, token]);
 
   const saveAlertPrefs = (patch: object) => {
     const current = { alertJ2, alertJ0, alertWeekly, alertRecall, ...patch };

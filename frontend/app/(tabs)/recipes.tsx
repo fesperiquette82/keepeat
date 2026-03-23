@@ -134,15 +134,16 @@ export default function RecipesScreen() {
         setRecipes(res.data);
       }
     } catch {
-      setError(t(
-        'Impossible de charger les recettes. Vérifiez votre connexion.',
-        'Unable to load recipes. Check your connection.',
-      ));
+      setError(
+        isFr
+          ? 'Impossible de charger les recettes. Vérifiez votre connexion.'
+          : 'Unable to load recipes. Check your connection.',
+      );
     } finally {
       setIsLoading(false);
       setIsRefreshing(false);
     }
-  }, [token, language]);
+  }, [isFr, token]);
 
   useEffect(() => { fetchRecipes(activeTab); }, [fetchRecipes, activeTab]);
 

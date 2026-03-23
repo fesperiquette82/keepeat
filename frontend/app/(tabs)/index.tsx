@@ -171,32 +171,6 @@ export default function HomeScreen() {
   const urgentCount = items.filter(i => { const d = getDaysUntil(i.expiry_date); return d !== null && d <= 7; }).length;
   const expiredCount = items.filter(i => { const d = getDaysUntil(i.expiry_date); return d !== null && d < 0; }).length;
 
-  const heroMsg = (): { text: string; color?: string } => {
-    if (expiredCount > 0)
-      return {
-        text: isFr
-          ? `⛔ ${expiredCount} produit${expiredCount > 1 ? 's' : ''} périmé${expiredCount > 1 ? 's' : ''} !`
-          : `⛔ ${expiredCount} expired product${expiredCount > 1 ? 's' : ''}!`,
-        color: '#ef4444',
-      };
-    if (urgentCount > 0)
-      return {
-        text: isFr
-          ? `⚠️ ${urgentCount} produit${urgentCount > 1 ? 's' : ''} à consommer rapidement`
-          : `⚠️ ${urgentCount} product${urgentCount > 1 ? 's' : ''} to use soon`,
-        color: '#f97316',
-      };
-    if (stats.consumed_this_week > 0)
-      return {
-        text: isFr
-          ? `🌱 ${stats.consumed_this_week} sauvé${stats.consumed_this_week > 1 ? 's' : ''} cette semaine · ~${Math.round(stats.consumed_this_week * 2.5)}€`
-          : `🌱 ${stats.consumed_this_week} saved this week · ~${Math.round(stats.consumed_this_week * 2.5)}€`,
-        color: '#16a34a',
-      };
-    if (items.length === 0)
-      return { text: isFr ? 'Votre stock est vide 🛒' : 'Your stock is empty 🛒' };
-    return { text: isFr ? '✅ Tout est sous contrôle' : '✅ Everything under control' };
-  };
 
   // ─── Product card ─────────────────────────────────────────────────────────
 

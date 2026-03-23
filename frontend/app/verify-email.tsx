@@ -1,4 +1,4 @@
-import React, { useEffect, useState } from 'react';
+import React, { useCallback, useEffect, useState } from 'react';
 import {
   View,
   Text,
@@ -15,14 +15,14 @@ import { useLanguageStore } from '../store/languageStore';
 export default function VerifyEmailScreen() {
   const router = useRouter();
   const { token } = useLocalSearchParams<{ token: string }>();
-  const { verifyEmail } = useAuthStore();
+  const verifyEmail = useAuthStore(state => state.verifyEmail);
   const { language } = useLanguageStore();
 
   const [status, setStatus] = useState<'loading' | 'success' | 'expired' | 'error'>('loading');
 
   const fr = language === 'fr';
 
-  useEffect(() => {
+  const runVerification = useCallback(() => {
     if (!token) {
       setStatus('error');
       return;
@@ -30,7 +30,6 @@ export default function VerifyEmailScreen() {
     verifyEmail(token as string)
       .then(() => {
         setStatus('success');
-        // _layout.tsx détecte user non-null et redirige vers '/'
       })
       .catch((err: any) => {
         const msg = err?.message ?? '';
@@ -40,7 +39,11 @@ export default function VerifyEmailScreen() {
           setStatus('error');
         }
       });
-  }, [token]);
+  }, [token, verifyEmail]);
+
+  useEffect(() => {
+    runVerification();
+  }, [runVerification]);
 
   if (status === 'loading') {
     return (
