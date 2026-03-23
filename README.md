@@ -5,6 +5,7 @@ Application mobile anti-gaspillage alimentaire composée d'un backend FastAPI/Mo
 ## Structure
 
 - `backend/` : API FastAPI, logique métier, accès MongoDB, notifications et intégrations externes.
+- `backend/data/recipes.catalog.json` : catalogue local des recettes françaises utilisé par le moteur de suggestions.
 - `frontend/` : application mobile Expo avec navigation `expo-router`, état global Zustand et synchronisation hors ligne.
 - `backend_test.py` : script de smoke tests HTTP pour le backend.
 
@@ -93,6 +94,7 @@ npm run lint
 
 ```bash
 python -m py_compile backend/server.py backend_test.py
+python -m unittest discover -s tests -p 'test_recipes_*.py'
 ```
 
 ### Smoke tests backend

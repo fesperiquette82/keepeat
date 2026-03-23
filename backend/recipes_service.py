@@ -2,70 +2,25 @@ from __future__ import annotations
 
 import json
 import os
-from datetime import timedelta
+import unicodedata as _ud
+from dataclasses import dataclass
+from functools import lru_cache
+from pathlib import Path
+from typing import Iterable
 
 import httpx
+from pydantic import ValidationError
 
-from app_core import logger, utc_now
+from app_core import logger
+from models import Recipe, RecipeDifficulty, RecipeMealType, RecipeSuggestion
 
-_FRIGO_CATS   = ["frais", "proteines", "legumes", "boissons"]
+_FRIGO_CATS = ["frais", "proteines", "legumes", "boissons"]
 _PLACARD_CATS = ["feculents", "desserts", "epicerie", "autres"]
 
-# Base de ~40 recettes françaises simples et saines
-_FRENCH_RECIPE_DB: list[dict] = [
-    # Pâtes
-    {"id": "fr001", "title": "Pâtes carbonara maison",         "category": "placard", "ingredients": ["pates", "lardons", "oeuf", "parmesan", "creme"]},
-    {"id": "fr002", "title": "Pâtes à la bolognaise",          "category": "placard", "ingredients": ["pates", "boeuf", "tomate", "oignon", "ail"]},
-    {"id": "fr003", "title": "Pâtes au pesto maison",          "category": "placard", "ingredients": ["pates", "basilic", "parmesan", "ail", "huile"]},
-    {"id": "fr004", "title": "Gratin de pâtes au fromage",     "category": "placard", "ingredients": ["pates", "fromage", "lait", "beurre", "farine"]},
-    {"id": "fr035", "title": "Minestrone de légumes",          "category": "placard", "ingredients": ["tomate", "courgette", "carotte", "oignon", "pates"]},
-    # Riz / féculents
-    {"id": "fr005", "title": "Riz sauté aux légumes",          "category": "placard", "ingredients": ["riz", "carotte", "oignon", "ail", "huile"]},
-    {"id": "fr006", "title": "Riz au lait maison",             "category": "placard", "ingredients": ["riz", "lait", "sucre"]},
-    {"id": "fr007", "title": "Risotto aux champignons",        "category": "placard", "ingredients": ["riz", "champignon", "oignon", "ail", "parmesan"]},
-    {"id": "fr041", "title": "Taboulé maison",                 "category": "placard", "ingredients": ["semoule", "tomate", "concombre", "oignon", "citron"]},
-    # Oeufs
-    {"id": "fr008", "title": "Omelette aux herbes",            "category": "frigo",   "ingredients": ["oeuf", "beurre"]},
-    {"id": "fr009", "title": "Oeufs brouillés crémeux",        "category": "frigo",   "ingredients": ["oeuf", "beurre", "creme"]},
-    {"id": "fr010", "title": "Quiche lorraine",                "category": "frigo",   "ingredients": ["oeuf", "lardons", "creme", "fromage"]},
-    {"id": "fr011", "title": "Frittata aux légumes",           "category": "frigo",   "ingredients": ["oeuf", "courgette", "poivron", "oignon"]},
-    {"id": "fr037", "title": "Crêpes sucrées",                 "category": "placard", "ingredients": ["farine", "oeuf", "lait", "sucre", "beurre"]},
-    # Poulet
-    {"id": "fr012", "title": "Poulet rôti aux herbes",         "category": "frigo",   "ingredients": ["poulet", "ail", "citron", "huile"]},
-    {"id": "fr013", "title": "Sauté de poulet aux légumes",    "category": "frigo",   "ingredients": ["poulet", "carotte", "oignon", "ail", "tomate"]},
-    {"id": "fr014", "title": "Poulet au curry doux",           "category": "frigo",   "ingredients": ["poulet", "curry", "oignon", "tomate", "creme"]},
-    {"id": "fr015", "title": "Poulet à la moutarde",           "category": "frigo",   "ingredients": ["poulet", "moutarde", "creme", "oignon"]},
-    # Poisson
-    {"id": "fr016", "title": "Saumon grillé citron-herbes",    "category": "frigo",   "ingredients": ["saumon", "citron", "huile"]},
-    {"id": "fr017", "title": "Cabillaud en papillote",         "category": "frigo",   "ingredients": ["cabillaud", "citron", "tomate"]},
-    {"id": "fr018", "title": "Salade niçoise au thon",         "category": "frigo",   "ingredients": ["thon", "tomate", "oeuf", "haricot", "oignon"]},
-    # Légumes
-    {"id": "fr019", "title": "Ratatouille provençale",         "category": "frigo",   "ingredients": ["courgette", "aubergine", "tomate", "poivron", "oignon"]},
-    {"id": "fr020", "title": "Gratin dauphinois",              "category": "frigo",   "ingredients": ["pomme de terre", "creme", "ail", "fromage"]},
-    {"id": "fr021", "title": "Poêlée de courgettes à l'ail",   "category": "frigo",   "ingredients": ["courgette", "ail", "huile"]},
-    {"id": "fr022", "title": "Carottes glacées au miel",       "category": "frigo",   "ingredients": ["carotte", "miel", "beurre"]},
-    {"id": "fr023", "title": "Soupe de légumes maison",        "category": "frigo",   "ingredients": ["carotte", "pomme de terre", "oignon", "poireau"]},
-    {"id": "fr024", "title": "Velouté de courgettes",          "category": "frigo",   "ingredients": ["courgette", "oignon", "creme"]},
-    {"id": "fr025", "title": "Purée de carottes",              "category": "frigo",   "ingredients": ["carotte", "beurre", "creme"]},
-    {"id": "fr036", "title": "Soupe à l'oignon gratinée",      "category": "frigo",   "ingredients": ["oignon", "pain", "fromage", "beurre"]},
-    {"id": "fr042", "title": "Salade composée",                "category": "frigo",   "ingredients": ["tomate", "concombre", "oignon", "huile", "vinaigre"]},
-    # Légumineuses
-    {"id": "fr026", "title": "Lentilles à la française",       "category": "placard", "ingredients": ["lentilles", "lardons", "carotte", "oignon", "ail"]},
-    {"id": "fr027", "title": "Curry de pois chiches",          "category": "placard", "ingredients": ["pois chiches", "tomate", "oignon", "ail", "curry"]},
-    {"id": "fr028", "title": "Salade de lentilles vinaigrette","category": "placard", "ingredients": ["lentilles", "oignon", "moutarde", "vinaigre"]},
-    # Viande rouge
-    {"id": "fr029", "title": "Hachis parmentier",              "category": "frigo",   "ingredients": ["boeuf", "pomme de terre", "oignon", "lait", "beurre"]},
-    {"id": "fr030", "title": "Steak haché sauce tomate",       "category": "frigo",   "ingredients": ["boeuf", "tomate", "oignon", "ail"]},
-    {"id": "fr031", "title": "Porc sauté aux légumes",         "category": "frigo",   "ingredients": ["porc", "carotte", "oignon", "ail"]},
-    # Fromage / charcuterie
-    {"id": "fr032", "title": "Croque-monsieur",                "category": "frigo",   "ingredients": ["pain", "jambon", "fromage", "beurre"]},
-    {"id": "fr033", "title": "Tarte tomate mozzarella",        "category": "frigo",   "ingredients": ["tomate", "mozzarella", "oeuf", "creme"]},
-    {"id": "fr034", "title": "Salade caprese",                 "category": "frigo",   "ingredients": ["tomate", "mozzarella", "huile"]},
-    # Desserts
-    {"id": "fr038", "title": "Mousse au chocolat",             "category": "frigo",   "ingredients": ["chocolat", "oeuf", "sucre", "beurre"]},
-    {"id": "fr039", "title": "Tarte aux pommes",               "category": "placard", "ingredients": ["pomme", "farine", "beurre", "sucre", "oeuf"]},
-    {"id": "fr040", "title": "Yaourt maison",                  "category": "frigo",   "ingredients": ["lait", "yaourt"]},
-]
+_DEFAULT_CATALOG_PATH = Path(__file__).resolve().parent / "data" / "recipes.catalog.json"
+_FULLY_AVAILABLE_BONUS = 0.35
+_OPTIONAL_INGREDIENT_BONUS = 0.05
+_MISSING_REQUIRED_PENALTY = 0.03
 
 # Dictionnaire FR → EN pour les alertes quotidiennes (daily alert, _check_daily_expiry_alert)
 _FR_EN: dict[str, str] = {
@@ -96,26 +51,11 @@ _FR_EN: dict[str, str] = {
     "chocolat": "chocolate", "sucre": "sugar", "miel": "honey",
 }
 
-
 _CATEGORY_TO_EN: dict[str, str] = {
     "frais": "milk", "proteines": "chicken", "legumes": "tomato",
     "feculents": "pasta", "desserts": "chocolate", "boissons": "milk",
     "epicerie": "garlic", "autres": "egg",
 }
-
-def fr_to_en_ingredient(name: str, category: str = "autres") -> str:
-    """Convertit un nom de produit français en ingrédient anglais (pour les alertes quotidiennes)."""
-    norm = _ud.normalize("NFD", name.lower())
-    norm = "".join(c for c in norm if _ud.category(c) != "Mn")
-    for fr_word in sorted(_FR_EN, key=len, reverse=True):
-        fr_norm = _ud.normalize("NFD", fr_word)
-        fr_norm = "".join(c for c in fr_norm if _ud.category(c) != "Mn")
-        if fr_norm in norm:
-            return _FR_EN[fr_word]
-    return _CATEGORY_TO_EN.get(category, "chicken")
-
-
-_RECIPE_MATCH_THRESHOLD = 0.2  # Sous ce score → aucune correspondance utile → fallback IA
 
 _AI_SUGGEST_PROMPT = """\
 Tu es un chef cuisinier français spécialisé en cuisine du quotidien. \
@@ -132,6 +72,60 @@ Règles IMPÉRATIVES :
 - ingredients_keywords : mots-clés courts en français minuscules (ex: "poulet", "tomate")
 - instructions_summary : max 80 mots, en français
 """
+
+# Synonymes et variantes produits → mot-clé recette
+# Permet de matcher "Gruyère" → "fromage", "Steak haché" → "boeuf", "Spaghetti" → "pates", etc.
+_ING_EXPAND: dict[str, list[str]] = {
+    "fromage": ["gruyere", "emmental", "comte", "cheddar", "camembert", "brie", "chevre",
+                 "roquefort", "raclette", "tomme", "mimolette", "coulommiers", "maroilles",
+                 "reblochon", "munster", "ossau", "beaufort", "feta", "ricotta"],
+    "boeuf": ["steak", "hache", "bifteck", "entrecote", "bavette", "rumsteck", "bourguignon",
+               "viande", "tartare", "roti", "braise"],
+    "lardons": ["bacon", "poitrine", "pancetta", "fumee", "allumettes"],
+    "creme": ["fraiche", "fleurette", "liquide", "epaisse", "semi-epaisse", "entiere"],
+    "pates": ["spaghetti", "penne", "fusilli", "tagliatelle", "linguine", "rigatoni",
+               "macaroni", "farfalle", "coquillette", "vermicelle", "lasagne", "gnocchi"],
+    "poulet": ["blanc", "cuisse", "escalope", "filet", "aiguillette", "cocotte"],
+    "porc": ["cochon", "longe", "chop", "filet mignon", "cote", "rillette"],
+    "saumon": ["pave", "truite"],
+    "pomme de terre": ["patate", "vitelotte", "ratte", "charlotte", "grenaille"],
+    "riz": ["basmati", "arborio", "rond", "long"],
+    "oeuf": ["oeufs", "oeuf"],
+    "tomate": ["tomates", "cherry", "cerises", "concassee", "pelees"],
+    "carotte": ["carottes"],
+    "champignon": ["champignons", "shiitake", "portobello", "girolles", "cepes"],
+    "oignon": ["oignons", "echalote", "echalotes", "cive", "ciboulette"],
+    "ail": ["gousses"],
+    "poisson": ["merlu", "lieu", "daurade", "bar", "sole", "cabillaud", "tilapia", "pangasius"],
+    "lentilles": ["lentille", "beluga", "corail", "verte", "puy"],
+    "pois chiches": ["pois chiche", "chickpeas"],
+    "courgette": ["courgettes", "zucchini"],
+    "aubergine": ["aubergines"],
+    "poivron": ["poivrons", "capsicum"],
+    "concombre": ["concombres"],
+}
+
+
+@dataclass(slots=True)
+class RecipeMatch:
+    recipe: Recipe
+    score: float
+    used_required: list[str]
+    missing_required: list[str]
+    optional_used: list[str]
+
+
+class RecipeCatalogError(RuntimeError):
+    """Raised when the local recipe catalog cannot be loaded or validated."""
+
+
+def fr_to_en_ingredient(name: str, category: str = "autres") -> str:
+    """Convertit un nom de produit français en ingrédient anglais (pour les alertes quotidiennes)."""
+    norm = _normalize_fr(name)
+    for fr_word in sorted(_FR_EN, key=len, reverse=True):
+        if _normalize_fr(fr_word) in norm:
+            return _FR_EN[fr_word]
+    return _CATEGORY_TO_EN.get(category, "chicken")
 
 
 async def _generate_ai_recipe(stock_names: list[str], openai_key: str) -> dict | None:
@@ -173,43 +167,226 @@ async def _generate_ai_recipe(stock_names: list[str], openai_key: str) -> dict |
         return None
 
 
-# Synonymes et variantes produits → mot-clé recette
-# Permet de matcher "Gruyère" → "fromage", "Steak haché" → "boeuf", "Spaghetti" → "pates", etc.
-_ING_EXPAND: dict[str, list[str]] = {
-    "fromage":        ["gruyere", "emmental", "comte", "cheddar", "camembert", "brie", "chevre",
-                       "roquefort", "raclette", "tomme", "mimolette", "coulommiers", "maroilles",
-                       "reblochon", "munster", "ossau", "beaufort", "feta", "ricotta"],
-    "boeuf":          ["steak", "hache", "bifteck", "entrecote", "bavette", "rumsteck", "bourguignon",
-                       "viande", "tartare", "roti", "braise"],
-    "lardons":        ["bacon", "poitrine", "pancetta", "fumee", "allumettes"],
-    "creme":          ["fraiche", "fleurette", "liquide", "epaisse", "semi-epaisse", "entiere"],
-    "pates":          ["spaghetti", "penne", "fusilli", "tagliatelle", "linguine", "rigatoni",
-                       "macaroni", "farfalle", "coquillette", "vermicelle", "lasagne", "gnocchi"],
-    "poulet":         ["blanc", "cuisse", "escalope", "filet", "aiguillette", "cocotte"],
-    "porc":           ["cochon", "longe", "chop", "filet mignon", "cote", "rillette"],
-    "saumon":         ["pavé", "truite"],
-    "pomme de terre": ["patate", "vitelotte", "ratte", "charlotte", "grenaille"],
-    "riz":            ["basmati", "arborio", "rond", "long"],
-    "oeuf":           ["oeufs", "oeuf"],
-    "tomate":         ["tomates", "cherry", "cerises", "concassee", "pelees"],
-    "carotte":        ["carottes"],
-    "champignon":     ["champignons", "shiitake", "portobello", "girolles", "cèpes", "cepes"],
-    "oignon":         ["oignons", "echalote", "echalotes", "cive", "ciboulette"],
-    "ail":            ["gousses"],
-    "poisson":        ["merlu", "lieu", "daurade", "bar", "sole", "cabillaud", "tilapia", "pangasius"],
-    "lentilles":      ["lentille", "beluga", "corail", "verte", "puy"],
-    "pois chiches":   ["pois chiche", "chickpeas"],
-    "courgette":      ["courgettes", "zucchini"],
-    "aubergine":      ["aubergines"],
-    "poivron":        ["poivrons", "capsicum"],
-    "concombre":      ["concombres"],
-}
+@lru_cache(maxsize=1)
+def load_local_recipes(catalog_path: str | os.PathLike[str] | None = None) -> tuple[Recipe, ...]:
+    """Load and validate the local recipe catalog from disk."""
+    path = Path(catalog_path) if catalog_path else _DEFAULT_CATALOG_PATH
+    if not path.exists():
+        raise RecipeCatalogError(f"Recipe catalog not found: {path}")
+
+    try:
+        raw = json.loads(path.read_text(encoding="utf-8"))
+    except json.JSONDecodeError as exc:
+        raise RecipeCatalogError(f"Recipe catalog JSON is invalid: {exc}") from exc
+
+    if not isinstance(raw, list):
+        raise RecipeCatalogError("Recipe catalog root must be a list")
+
+    recipes: list[Recipe] = []
+    seen_ids: set[str] = set()
+    for index, item in enumerate(raw):
+        try:
+            recipe = Recipe.model_validate(item)
+        except ValidationError as exc:
+            raise RecipeCatalogError(f"Invalid recipe at index {index}: {exc}") from exc
+        if recipe.id in seen_ids:
+            raise RecipeCatalogError(f"Duplicate recipe id detected: {recipe.id}")
+        seen_ids.add(recipe.id)
+        recipes.append(recipe)
+
+    return tuple(recipes)
+
+
+def clear_recipe_catalog_cache() -> None:
+    load_local_recipes.cache_clear()
+
+
+def get_recipes_catalog(
+    *,
+    catalog_path: str | os.PathLike[str] | None = None,
+    meal_type: str | None = None,
+    difficulty: str | None = None,
+    tag: str | None = None,
+    cuisine: str | None = None,
+    storage_focus: str | None = None,
+    limit: int | None = None,
+) -> list[Recipe]:
+    recipes = list(load_local_recipes(catalog_path))
+    if meal_type:
+        recipes = [r for r in recipes if any(mt.value == meal_type for mt in r.meal_type)]
+    if difficulty:
+        recipes = [r for r in recipes if r.difficulty.value == difficulty]
+    if tag:
+        norm_tag = _normalize_fr(tag)
+        recipes = [r for r in recipes if any(_normalize_fr(t) == norm_tag for t in r.tags)]
+    if cuisine:
+        norm_cuisine = _normalize_fr(cuisine)
+        recipes = [r for r in recipes if _normalize_fr(r.cuisine.value) == norm_cuisine]
+    if storage_focus:
+        recipes = [r for r in recipes if storage_focus in r.compat.storage_focus]
+    if limit is not None:
+        recipes = recipes[:limit]
+    return recipes
 
 
 def _normalize_fr(text: str) -> str:
-    """Minuscule + suppression des accents."""
-    n = _ud.normalize("NFD", text.lower())
+    """Minuscule + suppression des accents + trim."""
+    n = _ud.normalize("NFD", text.lower().strip())
     return "".join(c for c in n if _ud.category(c) != "Mn")
+
+
+normalize_ingredient_text = _normalize_fr
+
+
+def _candidate_terms(raw: str) -> set[str]:
+    norm = _normalize_fr(raw)
+    terms = {norm}
+    for token in norm.replace("-", " ").split():
+        if len(token) > 2:
+            terms.add(token)
+    for canonical, aliases in _ING_EXPAND.items():
+        canonical_norm = _normalize_fr(canonical)
+        alias_norms = {_normalize_fr(alias) for alias in aliases}
+        if norm == canonical_norm or norm in alias_norms or any(alias in norm for alias in alias_norms):
+            terms.add(canonical_norm)
+        if canonical_norm in norm:
+            terms.add(canonical_norm)
+        for alias_norm in alias_norms:
+            if alias_norm in norm or norm in alias_norm:
+                terms.add(canonical_norm)
+    return terms
+
+
+def normalize_stock_items(stock_items: Iterable[str | dict]) -> list[str]:
+    normalized: list[str] = []
+    for item in stock_items:
+        if isinstance(item, dict):
+            name = str(item.get("name", "")).strip()
+        else:
+            name = str(item).strip()
+        if name:
+            normalized.append(name)
+    return normalized
+
+
+def _match_ingredient(ingredient: str, norm_stock: list[str]) -> bool:
+    norm_ing = _normalize_fr(ingredient)
+    ingredient_terms = _candidate_terms(ingredient)
+    for stock_name in norm_stock:
+        stock_terms = _candidate_terms(stock_name)
+        if norm_ing in stock_name or stock_name in norm_ing:
+            return True
+        if ingredient_terms & stock_terms:
+            return True
+    return False
+
+
+def score_recipe_against_stock(recipe: Recipe, stock_items: Iterable[str | dict]) -> RecipeMatch:
+    norm_stock = [_normalize_fr(item) for item in normalize_stock_items(stock_items)]
+
+    used_required: list[str] = []
+    missing_required: list[str] = []
+    optional_used: list[str] = []
+
+    for ingredient in recipe.ingredients_required:
+        if _match_ingredient(ingredient, norm_stock):
+            used_required.append(ingredient)
+        else:
+            missing_required.append(ingredient)
+
+    for ingredient in recipe.ingredients_optional:
+        if _match_ingredient(ingredient, norm_stock):
+            optional_used.append(ingredient)
+
+    required_total = len(recipe.ingredients_required)
+    required_match_ratio = (len(used_required) / required_total) if required_total else 0.0
+    optional_bonus = min(len(optional_used) * _OPTIONAL_INGREDIENT_BONUS, 0.15)
+    missing_penalty = len(missing_required) * _MISSING_REQUIRED_PENALTY
+    fully_available_bonus = _FULLY_AVAILABLE_BONUS if required_total and not missing_required else 0.0
+    score = max(0.0, min(1.5, required_match_ratio + optional_bonus + fully_available_bonus - missing_penalty))
+
+    return RecipeMatch(
+        recipe=recipe,
+        score=round(score, 4),
+        used_required=used_required,
+        missing_required=missing_required,
+        optional_used=optional_used,
+    )
+
+
+def _sort_matches(match: RecipeMatch) -> tuple[float, int, int, int, int, str]:
+    return (
+        match.score,
+        len(match.used_required),
+        -len(match.missing_required),
+        len(match.optional_used),
+        -(match.recipe.prep_time_min + match.recipe.cook_time_min),
+        match.recipe.title,
+    )
+
+
+def suggest_recipes_from_catalog(
+    stock_items: Iterable[str | dict],
+    *,
+    limit: int = 5,
+    catalog_path: str | os.PathLike[str] | None = None,
+    meal_type: str | None = None,
+    storage_focus: str | None = None,
+) -> list[RecipeMatch]:
+    recipes = get_recipes_catalog(
+        catalog_path=catalog_path,
+        meal_type=meal_type,
+        storage_focus=storage_focus,
+    )
+    matches = [score_recipe_against_stock(recipe, stock_items) for recipe in recipes]
+    matches.sort(key=_sort_matches, reverse=True)
+    return matches[:limit]
+
+
+def recipe_to_legacy_candidate(recipe: Recipe) -> dict:
+    compat_focus = recipe.compat.storage_focus
+    category = compat_focus[0] if compat_focus else (
+        "frigo" if RecipeMealType.dinner in recipe.meal_type or RecipeMealType.lunch in recipe.meal_type else "placard"
+    )
+    return {
+        "id": recipe.id,
+        "title": recipe.title,
+        "category": category,
+        "ingredients": list(recipe.ingredients_required),
+        "instructions_summary": recipe.summary,
+        "prep_time_min": recipe.prep_time_min + recipe.cook_time_min,
+        "difficulty": recipe.difficulty.value,
+        "tags": list(recipe.tags),
+        "meal_type": [mt.value for mt in recipe.meal_type],
+        "cuisine": recipe.cuisine.value,
+        "servings": recipe.servings,
+    }
+
+
+def recipe_match_to_suggestion(match: RecipeMatch) -> RecipeSuggestion:
+    recipe = match.recipe
+    return RecipeSuggestion(
+        id=recipe.id,
+        title=recipe.title,
+        image="",
+        usedIngredients=match.used_required,
+        missedIngredients=match.missing_required,
+        optionalIngredientsUsed=match.optional_used,
+        sourceUrl="https://www.marmiton.org/recettes/recherche.aspx?aqt=" + recipe.title.replace(" ", "+"),
+        is_fallback=not match.used_required,
+        instructions_summary=recipe.summary,
+        prep_time_min=recipe.prep_time_min,
+        cook_time_min=recipe.cook_time_min,
+        difficulty=recipe.difficulty,
+        tags=recipe.tags,
+        meal_type=recipe.meal_type,
+        cuisine=recipe.cuisine,
+        servings=recipe.servings,
+        score=match.score,
+    )
+
+
+_FRENCH_RECIPE_DB: list[dict] = [recipe_to_legacy_candidate(recipe) for recipe in load_local_recipes()]
 
 
 def _match_recipe_to_stock(
@@ -218,39 +395,30 @@ def _match_recipe_to_stock(
     norm_urgent: set[str],
     boost_urgent: bool,
 ) -> tuple[float, list[str], list[str]]:
-    """Retourne (score, ingrédients_utilisés, ingrédients_manquants).
+    """Compat legacy pour les routes existantes.
 
-    Score = nb_ingrédients_trouvés / nb_total + bonus urgence.
-    Correspondance bidirectionnelle : le mot-clé recette dans le nom produit OU vice-versa.
+    Retourne (score, ingrédients_utilisés, ingrédients_manquants).
     """
-    used: list[str] = []
-    missed: list[str] = []
-    has_urgent_match = False
-
-    for ing in recipe["ingredients"]:
-        norm_ing = _normalize_fr(ing)
-        ing_words = [w for w in norm_ing.split() if len(w) > 2]
-        # Synonymes/variantes produits (ex: "fromage" → gruyere, emmental…)
-        synonyms = [_normalize_fr(s) for s in _ING_EXPAND.get(ing, [])]
-        found = False
-        for ns in norm_stock:
-            if (norm_ing in ns
-                    or any(w in ns for w in ing_words)
-                    or any(syn in ns for syn in synonyms)):
-                found = True
-                if ing not in used:
-                    used.append(ing)
-                if boost_urgent and any(norm_ing in nu or nu in norm_ing for nu in norm_urgent):
-                    has_urgent_match = True
-                break
-        if not found:
-            missed.append(ing)
-
-    n_total = len(recipe["ingredients"])
-    if n_total == 0:
-        return 0.0, [], []
-
-    score = len(used) / n_total
-    if has_urgent_match:
-        score += 0.3  # Boost si au moins un ingrédient urgent est utilisé
-    return score, used, missed
+    recipe_model = Recipe.model_validate({
+        "id": recipe.get("id", "legacy_recipe"),
+        "title": recipe.get("title", "Recette"),
+        "summary": recipe.get("instructions_summary", ""),
+        "ingredients_required": recipe.get("ingredients", []),
+        "ingredients_optional": [],
+        "steps": recipe.get("steps", ["Préparer la recette."]),
+        "prep_time_min": int(recipe.get("prep_time_min", 0) or 0),
+        "cook_time_min": int(recipe.get("cook_time_min", 0) or 0),
+        "difficulty": recipe.get("difficulty", RecipeDifficulty.easy.value),
+        "tags": recipe.get("tags", []),
+        "meal_type": recipe.get("meal_type", [RecipeMealType.dinner.value]),
+        "cuisine": recipe.get("cuisine", "française"),
+        "servings": int(recipe.get("servings", 2) or 2),
+    })
+    match = score_recipe_against_stock(recipe_model, norm_stock)
+    score = match.score
+    if boost_urgent and any(
+        _normalize_fr(used) in norm_urgent or any(nu in _normalize_fr(used) for nu in norm_urgent)
+        for used in match.used_required
+    ):
+        score += 0.15
+    return round(score, 4), match.used_required, match.missing_required
