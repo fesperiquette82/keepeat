@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+from enum import Enum
 from typing import Optional
 
 from pydantic import BaseModel, EmailStr, Field
@@ -107,3 +108,76 @@ class StatsResponse(BaseModel):
 
 class PushTokenBody(BaseModel):
     token: str
+
+
+class RecipeDifficulty(str, Enum):
+    easy = "easy"
+    medium = "medium"
+    hard = "hard"
+
+
+class RecipeMealType(str, Enum):
+    breakfast = "breakfast"
+    lunch = "lunch"
+    dinner = "dinner"
+    dessert = "dessert"
+    snack = "snack"
+    aperitif = "aperitif"
+
+
+class RecipeCuisine(str, Enum):
+    francaise = "française"
+
+
+class RecipeCompat(BaseModel):
+    storage_focus: list[str] = Field(default_factory=list)
+
+
+class RecipeSource(BaseModel):
+    type: str = "local_catalog"
+    name: str = "keepeat"
+
+
+class Recipe(BaseModel):
+    id: str = Field(..., min_length=3)
+    title: str = Field(..., min_length=1)
+    summary: str = ""
+    ingredients_required: list[str] = Field(default_factory=list, min_length=1)
+    ingredients_optional: list[str] = Field(default_factory=list)
+    steps: list[str] = Field(default_factory=list, min_length=1)
+    prep_time_min: int = Field(..., ge=0)
+    cook_time_min: int = Field(..., ge=0)
+    difficulty: RecipeDifficulty
+    tags: list[str] = Field(default_factory=list)
+    meal_type: list[RecipeMealType] = Field(default_factory=list, min_length=1)
+    cuisine: RecipeCuisine
+    servings: int = Field(..., ge=1)
+    search_terms: list[str] = Field(default_factory=list)
+    compat: RecipeCompat = Field(default_factory=RecipeCompat)
+    source: RecipeSource = Field(default_factory=RecipeSource)
+    version: int = Field(default=1, ge=1)
+
+
+class RecipeCatalogResponse(BaseModel):
+    recipes: list[Recipe]
+    total: int
+
+
+class RecipeSuggestion(BaseModel):
+    id: str
+    title: str
+    image: str = ""
+    usedIngredients: list[str] = Field(default_factory=list)
+    missedIngredients: list[str] = Field(default_factory=list)
+    optionalIngredientsUsed: list[str] = Field(default_factory=list)
+    sourceUrl: str = ""
+    is_fallback: bool = False
+    instructions_summary: str = ""
+    prep_time_min: Optional[int] = None
+    cook_time_min: Optional[int] = None
+    difficulty: RecipeDifficulty
+    tags: list[str] = Field(default_factory=list)
+    meal_type: list[RecipeMealType] = Field(default_factory=list)
+    cuisine: RecipeCuisine
+    servings: int
+    score: float = Field(..., ge=0.0)

@@ -40,6 +40,7 @@ from models import (
     ProductBase,
     ProductLookupResponse,
     PushTokenBody,
+    RecipeCatalogResponse,
     RegisterResponse,
     ResendVerificationBody,
     ResetPasswordBody,
@@ -58,13 +59,11 @@ from ocr_service import ocr_receipt
 from product_catalog import infer_food_category, infer_shelf_life, lookup_product_openfoodfacts
 from recipes_service import (
     _FRIGO_CATS,
-    _FRENCH_RECIPE_DB,
     _PLACARD_CATS,
-    _RECIPE_MATCH_THRESHOLD,
-    _generate_ai_recipe,
-    _match_recipe_to_stock,
-    _normalize_fr,
+    get_recipes_catalog,
     fr_to_en_ingredient,
+    recipe_match_to_suggestion,
+    suggest_recipes_from_catalog,
 )
 
 load_dotenv()
@@ -686,7 +685,7 @@ async def get_recipe_suggestions(
     recipe_filter: str = Query("urgent", alias="filter"),
     current_user: Dict[str, Any] = Depends(_get_current_user),
 ):
-    """Suggère des recettes depuis la base française embarquée.
+    """Suggère des recettes depuis le catalogue local.
     filter: urgent (≤7j) | all | frigo | placard
     """
     uid = current_user["id"]
@@ -709,123 +708,33 @@ async def get_recipe_suggestions(
         {"$limit": 20},
     ]
     items = await stock_col.aggregate(pipeline).to_list(length=20)
-
-    # Noms du stock normalisés pour la correspondance
     stock_names = [i.get("name", "") for i in items if i.get("name")]
-    norm_stock = [_normalize_fr(n) for n in stock_names]
-
-    # Ingrédients urgents (≤2j) pour le boost de pertinence
-    norm_urgent: set[str] = set()
-    if recipe_filter == "urgent" and items:
-        in_2_days = (utc_now().date() + timedelta(days=2)).strftime("%Y-%m-%d")
-        for item in items:
-            ed = item.get("expiry_date", "")
-            if ed and ed <= in_2_days:
-                norm_urgent.add(_normalize_fr(item.get("name", "")))
-
-    boost_urgent = recipe_filter == "urgent"
-
-    # Filtrer les recettes candidates par catégorie
-    if recipe_filter == "frigo":
-        base_candidates = [r for r in _FRENCH_RECIPE_DB if r["category"] == "frigo"]
-    elif recipe_filter == "placard":
-        base_candidates = [r for r in _FRENCH_RECIPE_DB if r["category"] == "placard"]
-    else:
-        base_candidates = _FRENCH_RECIPE_DB
-
-    # Charger les recettes IA communautaires (partagées, persistantes) — toujours incluses
-    community_docs = await community_recipes_col.find({}).sort("created_at", -1).limit(200).to_list(length=200)
-    community_extras = [
-        {
-            "id": str(d["_id"]),
-            "title": d["title"],
-            "category": "all",
-            "ingredients": d.get("ingredients_keywords", []),
-            "is_ai": True,
-            "instructions_summary": d.get("instructions_summary", ""),
-        }
-        for d in community_docs
-    ]
-    candidates = base_candidates + community_extras
-
-    # Si le stock est vide, retourner les premières recettes sans score
-    if not stock_names:
-        top5 = candidates[:5]
-        logger.info("Recipes suggestions: stock vide, retour top5 par défaut filter=%s", recipe_filter)
-        return [
-            {
-                "id": r["id"],
-                "title": r["title"],
-                "image": "",
-                "usedIngredients": [],
-                "missedIngredients": r["ingredients"],
-                "sourceUrl": "https://www.marmiton.org/recettes/recherche.aspx?aqt=" + r["title"].replace(" ", "+"),
-                "is_fallback": True,
-            }
-            for r in top5
-        ]
-
-    # Scorer toutes les recettes
-    scored = []
-    for recipe in candidates:
-        score, used, missed = _match_recipe_to_stock(recipe, norm_stock, norm_urgent, boost_urgent)
-        scored.append((score, recipe, used, missed))
-
-    scored.sort(key=lambda x: x[0], reverse=True)
-    best_score = scored[0][0] if scored else 0.0
-
-    # Fallback IA : générer une recette si aucune correspondance suffisante
-    if best_score < _RECIPE_MATCH_THRESHOLD:
-        openai_key = os.environ.get("KEEPEAT_OPENAI_TOKEN", "")
-        if openai_key:
-            logger.info("Recipes suggestions: best_score=%.2f < %.2f → génération IA", best_score, _RECIPE_MATCH_THRESHOLD)
-            ai_data = await _generate_ai_recipe(stock_names[:8], openai_key)
-            if ai_data:
-                new_id = f"ai_{int(utc_now().timestamp())}"
-                try:
-                    await community_recipes_col.insert_one({
-                        "_id": new_id,
-                        "title": ai_data["title"],
-                        "ingredients_keywords": ai_data["ingredients_keywords"],
-                        "instructions_summary": ai_data.get("instructions_summary", ""),
-                        "created_at": utc_now(),
-                    })
-                    logger.info("Recette IA sauvegardée en base : %s", ai_data["title"])
-                except Exception as exc:
-                    logger.warning("community_recipes insert failed: %s", exc)
-
-                ai_recipe_obj = {
-                    "id": new_id,
-                    "title": ai_data["title"],
-                    "category": "all",
-                    "ingredients": ai_data["ingredients_keywords"],
-                    "is_ai": True,
-                    "instructions_summary": ai_data.get("instructions_summary", ""),
-                }
-                ai_score, ai_used, ai_missed = _match_recipe_to_stock(ai_recipe_obj, norm_stock, norm_urgent, boost_urgent)
-                # Placer la recette IA en tête (score minimum = best_score + 0.1)
-                scored.insert(0, (max(ai_score, best_score + 0.1), ai_recipe_obj, ai_used, ai_missed))
-                scored.sort(key=lambda x: x[0], reverse=True)
-
-    top5 = scored[:5]
+    storage_focus = recipe_filter if recipe_filter in {"frigo", "placard"} else None
+    matches = suggest_recipes_from_catalog(stock_names, limit=5, storage_focus=storage_focus)
 
     logger.info(
         "Recipes suggestions: filter=%s stock=%s top5=%s",
-        recipe_filter, stock_names[:5], [r["title"] for _, r, _, _ in top5],
+        recipe_filter, stock_names[:5], [match.recipe.title for match in matches],
     )
-    return [
-        {
-            "id": recipe["id"],
-            "title": recipe["title"],
-            "image": "",
-            "usedIngredients": used,
-            "missedIngredients": missed,
-            "sourceUrl": "https://www.marmiton.org/recettes/recherche.aspx?aqt=" + recipe["title"].replace(" ", "+"),
-            "is_fallback": len(used) == 0,
-            **({"instructions_summary": recipe.get("instructions_summary", ""), "is_ai": True} if recipe.get("is_ai") else {}),
-        }
-        for _, recipe, used, missed in top5
-    ]
+    return [recipe_match_to_suggestion(match).model_dump(mode="json") for match in matches]
+
+
+@api_router.get("/recipes/catalog", response_model=RecipeCatalogResponse)
+async def get_recipe_catalog(
+    limit: int = Query(20, ge=1, le=200),
+    meal_type: Optional[str] = Query(None),
+    difficulty: Optional[str] = Query(None),
+    tag: Optional[str] = Query(None),
+    cuisine: Optional[str] = Query(None),
+):
+    recipes = get_recipes_catalog(
+        limit=limit,
+        meal_type=meal_type,
+        difficulty=difficulty,
+        tag=tag,
+        cuisine=cuisine,
+    )
+    return RecipeCatalogResponse(recipes=recipes, total=len(recipes))
 
 
 # -----------------------------------------------------------------------------
@@ -1187,5 +1096,3 @@ async def redirect_verify_email(token: str = Query(...)):
 # Wire routes
 # -----------------------------------------------------------------------------
 app.include_router(api_router)
-
-
