@@ -1,6 +1,6 @@
 import { Slot, useRouter, useSegments } from 'expo-router';
 import { StatusBar } from 'expo-status-bar';
-import React, { useEffect } from 'react';
+import React, { useEffect, useMemo } from 'react';
 import { View, StyleSheet, Platform } from 'react-native';
 import { GestureHandlerRootView } from 'react-native-gesture-handler';
 import * as NavigationBar from 'expo-navigation-bar';
@@ -27,12 +27,17 @@ async function warmUpBackend(): Promise<void> {
 export default function RootLayout() {
   const router = useRouter();
   const segments = useSegments();
-  const { user, token, isLoaded, loadAuth } = useAuthStore();
-  const { loadLanguage } = useLanguageStore();
-  const { items } = useStockStore();
+  const user = useAuthStore(state => state.user);
+  const token = useAuthStore(state => state.token);
+  const isLoaded = useAuthStore(state => state.isLoaded);
+  const loadAuth = useAuthStore(state => state.loadAuth);
+  const loadLanguage = useLanguageStore(state => state.loadLanguage);
+  const items = useStockStore(state => state.items);
 
   // Surveillance de la connectivité réseau + sync automatique
   useNetworkSync();
+
+  const publicScreens = useMemo(() => ['login', 'register', 'email-sent', 'verify-email', 'forgot-password', 'reset-password'], []);
 
   // Barre de navigation Android toujours visible, fond blanc
   useEffect(() => {
@@ -53,7 +58,7 @@ export default function RootLayout() {
       fetch(buildApiUrl('/health')).catch(() => {});
     }, 4 * 60 * 1000);
     return () => clearInterval(keepAlive);
-  }, []);
+  }, [loadAuth, loadLanguage]);
 
   // Enregistrement du push token + notif locale urgente au démarrage
   useEffect(() => {
@@ -63,23 +68,21 @@ export default function RootLayout() {
         checkAndNotifyUrgentOnOpen(items);
       }
     }
-  }, [user?.id]);
+  }, [items, token, user]);
 
   // Guard auth : redirige selon l'état de connexion
   useEffect(() => {
     if (!isLoaded) return;
 
     const segment = segments[0] as string | undefined;
-    const PUBLIC_SCREENS = ['login', 'register', 'email-sent', 'verify-email', 'forgot-password', 'reset-password'];
-    const inPublicScreen = PUBLIC_SCREENS.includes(segment ?? '');
+    const inPublicScreen = publicScreens.includes(segment ?? '');
 
     if (!user && !inPublicScreen) {
-      // eslint-disable-next-line @typescript-eslint/no-explicit-any
-      router.replace('/login' as any);
+      router.replace('/login');
     } else if (user && (segment === 'login' || segment === 'register')) {
       router.replace('/');
     }
-  }, [user, isLoaded, segments]);
+  }, [isLoaded, publicScreens, router, segments, user]);
 
   return (
     <GestureHandlerRootView style={{ flex: 1 }}>

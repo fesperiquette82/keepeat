@@ -1,5 +1,5 @@
 
-import React, { useEffect, useState } from 'react';
+import React, { useCallback, useEffect, useState } from 'react';
 import {
   View,
   Text,
@@ -7,12 +7,10 @@ import {
   ScrollView,
   ActivityIndicator,
   RefreshControl,
-  TouchableOpacity,
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { Ionicons } from '@expo/vector-icons';
 import axios from 'axios';
-import { useRouter } from 'expo-router';
 import { useAuthStore } from '../../store/authStore';
 import { useLanguageStore } from '../../store/languageStore';
 import { buildApiUrl } from '../../utils/config';
@@ -51,7 +49,6 @@ function formatMonth(month: string, lang: string): string {
 }
 
 export default function StatsScreen() {
-  const router = useRouter();
   const { token } = useAuthStore();
   const { language } = useLanguageStore();
   const isFr = language === 'fr';
@@ -63,7 +60,7 @@ export default function StatsScreen() {
   const [isRefreshing, setIsRefreshing] = useState(false);
   const [error, setError]               = useState<string | null>(null);
 
-  const fetchStats = async (silent = false) => {
+  const fetchStats = useCallback(async (silent = false) => {
     if (!token) return;
     if (!silent) setIsLoading(true);
     setError(null);
@@ -79,17 +76,18 @@ export default function StatsScreen() {
       setData(monthly.data);
       setGamif(gamifRes.data);
     } catch {
-      setError(t(
-        'Impossible de charger les stats. Vérifiez votre connexion.',
-        'Unable to load stats. Check your connection.',
-      ));
+      setError(
+        isFr
+          ? 'Impossible de charger les stats. Vérifiez votre connexion.'
+          : 'Unable to load stats. Check your connection.',
+      );
     } finally {
       setIsLoading(false);
       setIsRefreshing(false);
     }
-  };
+  }, [isFr, token]);
 
-  useEffect(() => { fetchStats(); }, [token]);
+  useEffect(() => { fetchStats(); }, [fetchStats]);
 
   const handleRefresh = () => { setIsRefreshing(true); fetchStats(true); };
 
