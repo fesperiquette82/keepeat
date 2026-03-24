@@ -18,9 +18,15 @@ _FRIGO_CATS = ["frais", "proteines", "legumes", "boissons"]
 _PLACARD_CATS = ["feculents", "desserts", "epicerie", "autres"]
 
 _DEFAULT_CATALOG_PATH = Path(__file__).resolve().parent / "data" / "recipes.catalog.json"
-_FULLY_AVAILABLE_BONUS = 0.35
-_OPTIONAL_INGREDIENT_BONUS = 0.05
-_MISSING_REQUIRED_PENALTY = 0.03
+_MIN_SCORE_MAIN_SUGGESTION = 0.55
+_ULTRA_GENERIC_INGREDIENTS = {
+    "sel", "salt", "poivre", "pepper", "eau", "water", "huile", "oil", "olive oil",
+}
+_WEAK_STRUCTURING_INGREDIENTS = {
+    "oeuf", "oeufs", "egg", "eggs", "lait", "milk", "farine", "flour",
+    "beurre", "butter", "sucre", "sugar",
+}
+_DAILY_FRENCH_TAGS = {"rapide", "familial", "economique", "anti-gaspi", "batch cooking"}
 
 # Dictionnaire FR → EN pour les alertes quotidiennes (daily alert, _check_daily_expiry_alert)
 _FR_EN: dict[str, str] = {
@@ -290,6 +296,23 @@ def _match_ingredient(ingredient: str, norm_stock: list[str]) -> bool:
     return False
 
 
+def _ingredient_strength(ingredient: str) -> str:
+    terms = _candidate_terms(ingredient)
+    if terms & _ULTRA_GENERIC_INGREDIENTS:
+        return "ultra"
+    if terms & _WEAK_STRUCTURING_INGREDIENTS:
+        return "weak"
+    return "strong"
+
+
+def _required_coverage_gate(required_total: int) -> float:
+    if required_total <= 2:
+        return 1.0
+    if required_total <= 4:
+        return 0.6
+    return 0.5
+
+
 def score_recipe_against_stock(recipe: Recipe, stock_items: Iterable[str | dict]) -> RecipeMatch:
     norm_stock = [_normalize_fr(item) for item in normalize_stock_items(stock_items)]
 
@@ -308,11 +331,56 @@ def score_recipe_against_stock(recipe: Recipe, stock_items: Iterable[str | dict]
             optional_used.append(ingredient)
 
     required_total = len(recipe.ingredients_required)
+    required_strengths = {ingredient: _ingredient_strength(ingredient) for ingredient in recipe.ingredients_required}
+    used_ultra = [ingredient for ingredient in used_required if required_strengths[ingredient] == "ultra"]
+    used_strong = [ingredient for ingredient in used_required if required_strengths[ingredient] == "strong"]
+    missing_strong = [ingredient for ingredient in missing_required if required_strengths[ingredient] == "strong"]
+    strong_required_total = sum(1 for level in required_strengths.values() if level == "strong")
+
     required_match_ratio = (len(used_required) / required_total) if required_total else 0.0
-    optional_bonus = min(len(optional_used) * _OPTIONAL_INGREDIENT_BONUS, 0.15)
-    missing_penalty = len(missing_required) * _MISSING_REQUIRED_PENALTY
-    fully_available_bonus = _FULLY_AVAILABLE_BONUS if required_total and not missing_required else 0.0
-    score = max(0.0, min(1.5, required_match_ratio + optional_bonus + fully_available_bonus - missing_penalty))
+    strong_required_coverage = (len(used_strong) / strong_required_total) if strong_required_total else 1.0
+    optional_coverage = (len(optional_used) / len(recipe.ingredients_optional)) if recipe.ingredients_optional else 0.0
+    missing_required_ratio = (len(missing_required) / required_total) if required_total else 1.0
+    missing_strong_ratio = (len(missing_strong) / strong_required_total) if strong_required_total else 0.0
+    time_total = recipe.prep_time_min + recipe.cook_time_min
+
+    gate_required_coverage = _required_coverage_gate(required_total)
+    is_eligible = (
+        bool(used_required)
+        and not (len(used_required) == 1 and len(used_ultra) == 1)
+        and required_match_ratio >= gate_required_coverage
+        and (strong_required_total == 0 or strong_required_coverage >= 0.6)
+        and missing_required_ratio <= 0.5
+    )
+    if not is_eligible:
+        score = 0.0
+    else:
+        difficulty_bonus = (
+            0.08 if recipe.difficulty == RecipeDifficulty.easy else
+            0.03 if recipe.difficulty == RecipeDifficulty.medium else
+            -0.05
+        )
+        cuisine_bonus = 0.03 if recipe.cuisine.value == "française" else 0.0
+        daily_tag_bonus = min(
+            0.03,
+            0.01 * sum(1 for tag in recipe.tags if _normalize_fr(tag) in _DAILY_FRENCH_TAGS),
+        )
+        time_bonus = 0.04 if time_total <= 35 else 0.02 if time_total <= 50 else 0.0
+        score = max(
+            0.0,
+            min(
+                1.0,
+                0.50 * required_match_ratio
+                + 0.25 * strong_required_coverage
+                + 0.10 * optional_coverage
+                - 0.30 * missing_required_ratio
+                - 0.20 * missing_strong_ratio
+                + difficulty_bonus
+                + cuisine_bonus
+                + daily_tag_bonus
+                + time_bonus,
+            ),
+        )
 
     return RecipeMatch(
         recipe=recipe,
@@ -324,10 +392,16 @@ def score_recipe_against_stock(recipe: Recipe, stock_items: Iterable[str | dict]
 
 
 def _sort_matches(match: RecipeMatch) -> tuple[float, int, int, int, int, str]:
+    difficulty_rank = {
+        RecipeDifficulty.easy: 3,
+        RecipeDifficulty.medium: 2,
+        RecipeDifficulty.hard: 1,
+    }
     return (
         match.score,
         len(match.used_required),
         -len(match.missing_required),
+        difficulty_rank.get(match.recipe.difficulty, 0),
         len(match.optional_used),
         -(match.recipe.prep_time_min + match.recipe.cook_time_min),
         match.recipe.title,
@@ -348,6 +422,7 @@ def suggest_recipes_from_catalog(
         storage_focus=storage_focus,
     )
     matches = [score_recipe_against_stock(recipe, stock_items) for recipe in recipes]
+    matches = [match for match in matches if match.score >= _MIN_SCORE_MAIN_SUGGESTION]
     matches.sort(key=_sort_matches, reverse=True)
     return matches[:limit]
 
