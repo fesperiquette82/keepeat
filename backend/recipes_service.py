@@ -173,11 +173,15 @@ def load_local_recipes(catalog_path: str | os.PathLike[str] | None = None) -> tu
     path = Path(catalog_path) if catalog_path else _DEFAULT_CATALOG_PATH
     if not path.exists():
         raise RecipeCatalogError(f"Recipe catalog not found: {path}")
+    if not path.is_file():
+        raise RecipeCatalogError(f"Recipe catalog path is not a file: {path}")
 
     try:
         raw = json.loads(path.read_text(encoding="utf-8"))
     except json.JSONDecodeError as exc:
         raise RecipeCatalogError(f"Recipe catalog JSON is invalid: {exc}") from exc
+    except OSError as exc:
+        raise RecipeCatalogError(f"Unable to read recipe catalog: {exc}") from exc
 
     if not isinstance(raw, list):
         raise RecipeCatalogError("Recipe catalog root must be a list")
@@ -201,6 +205,11 @@ def clear_recipe_catalog_cache() -> None:
     load_local_recipes.cache_clear()
 
 
+def load_recipe_catalog(catalog_path: str | os.PathLike[str] | None = None) -> list[Recipe]:
+    """Service function for loading the local recipe catalog."""
+    return list(load_local_recipes(catalog_path))
+
+
 def get_recipes_catalog(
     *,
     catalog_path: str | os.PathLike[str] | None = None,
@@ -211,7 +220,7 @@ def get_recipes_catalog(
     storage_focus: str | None = None,
     limit: int | None = None,
 ) -> list[Recipe]:
-    recipes = list(load_local_recipes(catalog_path))
+    recipes = load_recipe_catalog(catalog_path)
     if meal_type:
         recipes = [r for r in recipes if any(mt.value == meal_type for mt in r.meal_type)]
     if difficulty:

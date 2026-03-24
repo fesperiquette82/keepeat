@@ -6,7 +6,7 @@ from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[1] / "backend"))
 
-from recipes_service import RecipeCatalogError, clear_recipe_catalog_cache, load_local_recipes
+from recipes_service import RecipeCatalogError, clear_recipe_catalog_cache, load_local_recipes, load_recipe_catalog
 
 
 class RecipeLoaderTests(unittest.TestCase):
@@ -58,6 +58,11 @@ class RecipeLoaderTests(unittest.TestCase):
         with self.assertRaises(RecipeCatalogError):
             load_local_recipes(handle.name)
 
+    def test_load_local_recipes_rejects_directory_path(self):
+        with tempfile.TemporaryDirectory() as temp_dir:
+            with self.assertRaises(RecipeCatalogError):
+                load_local_recipes(temp_dir)
+
     def test_load_local_recipes_rejects_duplicate_ids(self):
         duplicate_recipe = {
             "id": "fr_duplicate",
@@ -78,6 +83,31 @@ class RecipeLoaderTests(unittest.TestCase):
 
         with self.assertRaises(RecipeCatalogError):
             load_local_recipes(path)
+
+    def test_load_recipe_catalog_returns_list_of_recipes(self):
+        path = self._write_catalog([
+            {
+                "id": "fr_test_soupe",
+                "title": "Soupe test",
+                "summary": "Résumé",
+                "ingredients_required": ["carotte"],
+                "ingredients_optional": ["crème"],
+                "steps": ["Cuire.", "Mixer."],
+                "prep_time_min": 10,
+                "cook_time_min": 20,
+                "difficulty": "easy",
+                "tags": ["soir"],
+                "meal_type": ["dinner"],
+                "cuisine": "française",
+                "servings": 2,
+            }
+        ])
+
+        recipes = load_recipe_catalog(path)
+
+        self.assertIsInstance(recipes, list)
+        self.assertEqual(len(recipes), 1)
+        self.assertEqual(recipes[0].title, "Soupe test")
 
 
 if __name__ == "__main__":
