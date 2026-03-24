@@ -163,6 +163,38 @@ class RecipeCatalogResponse(BaseModel):
     total: int
 
 
+
+
+class RecipeMatchStatus(str, Enum):
+    ready = "ready"
+    almost = "almost"
+    inspiration = "inspiration"
+
+
+class RecipeGroupedSuggestion(BaseModel):
+    id: str
+    title: str
+    used_ingredients: list[str] = Field(default_factory=list)
+    missing_ingredients: list[str] = Field(default_factory=list)
+    optional_ingredients_used: list[str] = Field(default_factory=list)
+    score: float = Field(..., ge=0.0)
+    prep_time_min: int = Field(..., ge=0)
+    cook_time_min: int = Field(..., ge=0)
+    difficulty: RecipeDifficulty
+    tags: list[str] = Field(default_factory=list)
+    meal_type: list[RecipeMealType] = Field(default_factory=list)
+    cuisine: RecipeCuisine
+    servings: int = Field(..., ge=1)
+    match_status: RecipeMatchStatus
+    matched_required_count: int = Field(..., ge=0)
+    missing_required_count: int = Field(..., ge=0)
+
+
+class RecipeSuggestionGroupsResponse(BaseModel):
+    ready: list[RecipeGroupedSuggestion] = Field(default_factory=list)
+    almost: list[RecipeGroupedSuggestion] = Field(default_factory=list)
+    inspiration: list[RecipeGroupedSuggestion] = Field(default_factory=list)
+
 class RecipeSuggestion(BaseModel):
     id: str
     title: str
