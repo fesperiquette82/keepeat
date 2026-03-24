@@ -57,6 +57,12 @@ class RecipeValidationTests(unittest.TestCase):
         with self.assertRaises(ValidationError):
             Recipe.model_validate(payload)
 
+    def test_recipe_requires_title(self):
+        payload = self._base_recipe()
+        payload["title"] = ""
+        with self.assertRaises(ValidationError):
+            Recipe.model_validate(payload)
+
 
 if __name__ == "__main__":
     unittest.main()
