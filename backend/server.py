@@ -41,6 +41,7 @@ from models import (
     ProductLookupResponse,
     PushTokenBody,
     RecipeCatalogResponse,
+    RecipeSuggestionGroupsResponse,
     RegisterResponse,
     ResendVerificationBody,
     ResetPasswordBody,
@@ -62,7 +63,9 @@ from recipes_service import (
     _PLACARD_CATS,
     get_recipes_catalog,
     fr_to_en_ingredient,
+    recipe_match_to_grouped_suggestion,
     recipe_match_to_suggestion,
+    suggest_recipe_groups_from_catalog,
     suggest_recipes_from_catalog,
 )
 
@@ -717,6 +720,57 @@ async def get_recipe_suggestions(
         recipe_filter, stock_names[:5], [match.recipe.title for match in matches],
     )
     return [recipe_match_to_suggestion(match).model_dump(mode="json") for match in matches]
+
+
+@api_router.get("/recipes/suggestions-grouped", response_model=RecipeSuggestionGroupsResponse)
+async def get_recipe_suggestions_grouped(
+    recipe_filter: str = Query("urgent", alias="filter"),
+    per_group_limit: int = Query(5, ge=1, le=20),
+    current_user: Dict[str, Any] = Depends(_get_current_user),
+):
+    """Suggère des recettes groupées par faisabilité depuis le catalogue local.
+    filter: urgent (≤7j) | all | frigo | placard
+    """
+    uid = current_user["id"]
+    today_str = utc_now().strftime("%Y-%m-%d")
+
+    match: dict = {"user_id": uid, "status": "active"}
+    if recipe_filter == "urgent":
+        in_7_days = (utc_now().date() + timedelta(days=7)).strftime("%Y-%m-%d")
+        match["expiry_date"] = {"$nin": [None, ""], "$gte": today_str, "$lte": in_7_days}
+    elif recipe_filter == "frigo":
+        match["food_category"] = {"$in": _FRIGO_CATS}
+    elif recipe_filter == "placard":
+        match["food_category"] = {"$in": _PLACARD_CATS}
+
+    pipeline = [
+        {"$match": match},
+        {"$addFields": {"_no_expiry": {"$cond": [{"$or": [{"$eq": ["$expiry_date", None]}, {"$eq": ["$expiry_date", ""]}]}, 1, 0]}}},
+        {"$sort": {"_no_expiry": 1, "expiry_date": 1}},
+        {"$limit": 20},
+    ]
+    items = await stock_col.aggregate(pipeline).to_list(length=20)
+    stock_names = [i.get("name", "") for i in items if i.get("name")]
+    storage_focus = recipe_filter if recipe_filter in {"frigo", "placard"} else None
+
+    grouped_matches = suggest_recipe_groups_from_catalog(
+        stock_names,
+        limit_per_group=per_group_limit,
+        storage_focus=storage_focus,
+    )
+
+    response = RecipeSuggestionGroupsResponse(
+        ready=[recipe_match_to_grouped_suggestion(m) for m in grouped_matches["ready"]],
+        almost=[recipe_match_to_grouped_suggestion(m) for m in grouped_matches["almost"]],
+        inspiration=[recipe_match_to_grouped_suggestion(m) for m in grouped_matches["inspiration"]],
+    )
+    logger.info(
+        "Recipes grouped suggestions: filter=%s stock=%s counts=%s",
+        recipe_filter,
+        stock_names[:5],
+        {k: len(v) for k, v in grouped_matches.items()},
+    )
+    return response
 
 
 @api_router.get("/recipes/catalog", response_model=RecipeCatalogResponse)

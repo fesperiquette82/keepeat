@@ -6,13 +6,13 @@ import unicodedata as _ud
 from dataclasses import dataclass
 from functools import lru_cache
 from pathlib import Path
-from typing import Iterable
+from typing import Iterable, Literal
 
 import httpx
 from pydantic import ValidationError
 
 from app_core import logger
-from models import Recipe, RecipeDifficulty, RecipeMealType, RecipeSuggestion
+from models import Recipe, RecipeDifficulty, RecipeGroupedSuggestion, RecipeMealType, RecipeSuggestion
 
 _FRIGO_CATS = ["frais", "proteines", "legumes", "boissons"]
 _PLACARD_CATS = ["feculents", "desserts", "epicerie", "autres"]
@@ -408,10 +408,11 @@ def _sort_matches(match: RecipeMatch) -> tuple[float, int, int, int, int, str]:
     )
 
 
-def suggest_recipes_from_catalog(
+
+
+def _ranked_matches_from_catalog(
     stock_items: Iterable[str | dict],
     *,
-    limit: int = 5,
     catalog_path: str | os.PathLike[str] | None = None,
     meal_type: str | None = None,
     storage_focus: str | None = None,
@@ -424,8 +425,65 @@ def suggest_recipes_from_catalog(
     matches = [score_recipe_against_stock(recipe, stock_items) for recipe in recipes]
     matches = [match for match in matches if match.score >= _MIN_SCORE_MAIN_SUGGESTION]
     matches.sort(key=_sort_matches, reverse=True)
+    return matches
+
+def suggest_recipes_from_catalog(
+    stock_items: Iterable[str | dict],
+    *,
+    limit: int = 5,
+    catalog_path: str | os.PathLike[str] | None = None,
+    meal_type: str | None = None,
+    storage_focus: str | None = None,
+) -> list[RecipeMatch]:
+    matches = _ranked_matches_from_catalog(
+        stock_items,
+        catalog_path=catalog_path,
+        meal_type=meal_type,
+        storage_focus=storage_focus,
+    )
     return matches[:limit]
 
+
+
+
+RecipeMatchGroup = Literal["ready", "almost", "inspiration"]
+
+
+def classify_recipe_match(match: RecipeMatch) -> RecipeMatchGroup:
+    missing_required_count = len(match.missing_required)
+    if missing_required_count == 0:
+        return "ready"
+    if missing_required_count <= 2:
+        return "almost"
+    return "inspiration"
+
+
+def suggest_recipe_groups_from_catalog(
+    stock_items: Iterable[str | dict],
+    *,
+    limit_per_group: int = 5,
+    catalog_path: str | os.PathLike[str] | None = None,
+    meal_type: str | None = None,
+    storage_focus: str | None = None,
+) -> dict[RecipeMatchGroup, list[RecipeMatch]]:
+    matches = _ranked_matches_from_catalog(
+        stock_items,
+        catalog_path=catalog_path,
+        meal_type=meal_type,
+        storage_focus=storage_focus,
+    )
+
+    grouped: dict[RecipeMatchGroup, list[RecipeMatch]] = {
+        "ready": [],
+        "almost": [],
+        "inspiration": [],
+    }
+    for match in matches:
+        status = classify_recipe_match(match)
+        if len(grouped[status]) >= limit_per_group:
+            continue
+        grouped[status].append(match)
+    return grouped
 
 def recipe_to_legacy_candidate(recipe: Recipe) -> dict:
     compat_focus = recipe.compat.storage_focus
@@ -467,6 +525,30 @@ def recipe_match_to_suggestion(match: RecipeMatch) -> RecipeSuggestion:
         cuisine=recipe.cuisine,
         servings=recipe.servings,
         score=match.score,
+    )
+
+
+
+def recipe_match_to_grouped_suggestion(match: RecipeMatch) -> RecipeGroupedSuggestion:
+    recipe = match.recipe
+    status = classify_recipe_match(match)
+    return RecipeGroupedSuggestion(
+        id=recipe.id,
+        title=recipe.title,
+        used_ingredients=match.used_required,
+        missing_ingredients=match.missing_required,
+        optional_ingredients_used=match.optional_used,
+        score=match.score,
+        prep_time_min=recipe.prep_time_min,
+        cook_time_min=recipe.cook_time_min,
+        difficulty=recipe.difficulty,
+        tags=recipe.tags,
+        meal_type=recipe.meal_type,
+        cuisine=recipe.cuisine,
+        servings=recipe.servings,
+        match_status=status,
+        matched_required_count=len(match.used_required),
+        missing_required_count=len(match.missing_required),
     )
 
 

@@ -9,8 +9,10 @@ sys.path.insert(0, str(Path(__file__).resolve().parents[1] / "backend"))
 from models import Recipe
 from recipes_service import (
     clear_recipe_catalog_cache,
+    classify_recipe_match,
     normalize_ingredient_text,
     score_recipe_against_stock,
+    suggest_recipe_groups_from_catalog,
     suggest_recipes_from_catalog,
 )
 
@@ -129,6 +131,71 @@ class RecipeMatchingTests(unittest.TestCase):
         matches = self._suggest_from_temp_catalog(recipes, ["oeufs", "gruyere"], limit=3)
         self.assertEqual(len(matches), 2)
         self.assertEqual(matches[0].recipe.id, "simple_omelette")
+
+
+    def test_classify_recipe_match_ready_almost_inspiration(self):
+        ready_match = score_recipe_against_stock(self._recipe(ingredients_required=["tomate"]), ["tomate"])
+        almost_one_missing = score_recipe_against_stock(
+            self._recipe(ingredients_required=["tomate", "fromage", "pain"]), ["tomate", "fromage"]
+        )
+        almost_two_missing = score_recipe_against_stock(
+            self._recipe(ingredients_required=["tomate", "fromage", "pain", "jambon"]), ["tomate", "fromage"]
+        )
+        inspiration_match = score_recipe_against_stock(
+            self._recipe(ingredients_required=["tomate", "fromage", "pain", "jambon", "oeuf", "lait"]),
+            ["tomate", "fromage", "pain"],
+        )
+
+        self.assertEqual(classify_recipe_match(ready_match), "ready")
+        self.assertEqual(classify_recipe_match(almost_one_missing), "almost")
+        self.assertEqual(classify_recipe_match(almost_two_missing), "almost")
+        self.assertEqual(classify_recipe_match(inspiration_match), "inspiration")
+
+    def test_grouped_suggestions_respects_classification_threshold_and_order(self):
+        recipes = [
+            self._build_catalog_recipe("r_ready", "A Ready", ["fromage", "poulet"]),
+            self._build_catalog_recipe("r_almost_one", "B Almost One", ["fromage", "poulet", "tomate", "jambon"]),
+            self._build_catalog_recipe("r_almost_two", "C Almost Two", ["fromage", "poulet", "tomate", "pain", "oeuf", "lait"]),
+            self._build_catalog_recipe(
+                "r_inspiration",
+                "D Inspiration",
+                ["fromage", "poulet", "tomate", "pain", "oeuf", "lait", "farine"],
+            ),
+            self._build_catalog_recipe(
+                "r_below_threshold",
+                "Z Below",
+                ["fromage", "poulet", "jambon", "oignon", "courgette", "riz", "ail"],
+            ),
+        ]
+        stock = ["gruyere", "poulet", "tomates", "pain"]
+        with tempfile.TemporaryDirectory() as tmpdir:
+            catalog = Path(tmpdir) / "recipes.catalog.json"
+            catalog.write_text(json.dumps(recipes, ensure_ascii=False), encoding="utf-8")
+            clear_recipe_catalog_cache()
+            grouped = suggest_recipe_groups_from_catalog(stock, limit_per_group=5, catalog_path=catalog)
+
+        self.assertEqual([m.recipe.id for m in grouped["ready"]], ["r_ready"])
+        self.assertEqual([m.recipe.id for m in grouped["almost"]], ["r_almost_two", "r_almost_one"])
+        self.assertEqual([m.recipe.id for m in grouped["inspiration"]], ["r_inspiration"])
+        all_ids = {m.recipe.id for group in grouped.values() for m in group}
+        self.assertNotIn("r_below_threshold", all_ids)
+
+
+    def test_grouped_suggestions_limit_per_group(self):
+        recipes = [
+            self._build_catalog_recipe("ready_1", "Ready 1", ["oeuf", "fromage"]),
+            self._build_catalog_recipe("ready_2", "Ready 2", ["oeuf", "fromage"]),
+            self._build_catalog_recipe("ready_3", "Ready 3", ["oeuf", "fromage"]),
+        ]
+        grouped = self._suggest_grouped_from_temp_catalog(recipes, ["oeufs", "gruyere"], limit_per_group=2)
+        self.assertEqual(len(grouped["ready"]), 2)
+
+    def _suggest_grouped_from_temp_catalog(self, recipes: list[dict], stock: list[str], limit_per_group: int = 5):
+        with tempfile.TemporaryDirectory() as tmpdir:
+            catalog = Path(tmpdir) / "recipes.catalog.json"
+            catalog.write_text(json.dumps(recipes, ensure_ascii=False), encoding="utf-8")
+            clear_recipe_catalog_cache()
+            return suggest_recipe_groups_from_catalog(stock, limit_per_group=limit_per_group, catalog_path=catalog)
 
 
 if __name__ == "__main__":
