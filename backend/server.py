@@ -1149,14 +1149,30 @@ async def get_gamification(
 
 # ── Recettes IA (OpenAI GPT-4o-mini) ─────────────────────────────────────────
 
-_AI_RECIPE_PROMPT = """Tu es un chef cuisinier français spécialisé en cuisine du quotidien. \
+_AI_RECIPE_SYSTEM = """\
+Tu es un chef cuisinier expert UNIQUEMENT en cuisine FRANÇAISE (brasserie, bistrot, cuisine familiale, \
+pâtisserie française, cuisine régionale française). Tu ne génères AUCUNE recette étrangère, sans exception.
+
+CUISINES STRICTEMENT INTERDITES : asiatique, japonaise, thaïlandaise, chinoise, coréenne, vietnamienne, \
+indienne, scandinave, danoise, américaine, mexicaine, arabe, maghrébine, africaine, caribéenne.
+
+RECETTES INTERDITES PAR EXEMPLE : Pad Thai, Pad See Ew, Lo Mein, Chow Mein, Aebleskiver, Sushi, \
+Curry, Ramen, Tacos, Burrito, Stir Fry, Wok, Naan, Falafel, Hummus, Pho, Bibimbap, Tagine, Shakshuka, \
+Satay, Tom Yum, Laksa, Gyoza, Tempura, Bulgogi, Kimchi.
+
+RÈGLE ABSOLUE : si les ingrédients fournis ne correspondent pas à la cuisine française, propose quand même \
+3 recettes FRANÇAISES classiques en utilisant ces ingrédients comme base OU en les substituant par leurs \
+équivalents français. Un "lait de coco" peut devenir un dessert au lait français, une "purée d'amande" \
+peut servir dans des financiers ou un gâteau aux amandes.\
+"""
+
+_AI_RECIPE_PROMPT = """\
 L'utilisateur a ces produits dans son frigo/placard :
 
 {ingredients}
 
-Génère exactement 3 recettes de cuisine FRANÇAISE simple et saine en utilisant ces ingrédients \
-(tu peux utiliser un sous-ensemble). Inspiration : cuisine bourgeoise française, brasserie, bistrot, \
-plats familiaux. PAS de cuisine étrangère ni de recettes complexes.
+Génère exactement 3 recettes de cuisine FRANÇAISE simple et saine (brasserie, bistrot, plats familiaux). \
+Utilise certains de ces ingrédients — pas nécessairement tous.
 
 Réponds UNIQUEMENT en JSON valide (pas de markdown), dans ce format :
 [
@@ -1168,6 +1184,23 @@ Réponds UNIQUEMENT en JSON valide (pas de markdown), dans ce format :
   }}
 ]
 Langue : français. Recettes simples (< 45 min), saines, sans friture."""
+
+# Mots-clés dans les titres indiquant une recette étrangère — blacklist de sécurité
+_FOREIGN_RECIPE_KEYWORDS: frozenset[str] = frozenset({
+    "pad see ew", "pad thai", "lo mein", "chow mein", "aebleskiver",
+    "stir fry", "stir-fry", "yakitori", "teriyaki", "sushi", "ramen",
+    "curry ", "tikka", "masala", " naan", "falafel", "hummus", " pho ",
+    "banh mi", "dim sum", "gyoza", "tempura", "bibimbap", "bulgogi",
+    "kimchi", "tagine", "shakshuka", "tajine",
+    "burrito", " taco ", "enchilada", "quesadilla", "nachos",
+    "tom yum", "laksa", "rendang", "satay",
+})
+
+
+def _is_french_ai_recipe(recipe: dict) -> bool:
+    """Retourne False si le titre contient des marqueurs de cuisine étrangère."""
+    title_lower = recipe.get("title", "").lower()
+    return not any(kw in title_lower for kw in _FOREIGN_RECIPE_KEYWORDS)
 
 # Cache en mémoire (uid -> {recipes, created_at})
 _ai_recipe_cache: dict[str, dict] = {}
@@ -1202,6 +1235,8 @@ async def get_ai_recipes(
     if not items:
         logger.info("RECIPES_DEBUG ai empty_stock — user=%s", uid)
         return []
+
+    stock_names = [i.get("name", "") for i in items if i.get("name")]
     logger.info(
         "RECIPES_DEBUG ai stock_items_raw — user=%s count=%d sample=%s",
         uid,
@@ -1234,7 +1269,10 @@ async def get_ai_recipes(
                 json={
                     "model": "gpt-4o-mini",
                     "max_tokens": 800,
-                    "messages": [{"role": "user", "content": prompt}],
+                    "messages": [
+                        {"role": "system", "content": _AI_RECIPE_SYSTEM},
+                        {"role": "user", "content": prompt},
+                    ],
                 },
             )
             if r.status_code != 200:
@@ -1263,6 +1301,41 @@ async def get_ai_recipes(
 
     for recipe in recipes:
         recipe["is_ai"] = True
+
+    # ── Validation : rejeter les recettes étrangères et les remplacer par le catalogue ──
+    valid: list[dict] = []
+    rejected_titles: list[str] = []
+    for r in recipes:
+        if _is_french_ai_recipe(r):
+            valid.append(r)
+        else:
+            rejected_titles.append(r.get("title", "?"))
+            logger.warning(
+                "RECIPES_DEBUG ai rejected_foreign — user=%s title=%s",
+                uid, r.get("title", "?"),
+            )
+
+    if rejected_titles:
+        needed = len(rejected_titles)
+        catalog_fallbacks = suggest_recipes_from_catalog(stock_names, limit=needed + 2)
+        existing_lower = {r["title"].lower() for r in valid}
+        for match in catalog_fallbacks:
+            if len(valid) >= 3:
+                break
+            if match.recipe.title.lower() not in existing_lower:
+                valid.append({
+                    "title": match.recipe.title,
+                    "ingredients_used": match.used_required,
+                    "instructions_summary": match.recipe.summary,
+                    "prep_time_min": match.recipe.prep_time_min + match.recipe.cook_time_min,
+                    "is_ai": True,
+                })
+                existing_lower.add(match.recipe.title.lower())
+        logger.info(
+            "RECIPES_DEBUG ai validation — user=%s rejected=%s final_count=%d",
+            uid, rejected_titles, len(valid),
+        )
+        recipes = valid
 
     _ai_recipe_cache[uid] = {"recipes": recipes, "created_at": utc_now()}
     logger.info("AI recipes generated — user=%s count=%d", uid, len(recipes))
