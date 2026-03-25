@@ -5,6 +5,7 @@ import asyncio
 import json
 import os
 import secrets
+import time
 from contextlib import asynccontextmanager
 from datetime import datetime, timedelta, timezone
 from email.mime.multipart import MIMEMultipart
@@ -61,6 +62,7 @@ from product_catalog import infer_food_category, infer_shelf_life, lookup_produc
 from recipes_service import (
     _FRIGO_CATS,
     _PLACARD_CATS,
+    load_local_recipes,
     get_recipes_catalog,
     fr_to_en_ingredient,
     recipe_match_to_grouped_suggestion,
@@ -90,8 +92,67 @@ SPOONACULAR_KEY = os.getenv("SPOONACULAR_KEY", "")
 _BACKEND_URL = os.getenv("BACKEND_URL", "https://keepeat-backend.onrender.com")
 
 
+async def _run_backend_warmup() -> None:
+    """Backward-compatible alias for run_backend_warmup."""
+    await run_backend_warmup()
+
+
+async def run_backend_warmup() -> dict[str, Any]:
+    """Précharge les éléments critiques pour limiter les cold starts.
+
+    Retourne un résumé exploitable pour les logs/tests sans faire échouer le startup
+    en cas d'échec partiel.
+    """
+    global_start = time.perf_counter()
+    logger.info("Warm-up startup: begin")
+
+    catalog_loaded = False
+    db_ping_ok = False
+
+    catalog_start = time.perf_counter()
+    try:
+        recipes = load_local_recipes()
+        catalog_loaded = True
+        logger.info(
+            "Warm-up startup: catalog step success (%s recipes) in %.1fms",
+            len(recipes),
+            (time.perf_counter() - catalog_start) * 1000,
+        )
+    except Exception as exc:
+        logger.warning(
+            "Warm-up startup: catalog step failed in %.1fms (%s)",
+            (time.perf_counter() - catalog_start) * 1000,
+            exc,
+        )
+
+    db_start = time.perf_counter()
+    try:
+        if db is not None:
+            await db.command("ping")
+            db_ping_ok = True
+            logger.info("Warm-up startup: db step success in %.1fms", (time.perf_counter() - db_start) * 1000)
+        else:
+            logger.warning("Warm-up startup: db step skipped (db is not configured)")
+    except Exception as exc:
+        logger.warning("Warm-up startup: db step failed in %.1fms (%s)", (time.perf_counter() - db_start) * 1000, exc)
+
+    summary = {
+        "catalog_loaded": catalog_loaded,
+        "db_ping_ok": db_ping_ok,
+        "duration_ms": round((time.perf_counter() - global_start) * 1000, 1),
+    }
+    logger.info("Warm-up startup: global summary %s", summary)
+    return summary
+
+
 @asynccontextmanager
 async def lifespan(app: FastAPI):
+    logger.info("Warm-up startup: trigger from FastAPI lifespan")
+    try:
+        warmup_summary = await run_backend_warmup()
+        logger.info("Warm-up startup: lifespan summary %s", warmup_summary)
+    except Exception as exc:
+        logger.exception("Warm-up startup: unexpected failure ignored (%s)", exc)
     await seed_default_user(users_col)
 
     await user_alerts_col.create_index("sent_at", expireAfterSeconds=30 * 24 * 3600)
@@ -196,7 +257,7 @@ api_router = APIRouter(prefix="/api")
 
 @api_router.get("/health")
 async def health():
-    return {"status": "healthy", "timestamp": utc_now().isoformat()}
+    return {"status": "ok"}
 
 
 # -----------------------------------------------------------------------------

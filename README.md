@@ -104,3 +104,41 @@ Le script suivant cible `http://localhost:8000` par défaut ; vous pouvez surcha
 ```bash
 python backend_test.py
 ```
+
+## Warm-up intelligent / éviter les cold starts
+
+Sur Render (et services similaires), un backend inactif peut passer en veille. La première requête utilisateur peut alors être plus lente (cold start).
+
+Approche KeepEat (backend uniquement) :
+
+1. Warm-up au startup FastAPI : préchargement du catalogue local + ping DB léger (défensif, sans crash serveur si échec partiel).
+2. Endpoint santé ultra léger : `GET /api/health` retourne rapidement `{"status":"ok"}` (pas de logique métier).
+3. Ping externe optionnel : un scheduler (UptimeRobot, cron, etc.) peut appeler périodiquement `/api/health` pour garder le service actif.
+
+### Script manuel de wake-up
+
+Script : `backend/scripts/warmup_ping.py`
+
+Exécution manuelle (one-shot, compatible cron) :
+
+```bash
+BACKEND_URL=https://xxx.onrender.com python backend/scripts/warmup_ping.py
+```
+
+Variables d'environnement :
+
+- `BACKEND_URL` (ex: `https://xxx.onrender.com`)
+- `WARMUP_HEALTH_PATH` (défaut: `/api/health`)
+- `WARMUP_TIMEOUT_SECONDS` (défaut: `3`)
+
+Logs du script :
+- `Warmup ping success` (avec statut HTTP et latence)
+- `Warmup ping failed` (avec latence et erreur)
+
+### Configuration recommandée UptimeRobot (optionnel)
+
+UptimeRobot est utile si l’hébergeur met le service en veille.
+
+- Type de monitor : `HTTP(s)`
+- URL : `https://xxx.onrender.com/api/health`
+- Intervalle : `5 minutes` (plan gratuit)
