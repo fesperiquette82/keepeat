@@ -417,14 +417,49 @@ def _ranked_matches_from_catalog(
     meal_type: str | None = None,
     storage_focus: str | None = None,
 ) -> list[RecipeMatch]:
+    raw_stock = normalize_stock_items(stock_items)
+    normalized_stock = [_normalize_fr(item) for item in raw_stock]
+    logger.info(
+        "RECIPES_DEBUG scoring input — meal_type=%s storage_focus=%s raw_stock=%s normalized_stock=%s",
+        meal_type,
+        storage_focus,
+        raw_stock,
+        normalized_stock,
+    )
     recipes = get_recipes_catalog(
         catalog_path=catalog_path,
         meal_type=meal_type,
         storage_focus=storage_focus,
     )
-    matches = [score_recipe_against_stock(recipe, stock_items) for recipe in recipes]
+    matches = [score_recipe_against_stock(recipe, raw_stock) for recipe in recipes]
+    pre_sorted_matches = sorted(matches, key=_sort_matches, reverse=True)
+    logger.info(
+        "RECIPES_DEBUG scoring top10_pre_threshold=%s",
+        [
+            {
+                "title": m.recipe.title,
+                "score": m.score,
+                "used_required": m.used_required,
+                "missing_required": m.missing_required,
+            }
+            for m in pre_sorted_matches[:10]
+        ],
+    )
     matches = [match for match in matches if match.score >= _MIN_SCORE_MAIN_SUGGESTION]
     matches.sort(key=_sort_matches, reverse=True)
+    logger.info(
+        "RECIPES_DEBUG scoring top10_post_threshold=%s min_score=%.2f",
+        [
+            {
+                "title": m.recipe.title,
+                "score": m.score,
+                "used_required": m.used_required,
+                "missing_required": m.missing_required,
+            }
+            for m in matches[:10]
+        ],
+        _MIN_SCORE_MAIN_SUGGESTION,
+    )
     return matches
 
 def suggest_recipes_from_catalog(

@@ -753,6 +753,7 @@ async def get_recipe_suggestions(
     filter: urgent (≤7j) | all | frigo | placard
     """
     uid = current_user["id"]
+    logger.info("RECIPES_DEBUG suggestions called — user=%s filter=%s", uid, recipe_filter)
     today_str = utc_now().strftime("%Y-%m-%d")
 
     # Récupérer les items actifs selon le filtre
@@ -765,22 +766,73 @@ async def get_recipe_suggestions(
     elif recipe_filter == "placard":
         match["food_category"] = {"$in": _PLACARD_CATS}
 
+    max_stock_items = 1000
     pipeline = [
         {"$match": match},
         {"$addFields": {"_no_expiry": {"$cond": [{"$or": [{"$eq": ["$expiry_date", None]}, {"$eq": ["$expiry_date", ""]}]}, 1, 0]}}},
         {"$sort": {"_no_expiry": 1, "expiry_date": 1}},
-        {"$limit": 20},
+        {"$limit": max_stock_items},
     ]
-    items = await stock_col.aggregate(pipeline).to_list(length=20)
+    items = await stock_col.aggregate(pipeline).to_list(length=max_stock_items)
+    logger.info(
+        "RECIPES_DEBUG suggestions stock_items_raw — user=%s filter=%s count=%d sample=%s",
+        uid,
+        recipe_filter,
+        len(items),
+        [
+            {
+                "id": str(i.get("_id", "")),
+                "name": i.get("name"),
+                "expiry_date": i.get("expiry_date"),
+                "food_category": i.get("food_category"),
+            }
+            for i in items[:10]
+        ],
+    )
     stock_names = [i.get("name", "") for i in items if i.get("name")]
     storage_focus = recipe_filter if recipe_filter in {"frigo", "placard"} else None
     matches = suggest_recipes_from_catalog(stock_names, limit=5, storage_focus=storage_focus)
+
+    # Fallback contrôlé: si un filtre contraint retourne trop peu de recettes,
+    # compléter avec des suggestions "all" pour éviter un écran trop vide.
+    if recipe_filter in {"urgent", "frigo", "placard"} and len(matches) < 3:
+        initial_count = len(matches)
+        all_items = await stock_col.find(
+            {"user_id": uid, "status": "active"},
+            {"name": 1},
+        ).sort("expiry_date", 1).limit(max_stock_items).to_list(length=max_stock_items)
+        all_stock_names = [i.get("name", "") for i in all_items if i.get("name")]
+        fallback_matches = suggest_recipes_from_catalog(all_stock_names, limit=8, storage_focus=None)
+        existing_ids = {m.recipe.id for m in matches}
+        for fallback in fallback_matches:
+            if fallback.recipe.id in existing_ids:
+                continue
+            matches.append(fallback)
+            existing_ids.add(fallback.recipe.id)
+            if len(matches) >= 5:
+                break
+        logger.info(
+            "RECIPES_DEBUG suggestions fallback_all_applied — user=%s filter=%s initial_count=%d final_count=%d",
+            uid,
+            recipe_filter,
+            initial_count,
+            len(matches),
+        )
 
     logger.info(
         "Recipes suggestions: filter=%s stock=%s top5=%s",
         recipe_filter, stock_names[:5], [match.recipe.title for match in matches],
     )
-    return [recipe_match_to_suggestion(match).model_dump(mode="json") for match in matches]
+    response = [recipe_match_to_suggestion(match).model_dump(mode="json") for match in matches]
+    logger.info(
+        "RECIPES_DEBUG suggestions response — user=%s filter=%s count=%d ids=%s titles=%s",
+        uid,
+        recipe_filter,
+        len(response),
+        [r.get("id") for r in response],
+        [r.get("title") for r in response],
+    )
+    return response
 
 
 @api_router.get("/recipes/suggestions-grouped", response_model=RecipeSuggestionGroupsResponse)
@@ -793,6 +845,12 @@ async def get_recipe_suggestions_grouped(
     filter: urgent (≤7j) | all | frigo | placard
     """
     uid = current_user["id"]
+    logger.info(
+        "RECIPES_DEBUG suggestions-grouped called — user=%s filter=%s per_group_limit=%s",
+        uid,
+        recipe_filter,
+        per_group_limit,
+    )
     today_str = utc_now().strftime("%Y-%m-%d")
 
     match: dict = {"user_id": uid, "status": "active"}
@@ -811,6 +869,21 @@ async def get_recipe_suggestions_grouped(
         {"$limit": 20},
     ]
     items = await stock_col.aggregate(pipeline).to_list(length=20)
+    logger.info(
+        "RECIPES_DEBUG suggestions-grouped stock_items_raw — user=%s filter=%s count=%d sample=%s",
+        uid,
+        recipe_filter,
+        len(items),
+        [
+            {
+                "id": str(i.get("_id", "")),
+                "name": i.get("name"),
+                "expiry_date": i.get("expiry_date"),
+                "food_category": i.get("food_category"),
+            }
+            for i in items[:10]
+        ],
+    )
     stock_names = [i.get("name", "") for i in items if i.get("name")]
     storage_focus = recipe_filter if recipe_filter in {"frigo", "placard"} else None
 
@@ -831,6 +904,14 @@ async def get_recipe_suggestions_grouped(
         stock_names[:5],
         {k: len(v) for k, v in grouped_matches.items()},
     )
+    logger.info(
+        "RECIPES_DEBUG suggestions-grouped response — user=%s filter=%s ready=%s almost=%s inspiration=%s",
+        uid,
+        recipe_filter,
+        [r.id for r in response.ready],
+        [r.id for r in response.almost],
+        [r.id for r in response.inspiration],
+    )
     return response
 
 
@@ -842,12 +923,25 @@ async def get_recipe_catalog(
     tag: Optional[str] = Query(None),
     cuisine: Optional[str] = Query(None),
 ):
+    logger.info(
+        "RECIPES_DEBUG catalog called — limit=%s meal_type=%s difficulty=%s tag=%s cuisine=%s",
+        limit,
+        meal_type,
+        difficulty,
+        tag,
+        cuisine,
+    )
     recipes = get_recipes_catalog(
         limit=limit,
         meal_type=meal_type,
         difficulty=difficulty,
         tag=tag,
         cuisine=cuisine,
+    )
+    logger.info(
+        "RECIPES_DEBUG catalog response — count=%d ids=%s",
+        len(recipes),
+        [r.id for r in recipes[:20]],
     )
     return RecipeCatalogResponse(recipes=recipes, total=len(recipes))
 
@@ -1073,6 +1167,7 @@ async def get_ai_recipes(
 ):
     """Génère 3 recettes personnalisées via GPT-4o-mini basées sur le stock de l'utilisateur."""
     uid = current_user["id"]
+    logger.info("RECIPES_DEBUG ai called — user=%s", uid)
     openai_key = os.environ.get("KEEPEAT_OPENAI_TOKEN", "")
     if not openai_key:
         raise HTTPException(status_code=503, detail="IA non configurée")
@@ -1080,6 +1175,12 @@ async def get_ai_recipes(
     # Cache 1h par utilisateur
     cached = _ai_recipe_cache.get(uid)
     if cached and (utc_now() - cached["created_at"]).total_seconds() < 3600:
+        logger.info(
+            "RECIPES_DEBUG ai cache_hit — user=%s age_s=%.2f count=%d",
+            uid,
+            (utc_now() - cached["created_at"]).total_seconds(),
+            len(cached["recipes"]),
+        )
         return cached["recipes"]
 
     items = await stock_col.find(
@@ -1087,7 +1188,22 @@ async def get_ai_recipes(
     ).sort("expiry_date", 1).limit(8).to_list(length=8)
 
     if not items:
+        logger.info("RECIPES_DEBUG ai empty_stock — user=%s", uid)
         return []
+    logger.info(
+        "RECIPES_DEBUG ai stock_items_raw — user=%s count=%d sample=%s",
+        uid,
+        len(items),
+        [
+            {
+                "id": str(i.get("_id", "")),
+                "name": i.get("name"),
+                "expiry_date": i.get("expiry_date"),
+                "food_category": i.get("food_category"),
+            }
+            for i in items[:10]
+        ],
+    )
 
     ingredients_list = "\n".join(
         f"- {i['name']}" + (f" ({i.get('food_category', '')})" if i.get('food_category') else "")
@@ -1138,6 +1254,11 @@ async def get_ai_recipes(
 
     _ai_recipe_cache[uid] = {"recipes": recipes, "created_at": utc_now()}
     logger.info("AI recipes generated — user=%s count=%d", uid, len(recipes))
+    logger.info(
+        "RECIPES_DEBUG ai response — user=%s titles=%s",
+        uid,
+        [r.get("title") for r in recipes],
+    )
     return recipes
 
 
@@ -1159,19 +1280,39 @@ async def get_predictions(
         }},
     ]
     stats_agg = await stock_col.aggregate(pipeline).to_list(length=20)
+    logger.info("RISK_DEBUG predictions aggregates — user=%s stats=%s", uid, stats_agg)
     risky_cats: set[str] = set()
     for s in stats_agg:
         total = s["consumed"] + s["thrown"]
-        if total >= 3 and s["thrown"] / total > 0.4:  # seuil minimum de 3 données
+        ratio = (s["thrown"] / total) if total else 0.0
+        logger.info(
+            "RISK_DEBUG predictions category_eval — user=%s category=%s consumed=%s thrown=%s total=%s ratio=%.3f threshold_total=%s threshold_ratio=%s",
+            uid,
+            s.get("_id"),
+            s.get("consumed"),
+            s.get("thrown"),
+            total,
+            ratio,
+            3,
+            0.4,
+        )
+        if total >= 3 and ratio > 0.4:  # seuil minimum de 3 données
             risky_cats.add(s["_id"])
 
     if not risky_cats:
+        logger.info("RISK_DEBUG predictions no_risky_categories — user=%s", uid)
         return []
 
     items = await stock_col.find(
         {"user_id": uid, "status": "active", "food_category": {"$in": list(risky_cats)}},
         {"_id": 1, "name": 1, "food_category": 1},
     ).to_list(length=30)
+    logger.info(
+        "RISK_DEBUG predictions active_items_flagged — user=%s risky_cats=%s items=%s",
+        uid,
+        list(risky_cats),
+        [{"id": str(i.get("_id", "")), "name": i.get("name"), "food_category": i.get("food_category")} for i in items],
+    )
 
     return [
         {"id": str(i["_id"]), "name": i["name"], "category": i.get("food_category", "")}

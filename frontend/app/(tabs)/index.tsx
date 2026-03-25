@@ -113,14 +113,27 @@ export default function HomeScreen() {
   // Gamification + prédictions — chargement silencieux en parallèle
   useEffect(() => {
     if (!token) return;
+    console.info('[RISK_DEBUG] loading gamification + predictions');
     Promise.allSettled([
       axios.get(buildApiUrl('/api/gamification'), { headers: { Authorization: `Bearer ${token}` } }),
       axios.get(buildApiUrl('/api/predictions'), { headers: { Authorization: `Bearer ${token}` } }),
     ]).then(([gamifRes, predRes]) => {
       if (gamifRes.status === 'fulfilled') setGamif(gamifRes.value.data);
       if (predRes.status === 'fulfilled') {
-        const ids = new Set<string>((predRes.value.data as { id: string }[]).map(p => p.id));
+        const predictions = predRes.value.data as { id: string; name?: string; category?: string }[];
+        console.info('[RISK_DEBUG] predictions response', {
+          count: predictions.length,
+          ids: predictions.map(p => p.id),
+          names: predictions.map(p => p.name),
+          categories: predictions.map(p => p.category),
+        });
+        const ids = new Set<string>(predictions.map(p => p.id));
         setRiskyItemIds(ids);
+      } else {
+        console.info('[RISK_DEBUG] predictions request failed', {
+          reason: predRes.reason?.message ?? String(predRes.reason),
+          status: predRes.reason?.response?.status,
+        });
       }
     });
   }, [token]);
@@ -229,7 +242,7 @@ export default function HomeScreen() {
               <Text style={styles.cardName} numberOfLines={1}>{item.name}</Text>
               {riskyItemIds.has(item.id) && (
                 <View style={styles.riskyBadge}>
-                  <Text style={styles.riskyBadgeText}>{isFr ? '⚠️ à risque' : '⚠️ risk'}</Text>
+                  <Text style={styles.riskyBadgeText}>{isFr ? '⚠️ Risque de gaspillage' : '⚠️ Waste risk'}</Text>
                 </View>
               )}
               <TouchableOpacity

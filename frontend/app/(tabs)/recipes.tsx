@@ -112,8 +112,16 @@ export default function RecipesScreen() {
       const url = tab === 'ai'
         ? buildApiUrl('/api/recipes/ai')
         : buildApiUrl(`/api/recipes/suggestions?filter=${TAB_TO_FILTER[tab]}`);
+      console.info('[RECIPES_DEBUG] fetchRecipes call', { tab, url, silent });
       const res = await axios.get(url, {
         headers: { Authorization: `Bearer ${token}` },
+      });
+      console.info('[RECIPES_DEBUG] fetchRecipes response', {
+        tab,
+        status: res.status,
+        count: Array.isArray(res.data) ? res.data.length : null,
+        ids: Array.isArray(res.data) ? res.data.slice(0, 10).map((r: any) => r?.id) : [],
+        titles: Array.isArray(res.data) ? res.data.slice(0, 10).map((r: any) => r?.title) : [],
       });
       // Normaliser les recettes IA au même format
       if (tab === 'ai') {
@@ -131,9 +139,11 @@ export default function RecipesScreen() {
         }));
         setRecipes(aiRecipes);
       } else {
+        console.info('[RECIPES_DEBUG] using /recipes/suggestions response directly (no legacy fallback/mocks)', { tab });
         setRecipes(res.data);
       }
-    } catch {
+    } catch (err: any) {
+      console.info('[RECIPES_DEBUG] fetchRecipes error', { tab, message: err?.message, status: err?.response?.status });
       setError(
         isFr
           ? 'Impossible de charger les recettes. Vérifiez votre connexion.'
@@ -152,18 +162,24 @@ export default function RecipesScreen() {
     if (!token) return;
     const load = async () => {
       try {
+        console.info('[RECIPES_DEBUG] preview request urgent');
         let res = await axios.get(buildApiUrl('/api/recipes/suggestions?filter=urgent'), {
           headers: { Authorization: `Bearer ${token}` },
         });
         if ((res.data as RecipeSuggestion[]).length > 0) {
+          console.info('[RECIPES_DEBUG] preview uses urgent', { count: (res.data as RecipeSuggestion[]).length });
           setPreviewRecipes((res.data as RecipeSuggestion[]).slice(0, 3));
           return;
         }
+        console.info('[RECIPES_DEBUG] preview urgent empty, fallback to all');
         res = await axios.get(buildApiUrl('/api/recipes/suggestions?filter=all'), {
           headers: { Authorization: `Bearer ${token}` },
         });
+        console.info('[RECIPES_DEBUG] preview uses all', { count: (res.data as RecipeSuggestion[]).length });
         setPreviewRecipes((res.data as RecipeSuggestion[]).slice(0, 3));
-      } catch { /* silencieux */ }
+      } catch (err: any) {
+        console.info('[RECIPES_DEBUG] preview load error', { message: err?.message, status: err?.response?.status });
+      }
     };
     load();
   }, [token]);
