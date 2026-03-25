@@ -9,7 +9,7 @@ import { useAuthStore } from '../store/authStore';
 import { useLanguageStore } from '../store/languageStore';
 import { useStockStore } from '../store/stockStore';
 import { requestNotificationPermissions, registerPushToken, checkAndNotifyUrgentOnOpen } from '../utils/notificationService';
-import { buildApiUrl } from '../utils/config';
+import { API_ENV, API_URL, buildApiUrl } from '../utils/config';
 import { useNetworkSync } from '../utils/useNetworkSync';
 
 async function warmUpBackend(): Promise<void> {
@@ -21,6 +21,16 @@ async function warmUpBackend(): Promise<void> {
     // Best-effort
   } finally {
     clearTimeout(timer);
+  }
+}
+
+async function logBackendBuildInfo(): Promise<void> {
+  try {
+    const res = await fetch(buildApiUrl('/api/build-info'));
+    const data = await res.json();
+    console.info('[ENV_DEBUG] backend build info', data);
+  } catch (err: any) {
+    console.info('[ENV_DEBUG] backend build info unavailable', { message: err?.message ?? String(err) });
   }
 }
 
@@ -50,7 +60,9 @@ export default function RootLayout() {
 
   // Initialisation au démarrage + keepalive Render.com toutes les 4 min
   useEffect(() => {
+    console.info('[ENV_DEBUG] app api target', { apiEnv: API_ENV, apiUrl: API_URL });
     warmUpBackend();
+    logBackendBuildInfo();
     loadAuth();
     loadLanguage();
     requestNotificationPermissions();

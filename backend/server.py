@@ -260,6 +260,18 @@ async def health():
     return {"status": "ok"}
 
 
+@api_router.get("/build-info")
+async def build_info():
+    """Retourne des informations de build pour diagnostiquer l'environnement ciblé."""
+    return {
+        "service": "keepeat-backend",
+        "env": os.getenv("APP_ENV", os.getenv("ENV", "unknown")),
+        "version": os.getenv("APP_VERSION", "unknown"),
+        "commit": os.getenv("RENDER_GIT_COMMIT", os.getenv("GIT_COMMIT_SHA", "unknown")),
+        "deployed_at": os.getenv("DEPLOYED_AT", "unknown"),
+    }
+
+
 # -----------------------------------------------------------------------------
 # Auth routes
 # -----------------------------------------------------------------------------
@@ -1303,14 +1315,24 @@ async def get_predictions(
         logger.info("RISK_DEBUG predictions no_risky_categories — user=%s", uid)
         return []
 
+    today_str = utc_now().strftime("%Y-%m-%d")
+    in_7_days = (utc_now().date() + timedelta(days=7)).strftime("%Y-%m-%d")
+
     items = await stock_col.find(
-        {"user_id": uid, "status": "active", "food_category": {"$in": list(risky_cats)}},
+        {
+            "user_id": uid,
+            "status": "active",
+            "food_category": {"$in": list(risky_cats)},
+            "expiry_date": {"$nin": [None, ""], "$gte": today_str, "$lte": in_7_days},
+        },
         {"_id": 1, "name": 1, "food_category": 1},
     ).to_list(length=30)
     logger.info(
-        "RISK_DEBUG predictions active_items_flagged — user=%s risky_cats=%s items=%s",
+        "RISK_DEBUG predictions active_items_flagged — user=%s risky_cats=%s expiry_window=%s..%s items=%s",
         uid,
         list(risky_cats),
+        today_str,
+        in_7_days,
         [{"id": str(i.get("_id", "")), "name": i.get("name"), "food_category": i.get("food_category")} for i in items],
     )
 
