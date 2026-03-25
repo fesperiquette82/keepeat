@@ -15,6 +15,7 @@ import { useRouter } from 'expo-router';
 import { Ionicons } from '@expo/vector-icons';
 import { useAuthStore } from '../store/authStore';
 import { useLanguageStore } from '../store/languageStore';
+import AnimatedLogo from '../component/AnimatedLogo';
 
 export default function LoginScreen() {
   const router = useRouter();
@@ -107,16 +108,18 @@ export default function LoginScreen() {
           contentContainerStyle={styles.scroll}
           keyboardShouldPersistTaps="handled"
         >
-          {/* Logo */}
-          <View style={styles.logoSection}>
-            <View style={styles.logoIcon}>
-              <Ionicons name="leaf" size={40} color="#22c55e" />
+          {/* Logo — animé au montage (fade-in + scale spring) */}
+          <AnimatedLogo delay={100}>
+            <View style={styles.logoSection}>
+              <View style={styles.logoIcon}>
+                <Ionicons name="leaf" size={40} color="#22c55e" />
+              </View>
+              <Text style={styles.logoTitle}>KeepEat</Text>
+              <Text style={styles.logoTagline}>
+                {fr ? 'Vos aliments, au bon moment' : 'Your food, at the right time'}
+              </Text>
             </View>
-            <Text style={styles.logoTitle}>KeepEat</Text>
-            <Text style={styles.logoTagline}>
-              {fr ? 'Vos aliments, au bon moment' : 'Your food, at the right time'}
-            </Text>
-          </View>
+          </AnimatedLogo>
 
           {/* Form */}
           <View style={styles.form}>
