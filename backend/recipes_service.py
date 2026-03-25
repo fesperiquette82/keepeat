@@ -22,9 +22,14 @@ _MIN_SCORE_MAIN_SUGGESTION = 0.55
 _ULTRA_GENERIC_INGREDIENTS = {
     "sel", "salt", "poivre", "pepper", "eau", "water", "huile", "oil", "olive oil",
 }
-_WEAK_STRUCTURING_INGREDIENTS = {
-    "oeuf", "oeufs", "egg", "eggs", "lait", "milk", "farine", "flour",
-    "beurre", "butter", "sucre", "sugar",
+WEAK_INGREDIENTS = {
+    "oeuf", "oeufs", "egg", "eggs",
+    "lait", "milk",
+    "sucre", "sugar",
+    "farine", "flour",
+    "sel", "salt",
+    "huile", "oil",
+    "beurre", "butter",
 }
 _DAILY_FRENCH_TAGS = {"rapide", "familial", "economique", "anti-gaspi", "batch cooking"}
 
@@ -300,7 +305,7 @@ def _ingredient_strength(ingredient: str) -> str:
     terms = _candidate_terms(ingredient)
     if terms & _ULTRA_GENERIC_INGREDIENTS:
         return "ultra"
-    if terms & _WEAK_STRUCTURING_INGREDIENTS:
+    if terms & WEAK_INGREDIENTS:
         return "weak"
     return "strong"
 
@@ -311,6 +316,48 @@ def _required_coverage_gate(required_total: int) -> float:
     if required_total <= 4:
         return 0.6
     return 0.5
+
+
+def _compute_score(match: RecipeMatch) -> float:
+    required_total = len(match.used_required) + len(match.missing_required)
+    required_coverage = (len(match.used_required) / required_total) if required_total else 0.0
+    optional_total = len(match.recipe.ingredients_optional)
+    optional_coverage = (len(match.optional_used) / optional_total) if optional_total else 0.0
+    missing_required_ratio = (len(match.missing_required) / required_total) if required_total else 1.0
+    score = (
+        0.6 * required_coverage
+        + 0.2 * optional_coverage
+        - 0.4 * missing_required_ratio
+    )
+    if match.recipe.difficulty == RecipeDifficulty.easy:
+        score += 0.1
+    if (match.recipe.prep_time_min + match.recipe.cook_time_min) < 40:
+        score += 0.05
+    return round(max(0.0, min(1.0, score)), 4)
+
+
+def _evaluate_recipe_eligibility(match: RecipeMatch, *, relaxed: bool = False) -> tuple[bool, list[str]]:
+    reasons: list[str] = []
+    required_strengths = {ingredient: _ingredient_strength(ingredient) for ingredient in match.recipe.ingredients_required}
+    used_strong = [ingredient for ingredient in match.used_required if required_strengths.get(ingredient) == "strong"]
+    used_weak_or_ultra = [
+        ingredient for ingredient in match.used_required if required_strengths.get(ingredient) in {"weak", "ultra"}
+    ]
+
+    if not match.used_required:
+        reasons.append("no_required_match")
+    min_strong_needed = 1 if relaxed else 2
+    if len(used_strong) < min_strong_needed:
+        reasons.append(f"strong_matches_below_{min_strong_needed}")
+    if used_weak_or_ultra and not used_strong:
+        reasons.append("only_weak_or_ultra_matches")
+
+    return (len(reasons) == 0), reasons
+
+
+def is_recipe_eligible(match: RecipeMatch) -> bool:
+    eligible, _ = _evaluate_recipe_eligibility(match, relaxed=False)
+    return eligible
 
 
 def score_recipe_against_stock(recipe: Recipe, stock_items: Iterable[str | dict]) -> RecipeMatch:
@@ -330,65 +377,15 @@ def score_recipe_against_stock(recipe: Recipe, stock_items: Iterable[str | dict]
         if _match_ingredient(ingredient, norm_stock):
             optional_used.append(ingredient)
 
-    required_total = len(recipe.ingredients_required)
-    required_strengths = {ingredient: _ingredient_strength(ingredient) for ingredient in recipe.ingredients_required}
-    used_ultra = [ingredient for ingredient in used_required if required_strengths[ingredient] == "ultra"]
-    used_strong = [ingredient for ingredient in used_required if required_strengths[ingredient] == "strong"]
-    missing_strong = [ingredient for ingredient in missing_required if required_strengths[ingredient] == "strong"]
-    strong_required_total = sum(1 for level in required_strengths.values() if level == "strong")
-
-    required_match_ratio = (len(used_required) / required_total) if required_total else 0.0
-    strong_required_coverage = (len(used_strong) / strong_required_total) if strong_required_total else 1.0
-    optional_coverage = (len(optional_used) / len(recipe.ingredients_optional)) if recipe.ingredients_optional else 0.0
-    missing_required_ratio = (len(missing_required) / required_total) if required_total else 1.0
-    missing_strong_ratio = (len(missing_strong) / strong_required_total) if strong_required_total else 0.0
-    time_total = recipe.prep_time_min + recipe.cook_time_min
-
-    gate_required_coverage = _required_coverage_gate(required_total)
-    is_eligible = (
-        bool(used_required)
-        and not (len(used_required) == 1 and len(used_ultra) == 1)
-        and required_match_ratio >= gate_required_coverage
-        and (strong_required_total == 0 or strong_required_coverage >= 0.6)
-        and missing_required_ratio <= 0.5
-    )
-    if not is_eligible:
-        score = 0.0
-    else:
-        difficulty_bonus = (
-            0.08 if recipe.difficulty == RecipeDifficulty.easy else
-            0.03 if recipe.difficulty == RecipeDifficulty.medium else
-            -0.05
-        )
-        cuisine_bonus = 0.03 if recipe.cuisine.value == "française" else 0.0
-        daily_tag_bonus = min(
-            0.03,
-            0.01 * sum(1 for tag in recipe.tags if _normalize_fr(tag) in _DAILY_FRENCH_TAGS),
-        )
-        time_bonus = 0.04 if time_total <= 35 else 0.02 if time_total <= 50 else 0.0
-        score = max(
-            0.0,
-            min(
-                1.0,
-                0.50 * required_match_ratio
-                + 0.25 * strong_required_coverage
-                + 0.10 * optional_coverage
-                - 0.30 * missing_required_ratio
-                - 0.20 * missing_strong_ratio
-                + difficulty_bonus
-                + cuisine_bonus
-                + daily_tag_bonus
-                + time_bonus,
-            ),
-        )
-
-    return RecipeMatch(
+    match = RecipeMatch(
         recipe=recipe,
-        score=round(score, 4),
+        score=0.0,
         used_required=used_required,
         missing_required=missing_required,
         optional_used=optional_used,
     )
+    match.score = _compute_score(match)
+    return match
 
 
 def _sort_matches(match: RecipeMatch) -> tuple[float, int, int, int, int, str]:
@@ -431,8 +428,8 @@ def _ranked_matches_from_catalog(
         meal_type=meal_type,
         storage_focus=storage_focus,
     )
-    matches = [score_recipe_against_stock(recipe, raw_stock) for recipe in recipes]
-    pre_sorted_matches = sorted(matches, key=_sort_matches, reverse=True)
+    scored_matches = [score_recipe_against_stock(recipe, raw_stock) for recipe in recipes]
+    pre_sorted_matches = sorted(scored_matches, key=_sort_matches, reverse=True)
     logger.info(
         "RECIPES_DEBUG scoring top10_pre_threshold=%s",
         [
@@ -445,8 +442,63 @@ def _ranked_matches_from_catalog(
             for m in pre_sorted_matches[:10]
         ],
     )
-    matches = [match for match in matches if match.score >= _MIN_SCORE_MAIN_SUGGESTION]
+    strict_matches: list[RecipeMatch] = []
+    rejected_reasons: list[dict[str, str | float | list[str]]] = []
+    for match in pre_sorted_matches:
+        eligible, reasons = _evaluate_recipe_eligibility(match, relaxed=False)
+        if not eligible:
+            rejected_reasons.append(
+                {
+                    "title": match.recipe.title,
+                    "score": match.score,
+                    "reasons": reasons,
+                }
+            )
+            continue
+        if match.score < _MIN_SCORE_MAIN_SUGGESTION:
+            rejected_reasons.append(
+                {
+                    "title": match.recipe.title,
+                    "score": match.score,
+                    "reasons": ["below_min_score"],
+                }
+            )
+            continue
+        strict_matches.append(match)
+
+    matches = strict_matches
+    if len(matches) < 3:
+        relaxed_candidates: list[RecipeMatch] = []
+        for match in pre_sorted_matches:
+            if match in strict_matches:
+                continue
+            eligible, reasons = _evaluate_recipe_eligibility(match, relaxed=True)
+            if not eligible or not match.used_required:
+                continue
+            if match.score < 0.35:
+                continue
+            relaxed_candidates.append(match)
+            logger.info(
+                "RECIPES_DEBUG relaxed_candidate title=%s score=%.4f missing_required=%s reasons=%s",
+                match.recipe.title,
+                match.score,
+                match.missing_required,
+                reasons,
+            )
+        matches = strict_matches + relaxed_candidates
+
     matches.sort(key=_sort_matches, reverse=True)
+    logger.info(
+        "RECIPES_DEBUG scoring summary total=%d strict_kept=%d final_kept=%d rejected=%d",
+        len(scored_matches),
+        len(strict_matches),
+        len(matches),
+        len(rejected_reasons),
+    )
+    logger.info(
+        "RECIPES_DEBUG scoring rejected_top10=%s",
+        rejected_reasons[:10],
+    )
     logger.info(
         "RECIPES_DEBUG scoring top10_post_threshold=%s min_score=%.2f",
         [
@@ -459,6 +511,10 @@ def _ranked_matches_from_catalog(
             for m in matches[:10]
         ],
         _MIN_SCORE_MAIN_SUGGESTION,
+    )
+    logger.info(
+        "RECIPES_DEBUG scoring top5_scores=%s",
+        [{"title": m.recipe.title, "score": m.score} for m in matches[:5]],
     )
     return matches
 

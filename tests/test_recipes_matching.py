@@ -175,8 +175,8 @@ class RecipeMatchingTests(unittest.TestCase):
             grouped = suggest_recipe_groups_from_catalog(stock, limit_per_group=5, catalog_path=catalog)
 
         self.assertEqual([m.recipe.id for m in grouped["ready"]], ["r_ready"])
-        self.assertEqual([m.recipe.id for m in grouped["almost"]], ["r_almost_two", "r_almost_one"])
-        self.assertEqual([m.recipe.id for m in grouped["inspiration"]], ["r_inspiration"])
+        self.assertEqual([m.recipe.id for m in grouped["almost"]], ["r_almost_one", "r_almost_two"])
+        self.assertEqual([m.recipe.id for m in grouped["inspiration"]], [])
         all_ids = {m.recipe.id for group in grouped.values() for m in group}
         self.assertNotIn("r_below_threshold", all_ids)
 
