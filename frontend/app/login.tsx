@@ -109,7 +109,7 @@ export default function LoginScreen() {
           keyboardShouldPersistTaps="handled"
         >
           {/* Logo — animé au montage (fade-in + scale spring) */}
-          <AnimatedLogo delay={100}>
+          <AnimatedLogo delay={120}>
             <View style={styles.logoSection}>
               <View style={styles.logoIcon}>
                 <Ionicons name="leaf" size={40} color="#22c55e" />
@@ -174,6 +174,7 @@ export default function LoginScreen() {
                   keyboardType="email-address"
                   autoCapitalize="none"
                   autoComplete="email"
+                  importantForAutofill="yes"
                 />
               </View>
             </View>
@@ -197,6 +198,7 @@ export default function LoginScreen() {
                   placeholderTextColor="#444"
                   secureTextEntry={!showPassword}
                   autoComplete="password"
+                  importantForAutofill="yes"
                 />
                 <TouchableOpacity onPress={() => setShowPassword(!showPassword)} style={styles.eyeBtn}>
                   <Ionicons name={showPassword ? 'eye-off-outline' : 'eye-outline'} size={18} color="#666" />
@@ -242,7 +244,7 @@ export default function LoginScreen() {
 }
 
 const styles = StyleSheet.create({
-  container: { flex: 1, backgroundColor: '#EFEFEF' },
+  container: { flex: 1, backgroundColor: '#E3E8F0' },
   flex: { flex: 1 },
   scroll: { flexGrow: 1, justifyContent: 'center', padding: 24 },
 
@@ -317,10 +319,10 @@ const styles = StyleSheet.create({
   inputWrapper: {
     flexDirection: 'row',
     alignItems: 'center',
-    backgroundColor: '#F9FAFB',
+    backgroundColor: '#F3F6FA',
     borderRadius: 12,
     borderWidth: 1.5,
-    borderColor: '#E5E7EB',
+    borderColor: '#D5DEE8',
   },
   inputIcon: { paddingLeft: 14 },
   input: {

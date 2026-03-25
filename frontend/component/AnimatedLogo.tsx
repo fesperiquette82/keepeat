@@ -1,5 +1,5 @@
 import React, { useEffect, useRef } from 'react';
-import { Animated } from 'react-native';
+import { Animated, Easing } from 'react-native';
 
 interface Props {
   children: React.ReactNode;
@@ -19,31 +19,33 @@ interface Props {
 export default function AnimatedLogo({ children, delay = 100 }: Props) {
   // Valeurs initiales : invisible (opacity 0) et légèrement réduit (scale 0.8)
   const opacity = useRef(new Animated.Value(0)).current;
-  const scale   = useRef(new Animated.Value(0.8)).current;
+  const scale   = useRef(new Animated.Value(0.75)).current;
 
   useEffect(() => {
     // Petit délai avant le départ → l'écran a le temps de se rendre,
     // ce qui évite un flash et donne un effet plus soigné.
     const timer = setTimeout(() => {
       Animated.parallel([
-
-        // ── Fade-in : 400ms, linéaire ──────────────────────────────────
         Animated.timing(opacity, {
           toValue: 1,
-          duration: 400,
-          useNativeDriver: true, // exécuté sur le thread UI natif → 60 fps garanti
-        }),
-
-        // ── Scale avec spring : léger "rebond" naturel ─────────────────
-        // tension : rigidité du ressort (plus élevé = plus rapide)
-        // friction : amortissement (plus bas = plus de rebond)
-        Animated.spring(scale, {
-          toValue: 1,
-          tension: 60,   // réactif sans être brutal
-          friction: 8,   // légèrement sous-amorti → petit bounce à la fin
+          duration: 320,
+          easing: Easing.out(Easing.cubic),
           useNativeDriver: true,
         }),
-
+        Animated.sequence([
+          Animated.timing(scale, {
+            toValue: 1.05,
+            duration: 260,
+            easing: Easing.out(Easing.cubic),
+            useNativeDriver: true,
+          }),
+          Animated.timing(scale, {
+            toValue: 1,
+            duration: 180,
+            easing: Easing.inOut(Easing.quad),
+            useNativeDriver: true,
+          }),
+        ]),
       ]).start();
     }, delay);
 
