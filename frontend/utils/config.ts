@@ -17,19 +17,37 @@ const ENV_API_URLS: Record<AppEnv, string> = {
   production: 'https://keepeat-backend.onrender.com',
 };
 
+function normalizeBaseUrl(url: string): string {
+  return url.trim().replace(/\/$/, '');
+}
+
 function resolveAppEnv(): AppEnv {
   return ENV_ALIASES[APP_ENV] ?? 'production';
 }
 
 function resolveApiUrl(): string {
+  const appEnv = resolveAppEnv();
+  const defaultUrl = ENV_API_URLS[appEnv];
   const explicitUrl = process.env.EXPO_PUBLIC_BACKEND_URL?.trim();
-  if (explicitUrl) {
-    return explicitUrl;
+  const perEnvUrl = process.env[`EXPO_PUBLIC_BACKEND_URL_${appEnv.toUpperCase()}`]?.trim();
+
+  // En production, on verrouille la cible backend pour éviter un build mobile
+  // qui pointerait vers une ancienne API (source des recettes exotiques observées).
+  if (appEnv === 'production') {
+    if (perEnvUrl) {
+      return normalizeBaseUrl(perEnvUrl);
+    }
+    if (explicitUrl && normalizeBaseUrl(explicitUrl) !== normalizeBaseUrl(defaultUrl)) {
+      console.info('[ENV_DEBUG] ignoring EXPO_PUBLIC_BACKEND_URL in production', {
+        explicitUrl,
+        enforcedUrl: defaultUrl,
+      });
+      return normalizeBaseUrl(defaultUrl);
+    }
+    return normalizeBaseUrl(explicitUrl || defaultUrl);
   }
 
-  const appEnv = resolveAppEnv();
-  const perEnvUrl = process.env[`EXPO_PUBLIC_BACKEND_URL_${appEnv.toUpperCase()}`]?.trim();
-  return perEnvUrl || ENV_API_URLS[appEnv];
+  return normalizeBaseUrl(explicitUrl || perEnvUrl || defaultUrl);
 }
 
 export const API_ENV = resolveAppEnv();
