@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useEffect, useRef, useState } from 'react';
 import {
   View,
   Text,
@@ -9,13 +9,42 @@ import {
   KeyboardAvoidingView,
   Platform,
   ScrollView,
+  Animated,
+  Easing,
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { useRouter } from 'expo-router';
 import { Ionicons } from '@expo/vector-icons';
 import { useAuthStore } from '../store/authStore';
 import { useLanguageStore } from '../store/languageStore';
-import AnimatedLogo from '../component/AnimatedLogo';
+
+function VeggiePastille() {
+  return (
+    <View style={styles.veggiesRow}>
+      {/* Carotte */}
+      <View style={styles.veggieSlot}>
+        <View style={styles.carrotTop}>
+          <View style={[styles.carrotLeaf, styles.carrotLeafLeft]} />
+          <View style={[styles.carrotLeaf, styles.carrotLeafCenter]} />
+          <View style={[styles.carrotLeaf, styles.carrotLeafRight]} />
+        </View>
+        <View style={styles.carrotBody} />
+      </View>
+
+      {/* Tomate */}
+      <View style={styles.veggieSlot}>
+        <View style={styles.tomatoLeaf} />
+        <View style={styles.tomatoBody} />
+      </View>
+
+      {/* Oignon */}
+      <View style={styles.veggieSlot}>
+        <View style={styles.onionStem} />
+        <View style={styles.onionBody} />
+      </View>
+    </View>
+  );
+}
 
 export default function LoginScreen() {
   const router = useRouter();
@@ -30,8 +59,39 @@ export default function LoginScreen() {
   const [emailNotVerified, setEmailNotVerified] = useState(false);
   const [resendLoading, setResendLoading] = useState(false);
   const [resendDone, setResendDone] = useState(false);
+  const badgeOpacity = useRef(new Animated.Value(0)).current;
+  const badgeScale = useRef(new Animated.Value(0.8)).current;
 
   const fr = language === 'fr';
+
+  useEffect(() => {
+    const timer = setTimeout(() => {
+      Animated.parallel([
+        Animated.timing(badgeOpacity, {
+          toValue: 1,
+          duration: 320,
+          easing: Easing.out(Easing.cubic),
+          useNativeDriver: true,
+        }),
+        Animated.sequence([
+          Animated.timing(badgeScale, {
+            toValue: 1.05,
+            duration: 240,
+            easing: Easing.out(Easing.cubic),
+            useNativeDriver: true,
+          }),
+          Animated.spring(badgeScale, {
+            toValue: 1,
+            tension: 140,
+            friction: 9,
+            useNativeDriver: true,
+          }),
+        ]),
+      ]).start();
+    }, 120);
+
+    return () => clearTimeout(timer);
+  }, [badgeOpacity, badgeScale]);
 
   const handleDevLogin = async () => {
     setLocalError(null);
@@ -108,18 +168,23 @@ export default function LoginScreen() {
           contentContainerStyle={styles.scroll}
           keyboardShouldPersistTaps="handled"
         >
-          {/* Logo — animé au montage (fade-in + scale spring) */}
-          <AnimatedLogo delay={120}>
-            <View style={styles.logoSection}>
-              <View style={styles.logoIcon}>
-                <Ionicons name="leaf" size={40} color="#22c55e" />
-              </View>
-              <Text style={styles.logoTitle}>KeepEat</Text>
-              <Text style={styles.logoTagline}>
-                {fr ? 'Vos aliments, au bon moment' : 'Your food, at the right time'}
-              </Text>
-            </View>
-          </AnimatedLogo>
+          <View style={styles.logoSection}>
+            <Animated.View
+              style={[
+                styles.logoIcon,
+                {
+                  opacity: badgeOpacity,
+                  transform: [{ scale: badgeScale }],
+                },
+              ]}
+            >
+              <VeggiePastille />
+            </Animated.View>
+            <Text style={styles.logoTitle}>KeepEat</Text>
+            <Text style={styles.logoTagline}>
+              {fr ? 'Vos aliments, au bon moment' : 'Your food, at the right time'}
+            </Text>
+          </View>
 
           {/* Form */}
           <View style={styles.form}>
@@ -253,15 +318,78 @@ const styles = StyleSheet.create({
     width: 88,
     height: 88,
     borderRadius: 28,
-    backgroundColor: '#22c55e',
+    backgroundColor: '#00C853',
     alignItems: 'center',
     justifyContent: 'center',
     marginBottom: 16,
-    shadowColor: '#22c55e',
+    shadowColor: '#00C853',
     shadowOffset: { width: 0, height: 6 },
-    shadowOpacity: 0.3,
-    shadowRadius: 12,
+    shadowOpacity: 0.28,
+    shadowRadius: 10,
     elevation: 8,
+  },
+  veggiesRow: {
+    flexDirection: 'row',
+    alignItems: 'flex-end',
+    justifyContent: 'center',
+    gap: 7,
+  },
+  veggieSlot: {
+    width: 19,
+    alignItems: 'center',
+    justifyContent: 'flex-end',
+  },
+  carrotTop: {
+    height: 8,
+    width: 13,
+    flexDirection: 'row',
+    justifyContent: 'center',
+    alignItems: 'flex-end',
+    marginBottom: 1,
+  },
+  carrotLeaf: {
+    position: 'absolute',
+    width: 4,
+    height: 7,
+    borderRadius: 3,
+    backgroundColor: '#2E7D32',
+    top: 0,
+  },
+  carrotLeafLeft: { transform: [{ rotate: '-26deg' }], left: 1 },
+  carrotLeafCenter: { transform: [{ rotate: '-6deg' }], left: 4.5, backgroundColor: '#388E3C' },
+  carrotLeafRight: { transform: [{ rotate: '20deg' }], right: 1 },
+  carrotBody: {
+    width: 11,
+    height: 22,
+    backgroundColor: '#FB8C00',
+    borderRadius: 7,
+    transform: [{ rotate: '8deg' }],
+  },
+  tomatoLeaf: {
+    width: 10,
+    height: 5,
+    borderRadius: 2,
+    backgroundColor: '#2E7D32',
+    marginBottom: -1,
+  },
+  tomatoBody: {
+    width: 16,
+    height: 16,
+    borderRadius: 8,
+    backgroundColor: '#E53935',
+  },
+  onionStem: {
+    width: 3,
+    height: 6,
+    borderRadius: 2,
+    backgroundColor: '#8E24AA',
+    marginBottom: -1,
+  },
+  onionBody: {
+    width: 15,
+    height: 18,
+    borderRadius: 9,
+    backgroundColor: '#AB47BC',
   },
   logoTitle: { fontSize: 34, fontWeight: '800', color: '#111827', letterSpacing: -0.5 },
   logoTagline: { fontSize: 14, color: '#6B7280', marginTop: 6 },
