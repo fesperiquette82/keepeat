@@ -1,0 +1,14 @@
+{
+  "permissions": {
+    "allow": [
+      "Bash(node -e \"const p=require\\(''./package.json''\\); console.log\\(''expo-image-manipulator:'', p.dependencies[''expo-image-manipulator'']\\)\")",
+      "Bash(git add frontend/app/add-product.tsx frontend/app/edit-product.tsx frontend/package.json frontend/package-lock.json)",
+      "Bash(git add backend/requirements.txt backend/server.py frontend/app/_layout.tsx frontend/app/login.tsx frontend/app/register.tsx frontend/store/authStore.ts frontend/app/email-sent.tsx frontend/app/forgot-password.tsx frontend/app/reset-password.tsx frontend/app/verify-email.tsx)",
+      "Bash(git push origin main)",
+      "Bash(git add backend/requirements.txt)",
+      "Bash(python analyse_modules_en.py)",
+      "Bash(python architecture_solution_en.py)",
+      "Bash(python couplage_modules_en.py)"
+    ]
+  }
+}

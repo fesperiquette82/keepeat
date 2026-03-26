@@ -29,3 +29,6 @@ frontend/scripts/*.ps1
 monitor/
 project.zip
 
+# Claude Code — paramètres locaux machine
+.claude/settings.local.json
+
