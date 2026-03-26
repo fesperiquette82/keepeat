@@ -1,16 +1,24 @@
 import { Slot, useRouter, useSegments } from 'expo-router';
 import { StatusBar } from 'expo-status-bar';
-import React, { useEffect, useMemo } from 'react';
+import React, { useEffect, useMemo, useState } from 'react';
 import { View, StyleSheet, Platform } from 'react-native';
+import * as SplashScreen from 'expo-splash-screen';
 import { GestureHandlerRootView } from 'react-native-gesture-handler';
 import * as NavigationBar from 'expo-navigation-bar';
 import ErrorBoundary from "../component/ErrorBoundary";
+import AnimatedSplashOverlay from '../component/AnimatedSplashOverlay';
 import { useAuthStore } from '../store/authStore';
 import { useLanguageStore } from '../store/languageStore';
 import { useStockStore } from '../store/stockStore';
 import { requestNotificationPermissions, registerPushToken, checkAndNotifyUrgentOnOpen } from '../utils/notificationService';
 import { API_ENV, API_URL, buildApiUrl } from '../utils/config';
 import { useNetworkSync } from '../utils/useNetworkSync';
+
+
+// Garde le splash natif visible tant que le root n'est pas prêt.
+void SplashScreen.preventAutoHideAsync().catch(() => {
+  // Sur Expo Go/web, cela peut échouer silencieusement : l'overlay RN prend le relais.
+});
 
 async function warmUpBackend(): Promise<void> {
   const controller = new AbortController();
@@ -43,6 +51,9 @@ export default function RootLayout() {
   const loadAuth = useAuthStore(state => state.loadAuth);
   const loadLanguage = useLanguageStore(state => state.loadLanguage);
   const items = useStockStore(state => state.items);
+  const [appReady, setAppReady] = useState(false);
+  const [animationDone, setAnimationDone] = useState(false);
+  const [showAnimatedOverlay, setShowAnimatedOverlay] = useState(true);
 
   // Surveillance de la connectivité réseau + sync automatique
   useNetworkSync();
@@ -71,6 +82,38 @@ export default function RootLayout() {
     }, 4 * 60 * 1000);
     return () => clearInterval(keepAlive);
   }, [loadAuth, loadLanguage]);
+
+
+  // Marque l'app prête dès que l'état critique d'auth est chargé.
+  useEffect(() => {
+    if (isLoaded) {
+      setAppReady(true);
+    }
+  }, [isLoaded]);
+
+  // Cache le splash natif uniquement quand l'app est prête + animation terminée.
+  useEffect(() => {
+    if (!appReady || !animationDone) return;
+
+    let cancelled = false;
+    const hideSplash = async () => {
+      try {
+        await SplashScreen.hideAsync();
+      } catch {
+        // Expo Go/web: le splash natif n'est pas toujours contrôlable.
+      } finally {
+        if (!cancelled) {
+          setShowAnimatedOverlay(false);
+        }
+      }
+    };
+
+    hideSplash();
+
+    return () => {
+      cancelled = true;
+    };
+  }, [appReady, animationDone]);
 
   // Enregistrement du push token + notif locale urgente au démarrage
   useEffect(() => {
@@ -102,6 +145,10 @@ export default function RootLayout() {
         <View style={styles.container}>
           <StatusBar style="dark" />
           <Slot />
+          <AnimatedSplashOverlay
+            visible={showAnimatedOverlay}
+            onAnimationFinished={() => setAnimationDone(true)}
+          />
         </View>
       </ErrorBoundary>
     </GestureHandlerRootView>
