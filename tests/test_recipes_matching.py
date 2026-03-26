@@ -11,6 +11,7 @@ from recipes_service import (
     clear_recipe_catalog_cache,
     classify_recipe_match,
     normalize_ingredient_text,
+    recipe_match_to_suggestion,
     score_recipe_against_stock,
     suggest_recipe_groups_from_catalog,
     suggest_recipes_from_catalog,
@@ -189,6 +190,49 @@ class RecipeMatchingTests(unittest.TestCase):
         ]
         grouped = self._suggest_grouped_from_temp_catalog(recipes, ["oeufs", "gruyere"], limit_per_group=2)
         self.assertEqual(len(grouped["ready"]), 2)
+
+    def test_suggest_recipes_exposes_three_suggestion_types(self):
+        recipes = [
+            self._build_catalog_recipe(
+                "perfect_recipe",
+                "Perfect",
+                ["oeuf", "fromage"],
+                meal_type=["dinner"],
+            ),
+            self._build_catalog_recipe(
+                "near_recipe",
+                "Near",
+                ["oeuf", "fromage", "pain", "tomate", "jambon"],
+                meal_type=["dinner"],
+            ),
+            self._build_catalog_recipe(
+                "idea_recipe",
+                "Idea",
+                ["banane", "yaourt", "miel", "granola"],
+                meal_type=["breakfast"],
+                tags=["petit-dejeuner"],
+            ),
+        ]
+        stock = ["oeufs", "gruyere", "pain", "banane"]
+        matches = self._suggest_from_temp_catalog(recipes, stock, limit=5)
+
+        by_id = {m.recipe.id: m for m in matches}
+        self.assertEqual(by_id["perfect_recipe"].suggestion_type, "perfect")
+        self.assertEqual(by_id["near_recipe"].suggestion_type, "near")
+        self.assertEqual(by_id["idea_recipe"].suggestion_type, "idea")
+
+    def test_recipe_suggestion_contains_counts(self):
+        recipe = self._recipe(
+            id="counts_recipe",
+            title="Counts",
+            ingredients_required=["oeuf", "fromage", "pain"],
+        )
+        match = score_recipe_against_stock(recipe, ["oeufs", "gruyere"])
+        match.suggestion_type = "near"
+        suggestion = recipe_match_to_suggestion(match)
+        self.assertEqual(suggestion.used_ingredients_count, 2)
+        self.assertEqual(suggestion.missing_ingredients_count, 1)
+        self.assertEqual(suggestion.suggestion_type, "near")
 
     def _suggest_grouped_from_temp_catalog(self, recipes: list[dict], stock: list[str], limit_per_group: int = 5):
         with tempfile.TemporaryDirectory() as tmpdir:

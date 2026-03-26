@@ -213,3 +213,6 @@ class RecipeSuggestion(BaseModel):
     cuisine: RecipeCuisine
     servings: int
     score: float = Field(..., ge=0.0)
+    suggestion_type: str = Field(default="perfect")
+    used_ingredients_count: int = Field(default=0, ge=0)
+    missing_ingredients_count: int = Field(default=0, ge=0)
