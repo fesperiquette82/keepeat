@@ -4,7 +4,7 @@
     "slug": "keepeat",
     "version": "0.1.0",
     "orientation": "portrait",
-    "icon": "./assets/images/icon.png",
+    "icon": "./assets/icon.png",
     "scheme": "keepeat",
     "userInterfaceStyle": "dark",
     "newArchEnabled": true,
@@ -21,8 +21,9 @@
       "package": "com.fesperiquette.keepeat",
       "versionCode": 1,
       "adaptiveIcon": {
-        "foregroundImage": "./assets/images/adaptive-icon.png",
-        "backgroundColor": "#0a0a0a"
+        "foregroundImage": "./assets/adaptive-icon.png",
+        "backgroundColor": "#22C55E",
+        "monochromeImage": "./assets/adaptive-icon-monochrome.png"
       },
       "edgeToEdgeEnabled": true,
       "permissions": [
@@ -43,9 +44,13 @@
       [
         "expo-splash-screen",
         {
-          "image": "./assets/images/KeepEatLogo.png",
-          "resizeMode": "contain",
-          "backgroundColor": "#000000"
+          "image": "./assets/splash-icon.png",
+          "backgroundColor": "#E3E8F0",
+          "imageWidth": 180,
+          "dark": {
+            "image": "./assets/splash-icon-dark.png",
+            "backgroundColor": "#111827"
+          }
         }
       ],
       "expo-font",
