@@ -19,6 +19,7 @@ _PLACARD_CATS = ["feculents", "desserts", "epicerie", "autres"]
 
 _DEFAULT_CATALOG_PATH = Path(__file__).resolve().parent / "data" / "recipes.catalog.json"
 _MIN_SCORE_MAIN_SUGGESTION = 0.55
+_MIN_SCORE_NEAR_SUGGESTION = 0.35
 _ULTRA_GENERIC_INGREDIENTS = {
     "sel", "salt", "poivre", "pepper", "eau", "water", "huile", "oil", "olive oil",
 }
@@ -124,6 +125,7 @@ class RecipeMatch:
     used_required: list[str]
     missing_required: list[str]
     optional_used: list[str]
+    suggestion_type: Literal["perfect", "near", "idea"] = "perfect"
 
 
 class RecipeCatalogError(RuntimeError):
@@ -526,13 +528,63 @@ def suggest_recipes_from_catalog(
     meal_type: str | None = None,
     storage_focus: str | None = None,
 ) -> list[RecipeMatch]:
-    matches = _ranked_matches_from_catalog(
-        stock_items,
+    raw_stock = normalize_stock_items(stock_items)
+    recipes = get_recipes_catalog(
         catalog_path=catalog_path,
         meal_type=meal_type,
         storage_focus=storage_focus,
     )
-    return matches[:limit]
+    scored_matches = sorted(
+        [score_recipe_against_stock(recipe, raw_stock) for recipe in recipes],
+        key=_sort_matches,
+        reverse=True,
+    )
+
+    perfect_matches: list[RecipeMatch] = []
+    near_matches: list[RecipeMatch] = []
+    idea_matches: list[RecipeMatch] = []
+    simple_idea_meal_types = {
+        RecipeMealType.breakfast,
+        RecipeMealType.snack,
+        RecipeMealType.dessert,
+        RecipeMealType.aperitif,
+    }
+
+    for match in scored_matches:
+        if not match.used_required:
+            continue
+
+        required_total = len(match.used_required) + len(match.missing_required)
+        eligible_strict, _ = _evaluate_recipe_eligibility(match, relaxed=False)
+        eligible_relaxed, _ = _evaluate_recipe_eligibility(match, relaxed=True)
+
+        if (
+            match.score >= _MIN_SCORE_MAIN_SUGGESTION
+            and (eligible_strict or (eligible_relaxed and len(match.missing_required) == 0))
+        ):
+            match.suggestion_type = "perfect"
+            perfect_matches.append(match)
+            continue
+
+        if (
+            eligible_relaxed
+            and 1 <= len(match.missing_required) <= 2
+            and match.score >= _MIN_SCORE_NEAR_SUGGESTION
+        ):
+            match.suggestion_type = "near"
+            near_matches.append(match)
+            continue
+
+        if (
+            any(mt in simple_idea_meal_types for mt in match.recipe.meal_type)
+            and required_total > 0
+            and len(match.missing_required) <= max(2, required_total - 1)
+        ):
+            match.suggestion_type = "idea"
+            idea_matches.append(match)
+
+    merged = perfect_matches + near_matches + idea_matches
+    return merged[:limit]
 
 
 
@@ -616,6 +668,9 @@ def recipe_match_to_suggestion(match: RecipeMatch) -> RecipeSuggestion:
         cuisine=recipe.cuisine,
         servings=recipe.servings,
         score=match.score,
+        suggestion_type=match.suggestion_type,
+        used_ingredients_count=len(match.used_required),
+        missing_ingredients_count=len(match.missing_required),
     )
 
 
