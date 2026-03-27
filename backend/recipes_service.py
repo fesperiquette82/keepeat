@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import hashlib
 import json
 import os
 import unicodedata as _ud
@@ -213,6 +214,22 @@ def load_local_recipes(catalog_path: str | os.PathLike[str] | None = None) -> tu
 
     return tuple(recipes)
 
+
+
+
+def get_recipe_catalog_debug_info() -> dict[str, str]:
+    """Return stable metadata for the currently loaded local catalog."""
+    recipes = load_local_recipes()
+    payload = [recipe.model_dump(mode="json") for recipe in recipes]
+    digest = hashlib.sha256(
+        json.dumps(payload, ensure_ascii=False, sort_keys=True, separators=(",", ":")).encode("utf-8")
+    ).hexdigest()
+    return {
+        "recipes_source": str(_DEFAULT_CATALOG_PATH),
+        "catalog_hash": digest[:16],
+        "catalog_name": _DEFAULT_CATALOG_PATH.name,
+        "catalog_locale": "fr-FR",
+    }
 
 def clear_recipe_catalog_cache() -> None:
     load_local_recipes.cache_clear()

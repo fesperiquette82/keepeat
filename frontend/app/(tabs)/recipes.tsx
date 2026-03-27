@@ -10,15 +10,19 @@ import {
   ActivityIndicator,
   Linking,
   RefreshControl,
+  Modal,
+  Pressable,
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { Ionicons } from '@expo/vector-icons';
 import axios from 'axios';
+import AsyncStorage from '@react-native-async-storage/async-storage';
+import Constants from 'expo-constants';
 import { useRouter } from 'expo-router';
 import { useAuthStore } from '../../store/authStore';
 import { useLanguageStore } from '../../store/languageStore';
 import { useStockStore } from '../../store/stockStore';
-import { buildApiUrl } from '../../utils/config';
+import { ALLOWED_PROD_API_URLS, API_ENV, API_URL, API_URL_GUARDRAIL_REASON, API_URL_GUARDRAIL_STATUS, buildApiUrl } from '../../utils/config';
 import { C, shadowSm } from '../../utils/theme';
 
 interface RecipeSuggestion {
@@ -33,6 +37,43 @@ interface RecipeSuggestion {
   ingredients_used?: string[];
   instructions_summary?: string;
   prep_time_min?: number;
+}
+
+interface RecipesDebugMeta {
+  backend_commit?: string;
+  backend_version?: string;
+  recipes_source?: string;
+  catalog_hash?: string;
+  catalog_name?: string;
+  catalog_locale?: string;
+  endpoint?: string;
+  filter?: string | null;
+  served_at?: string;
+}
+
+interface RecipesDiagnosticsState {
+  lastEndpoint: string | null;
+  lastFetchAt: string | null;
+  responseShape: 'array' | 'object_with_meta' | 'unknown';
+  transformation: string;
+  backendCommit: string;
+  backendVersion: string;
+  recipesSource: string;
+  catalogHash: string;
+  catalogLocale: string;
+}
+
+const RECIPES_DEBUG_CACHE_KEY = 'keepeat:recipes:debug:last_response';
+
+function headerValue(headers: any, key: string): string | undefined {
+  const direct = headers?.[key] ?? headers?.[key.toLowerCase()] ?? headers?.[key.toUpperCase()];
+  return typeof direct === 'string' ? direct : undefined;
+}
+
+function getRecipesPayload(data: any): { recipes: any[]; meta: RecipesDebugMeta | null; shape: RecipesDiagnosticsState['responseShape'] } {
+  if (Array.isArray(data)) return { recipes: data, meta: null, shape: 'array' };
+  if (data && Array.isArray(data.recipes)) return { recipes: data.recipes, meta: (data.meta ?? null) as RecipesDebugMeta | null, shape: 'object_with_meta' };
+  return { recipes: [], meta: null, shape: 'unknown' };
 }
 
 type FilterTab = 'tous' | 'urgents' | 'frigo' | 'placard' | 'ai';
@@ -81,6 +122,19 @@ export default function RecipesScreen() {
   const [error, setError]             = useState<string | null>(null);
   const [activeTab, setActiveTab]     = useState<FilterTab>('tous');
   const [previewRecipes, setPreviewRecipes] = useState<RecipeSuggestion[]>([]);
+  const [isDebugVisible, setIsDebugVisible] = useState(false);
+  const [titleTapCount, setTitleTapCount] = useState(0);
+  const [diagnostics, setDiagnostics] = useState<RecipesDiagnosticsState>({
+    lastEndpoint: null,
+    lastFetchAt: null,
+    responseShape: 'unknown',
+    transformation: 'none',
+    backendCommit: 'unknown',
+    backendVersion: 'unknown',
+    recipesSource: 'unknown',
+    catalogHash: 'unknown',
+    catalogLocale: 'unknown',
+  });
 
   const t = (fr: string, en: string) => isFr ? fr : en;
 
@@ -104,28 +158,87 @@ export default function RecipesScreen() {
       .slice(0, 4);
   }, [items]);
 
+  useEffect(() => {
+    if (titleTapCount <= 0) return;
+    const timer = setTimeout(() => setTitleTapCount(0), 1200);
+    return () => clearTimeout(timer);
+  }, [titleTapCount]);
+
+  const onTitlePress = useCallback(() => {
+    setTitleTapCount((prev) => {
+      const next = prev + 1;
+      if (next >= 5) {
+        setIsDebugVisible(true);
+        return 0;
+      }
+      return next;
+    });
+  }, []);
+
+  const purgeRecipesDebugCache = useCallback(async () => {
+    await AsyncStorage.removeItem(RECIPES_DEBUG_CACHE_KEY);
+    console.info('[RECIPES_DEBUG] local diagnostics cache purged', { key: RECIPES_DEBUG_CACHE_KEY });
+  }, []);
+
   const fetchRecipes = useCallback(async (tab: FilterTab, silent = false) => {
     if (!token) return;
     if (!silent) setIsLoading(true);
     setError(null);
     try {
-      const url = tab === 'ai'
-        ? buildApiUrl('/api/recipes/ai')
-        : buildApiUrl(`/api/recipes/suggestions?filter=${TAB_TO_FILTER[tab]}`);
+      const endpointPath = tab === 'ai'
+        ? '/api/recipes/ai?include_meta=true'
+        : `/api/recipes/suggestions?filter=${TAB_TO_FILTER[tab]}&include_meta=true`;
+      const url = buildApiUrl(endpointPath);
       console.info('[RECIPES_DEBUG] fetchRecipes call', { tab, url, silent });
       const res = await axios.get(url, {
         headers: { Authorization: `Bearer ${token}` },
       });
+      const payload = getRecipesPayload(res.data);
       console.info('[RECIPES_DEBUG] fetchRecipes response', {
         tab,
         status: res.status,
-        count: Array.isArray(res.data) ? res.data.length : null,
-        ids: Array.isArray(res.data) ? res.data.slice(0, 10).map((r: any) => r?.id) : [],
-        titles: Array.isArray(res.data) ? res.data.slice(0, 10).map((r: any) => r?.title) : [],
+        shape: payload.shape,
+        count: payload.recipes.length,
+        ids: payload.recipes.slice(0, 10).map((r: any) => r?.id),
+        titles: payload.recipes.slice(0, 10).map((r: any) => r?.title),
       });
+      const backendCommit = headerValue(res.headers, 'x-backend-commit') ?? payload.meta?.backend_commit ?? 'unknown';
+      const backendVersion = headerValue(res.headers, 'x-backend-version') ?? payload.meta?.backend_version ?? 'unknown';
+      const recipesSource = headerValue(res.headers, 'x-recipes-source') ?? payload.meta?.recipes_source ?? 'unknown';
+      const catalogHash = headerValue(res.headers, 'x-catalog-hash') ?? payload.meta?.catalog_hash ?? 'unknown';
+      const catalogLocale = headerValue(res.headers, 'x-catalog-locale') ?? payload.meta?.catalog_locale ?? 'unknown';
+      const nowIso = new Date().toISOString();
+      const transformation = tab === 'ai'
+        ? 'transformed: ai response normalized to RecipeSuggestion card model'
+        : 'raw: /api/recipes/suggestions response displayed without recipe data fallback';
+      setDiagnostics({
+        lastEndpoint: payload.meta?.endpoint ?? endpointPath,
+        lastFetchAt: nowIso,
+        responseShape: payload.shape,
+        transformation,
+        backendCommit,
+        backendVersion,
+        recipesSource,
+        catalogHash,
+        catalogLocale,
+      });
+      await AsyncStorage.setItem(
+        RECIPES_DEBUG_CACHE_KEY,
+        JSON.stringify({
+          tab,
+          endpoint: payload.meta?.endpoint ?? endpointPath,
+          fetchedAt: nowIso,
+          backendCommit,
+          backendVersion,
+          recipesSource,
+          catalogHash,
+          catalogLocale,
+          shape: payload.shape,
+        }),
+      );
       // Normaliser les recettes IA au même format
       if (tab === 'ai') {
-        const aiRecipes = (res.data as any[]).map((r, i) => ({
+        const aiRecipes = payload.recipes.map((r, i) => ({
           id: -(i + 1),
           title: r.title,
           image: '',
@@ -140,7 +253,7 @@ export default function RecipesScreen() {
         setRecipes(aiRecipes);
       } else {
         console.info('[RECIPES_DEBUG] using /recipes/suggestions response directly (no legacy fallback/mocks)', { tab });
-        setRecipes(res.data);
+        setRecipes(payload.recipes);
       }
     } catch (err: any) {
       console.info('[RECIPES_DEBUG] fetchRecipes error', { tab, message: err?.message, status: err?.response?.status });
@@ -199,7 +312,9 @@ export default function RecipesScreen() {
       {/* Header */}
       <View style={styles.header}>
         <View style={styles.headerLeft}>
-          <Text style={styles.headerTitle}>{t('Recettes 🌿', 'Recipes 🌿')}</Text>
+          <TouchableOpacity onPress={onTitlePress} onLongPress={() => setIsDebugVisible(true)} delayLongPress={500} activeOpacity={0.9}>
+            <Text style={styles.headerTitle}>{t('Recettes 🌿', 'Recipes 🌿')}</Text>
+          </TouchableOpacity>
           <Text style={styles.headerSub}>{t('Inspirées de vos produits', 'Based on your products')}</Text>
         </View>
         {/* Decoration */}
@@ -440,6 +555,42 @@ export default function RecipesScreen() {
           ))}
         </ScrollView>
       )}
+
+      <Modal visible={isDebugVisible} animationType="fade" transparent onRequestClose={() => setIsDebugVisible(false)}>
+        <Pressable style={styles.debugBackdrop} onPress={() => setIsDebugVisible(false)}>
+          <Pressable style={styles.debugPanel} onPress={() => {}}>
+            <Text style={styles.debugTitle}>Diagnostic recettes</Text>
+            <Text style={styles.debugLine}>app_env: {API_ENV}</Text>
+            <Text style={styles.debugLine}>app_version: {Constants.expoConfig?.version ?? 'unknown'}</Text>
+            <Text style={styles.debugLine}>app_commit: {String(process.env.EXPO_PUBLIC_APP_COMMIT ?? Constants.expoConfig?.extra?.appCommit ?? 'unknown')}</Text>
+            <Text style={styles.debugLine}>build_time: {String(process.env.EXPO_PUBLIC_BUILD_TIME ?? Constants.expoConfig?.extra?.buildTime ?? 'unknown')}</Text>
+            <Text style={styles.debugLine}>expo_release_channel: {String((Constants as any).expoConfig?.releaseChannel ?? 'n/a')}</Text>
+            <Text style={styles.debugLine}>eas_channel: {String((Constants as any).easConfig?.channel ?? 'n/a')}</Text>
+            <Text style={styles.debugLine}>runtime_version: {String((Constants as any).expoConfig?.runtimeVersion ?? 'n/a')}</Text>
+            <Text style={styles.debugLine}>update_id: {String((Constants as any).expoConfig?.extra?.expoClient?.updateId ?? (Constants as any).easConfig?.updateId ?? 'n/a')}</Text>
+            <Text style={styles.debugLine}>api_base_url: {API_URL}</Text>
+            <Text style={styles.debugLine}>api_guardrail: {API_URL_GUARDRAIL_STATUS} ({API_URL_GUARDRAIL_REASON})</Text>
+            <Text style={styles.debugLine}>allowed_prod_api_urls: {ALLOWED_PROD_API_URLS.join(', ')}</Text>
+            <Text style={styles.debugLine}>backend_commit: {diagnostics.backendCommit}</Text>
+            <Text style={styles.debugLine}>backend_version: {diagnostics.backendVersion}</Text>
+            <Text style={styles.debugLine}>recipes_source: {diagnostics.recipesSource}</Text>
+            <Text style={styles.debugLine}>catalog_hash: {diagnostics.catalogHash}</Text>
+            <Text style={styles.debugLine}>catalog_locale: {diagnostics.catalogLocale}</Text>
+            <Text style={styles.debugLine}>last_endpoint: {diagnostics.lastEndpoint ?? 'none'}</Text>
+            <Text style={styles.debugLine}>last_fetch_at: {diagnostics.lastFetchAt ?? 'none'}</Text>
+            <Text style={styles.debugLine}>response_shape: {diagnostics.responseShape}</Text>
+            <Text style={styles.debugLine}>transformation: {diagnostics.transformation}</Text>
+            <View style={styles.debugActions}>
+              <TouchableOpacity style={styles.debugBtn} onPress={purgeRecipesDebugCache}>
+                <Text style={styles.debugBtnText}>Purger cache debug local</Text>
+              </TouchableOpacity>
+              <TouchableOpacity style={styles.debugBtn} onPress={() => setIsDebugVisible(false)}>
+                <Text style={styles.debugBtnText}>Fermer</Text>
+              </TouchableOpacity>
+            </View>
+          </Pressable>
+        </Pressable>
+      </Modal>
     </SafeAreaView>
   );
 }
@@ -659,4 +810,23 @@ const styles = StyleSheet.create({
   urgentBannerBody: { flex: 1, gap: 3 },
   urgentBannerLabel: { fontSize: 12, fontWeight: '700', color: C.orange },
   urgentBannerNames: { fontSize: 12, color: '#92400e', lineHeight: 18 },
+
+  debugBackdrop: {
+    flex: 1,
+    backgroundColor: 'rgba(0,0,0,0.35)',
+    justifyContent: 'center',
+    padding: 18,
+  },
+  debugPanel: {
+    backgroundColor: '#fff',
+    borderRadius: 12,
+    padding: 14,
+    maxHeight: '82%',
+    gap: 4,
+  },
+  debugTitle: { fontSize: 16, fontWeight: '800', color: '#111827', marginBottom: 4 },
+  debugLine: { fontSize: 11, color: '#374151' },
+  debugActions: { flexDirection: 'row', gap: 8, marginTop: 10 },
+  debugBtn: { backgroundColor: C.primaryLight, borderRadius: 8, paddingHorizontal: 10, paddingVertical: 8 },
+  debugBtnText: { color: C.primary, fontSize: 12, fontWeight: '700' },
 });

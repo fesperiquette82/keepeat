@@ -16,7 +16,7 @@ import aiosmtplib
 import httpx
 from bson import ObjectId
 from dotenv import load_dotenv
-from fastapi import APIRouter, Depends, FastAPI, Header, HTTPException, Query, Request, status
+from fastapi import APIRouter, Depends, FastAPI, Header, HTTPException, Query, Request, Response, status
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import HTMLResponse
 from motor.motor_asyncio import AsyncIOMotorClient
@@ -64,6 +64,7 @@ from recipes_service import (
     _PLACARD_CATS,
     load_local_recipes,
     get_recipes_catalog,
+    get_recipe_catalog_debug_info,
     fr_to_en_ingredient,
     recipe_match_to_grouped_suggestion,
     recipe_match_to_suggestion,
@@ -90,6 +91,35 @@ community_recipes_col = db["community_recipes"]
 ADMIN_KEY = os.getenv("ADMIN_KEY", "")
 SPOONACULAR_KEY = os.getenv("SPOONACULAR_KEY", "")
 _BACKEND_URL = os.getenv("BACKEND_URL", "https://keepeat-backend.onrender.com")
+_BACKEND_VERSION = os.getenv("APP_VERSION", "1.0.0")
+_BACKEND_COMMIT = os.getenv("RENDER_GIT_COMMIT", os.getenv("GIT_COMMIT_SHA", "unknown"))
+
+
+def _build_recipes_debug_meta(*, endpoint: str, recipe_filter: str | None = None) -> dict[str, Any]:
+    catalog_info = get_recipe_catalog_debug_info()
+    return {
+        "backend_commit": _BACKEND_COMMIT,
+        "backend_version": _BACKEND_VERSION,
+        "recipes_source": catalog_info["recipes_source"],
+        "catalog_hash": catalog_info["catalog_hash"],
+        "catalog_name": catalog_info["catalog_name"],
+        "catalog_locale": catalog_info["catalog_locale"],
+        "endpoint": endpoint,
+        "filter": recipe_filter,
+        "served_at": utc_now().isoformat(),
+    }
+
+
+def _apply_recipes_debug_headers(response: Response | None, meta: dict[str, Any]) -> None:
+    if response is None:
+        return
+    response.headers["Cache-Control"] = "no-store, no-cache, must-revalidate"
+    response.headers["Pragma"] = "no-cache"
+    response.headers["X-Backend-Commit"] = str(meta.get("backend_commit", "unknown"))
+    response.headers["X-Backend-Version"] = str(meta.get("backend_version", "unknown"))
+    response.headers["X-Recipes-Source"] = str(meta.get("recipes_source", "unknown"))
+    response.headers["X-Catalog-Hash"] = str(meta.get("catalog_hash", "unknown"))
+    response.headers["X-Catalog-Locale"] = str(meta.get("catalog_locale", "unknown"))
 
 
 async def _run_backend_warmup() -> None:
@@ -266,8 +296,8 @@ async def build_info():
     return {
         "service": "keepeat-backend",
         "env": os.getenv("APP_ENV", os.getenv("ENV", "unknown")),
-        "version": os.getenv("APP_VERSION", "unknown"),
-        "commit": os.getenv("RENDER_GIT_COMMIT", os.getenv("GIT_COMMIT_SHA", "unknown")),
+        "version": _BACKEND_VERSION,
+        "commit": _BACKEND_COMMIT,
         "deployed_at": os.getenv("DEPLOYED_AT", "unknown"),
     }
 
@@ -758,13 +788,16 @@ async def get_recalls_status(
 
 @api_router.get("/recipes/suggestions")
 async def get_recipe_suggestions(
+    response: Response = None,
     recipe_filter: str = Query("urgent", alias="filter"),
+    include_meta: bool = Query(False, alias="include_meta"),
     current_user: Dict[str, Any] = Depends(_get_current_user),
 ):
     """Suggère des recettes depuis le catalogue local.
     filter: urgent (≤7j) | all | frigo | placard
     """
     uid = current_user["id"]
+    include_meta_enabled = include_meta is True or str(include_meta).lower() in {"1", "true", "yes"}
     logger.info("RECIPES_DEBUG suggestions called — user=%s filter=%s", uid, recipe_filter)
     today_str = utc_now().strftime("%Y-%m-%d")
 
@@ -835,20 +868,25 @@ async def get_recipe_suggestions(
         "Recipes suggestions: filter=%s stock=%s top5=%s",
         recipe_filter, stock_names[:5], [match.recipe.title for match in matches],
     )
-    response = [recipe_match_to_suggestion(match).model_dump(mode="json") for match in matches]
+    recipes_payload = [recipe_match_to_suggestion(match).model_dump(mode="json") for match in matches]
     logger.info(
         "RECIPES_DEBUG suggestions response — user=%s filter=%s count=%d ids=%s titles=%s",
         uid,
         recipe_filter,
-        len(response),
-        [r.get("id") for r in response],
-        [r.get("title") for r in response],
+        len(recipes_payload),
+        [r.get("id") for r in recipes_payload],
+        [r.get("title") for r in recipes_payload],
     )
-    return response
+    meta = _build_recipes_debug_meta(endpoint="/api/recipes/suggestions", recipe_filter=recipe_filter)
+    _apply_recipes_debug_headers(response=response, meta=meta)
+    if include_meta_enabled:
+        return {"recipes": recipes_payload, "meta": meta}
+    return recipes_payload
 
 
 @api_router.get("/recipes/suggestions-grouped", response_model=RecipeSuggestionGroupsResponse)
 async def get_recipe_suggestions_grouped(
+    response: Response = None,
     recipe_filter: str = Query("urgent", alias="filter"),
     per_group_limit: int = Query(5, ge=1, le=20),
     current_user: Dict[str, Any] = Depends(_get_current_user),
@@ -905,7 +943,7 @@ async def get_recipe_suggestions_grouped(
         storage_focus=storage_focus,
     )
 
-    response = RecipeSuggestionGroupsResponse(
+    grouped_response = RecipeSuggestionGroupsResponse(
         ready=[recipe_match_to_grouped_suggestion(m) for m in grouped_matches["ready"]],
         almost=[recipe_match_to_grouped_suggestion(m) for m in grouped_matches["almost"]],
         inspiration=[recipe_match_to_grouped_suggestion(m) for m in grouped_matches["inspiration"]],
@@ -920,11 +958,13 @@ async def get_recipe_suggestions_grouped(
         "RECIPES_DEBUG suggestions-grouped response — user=%s filter=%s ready=%s almost=%s inspiration=%s",
         uid,
         recipe_filter,
-        [r.id for r in response.ready],
-        [r.id for r in response.almost],
-        [r.id for r in response.inspiration],
+        [r.id for r in grouped_response.ready],
+        [r.id for r in grouped_response.almost],
+        [r.id for r in grouped_response.inspiration],
     )
-    return response
+    meta = _build_recipes_debug_meta(endpoint="/api/recipes/suggestions-grouped", recipe_filter=recipe_filter)
+    _apply_recipes_debug_headers(response=response, meta=meta)
+    return grouped_response
 
 
 @api_router.get("/recipes/catalog", response_model=RecipeCatalogResponse)
@@ -1208,10 +1248,13 @@ _ai_recipe_cache: dict[str, dict] = {}
 
 @api_router.get("/recipes/ai")
 async def get_ai_recipes(
+    response: Response = None,
+    include_meta: bool = Query(False, alias="include_meta"),
     current_user: Dict[str, Any] = Depends(_get_current_user),
 ):
     """Génère 3 recettes personnalisées via GPT-4o-mini basées sur le stock de l'utilisateur."""
     uid = current_user["id"]
+    include_meta_enabled = include_meta is True or str(include_meta).lower() in {"1", "true", "yes"}
     logger.info("RECIPES_DEBUG ai called — user=%s", uid)
     openai_key = os.environ.get("KEEPEAT_OPENAI_TOKEN", "")
     if not openai_key:
@@ -1226,6 +1269,10 @@ async def get_ai_recipes(
             (utc_now() - cached["created_at"]).total_seconds(),
             len(cached["recipes"]),
         )
+        meta = _build_recipes_debug_meta(endpoint="/api/recipes/ai")
+        _apply_recipes_debug_headers(response=response, meta=meta)
+        if include_meta_enabled:
+            return {"recipes": cached["recipes"], "meta": meta}
         return cached["recipes"]
 
     items = await stock_col.find(
@@ -1234,6 +1281,10 @@ async def get_ai_recipes(
 
     if not items:
         logger.info("RECIPES_DEBUG ai empty_stock — user=%s", uid)
+        meta = _build_recipes_debug_meta(endpoint="/api/recipes/ai")
+        _apply_recipes_debug_headers(response=response, meta=meta)
+        if include_meta_enabled:
+            return {"recipes": [], "meta": meta}
         return []
 
     stock_names = [i.get("name", "") for i in items if i.get("name")]
@@ -1344,6 +1395,10 @@ async def get_ai_recipes(
         uid,
         [r.get("title") for r in recipes],
     )
+    meta = _build_recipes_debug_meta(endpoint="/api/recipes/ai")
+    _apply_recipes_debug_headers(response=response, meta=meta)
+    if include_meta_enabled:
+        return {"recipes": recipes, "meta": meta}
     return recipes
 
 
@@ -1417,9 +1472,6 @@ async def get_predictions(
 
 # Redirect pages (deep link fallback for email clients)
 # -----------------------------------------------------------------------------
-_BACKEND_URL = os.getenv("BACKEND_URL", "https://keepeat-backend.onrender.com")
-
-
 @app.get("/redirect/reset-password", response_class=HTMLResponse, include_in_schema=False)
 async def redirect_reset_password(token: str = Query(...)):
     deep_link = f"keepeat://reset-password?token={token}"

@@ -78,6 +78,8 @@
     },
     "extra": {
       "router": {},
+      "appCommit": "unknown",
+      "buildTime": "unknown",
       "eas": {
         "projectId": "00fe91c0-6cb4-4c64-b292-3da6db037b0f"
       }
