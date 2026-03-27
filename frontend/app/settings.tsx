@@ -3,6 +3,7 @@ import {
   View,
   Text,
   StyleSheet,
+  Image,
   TouchableOpacity,
   ScrollView,
   Alert,
@@ -304,7 +305,11 @@ export default function SettingsScreen() {
           <View style={styles.aboutCard}>
             <View style={styles.appInfo}>
               <View style={styles.appLogo}>
-                <Ionicons name="leaf" size={32} color="#22c55e" />
+                <Image
+                  source={require('../assets/images/branding/keepeat-logo.png')}
+                  style={styles.appLogoImage}
+                  resizeMode="contain"
+                />
               </View>
               <View>
                 <Text style={styles.appName}>KeepEat</Text>
@@ -547,17 +552,19 @@ const styles = StyleSheet.create({
     marginBottom: 16,
   },
   appLogo: {
-    width: 60,
-    height: 60,
-    borderRadius: 18,
-    backgroundColor: '#22c55e',
+    width: 64,
+    height: 64,
     alignItems: 'center',
     justifyContent: 'center',
-    shadowColor: '#22c55e',
+    shadowColor: '#111827',
     shadowOffset: { width: 0, height: 4 },
-    shadowOpacity: 0.25,
+    shadowOpacity: 0.15,
     shadowRadius: 8,
     elevation: 5,
+  },
+  appLogoImage: {
+    width: 64,
+    height: 64,
   },
   appName: {
     fontSize: 24,
