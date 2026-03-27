@@ -3,6 +3,7 @@ import {
   View,
   Text,
   StyleSheet,
+  Image,
   TextInput,
   TouchableOpacity,
   ActivityIndicator,
@@ -17,34 +18,6 @@ import { useRouter } from 'expo-router';
 import { Ionicons } from '@expo/vector-icons';
 import { useAuthStore } from '../store/authStore';
 import { useLanguageStore } from '../store/languageStore';
-
-function VeggiePastille() {
-  return (
-    <View style={styles.veggiesRow}>
-      {/* Carotte */}
-      <View style={styles.veggieSlot}>
-        <View style={styles.carrotTop}>
-          <View style={[styles.carrotLeaf, styles.carrotLeafLeft]} />
-          <View style={[styles.carrotLeaf, styles.carrotLeafCenter]} />
-          <View style={[styles.carrotLeaf, styles.carrotLeafRight]} />
-        </View>
-        <View style={styles.carrotBody} />
-      </View>
-
-      {/* Tomate */}
-      <View style={styles.veggieSlot}>
-        <View style={styles.tomatoLeaf} />
-        <View style={styles.tomatoBody} />
-      </View>
-
-      {/* Oignon */}
-      <View style={styles.veggieSlot}>
-        <View style={styles.onionStem} />
-        <View style={styles.onionBody} />
-      </View>
-    </View>
-  );
-}
 
 export default function LoginScreen() {
   const router = useRouter();
@@ -178,7 +151,11 @@ export default function LoginScreen() {
                 },
               ]}
             >
-              <VeggiePastille />
+              <Image
+                source={require('../assets/images/branding/keepeat-logo.png')}
+                style={styles.logoImage}
+                resizeMode="contain"
+              />
             </Animated.View>
             <Text style={styles.logoTitle}>KeepEat</Text>
             <Text style={styles.logoTagline}>
@@ -315,82 +292,18 @@ const styles = StyleSheet.create({
 
   logoSection: { alignItems: 'center', marginBottom: 36 },
   logoIcon: {
-    width: 88,
-    height: 88,
-    borderRadius: 28,
-    backgroundColor: '#00C853',
+    width: 120,
+    height: 120,
     alignItems: 'center',
     justifyContent: 'center',
     marginBottom: 16,
-    shadowColor: '#00C853',
+    shadowColor: '#111827',
     shadowOffset: { width: 0, height: 6 },
-    shadowOpacity: 0.28,
+    shadowOpacity: 0.15,
     shadowRadius: 10,
     elevation: 8,
   },
-  veggiesRow: {
-    flexDirection: 'row',
-    alignItems: 'flex-end',
-    justifyContent: 'center',
-    gap: 7,
-  },
-  veggieSlot: {
-    width: 19,
-    alignItems: 'center',
-    justifyContent: 'flex-end',
-  },
-  carrotTop: {
-    height: 8,
-    width: 13,
-    flexDirection: 'row',
-    justifyContent: 'center',
-    alignItems: 'flex-end',
-    marginBottom: 1,
-  },
-  carrotLeaf: {
-    position: 'absolute',
-    width: 4,
-    height: 7,
-    borderRadius: 3,
-    backgroundColor: '#2E7D32',
-    top: 0,
-  },
-  carrotLeafLeft: { transform: [{ rotate: '-26deg' }], left: 1 },
-  carrotLeafCenter: { transform: [{ rotate: '-6deg' }], left: 4.5, backgroundColor: '#388E3C' },
-  carrotLeafRight: { transform: [{ rotate: '20deg' }], right: 1 },
-  carrotBody: {
-    width: 11,
-    height: 22,
-    backgroundColor: '#FB8C00',
-    borderRadius: 7,
-    transform: [{ rotate: '8deg' }],
-  },
-  tomatoLeaf: {
-    width: 10,
-    height: 5,
-    borderRadius: 2,
-    backgroundColor: '#2E7D32',
-    marginBottom: -1,
-  },
-  tomatoBody: {
-    width: 16,
-    height: 16,
-    borderRadius: 8,
-    backgroundColor: '#E53935',
-  },
-  onionStem: {
-    width: 3,
-    height: 6,
-    borderRadius: 2,
-    backgroundColor: '#8E24AA',
-    marginBottom: -1,
-  },
-  onionBody: {
-    width: 15,
-    height: 18,
-    borderRadius: 9,
-    backgroundColor: '#AB47BC',
-  },
+  logoImage: { width: 120, height: 120 },
   logoTitle: { fontSize: 34, fontWeight: '800', color: '#111827', letterSpacing: -0.5 },
   logoTagline: { fontSize: 14, color: '#6B7280', marginTop: 6 },
 

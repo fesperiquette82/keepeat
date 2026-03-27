@@ -3,6 +3,7 @@ import {
   View,
   Text,
   StyleSheet,
+  Image,
   TextInput,
   TouchableOpacity,
   ActivityIndicator,
@@ -116,7 +117,11 @@ export default function RegisterScreen() {
           {/* Logo */}
           <View style={styles.logoSection}>
             <View style={styles.logoIcon}>
-              <Ionicons name="leaf" size={40} color="#22c55e" />
+              <Image
+                source={require('../assets/images/branding/keepeat-logo.png')}
+                style={styles.logoImage}
+                resizeMode="contain"
+              />
             </View>
             <Text style={styles.logoTitle}>KeepEat</Text>
             <Text style={styles.logoTagline}>
@@ -241,16 +246,13 @@ const styles = StyleSheet.create({
 
   logoSection: { alignItems: 'center', marginBottom: 40 },
   logoIcon: {
-    width: 80,
-    height: 80,
-    borderRadius: 20,
-    backgroundColor: '#22c55e15',
-    borderWidth: 1,
-    borderColor: '#22c55e30',
+    width: 120,
+    height: 120,
     alignItems: 'center',
     justifyContent: 'center',
     marginBottom: 16,
   },
+  logoImage: { width: 120, height: 120 },
   logoTitle: { fontSize: 32, fontWeight: 'bold', color: '#22c55e' },
   logoTagline: { fontSize: 14, color: '#666', marginTop: 6 },
 

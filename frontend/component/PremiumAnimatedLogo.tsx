@@ -1,5 +1,5 @@
 import React, { useEffect, useRef } from 'react';
-import { Animated, Easing, Image, StyleSheet, useColorScheme, View } from 'react-native';
+import { Animated, Easing, Image, StyleSheet, View } from 'react-native';
 
 const ANIMATION_DURATION_MS = 600;
 
@@ -12,7 +12,6 @@ interface PremiumAnimatedLogoProps {
  * Conçu pour être réutilisé (splash overlay, onboarding, etc.).
  */
 export default function PremiumAnimatedLogo({ onAnimationEnd }: PremiumAnimatedLogoProps) {
-  const colorScheme = useColorScheme();
   const opacity = useRef(new Animated.Value(0)).current;
   const scale = useRef(new Animated.Value(0.75)).current;
 
@@ -42,14 +41,14 @@ export default function PremiumAnimatedLogo({ onAnimationEnd }: PremiumAnimatedL
     ]).start(() => onAnimationEnd?.());
   }, [onAnimationEnd, opacity, scale]);
 
-  const logoSource = colorScheme === 'dark'
-    ? require('../assets/splash-icon-dark.png')
-    : require('../assets/splash-icon.png');
-
   return (
     <Animated.View style={[styles.wrapper, { opacity, transform: [{ scale }] }]}>
       <View style={styles.logoContainer}>
-        <Image source={logoSource} style={styles.logo} resizeMode="contain" />
+        <Image
+          source={require('../assets/images/branding/keepeat-logo.png')}
+          style={styles.logo}
+          resizeMode="contain"
+        />
       </View>
     </Animated.View>
   );
