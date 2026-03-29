@@ -13,6 +13,16 @@ from app_core import logger, utc_now
 from auth_utils import hash_password, validate_password
 
 
+def _resolve_alert_prefs(user_doc: dict[str, Any]) -> dict[str, bool]:
+    prefs = user_doc.get("alert_prefs") or {}
+    return {
+        "alertJ2": bool(prefs.get("alertJ2", True)),
+        "alertJ0": bool(prefs.get("alertJ0", True)),
+        "alertWeekly": bool(prefs.get("alertWeekly", False)),
+        "alertRecall": bool(prefs.get("alertRecall", True)),
+    }
+
+
 @dataclass(frozen=True)
 class AlertDependencies:
     users_col: Any
@@ -91,6 +101,9 @@ async def check_recalls_and_notify(deps: AlertDependencies) -> None:
 
     async for user_doc in deps.users_col.find({"push_tokens": {"$exists": True, "$ne": []}}):
         user_id = str(user_doc["_id"])
+        prefs = _resolve_alert_prefs(user_doc)
+        if not prefs["alertRecall"]:
+            continue
         tokens: list[str] = user_doc.get("push_tokens", [])
         cursor = deps.stock_col.find({"user_id": user_id, "status": "active", "barcode": {"$exists": True, "$ne": ""}})
         async for item in cursor:
@@ -163,6 +176,9 @@ async def check_weekly_expiry_summary(deps: AlertDependencies) -> None:
 
     async for user_doc in deps.users_col.find({"push_tokens": {"$exists": True, "$ne": []}}):
         user_id = str(user_doc["_id"])
+        prefs = _resolve_alert_prefs(user_doc)
+        if not prefs["alertWeekly"]:
+            continue
         tokens: list[str] = user_doc.get("push_tokens", [])
         alert_key = f"weekly_{user_id}_{today.year}_{iso_week}"
         already_sent = await deps.user_alerts_col.find_one({"user_id": user_id, "key": alert_key})
@@ -198,6 +214,11 @@ async def check_daily_expiry_alert(deps: AlertDependencies) -> None:
 
     async for user_doc in deps.users_col.find({"push_tokens": {"$exists": True, "$ne": []}}):
         user_id = str(user_doc["_id"])
+        prefs = _resolve_alert_prefs(user_doc)
+        alert_j2 = prefs["alertJ2"]
+        alert_j0 = prefs["alertJ0"]
+        if not alert_j2 and not alert_j0:
+            continue
         tokens: list[str] = user_doc.get("push_tokens", [])
         alert_key = f"daily_expiry_{user_id}_{today_str}"
         already_sent = await deps.user_alerts_col.find_one({"user_id": user_id, "key": alert_key})
@@ -213,7 +234,25 @@ async def check_daily_expiry_alert(deps: AlertDependencies) -> None:
         if not urgent_items:
             continue
 
-        names = [item["name"] for item in urgent_items]
+        filtered_items: list[dict[str, Any]] = []
+        for item in urgent_items:
+            expiry_raw = str(item.get("expiry_date", "")).strip()
+            if len(expiry_raw) < 10:
+                continue
+            try:
+                expiry_date = datetime.fromisoformat(expiry_raw[:10]).date()
+            except Exception:
+                continue
+            days_left = (expiry_date - today).days
+            if days_left == 0 and alert_j0:
+                filtered_items.append(item)
+            elif 1 <= days_left <= 2 and alert_j2:
+                filtered_items.append(item)
+
+        if not filtered_items:
+            continue
+
+        names = [item["name"] for item in filtered_items]
         count = len(names)
         recipe_hint = ""
         if names:

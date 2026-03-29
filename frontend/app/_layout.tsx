@@ -26,7 +26,7 @@ async function warmUpBackend(): Promise<void> {
   const controller = new AbortController();
   const timer = setTimeout(() => controller.abort(), 30_000);
   try {
-    await fetch(buildApiUrl('/health'), { signal: controller.signal });
+    await fetch(buildApiUrl('/api/health'), { signal: controller.signal });
   } catch {
     // Best-effort
   } finally {
@@ -82,7 +82,7 @@ export default function RootLayout() {
     loadLanguage();
     requestNotificationPermissions();
     const keepAlive = setInterval(() => {
-      fetch(buildApiUrl('/health'))
+      fetch(buildApiUrl('/api/health'))
         .then(() => {
           if (APP_CONFIG.enableNetworkTracing) {
             logger.debug('[NETWORK_TRACE] keepalive success');

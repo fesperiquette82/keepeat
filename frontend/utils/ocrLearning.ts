@@ -1,4 +1,5 @@
 import AsyncStorage from '@react-native-async-storage/async-storage';
+import { logger } from './logger';
 
 const STORAGE_KEY = 'keepeat_ocr_corrections';
 const MAX_ENTRIES = 100;
@@ -31,7 +32,7 @@ export async function addOcrCorrection(ocrText: string, date: string): Promise<v
     const trimmed = corrections.slice(-MAX_ENTRIES);
     await AsyncStorage.setItem(STORAGE_KEY, JSON.stringify(trimmed));
   } catch (err) {
-    console.warn('[OcrLearning] addOcrCorrection error:', err);
+    logger.warn('[OcrLearning] addOcrCorrection error', { message: err instanceof Error ? err.message : String(err) });
   }
 }
 

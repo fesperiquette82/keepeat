@@ -356,6 +356,7 @@ export default function RecipesScreen() {
   }, []);
 
   const onTitlePress = useCallback(() => {
+    if (!RECIPES_DEBUG_ENABLED) return;
     setTitleTapCount((prev) => {
       const next = prev + 1;
       if (next >= 5) {
@@ -699,7 +700,7 @@ export default function RecipesScreen() {
       {/* Header */}
       <View style={styles.header}>
         <View style={styles.headerLeft}>
-          <TouchableOpacity onPress={onTitlePress} onLongPress={() => setIsDebugVisible(true)} delayLongPress={500} activeOpacity={0.9}>
+          <TouchableOpacity onPress={onTitlePress} onLongPress={() => { if (RECIPES_DEBUG_ENABLED) setIsDebugVisible(true); }} delayLongPress={500} activeOpacity={0.9}>
             <Text style={styles.headerTitle}>{t('Recettes 🌿', 'Recipes 🌿')}</Text>
           </TouchableOpacity>
           <Text style={styles.headerSub}>{t('Inspirées de vos produits', 'Based on your products')}</Text>
@@ -1011,7 +1012,7 @@ export default function RecipesScreen() {
         </ScrollView>
       )}
 
-      <Modal visible={isDebugVisible} animationType="fade" transparent onRequestClose={() => setIsDebugVisible(false)}>
+      <Modal visible={RECIPES_DEBUG_ENABLED && isDebugVisible} animationType="fade" transparent onRequestClose={() => setIsDebugVisible(false)}>
         <Pressable style={styles.debugBackdrop} onPress={() => setIsDebugVisible(false)}>
           <Pressable style={styles.debugPanel} onPress={() => {}}>
             <Text style={styles.debugTitle}>Diagnostic recettes</Text>

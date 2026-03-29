@@ -1,5 +1,6 @@
 import React from "react";
 import { View, Text, ScrollView, StyleSheet } from "react-native";
+import { logger } from "../utils/logger";
 
 interface State {
   error: any;
@@ -13,7 +14,10 @@ export default class ErrorBoundary extends React.Component<any, State> {
   }
 
   componentDidCatch(error: any, errorInfo: any) {
-    console.error("ErrorBoundary caught:", error, errorInfo);
+    logger.error("ErrorBoundary caught", {
+      message: error instanceof Error ? error.message : String(error),
+      stack: errorInfo?.componentStack ? String(errorInfo.componentStack) : undefined,
+    });
     this.setState({ error, errorInfo });
   }
 
