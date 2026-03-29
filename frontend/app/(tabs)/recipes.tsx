@@ -24,6 +24,8 @@ import { useLanguageStore } from '../../store/languageStore';
 import { useStockStore } from '../../store/stockStore';
 import { ALLOWED_PROD_API_URLS, API_ENV, API_URL, API_URL_GUARDRAIL_REASON, API_URL_GUARDRAIL_STATUS, buildApiUrl } from '../../utils/config';
 import { C, shadowSm } from '../../utils/theme';
+import { APP_CONFIG } from '../../utils/appConfig';
+import { logger } from '../../utils/logger';
 import {
   applyFrontRecipeSafetyGuardrailWithStyle,
   normalizeSuggestionRecipe,
@@ -96,15 +98,15 @@ interface RecipesDiagnosticsState {
 }
 
 const RECIPES_DEBUG_CACHE_KEY = 'keepeat:recipes:debug:last_response';
-const RECIPES_DEBUG_ENABLED = typeof __DEV__ !== 'undefined' && __DEV__;
+const RECIPES_DEBUG_ENABLED = APP_CONFIG.enableDebugTools;
 
 function recipesDebugLog(message: string, payload?: unknown) {
   if (!RECIPES_DEBUG_ENABLED) return;
   if (payload !== undefined) {
-    console.info(message, payload);
+    logger.debug(message, payload);
     return;
   }
-  console.info(message);
+  logger.debug(message);
 }
 
 function formatDebugValue(value: unknown, fallback = 'n/a'): string {
