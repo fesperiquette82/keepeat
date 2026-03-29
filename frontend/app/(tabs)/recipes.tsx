@@ -75,6 +75,24 @@ interface RecipesDiagnosticsState {
   missingIngredientsSummary: string;
   cuisineCountrySummary: string;
   fallbackReasonSummary: string;
+  suggestionsSectionSource: string;
+  suggestionsSectionMode: string;
+  suggestionsSectionCount: number;
+  mainSectionSource: string;
+  mainSectionMode: string;
+  mainSectionCount: number;
+  suggestedSectionDataSource: string;
+  suggestedSectionFallback: boolean;
+  suggestedSectionCacheUsed: boolean;
+  discoverySectionDataSource: string;
+  discoverySectionCount: number;
+  discoverySectionFallback: boolean;
+  discoverySectionCacheUsed: boolean;
+  cacheHit: boolean;
+  cacheKey: string;
+  cacheSource: string;
+  cacheItemCount: number;
+  cacheInvalidatedReason: string;
 }
 
 const RECIPES_DEBUG_CACHE_KEY = 'keepeat:recipes:debug:last_response';
@@ -206,7 +224,8 @@ export default function RecipesScreen() {
   const [isRefreshing, setIsRefreshing] = useState(false);
   const [error, setError]             = useState<string | null>(null);
   const [activeTab, setActiveTab]     = useState<FilterTab>('tous');
-  const [previewRecipes, setPreviewRecipes] = useState<RecipeSuggestion[]>([]);
+  const [personalizedValidatedRecipes, setPersonalizedValidatedRecipes] = useState<RecipeSuggestion[]>([]);
+  const [discoveryRecipes, setDiscoveryRecipes] = useState<RecipeSuggestion[]>([]);
   const [suggestionStyle, setSuggestionStyle] = useState<SuggestionStyle>('classique');
   const [isDebugVisible, setIsDebugVisible] = useState(false);
   const [titleTapCount, setTitleTapCount] = useState(0);
@@ -236,7 +255,42 @@ export default function RecipesScreen() {
     missingIngredientsSummary: 'none',
     cuisineCountrySummary: 'none',
     fallbackReasonSummary: 'none',
+    suggestionsSectionSource: 'none',
+    suggestionsSectionMode: 'none',
+    suggestionsSectionCount: 0,
+    mainSectionSource: 'none',
+    mainSectionMode: 'none',
+    mainSectionCount: 0,
+    suggestedSectionDataSource: 'none',
+    suggestedSectionFallback: false,
+    suggestedSectionCacheUsed: false,
+    discoverySectionDataSource: 'none',
+    discoverySectionCount: 0,
+    discoverySectionFallback: false,
+    discoverySectionCacheUsed: false,
+    cacheHit: false,
+    cacheKey: 'none',
+    cacheSource: 'none',
+    cacheItemCount: 0,
+    cacheInvalidatedReason: 'none',
   });
+  const [cacheInvalidatedReason, setCacheInvalidatedReason] = useState('none');
+  const suggestionsCacheRef = React.useRef<Record<string, {
+    endpointPath: string;
+    payload: { recipes: any[]; meta: RecipesDebugMeta | null; shape: RecipesDiagnosticsState['responseShape'] };
+    normalizedRecipes: RecipeSuggestion[];
+    guardrailResult: { kept: RecipeSuggestion[]; filtered: GuardrailFilteredRecipe[] };
+    validatedRecipes: RecipeSuggestion[];
+    filterUsed: string;
+    userLocale: string;
+    backendCommit: string;
+    backendVersion: string;
+    recipesSource: string;
+    catalogHash: string;
+    catalogLocale: string;
+    requestedLocale: string;
+    effectiveLocale: string;
+  }>>({});
 
   const t = (fr: string, en: string) => isFr ? fr : en;
 
@@ -259,6 +313,24 @@ export default function RecipesScreen() {
       })
       .slice(0, 4);
   }, [items]);
+  const stockSignature = useMemo(
+    () => JSON.stringify(items.map((item) => `${item.id}:${item.name}:${item.expiry_date ?? ''}:${item.location ?? ''}`).sort()),
+    [items],
+  );
+
+  useEffect(() => {
+    suggestionsCacheRef.current = {};
+    setCacheInvalidatedReason('stock_changed');
+  }, [stockSignature]);
+
+  useEffect(() => {
+    suggestionsCacheRef.current = {};
+    setCacheInvalidatedReason('suggestion_style_changed');
+  }, [suggestionStyle]);
+
+  useEffect(() => {
+    setCacheInvalidatedReason(`filter_changed:${activeTab}`);
+  }, [activeTab]);
 
   useEffect(() => {
     if (titleTapCount <= 0) return;
@@ -297,130 +369,91 @@ export default function RecipesScreen() {
     recipesDebugLog('[RECIPES_DEBUG] local diagnostics cache purged', { key: RECIPES_DEBUG_CACHE_KEY });
   }, []);
 
+  const fetchValidatedSuggestions = useCallback(async (
+    filter: string,
+    options?: { strictPersonalized?: boolean },
+  ) => {
+    if (options?.strictPersonalized && suggestionStyle === 'classique' && items.length === 0) {
+      return {
+        endpointPath: `/api/recipes/suggestions?filter=${encodeURIComponent(filter)}&include_meta=true`,
+        payload: { recipes: [], meta: null, shape: 'object_with_meta' as const },
+        normalizedRecipes: [] as RecipeSuggestion[],
+        guardrailResult: { kept: [] as RecipeSuggestion[], filtered: [] as GuardrailFilteredRecipe[] },
+        validatedRecipes: [] as RecipeSuggestion[],
+        filterUsed: filter,
+        userLocale: resolveUserLocale(language),
+        backendCommit: 'stock_empty_short_circuit',
+        backendVersion: 'stock_empty_short_circuit',
+        recipesSource: 'stock_empty_short_circuit',
+        catalogHash: 'stock_empty_short_circuit',
+        catalogLocale: 'stock_empty_short_circuit',
+        requestedLocale: resolveUserLocale(language),
+        effectiveLocale: resolveUserLocale(language),
+      };
+    }
+    const userLocale = resolveUserLocale(language);
+    const cacheKey = `${filter}|${userLocale}|${suggestionStyle}|${stockSignature}|strict:${options?.strictPersonalized ? '1' : '0'}`;
+    const cached = suggestionsCacheRef.current[cacheKey];
+    if (cached) {
+      return { ...cached, cacheHit: true, cacheKey, cacheSource: 'memory', cacheItemCount: cached.validatedRecipes.length };
+    }
+    const endpointPath = `/api/recipes/suggestions?filter=${encodeURIComponent(filter)}&include_meta=true&locale=${encodeURIComponent(userLocale)}&suggestion_style=${encodeURIComponent(suggestionStyle)}`;
+    const res = await axios.get(buildApiUrl(endpointPath), {
+      headers: { Authorization: `Bearer ${token}`, 'Accept-Language': userLocale },
+    });
+    const payload = getRecipesPayload(res.data);
+    const normalizedRecipes = payload.recipes.map((recipe, index) => normalizeSuggestionRecipe(recipe, index));
+    const guardrailResult = applyFrontRecipeSafetyGuardrailWithStyle(normalizedRecipes, suggestionStyle);
+    const validatedRecipes = options?.strictPersonalized
+      ? guardrailResult.kept.filter((recipe) => !recipe.is_fallback)
+      : guardrailResult.kept;
+
+    const result = {
+      endpointPath,
+      payload,
+      normalizedRecipes,
+      guardrailResult,
+      validatedRecipes,
+      filterUsed: headerValue(res.headers, 'x-recipes-filter') ?? payload.meta?.filter_effective ?? payload.meta?.filter ?? filter,
+      userLocale,
+      backendCommit: firstDefinedReadable(headerValue(res.headers, 'x-backend-commit'), payload.meta?.backend_commit),
+      backendVersion: firstDefinedReadable(headerValue(res.headers, 'x-backend-version'), payload.meta?.backend_version),
+      recipesSource: firstDefinedReadable(headerValue(res.headers, 'x-recipes-source'), payload.meta?.recipes_source),
+      catalogHash: firstDefinedReadable(headerValue(res.headers, 'x-catalog-hash'), payload.meta?.catalog_hash),
+      catalogLocale: firstDefinedReadable(headerValue(res.headers, 'x-catalog-locale'), payload.meta?.catalog_locale),
+      requestedLocale: firstDefinedReadable(headerValue(res.headers, 'x-requested-locale'), payload.meta?.requested_locale),
+      effectiveLocale: firstDefinedReadable(headerValue(res.headers, 'x-effective-locale'), payload.meta?.effective_locale),
+    };
+    suggestionsCacheRef.current[cacheKey] = result;
+
+    if (options?.strictPersonalized && validatedRecipes.length === 0) {
+      for (const key of Object.keys(suggestionsCacheRef.current)) {
+        if (key.startsWith(`personalized|`)) delete suggestionsCacheRef.current[key];
+      }
+      setCacheInvalidatedReason('personalized_empty_result');
+    }
+
+    return { ...result, cacheHit: false, cacheKey, cacheSource: 'network', cacheItemCount: validatedRecipes.length };
+  }, [items.length, language, stockSignature, suggestionStyle, token]);
+
   const fetchRecipes = useCallback(async (tab: FilterTab, silent = false) => {
     if (!token) return;
+    const existingPersonalizedCount = personalizedValidatedRecipes.length;
     if (!silent) setIsLoading(true);
     setError(null);
     try {
-      const endpointPath = tab === 'ai'
-        ? '/api/recipes/ai?include_meta=true'
-        : `/api/recipes/suggestions?filter=${TAB_TO_FILTER[tab]}&include_meta=true&locale=${encodeURIComponent(resolveUserLocale(language))}&suggestion_style=${encodeURIComponent(suggestionStyle)}`;
-      const url = buildApiUrl(endpointPath);
-      const userLocale = resolveUserLocale(language);
-      recipesDebugLog('[RECIPES_DEBUG] fetchRecipes call', { tab, url, silent });
-      const res = await axios.get(url, {
-        headers: {
-          Authorization: `Bearer ${token}`,
-          'Accept-Language': userLocale,
-        },
-      });
-      const payload = getRecipesPayload(res.data);
-      recipesDebugLog('[RECIPES_DEBUG] fetchRecipes response', {
-        tab,
-        status: res.status,
-        shape: payload.shape,
-        count: payload.recipes.length,
-        ids: payload.recipes.slice(0, 10).map((r: any) => r?.id),
-        titles: payload.recipes.slice(0, 10).map((r: any) => r?.title),
-      });
-      const backendCommit = firstDefinedReadable(headerValue(res.headers, 'x-backend-commit'), payload.meta?.backend_commit);
-      const backendVersion = firstDefinedReadable(headerValue(res.headers, 'x-backend-version'), payload.meta?.backend_version);
-      const recipesSource = firstDefinedReadable(headerValue(res.headers, 'x-recipes-source'), payload.meta?.recipes_source);
-      const catalogHash = firstDefinedReadable(headerValue(res.headers, 'x-catalog-hash'), payload.meta?.catalog_hash);
-      const catalogLocale = firstDefinedReadable(headerValue(res.headers, 'x-catalog-locale'), payload.meta?.catalog_locale);
-      const requestedLocale = firstDefinedReadable(headerValue(res.headers, 'x-requested-locale'), payload.meta?.requested_locale);
-      const effectiveLocale = firstDefinedReadable(headerValue(res.headers, 'x-effective-locale'), payload.meta?.effective_locale);
-      const filterSent = TAB_TO_FILTER[tab];
-      const filterUsed = headerValue(res.headers, 'x-recipes-filter') ?? payload.meta?.filter_effective ?? payload.meta?.filter ?? filterSent;
       const nowIso = new Date().toISOString();
-      const transformation = tab === 'ai'
-        ? 'transformed: ai response normalized to RecipeSuggestion card model'
-        : 'transformed: /api/recipes/suggestions response normalized to RecipeSuggestion card model';
-      const normalizedCount = payload.recipes.length;
-      let guardrailKeptCount = normalizedCount;
-      let guardrailFilteredCount = 0;
-      let guardrailFilteredSummary = 'none';
-      let guardrailStatus: RecipesDiagnosticsState['guardrailStatus'] = 'disabled';
-      const normalizedForDebug = payload.recipes.map((recipe, index) => normalizeSuggestionRecipe(recipe, index));
-      const recipeScores = normalizedForDebug
-        .map((recipe) => {
-          const debugScore = typeof recipe.debug?.final_score === 'number' ? recipe.debug.final_score : null;
-          return typeof debugScore === 'number' ? debugScore : (typeof recipe.score === 'number' ? recipe.score : null);
-        })
-        .filter((value): value is number => value !== null && Number.isFinite(value));
-      const scoreRange = recipeScores.length > 0
-        ? `${Math.min(...recipeScores).toFixed(2)} → ${Math.max(...recipeScores).toFixed(2)}`
-        : 'n/a';
-      const matchedIngredientsSummary = summarizeList(
-        normalizedForDebug.flatMap((recipe) => recipe.usedIngredients),
-      );
-      const missingIngredientsSummary = summarizeList(
-        normalizedForDebug.flatMap((recipe) => recipe.missedIngredients),
-      );
-      const cuisineCountrySummary = summarizeList(
-        normalizedForDebug.flatMap((recipe) => {
-          const cuisine = recipe.cuisine ? `cuisine:${recipe.cuisine}` : '';
-          const country = recipe.country ? `country:${recipe.country}` : '';
-          return [cuisine, country].filter(Boolean);
-        }),
-      );
-      const fallbackReasonSummary = summarizeList(
-        normalizedForDebug.flatMap((recipe) => {
-          const rawReason = recipe.fallback_reason
-            ?? (typeof recipe.debug?.ranking_reason === 'string' ? recipe.debug.ranking_reason : '')
-            ?? (typeof recipe.debug?.familiarity_reason === 'string' ? recipe.debug.familiarity_reason : '');
-          return rawReason ? [rawReason] : [];
-        }),
-      );
-      setDiagnostics({
-        lastEndpoint: payload.meta?.endpoint ?? endpointPath,
-        lastFetchAt: nowIso,
-        responseShape: payload.shape,
-        transformation,
-        backendCommit,
-        backendVersion,
-        recipesSource,
-        catalogHash,
-        catalogLocale,
-        localeSent: userLocale,
-        acceptLanguageSent: userLocale,
-        requestedLocale,
-        effectiveLocale,
-        filterSent,
-        filterUsed,
-        guardrailStatus,
-        guardrailKeptCount,
-        guardrailFilteredCount,
-        guardrailFilteredSummary,
-        receivedCount: payload.recipes.length,
-        scoreRange,
-        matchedIngredientsSummary,
-        missingIngredientsSummary,
-        cuisineCountrySummary,
-        fallbackReasonSummary,
-      });
-      await AsyncStorage.setItem(
-        RECIPES_DEBUG_CACHE_KEY,
-        JSON.stringify({
-          tab,
-          endpoint: payload.meta?.endpoint ?? endpointPath,
-          fetchedAt: nowIso,
-          backendCommit,
-          backendVersion,
-          recipesSource,
-            catalogHash,
-            catalogLocale,
-            localeSent: userLocale,
-            acceptLanguageSent: userLocale,
-            requestedLocale,
-            effectiveLocale,
-            filterSent,
-            filterUsed,
-            shape: payload.shape,
-          }),
-      );
-      // Normaliser les recettes IA au même format
+
       if (tab === 'ai') {
+        const endpointPath = '/api/recipes/ai?include_meta=true';
+        const userLocale = resolveUserLocale(language);
+        const res = await axios.get(buildApiUrl(endpointPath), {
+          headers: {
+            Authorization: `Bearer ${token}`,
+            'Accept-Language': userLocale,
+          },
+        });
+        const payload = getRecipesPayload(res.data);
         const aiRecipes = payload.recipes.map((r, i) => ({
           id: -(i + 1),
           title: r.title,
@@ -434,37 +467,123 @@ export default function RecipesScreen() {
           prep_time_min: r.prep_time_min ?? null,
         }));
         setRecipes(aiRecipes);
-      } else {
-        // TEMP FRONT SAFETY FILTER — facile à retirer quand le backend sera 100% fiable.
-        const normalizedRecipes = normalizedForDebug;
-        const guardrailResult = applyFrontRecipeSafetyGuardrailWithStyle(normalizedRecipes, suggestionStyle);
-        guardrailStatus = 'enabled';
-        guardrailKeptCount = guardrailResult.kept.length;
-        guardrailFilteredCount = guardrailResult.filtered.length;
-        guardrailFilteredSummary = summarizeFilteredRecipes(guardrailResult.filtered);
-        recipesDebugLog('[RECIPES_DEBUG] suggestions normalization summary', {
-          tab,
-          count_raw: payload.recipes.length,
-          count_normalized: normalizedRecipes.length,
-          count_guardrail_kept: guardrailResult.kept.length,
-          count_guardrail_filtered: guardrailResult.filtered.length,
-          guardrail_filtered: guardrailResult.filtered,
-          sample_keys: payload.recipes[0] ? Object.keys(payload.recipes[0]).slice(0, 20) : [],
-        });
         setDiagnostics((prev) => ({
           ...prev,
-          guardrailStatus,
-          guardrailKeptCount,
-          guardrailFilteredCount,
-          guardrailFilteredSummary,
+          lastEndpoint: payload.meta?.endpoint ?? endpointPath,
+          lastFetchAt: nowIso,
+          responseShape: payload.shape,
+          transformation: 'transformed: ai response normalized to RecipeSuggestion card model',
+          backendCommit: firstDefinedReadable(headerValue(res.headers, 'x-backend-commit'), payload.meta?.backend_commit),
+          backendVersion: firstDefinedReadable(headerValue(res.headers, 'x-backend-version'), payload.meta?.backend_version),
+          recipesSource: firstDefinedReadable(headerValue(res.headers, 'x-recipes-source'), payload.meta?.recipes_source),
+          catalogHash: firstDefinedReadable(headerValue(res.headers, 'x-catalog-hash'), payload.meta?.catalog_hash),
+          catalogLocale: firstDefinedReadable(headerValue(res.headers, 'x-catalog-locale'), payload.meta?.catalog_locale),
+          localeSent: userLocale,
+          acceptLanguageSent: userLocale,
+          requestedLocale: firstDefinedReadable(headerValue(res.headers, 'x-requested-locale'), payload.meta?.requested_locale),
+          effectiveLocale: firstDefinedReadable(headerValue(res.headers, 'x-effective-locale'), payload.meta?.effective_locale),
+          filterSent: TAB_TO_FILTER[tab],
+          filterUsed: headerValue(res.headers, 'x-recipes-filter') ?? payload.meta?.filter_effective ?? payload.meta?.filter ?? TAB_TO_FILTER[tab],
+          guardrailStatus: 'disabled',
+          guardrailKeptCount: payload.recipes.length,
+          guardrailFilteredCount: 0,
+          guardrailFilteredSummary: 'none',
           receivedCount: payload.recipes.length,
+          mainSectionSource: 'ai',
+          mainSectionMode: 'ai',
+          mainSectionCount: aiRecipes.length,
+          suggestionsSectionSource: 'suggestions',
+          suggestionsSectionMode: existingPersonalizedCount > 0 ? 'personalized' : 'personalized_empty',
+          suggestionsSectionCount: Math.min(existingPersonalizedCount, 3),
+        }));
+      } else {
+        const filterSent = TAB_TO_FILTER[tab];
+        const strictPersonalized = filterSent === 'personalized';
+        const result = await fetchValidatedSuggestions(filterSent, { strictPersonalized });
+        const normalizedForDebug = result.normalizedRecipes;
+        const recipeScores = normalizedForDebug
+          .map((recipe) => {
+            const debugScore = typeof recipe.debug?.final_score === 'number' ? recipe.debug.final_score : null;
+            return typeof debugScore === 'number' ? debugScore : (typeof recipe.score === 'number' ? recipe.score : null);
+          })
+          .filter((value): value is number => value !== null && Number.isFinite(value));
+        const scoreRange = recipeScores.length > 0
+          ? `${Math.min(...recipeScores).toFixed(2)} → ${Math.max(...recipeScores).toFixed(2)}`
+          : 'n/a';
+
+        const matchedIngredientsSummary = summarizeList(normalizedForDebug.flatMap((recipe) => recipe.usedIngredients));
+        const missingIngredientsSummary = summarizeList(normalizedForDebug.flatMap((recipe) => recipe.missedIngredients));
+        const cuisineCountrySummary = summarizeList(
+          normalizedForDebug.flatMap((recipe) => {
+            const cuisine = recipe.cuisine ? `cuisine:${recipe.cuisine}` : '';
+            const country = recipe.country ? `country:${recipe.country}` : '';
+            return [cuisine, country].filter(Boolean);
+          }),
+        );
+        const fallbackReasonSummary = summarizeList(
+          normalizedForDebug.flatMap((recipe) => {
+            const rawReason = recipe.fallback_reason
+              ?? (typeof recipe.debug?.ranking_reason === 'string' ? recipe.debug.ranking_reason : '')
+              ?? (typeof recipe.debug?.familiarity_reason === 'string' ? recipe.debug.familiarity_reason : '');
+            return rawReason ? [rawReason] : [];
+          }),
+        );
+        const guardrailFilteredSummary = summarizeFilteredRecipes(result.guardrailResult.filtered);
+
+        setRecipes(result.validatedRecipes);
+        if (strictPersonalized) {
+          setPersonalizedValidatedRecipes(result.validatedRecipes);
+          setDiscoveryRecipes(result.guardrailResult.kept.filter((recipe) => Boolean(recipe.is_fallback)));
+        } else if (tab !== 'tous') {
+          setDiscoveryRecipes([]);
+        }
+
+        setDiagnostics((prev) => ({
+          ...prev,
+          lastEndpoint: result.payload.meta?.endpoint ?? result.endpointPath,
+          lastFetchAt: nowIso,
+          responseShape: result.payload.shape,
+          transformation: 'transformed: /api/recipes/suggestions response normalized to RecipeSuggestion card model',
+          backendCommit: result.backendCommit,
+          backendVersion: result.backendVersion,
+          recipesSource: result.recipesSource,
+          catalogHash: result.catalogHash,
+          catalogLocale: result.catalogLocale,
+          localeSent: result.userLocale,
+          acceptLanguageSent: result.userLocale,
+          requestedLocale: result.requestedLocale,
+          effectiveLocale: result.effectiveLocale,
+          filterSent,
+          filterUsed: result.filterUsed,
+          guardrailStatus: 'enabled',
+          guardrailKeptCount: result.validatedRecipes.length,
+          guardrailFilteredCount: result.guardrailResult.filtered.length,
+          guardrailFilteredSummary,
+          receivedCount: result.payload.recipes.length,
           scoreRange,
           matchedIngredientsSummary,
           missingIngredientsSummary,
           cuisineCountrySummary,
           fallbackReasonSummary,
+          mainSectionSource: 'suggestions',
+          mainSectionMode: result.validatedRecipes.length > 0 ? 'personalized' : 'personalized_empty',
+          mainSectionCount: result.validatedRecipes.length,
+          suggestedSectionDataSource: 'personalized_engine',
+          suggestedSectionFallback: false,
+          suggestedSectionCacheUsed: false,
+          discoverySectionDataSource: 'discovery_fallback',
+          discoverySectionCount: strictPersonalized ? result.guardrailResult.kept.filter((recipe) => Boolean(recipe.is_fallback)).length : 0,
+          discoverySectionFallback: strictPersonalized ? result.guardrailResult.kept.some((recipe) => Boolean(recipe.is_fallback)) : false,
+          discoverySectionCacheUsed: false,
+          cacheHit: Boolean((result as any).cacheHit),
+          cacheKey: (result as any).cacheKey ?? 'none',
+          cacheSource: (result as any).cacheSource ?? 'none',
+          cacheItemCount: (result as any).cacheItemCount ?? 0,
+          cacheInvalidatedReason,
+          suggestionsSectionSource: 'suggestions',
+          suggestionsSectionMode: (strictPersonalized ? result.validatedRecipes.length : existingPersonalizedCount) > 0 ? 'personalized' : 'personalized_empty',
+          suggestionsSectionCount: Math.min((strictPersonalized ? result.validatedRecipes.length : existingPersonalizedCount), 3),
         }));
-        setRecipes(guardrailResult.kept);
       }
     } catch (err: any) {
       recipesDebugLog('[RECIPES_DEBUG] fetchRecipes error', { tab, message: err?.message, status: err?.response?.status });
@@ -477,41 +596,86 @@ export default function RecipesScreen() {
       setIsLoading(false);
       setIsRefreshing(false);
     }
-  }, [isFr, language, suggestionStyle, token]);
+  }, [cacheInvalidatedReason, fetchValidatedSuggestions, isFr, language, personalizedValidatedRecipes.length, token]);
 
   useEffect(() => { fetchRecipes(activeTab); }, [fetchRecipes, activeTab]);
 
-  // Chargement silencieux des 3 recettes preview (urgent en priorité, all en fallback)
+  // Source unique preview: mêmes données personnalisées validées que la section principale.
   useEffect(() => {
     if (!token) return;
-    const userLocale = resolveUserLocale(language);
     const load = async () => {
       try {
-        recipesDebugLog('[RECIPES_DEBUG] preview request urgent');
-        let res = await axios.get(buildApiUrl(`/api/recipes/suggestions?filter=urgent&locale=${encodeURIComponent(userLocale)}&suggestion_style=${encodeURIComponent(suggestionStyle)}`), {
-          headers: { Authorization: `Bearer ${token}`, 'Accept-Language': userLocale },
-        });
-        const urgentPayload = getRecipesPayload(res.data);
-        const urgentNormalized = urgentPayload.recipes.map((recipe, index) => normalizeSuggestionRecipe(recipe, index));
-        if (urgentNormalized.length > 0) {
-          recipesDebugLog('[RECIPES_DEBUG] preview uses urgent', { count: urgentNormalized.length, shape: urgentPayload.shape });
-          setPreviewRecipes(urgentNormalized.slice(0, 3));
-          return;
-        }
-        recipesDebugLog('[RECIPES_DEBUG] preview urgent empty, fallback to all');
-        res = await axios.get(buildApiUrl(`/api/recipes/suggestions?filter=personalized&locale=${encodeURIComponent(userLocale)}&suggestion_style=${encodeURIComponent(suggestionStyle)}`), {
-          headers: { Authorization: `Bearer ${token}`, 'Accept-Language': userLocale },
-        });
-        const allPayload = getRecipesPayload(res.data);
-        const allNormalized = allPayload.recipes.map((recipe, index) => normalizeSuggestionRecipe(recipe, index));
-        recipesDebugLog('[RECIPES_DEBUG] preview uses all', { count: allNormalized.length, shape: allPayload.shape });
-        setPreviewRecipes(allNormalized.slice(0, 3));
+        const result = await fetchValidatedSuggestions('personalized', { strictPersonalized: true });
+        setPersonalizedValidatedRecipes(result.validatedRecipes);
+        setDiagnostics((prev) => ({
+          ...prev,
+          suggestionsSectionSource: 'suggestions',
+          suggestionsSectionMode: result.validatedRecipes.length > 0 ? 'personalized' : 'personalized_empty',
+          suggestionsSectionCount: Math.min(result.validatedRecipes.length, 3),
+          suggestedSectionDataSource: 'personalized_engine',
+          suggestedSectionFallback: false,
+          suggestedSectionCacheUsed: false,
+          cacheHit: Boolean((result as any).cacheHit),
+          cacheKey: (result as any).cacheKey ?? 'none',
+          cacheSource: (result as any).cacheSource ?? 'none',
+          cacheItemCount: (result as any).cacheItemCount ?? 0,
+          cacheInvalidatedReason,
+        }));
       } catch (err: any) {
         recipesDebugLog('[RECIPES_DEBUG] preview load error', { message: err?.message, status: err?.response?.status });
+        setPersonalizedValidatedRecipes([]);
+        setDiagnostics((prev) => ({
+          ...prev,
+          suggestionsSectionSource: 'suggestions',
+          suggestionsSectionMode: 'error',
+          suggestionsSectionCount: 0,
+        }));
       }
     };
     load();
-  }, [language, suggestionStyle, token]);
+  }, [cacheInvalidatedReason, fetchValidatedSuggestions, token]);
+
+  const previewRecipes = useMemo(() => personalizedValidatedRecipes.slice(0, 3), [personalizedValidatedRecipes]);
+  const isClassicPersonalizedMode = suggestionStyle === 'classique';
+  const shouldHideSuggestedByEmptyStock = isClassicPersonalizedMode && items.length === 0;
+  const shouldShowSuggestedPreview = !shouldHideSuggestedByEmptyStock && previewRecipes.length > 0;
+  const shouldShowDiscoverySection = activeTab === 'tous' && discoveryRecipes.length > 0;
+  const shouldShowEmptyTous = activeTab === 'tous' && !shouldShowSuggestedPreview && !shouldShowDiscoverySection;
+
+  useEffect(() => {
+    const suggestedMode = shouldHideSuggestedByEmptyStock
+      ? 'blocked_empty_stock'
+      : (previewRecipes.length > 0 ? 'personalized' : 'personalized_empty');
+    recipesDebugLog('[RECIPES_DEBUG] suggested section visibility', {
+      stock_count: items.length,
+      preview_count: previewRecipes.length,
+      suggestion_style: suggestionStyle,
+      should_hide_empty_stock: shouldHideSuggestedByEmptyStock,
+      should_show_preview: shouldShowSuggestedPreview,
+      mode: suggestedMode,
+    });
+    setDiagnostics((prev) => {
+      if (
+        prev.suggestionsSectionMode === suggestedMode
+        && prev.suggestionsSectionCount === (shouldShowSuggestedPreview ? Math.min(previewRecipes.length, 3) : 0)
+      ) {
+        return prev;
+      }
+      return {
+        ...prev,
+        suggestionsSectionSource: 'suggestions',
+        suggestionsSectionMode: suggestedMode,
+        suggestionsSectionCount: shouldShowSuggestedPreview ? Math.min(previewRecipes.length, 3) : 0,
+        suggestedSectionDataSource: 'personalized_engine',
+        suggestedSectionFallback: false,
+        suggestedSectionCacheUsed: false,
+        discoverySectionDataSource: 'discovery_fallback',
+        discoverySectionCount: shouldShowDiscoverySection ? discoveryRecipes.length : 0,
+        discoverySectionFallback: shouldShowDiscoverySection,
+        discoverySectionCacheUsed: false,
+      };
+    });
+  }, [discoveryRecipes.length, items.length, previewRecipes.length, shouldHideSuggestedByEmptyStock, shouldShowDiscoverySection, shouldShowSuggestedPreview, suggestionStyle]);
 
   const handleRefresh = () => {
     setIsRefreshing(true);
@@ -550,7 +714,7 @@ export default function RecipesScreen() {
       </View>
 
       {/* Preview 3 recettes — chargement silencieux */}
-      {previewRecipes.length > 0 && (
+      {shouldShowSuggestedPreview && (
         <View style={styles.previewSection}>
           <Text style={styles.previewTitle}>
             {isFr ? '✨ Suggérées pour vous' : '✨ Suggested for you'}
@@ -631,7 +795,7 @@ export default function RecipesScreen() {
             <Text style={styles.retryBtnText}>{t('Réessayer', 'Retry')}</Text>
           </TouchableOpacity>
         </View>
-      ) : recipes.length === 0 ? (
+      ) : ((activeTab === 'tous' ? shouldShowEmptyTous : recipes.length === 0)) ? (
         <View style={styles.center}>
           {activeTab === 'urgents' ? (
             <>
@@ -705,7 +869,13 @@ export default function RecipesScreen() {
           )}
 
           {/* Section header */}
-          {recipes[0]?.is_fallback ? (
+          {activeTab === 'tous' ? (
+            <View style={styles.sectionHeader}>
+              <Text style={styles.sectionTitle}>
+                {t('Suggestions personnalisées ✅', 'Personalized suggestions ✅')}
+              </Text>
+            </View>
+          ) : recipes[0]?.is_fallback ? (
             <View style={[styles.sectionHeader, styles.fallbackHeader]}>
               <Ionicons name="sparkles-outline" size={15} color={C.primary} />
               <Text style={styles.sectionTitleFallback}>
@@ -794,6 +964,48 @@ export default function RecipesScreen() {
               </View>
             </TouchableOpacity>
           ))}
+
+          {shouldShowDiscoverySection && (
+            <>
+              <View style={[styles.sectionHeader, styles.fallbackHeader]}>
+                <Ionicons name="globe-outline" size={15} color={C.primary} />
+                <Text style={styles.sectionTitleFallback}>
+                  {t('🌍 Découvrir (fallback)', '🌍 Discover (fallback)')}
+                </Text>
+              </View>
+              {discoveryRecipes.map((recipe) => (
+                <TouchableOpacity
+                  key={`discovery-${recipe.id}`}
+                  style={styles.card}
+                  onPress={() => recipe.sourceUrl ? openRecipe(recipe.sourceUrl) : null}
+                  activeOpacity={recipe.sourceUrl ? 0.88 : 1}
+                >
+                  <View style={styles.cardImgWrap}>
+                    {recipe.image ? (
+                      <Image source={{ uri: recipe.image }} style={styles.cardImg} />
+                    ) : (
+                      <View style={styles.cardImgPlaceholder}>
+                        <Ionicons name="restaurant-outline" size={32} color="#ccc" />
+                      </View>
+                    )}
+                  </View>
+                  <View style={styles.cardBody}>
+                    <Text style={styles.cardTitle} numberOfLines={2}>{recipe.title}</Text>
+                    {recipe.usedIngredients.length > 0 && (
+                      <View style={styles.ingredientsRow}>
+                        {recipe.usedIngredients.slice(0, 3).map(ing => (
+                          <View key={`discovery-${recipe.id}-${ing}`} style={styles.badgeUsed}>
+                            <Ionicons name="checkmark" size={10} color={C.primary} />
+                            <Text style={styles.badgeUsedText} numberOfLines={1}>{ing}</Text>
+                          </View>
+                        ))}
+                      </View>
+                    )}
+                  </View>
+                </TouchableOpacity>
+              ))}
+            </>
+          )}
         </ScrollView>
       )}
 
@@ -835,6 +1047,29 @@ export default function RecipesScreen() {
             <Text style={styles.debugLine}>front_guardrail_kept: {diagnostics.guardrailKeptCount}</Text>
             <Text style={styles.debugLine}>front_guardrail_filtered: {diagnostics.guardrailFilteredCount}</Text>
             <Text style={styles.debugLine}>front_guardrail_filtered_summary: {formatDebugValue(diagnostics.guardrailFilteredSummary)}</Text>
+            <Text style={styles.debugLine}>section_suggested_source: {formatDebugValue(diagnostics.suggestionsSectionSource)}</Text>
+            <Text style={styles.debugLine}>section_suggested_mode: {formatDebugValue(diagnostics.suggestionsSectionMode)}</Text>
+            <Text style={styles.debugLine}>section_suggested_count: {diagnostics.suggestionsSectionCount}</Text>
+            <Text style={styles.debugLine}>section_name: suggested_for_you</Text>
+            <Text style={styles.debugLine}>data_source: {formatDebugValue(diagnostics.suggestedSectionDataSource)}</Text>
+            <Text style={styles.debugLine}>item_count: {diagnostics.suggestionsSectionCount}</Text>
+            <Text style={styles.debugLine}>is_personalized: true</Text>
+            <Text style={styles.debugLine}>is_fallback: {String(diagnostics.suggestedSectionFallback)}</Text>
+            <Text style={styles.debugLine}>cache_used: {String(diagnostics.suggestedSectionCacheUsed)}</Text>
+            <Text style={styles.debugLine}>section_name: discovery</Text>
+            <Text style={styles.debugLine}>data_source: {formatDebugValue(diagnostics.discoverySectionDataSource)}</Text>
+            <Text style={styles.debugLine}>item_count: {diagnostics.discoverySectionCount}</Text>
+            <Text style={styles.debugLine}>is_personalized: false</Text>
+            <Text style={styles.debugLine}>is_fallback: {String(diagnostics.discoverySectionFallback)}</Text>
+            <Text style={styles.debugLine}>cache_used: {String(diagnostics.discoverySectionCacheUsed)}</Text>
+            <Text style={styles.debugLine}>cache_hit: {String(diagnostics.cacheHit)}</Text>
+            <Text style={styles.debugLine}>cache_key: {formatDebugValue(diagnostics.cacheKey)}</Text>
+            <Text style={styles.debugLine}>cache_source: {formatDebugValue(diagnostics.cacheSource)}</Text>
+            <Text style={styles.debugLine}>cache_item_count: {diagnostics.cacheItemCount}</Text>
+            <Text style={styles.debugLine}>cache_invalidated_reason: {formatDebugValue(diagnostics.cacheInvalidatedReason)}</Text>
+            <Text style={styles.debugLine}>section_main_source: {formatDebugValue(diagnostics.mainSectionSource)}</Text>
+            <Text style={styles.debugLine}>section_main_mode: {formatDebugValue(diagnostics.mainSectionMode)}</Text>
+            <Text style={styles.debugLine}>section_main_count: {diagnostics.mainSectionCount}</Text>
             <Text style={styles.debugLine}>last_endpoint: {formatDebugValue(diagnostics.lastEndpoint, 'none')}</Text>
             <Text style={styles.debugLine}>last_fetch_at: {formatDebugValue(diagnostics.lastFetchAt, 'none')}</Text>
             <Text style={styles.debugLine}>response_shape: {formatDebugValue(diagnostics.responseShape)}</Text>
