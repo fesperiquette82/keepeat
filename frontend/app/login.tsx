@@ -3,7 +3,6 @@ import {
   View,
   Text,
   StyleSheet,
-  Image,
   TextInput,
   TouchableOpacity,
   ActivityIndicator,
@@ -18,6 +17,35 @@ import { useRouter } from 'expo-router';
 import { Ionicons } from '@expo/vector-icons';
 import { useAuthStore } from '../store/authStore';
 import { useLanguageStore } from '../store/languageStore';
+
+function VeggiePastille() {
+  return (
+    <View style={styles.veggieRow}>
+      <View style={styles.veggieItem}>
+        <View style={styles.carrotGreens}>
+          <View style={[styles.carrotLeaf, styles.carrotLeafLeft]} />
+          <View style={[styles.carrotLeaf, styles.carrotLeafCenter]} />
+          <View style={[styles.carrotLeaf, styles.carrotLeafRight]} />
+        </View>
+        <View style={styles.carrotBody} />
+      </View>
+
+      <View style={styles.veggieItem}>
+        <View style={styles.tomatoLeaf} />
+        <View style={styles.tomatoBody}>
+          <View style={styles.tomatoHighlight} />
+        </View>
+      </View>
+
+      <View style={styles.veggieItem}>
+        <View style={styles.onionStem} />
+        <View style={styles.onionBody}>
+          <View style={styles.onionHighlight} />
+        </View>
+      </View>
+    </View>
+  );
+}
 
 export default function LoginScreen() {
   const router = useRouter();
@@ -151,11 +179,7 @@ export default function LoginScreen() {
                 },
               ]}
             >
-              <Image
-                source={require('../assets/images/branding/keepeat-logo.png')}
-                style={styles.logoImage}
-                resizeMode="contain"
-              />
+              <VeggiePastille />
             </Animated.View>
             <Text style={styles.logoTitle}>KeepEat</Text>
             <Text style={styles.logoTagline}>
@@ -294,6 +318,8 @@ const styles = StyleSheet.create({
   logoIcon: {
     width: 120,
     height: 120,
+    borderRadius: 60,
+    backgroundColor: '#00C853',
     alignItems: 'center',
     justifyContent: 'center',
     marginBottom: 16,
@@ -303,7 +329,100 @@ const styles = StyleSheet.create({
     shadowRadius: 10,
     elevation: 8,
   },
-  logoImage: { width: 120, height: 120 },
+  veggieRow: {
+    flexDirection: 'row',
+    alignItems: 'flex-end',
+    justifyContent: 'center',
+    gap: 10,
+  },
+  veggieItem: {
+    alignItems: 'center',
+    justifyContent: 'flex-end',
+  },
+  carrotGreens: {
+    flexDirection: 'row',
+    alignItems: 'flex-end',
+    marginBottom: -2,
+    zIndex: 2,
+  },
+  carrotLeaf: {
+    width: 5,
+    height: 12,
+    backgroundColor: '#0E9F3D',
+    borderRadius: 8,
+  },
+  carrotLeafLeft: {
+    transform: [{ rotate: '-24deg' }],
+    marginRight: 1,
+  },
+  carrotLeafCenter: {
+    height: 13,
+  },
+  carrotLeafRight: {
+    transform: [{ rotate: '24deg' }],
+    marginLeft: 1,
+  },
+  carrotBody: {
+    width: 18,
+    height: 28,
+    backgroundColor: '#FF8A00',
+    borderTopLeftRadius: 10,
+    borderTopRightRadius: 10,
+    borderBottomLeftRadius: 14,
+    borderBottomRightRadius: 5,
+    transform: [{ rotate: '2deg' }],
+  },
+  tomatoLeaf: {
+    width: 12,
+    height: 7,
+    backgroundColor: '#129A3E',
+    borderRadius: 6,
+    marginBottom: -2,
+    zIndex: 2,
+  },
+  tomatoBody: {
+    width: 24,
+    height: 22,
+    backgroundColor: '#FF3B30',
+    borderRadius: 14,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  tomatoHighlight: {
+    width: 6,
+    height: 6,
+    borderRadius: 4,
+    backgroundColor: 'rgba(255,255,255,0.45)',
+    marginLeft: -6,
+    marginTop: -3,
+  },
+  onionStem: {
+    width: 3,
+    height: 8,
+    backgroundColor: '#8B5CF6',
+    borderRadius: 4,
+    marginBottom: -1,
+    zIndex: 2,
+  },
+  onionBody: {
+    width: 20,
+    height: 24,
+    backgroundColor: '#C026D3',
+    borderTopLeftRadius: 12,
+    borderTopRightRadius: 12,
+    borderBottomLeftRadius: 12,
+    borderBottomRightRadius: 14,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  onionHighlight: {
+    width: 5,
+    height: 9,
+    borderRadius: 4,
+    backgroundColor: 'rgba(255,255,255,0.32)',
+    marginLeft: -5,
+    marginTop: -1,
+  },
   logoTitle: { fontSize: 34, fontWeight: '800', color: '#111827', letterSpacing: -0.5 },
   logoTagline: { fontSize: 14, color: '#6B7280', marginTop: 6 },
 
