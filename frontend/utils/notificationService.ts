@@ -5,6 +5,7 @@ import { Platform } from 'react-native';
 import { differenceInDays, parseISO } from 'date-fns';
 import { StockItem } from '../store/stockStore';
 import { buildApiUrl } from './config';
+import { logger } from './logger';
 const PUSH_TOKEN_KEY = 'keepeat_push_token';
 
 const NOTIF_IDS_KEY = 'keepeat_notification_ids';
@@ -90,7 +91,7 @@ export async function registerPushToken(authToken: string): Promise<void> {
 
     await AsyncStorage.setItem(PUSH_TOKEN_KEY, expoPushToken);
   } catch (err) {
-    console.warn('[Push] registerPushToken error:', err);
+    logger.warn('[Push] registerPushToken error', { message: err instanceof Error ? err.message : String(err) });
   }
 }
 
@@ -112,7 +113,7 @@ export async function unregisterPushToken(authToken: string): Promise<void> {
     });
     await AsyncStorage.removeItem(PUSH_TOKEN_KEY);
   } catch (err) {
-    console.warn('[Push] unregisterPushToken error:', err);
+    logger.warn('[Push] unregisterPushToken error', { message: err instanceof Error ? err.message : String(err) });
   }
 }
 
@@ -157,7 +158,7 @@ export async function scheduleExpiryNotification(item: StockItem): Promise<void>
     map[item.id] = notifId;
     await saveNotifIds(map);
   } catch (err) {
-    console.warn('[Notifications] scheduleExpiryNotification error:', err);
+    logger.warn('[Notifications] scheduleExpiryNotification error', { message: err instanceof Error ? err.message : String(err) });
   }
 }
 
@@ -171,7 +172,7 @@ export async function cancelExpiryNotification(itemId: string): Promise<void> {
       await saveNotifIds(map);
     }
   } catch (err) {
-    console.warn('[Notifications] cancelExpiryNotification error:', err);
+    logger.warn('[Notifications] cancelExpiryNotification error', { message: err instanceof Error ? err.message : String(err) });
   }
 }
 
@@ -214,7 +215,7 @@ export async function checkAndNotifyUrgentOnOpen(items: StockItem[]): Promise<vo
     });
     await AsyncStorage.setItem(KEY, '1');
   } catch (err) {
-    console.warn('[Notifications] checkAndNotifyUrgentOnOpen error:', err);
+    logger.warn('[Notifications] checkAndNotifyUrgentOnOpen error', { message: err instanceof Error ? err.message : String(err) });
   }
 }
 
@@ -226,6 +227,6 @@ export async function rescheduleAllNotifications(items: StockItem[]): Promise<vo
     const activeWithDate = items.filter(i => i.status === 'active' && i.expiry_date);
     await Promise.all(activeWithDate.map(scheduleExpiryNotification));
   } catch (err) {
-    console.warn('[Notifications] rescheduleAllNotifications error:', err);
+    logger.warn('[Notifications] rescheduleAllNotifications error', { message: err instanceof Error ? err.message : String(err) });
   }
 }

@@ -1,3 +1,6 @@
+import { APP_CONFIG } from './appConfig';
+import { logger } from './logger';
+
 const APP_ENV = (process.env.EXPO_PUBLIC_APP_ENV ?? process.env.NODE_ENV ?? 'production').trim().toLowerCase();
 
 type AppEnv = 'development' | 'staging' | 'production';
@@ -22,6 +25,7 @@ function normalizeBaseUrl(url: string): string {
 }
 
 function resolveAppEnv(): AppEnv {
+  if (APP_CONFIG.appVariant === 'debug') return 'development';
   return ENV_ALIASES[APP_ENV] ?? 'production';
 }
 
@@ -60,7 +64,7 @@ function resolveApiUrl(): {
       };
     }
 
-    console.error('[ENV_GUARDRAIL] blocked non-allowed production backend target', {
+    logger.error('[ENV_GUARDRAIL] blocked non-allowed production backend target', {
       candidate,
       allowedProdUrls,
     });

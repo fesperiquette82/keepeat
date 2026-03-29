@@ -13,6 +13,8 @@ import { useStockStore } from '../store/stockStore';
 import { requestNotificationPermissions, registerPushToken, checkAndNotifyUrgentOnOpen } from '../utils/notificationService';
 import { API_ENV, API_URL, buildApiUrl } from '../utils/config';
 import { useNetworkSync } from '../utils/useNetworkSync';
+import { logger } from '../utils/logger';
+import { APP_CONFIG } from '../utils/appConfig';
 
 
 // Garde le splash natif visible tant que le root n'est pas prêt.
@@ -36,9 +38,9 @@ async function logBackendBuildInfo(): Promise<void> {
   try {
     const res = await fetch(buildApiUrl('/api/build-info'));
     const data = await res.json();
-    console.info('[ENV_DEBUG] backend build info', data);
-  } catch (err: any) {
-    console.info('[ENV_DEBUG] backend build info unavailable', { message: err?.message ?? String(err) });
+    logger.debug('[ENV_DEBUG] backend build info', data);
+  } catch (err) {
+    logger.debug('[ENV_DEBUG] backend build info unavailable', { message: err instanceof Error ? err.message : String(err) });
   }
 }
 
@@ -71,14 +73,26 @@ export default function RootLayout() {
 
   // Initialisation au démarrage + keepalive Render.com toutes les 4 min
   useEffect(() => {
-    console.info('[ENV_DEBUG] app api target', { apiEnv: API_ENV, apiUrl: API_URL });
+    logger.info('[ENV] app api target', { apiEnv: API_ENV, apiUrl: API_URL, appVariant: APP_CONFIG.appVariant });
     warmUpBackend();
-    logBackendBuildInfo();
+    if (APP_CONFIG.enableDebugTools) {
+      logBackendBuildInfo();
+    }
     loadAuth();
     loadLanguage();
     requestNotificationPermissions();
     const keepAlive = setInterval(() => {
-      fetch(buildApiUrl('/health')).catch(() => {});
+      fetch(buildApiUrl('/health'))
+        .then(() => {
+          if (APP_CONFIG.enableNetworkTracing) {
+            logger.debug('[NETWORK_TRACE] keepalive success');
+          }
+        })
+        .catch((err) => {
+          if (APP_CONFIG.enableNetworkTracing) {
+            logger.warn('[NETWORK_TRACE] keepalive failed', { message: err instanceof Error ? err.message : String(err) });
+          }
+        });
     }, 4 * 60 * 1000);
     return () => clearInterval(keepAlive);
   }, [loadAuth, loadLanguage]);

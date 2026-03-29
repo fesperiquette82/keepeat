@@ -1,4 +1,4 @@
-import React, { useEffect, useMemo, useState } from 'react';
+import React, { useCallback, useEffect, useMemo, useState } from 'react';
 import {
   View,
   Text,
@@ -17,6 +17,9 @@ import { useLanguageStore } from '../store/languageStore';
 import { useStockStore } from '../store/stockStore';
 import { useAuthStore } from '../store/authStore';
 import { buildApiUrl } from '../utils/config';
+import { APP_CONFIG } from '../utils/appConfig';
+import { logger } from '../utils/logger';
+import { runAllDiagnosticChecks, type DiagnosticCheckResult } from '../utils/diagnostics/healthChecks';
 
 const ALERT_PREFS_KEY = 'keepeat_alert_prefs';
 
@@ -28,6 +31,9 @@ export default function SettingsScreen() {
   const loadLanguage = useLanguageStore(state => state.loadLanguage);
   const stats = useStockStore(state => state.stats);
   const fetchStats = useStockStore(state => state.fetchStats);
+  const pendingMutations = useStockStore(state => state.pendingMutations);
+  const isOnline = useStockStore(state => state.isOnline);
+  const pendingMutationsCount = pendingMutations.length;
   const user = useAuthStore(state => state.user);
   const logout = useAuthStore(state => state.logout);
   const token = useAuthStore(state => state.token);
@@ -36,6 +42,8 @@ export default function SettingsScreen() {
   const [alertJ0,       setAlertJ0]       = useState(true);
   const [alertWeekly,   setAlertWeekly]   = useState(false);
   const [alertRecall,   setAlertRecall]   = useState(true);
+  const [diagnosticResults, setDiagnosticResults] = useState<DiagnosticCheckResult[]>([]);
+  const [isRunningDiagnostics, setIsRunningDiagnostics] = useState(false);
 
   const fr = language === 'fr';
   const loadAlertPrefs = useMemo(() => async () => {
@@ -59,14 +67,55 @@ export default function SettingsScreen() {
       })
         .then(r => r.json())
         .then(data => setLastRecallCheck(data.last_check ?? null))
-        .catch(() => {});
+        .catch((err) => {
+          logger.warn('[Settings] recalls status unavailable', { message: err instanceof Error ? err.message : String(err) });
+        });
     }
-    loadAlertPrefs().catch(() => {});
+    loadAlertPrefs().catch((err) => {
+      logger.warn('[Settings] load alert prefs failed', { message: err instanceof Error ? err.message : String(err) });
+    });
   }, [fetchStats, loadAlertPrefs, loadLanguage, token]);
 
   const saveAlertPrefs = (patch: object) => {
     const current = { alertJ2, alertJ0, alertWeekly, alertRecall, ...patch };
-    AsyncStorage.setItem(ALERT_PREFS_KEY, JSON.stringify(current)).catch(() => {});
+    AsyncStorage.setItem(ALERT_PREFS_KEY, JSON.stringify(current)).catch((err) => {
+      logger.warn('[Settings] save alert prefs failed', { message: err instanceof Error ? err.message : String(err) });
+    });
+  };
+
+  const runDiagnostics = useCallback(async () => {
+    if (!APP_CONFIG.enableDiagnosticScreen) return;
+    setIsRunningDiagnostics(true);
+    try {
+      const results = await runAllDiagnosticChecks({
+        token,
+        pendingMutationsCount,
+        isOnline,
+      });
+      setDiagnosticResults(results);
+      logger.info('[Diagnostics] checks completed', {
+        total: results.length,
+        ok: results.filter(r => r.status === 'ok').length,
+        warn: results.filter(r => r.status === 'warn').length,
+        error: results.filter(r => r.status === 'error').length,
+      });
+    } finally {
+      setIsRunningDiagnostics(false);
+    }
+  }, [isOnline, pendingMutationsCount, token]);
+
+  useEffect(() => {
+    if (APP_CONFIG.enableDiagnosticScreen) {
+      runDiagnostics().catch((err) => {
+        logger.warn('[Diagnostics] initial run failed', { message: err instanceof Error ? err.message : String(err) });
+      });
+    }
+  }, [runDiagnostics]);
+
+  const statusStyle = (status: DiagnosticCheckResult['status']) => {
+    if (status === 'ok') return styles.diagStatusOk;
+    if (status === 'warn') return styles.diagStatusWarn;
+    return styles.diagStatusError;
   };
 
   const formatLastCheck = (iso: string | null): string => {
@@ -172,6 +221,47 @@ export default function SettingsScreen() {
             </TouchableOpacity>
           </View>
         </View>
+
+        {APP_CONFIG.enableDiagnosticScreen && (
+          <View style={styles.section}>
+            <Text style={styles.sectionTitle}>{fr ? 'Diagnostic interne' : 'Internal diagnostics'}</Text>
+            <View style={styles.debugCard}>
+              <Text style={styles.debugTitle}>{fr ? 'Flags actifs' : 'Active flags'}</Text>
+              <Text style={styles.debugLine}>appVariant: {APP_CONFIG.appVariant}</Text>
+              <Text style={styles.debugLine}>enableDebugTools: {String(APP_CONFIG.enableDebugTools)}</Text>
+              <Text style={styles.debugLine}>enableVerboseLogs: {String(APP_CONFIG.enableVerboseLogs)}</Text>
+              <Text style={styles.debugLine}>enableDiagnosticScreen: {String(APP_CONFIG.enableDiagnosticScreen)}</Text>
+              <Text style={styles.debugLine}>enableNetworkTracing: {String(APP_CONFIG.enableNetworkTracing)}</Text>
+
+              <TouchableOpacity
+                style={[styles.diagRefreshBtn, isRunningDiagnostics && styles.diagRefreshBtnDisabled]}
+                onPress={() => runDiagnostics().catch((err) => logger.warn('[Diagnostics] rerun failed', { message: err instanceof Error ? err.message : String(err) }))}
+                disabled={isRunningDiagnostics}
+              >
+                <Text style={styles.diagRefreshText}>
+                  {isRunningDiagnostics
+                    ? (fr ? 'Checks en cours…' : 'Checks running…')
+                    : (fr ? 'Relancer tous les checks' : 'Rerun all checks')}
+                </Text>
+              </TouchableOpacity>
+
+              {diagnosticResults.map((result) => (
+                <View key={result.key} style={styles.diagResultCard}>
+                  <View style={styles.diagHeaderRow}>
+                    <Text style={styles.diagLabel}>{result.label}</Text>
+                    <Text style={[styles.diagStatus, statusStyle(result.status)]}>{result.status.toUpperCase()}</Text>
+                  </View>
+                  <Text style={styles.diagSummary}>{result.summary}</Text>
+                  <Text style={styles.diagDetails}>
+                    {result.details} · {result.durationMs}ms
+                  </Text>
+                  {result.error ? <Text style={styles.diagError}>err: {result.error}</Text> : null}
+                  <Text style={styles.diagTimestamp}>{new Date(result.timestamp).toLocaleTimeString()}</Text>
+                </View>
+              ))}
+            </View>
+          </View>
+        )}
 
         {/* Statistics Section */}
         <View style={styles.section}>
@@ -624,6 +714,90 @@ const styles = StyleSheet.create({
     shadowOpacity: 0.06,
     shadowRadius: 8,
     elevation: 3,
+  },
+  debugCard: {
+    backgroundColor: '#111827',
+    borderRadius: 16,
+    padding: 14,
+    gap: 6,
+  },
+  debugTitle: {
+    color: '#f9fafb',
+    fontSize: 14,
+    fontWeight: '700',
+    marginBottom: 4,
+  },
+  debugLine: {
+    color: '#d1d5db',
+    fontSize: 12,
+    fontWeight: '500',
+  },
+  diagRefreshBtn: {
+    backgroundColor: '#1f2937',
+    borderRadius: 12,
+    paddingVertical: 10,
+    paddingHorizontal: 12,
+    marginTop: 8,
+  },
+  diagRefreshBtnDisabled: {
+    opacity: 0.6,
+  },
+  diagRefreshText: {
+    color: '#e5e7eb',
+    fontSize: 12,
+    fontWeight: '700',
+    textAlign: 'center',
+  },
+  diagResultCard: {
+    borderWidth: 1,
+    borderColor: '#374151',
+    borderRadius: 12,
+    padding: 10,
+    marginTop: 8,
+    gap: 3,
+  },
+  diagHeaderRow: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    gap: 8,
+  },
+  diagLabel: {
+    color: '#f9fafb',
+    fontSize: 12,
+    fontWeight: '700',
+    flex: 1,
+  },
+  diagStatus: {
+    fontSize: 10,
+    fontWeight: '800',
+  },
+  diagStatusOk: {
+    color: '#86efac',
+  },
+  diagStatusWarn: {
+    color: '#fcd34d',
+  },
+  diagStatusError: {
+    color: '#fca5a5',
+  },
+  diagSummary: {
+    color: '#e5e7eb',
+    fontSize: 12,
+    fontWeight: '600',
+  },
+  diagDetails: {
+    color: '#9ca3af',
+    fontSize: 11,
+  },
+  diagError: {
+    color: '#fca5a5',
+    fontSize: 11,
+    fontWeight: '600',
+  },
+  diagTimestamp: {
+    color: '#6b7280',
+    fontSize: 10,
   },
   alertRow: {
     flexDirection: 'row',
