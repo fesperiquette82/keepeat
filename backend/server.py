@@ -95,7 +95,36 @@ _BACKEND_VERSION = os.getenv("APP_VERSION", "1.0.0")
 _BACKEND_COMMIT = os.getenv("RENDER_GIT_COMMIT", os.getenv("GIT_COMMIT_SHA", "unknown"))
 
 
-def _build_recipes_debug_meta(*, endpoint: str, recipe_filter: str | None = None) -> dict[str, Any]:
+def _normalize_locale_tag(raw_locale: Any) -> str | None:
+    if not isinstance(raw_locale, str):
+        return None
+    token = raw_locale.strip()
+    if not token:
+        return None
+    token = token.split(",")[0].split(";")[0].strip().replace("_", "-")
+    if not token:
+        return None
+    parts = token.split("-")
+    if len(parts) == 1:
+        return parts[0].lower()
+    return f"{parts[0].lower()}-{parts[1].upper()}"
+
+
+def _resolve_recipes_locale(locale_query: str | None, accept_language: str | None) -> tuple[str, str]:
+    requested_locale = _normalize_locale_tag(locale_query) or _normalize_locale_tag(accept_language) or "fr-FR"
+    # Le catalogue local est actuellement fr-FR; locale effective stable et rétrocompatible.
+    effective_locale = "fr-FR"
+    return requested_locale, effective_locale
+
+
+def _build_recipes_debug_meta(
+    *,
+    endpoint: str,
+    recipe_filter: str | None = None,
+    effective_filter: str | None = None,
+    requested_locale: str | None = None,
+    effective_locale: str | None = None,
+) -> dict[str, Any]:
     catalog_info = get_recipe_catalog_debug_info()
     return {
         "backend_commit": _BACKEND_COMMIT,
@@ -104,8 +133,11 @@ def _build_recipes_debug_meta(*, endpoint: str, recipe_filter: str | None = None
         "catalog_hash": catalog_info["catalog_hash"],
         "catalog_name": catalog_info["catalog_name"],
         "catalog_locale": catalog_info["catalog_locale"],
+        "requested_locale": requested_locale or "fr-FR",
+        "effective_locale": effective_locale or catalog_info["catalog_locale"],
         "endpoint": endpoint,
         "filter": recipe_filter,
+        "filter_effective": effective_filter or recipe_filter,
         "served_at": utc_now().isoformat(),
     }
 
@@ -120,6 +152,9 @@ def _apply_recipes_debug_headers(response: Response | None, meta: dict[str, Any]
     response.headers["X-Recipes-Source"] = str(meta.get("recipes_source", "unknown"))
     response.headers["X-Catalog-Hash"] = str(meta.get("catalog_hash", "unknown"))
     response.headers["X-Catalog-Locale"] = str(meta.get("catalog_locale", "unknown"))
+    response.headers["X-Recipes-Filter"] = str(meta.get("filter_effective", meta.get("filter", "unknown")))
+    response.headers["X-Requested-Locale"] = str(meta.get("requested_locale", "fr-FR"))
+    response.headers["X-Effective-Locale"] = str(meta.get("effective_locale", "fr-FR"))
 
 
 async def _run_backend_warmup() -> None:
@@ -791,24 +826,30 @@ async def get_recipe_suggestions(
     response: Response = None,
     recipe_filter: str = Query("urgent", alias="filter"),
     include_meta: bool = Query(False, alias="include_meta"),
+    locale: str | None = Query(None),
+    accept_language: str | None = Header(None, alias="Accept-Language"),
     current_user: Dict[str, Any] = Depends(_get_current_user),
 ):
     """Suggère des recettes depuis le catalogue local.
-    filter: urgent (≤7j) | all | frigo | placard
+    filter: urgent (≤7j) | personalized | all | frigo | placard
+    - personalized: vue principale recommandée, restreinte aux suggestions les plus accessibles
+    - all: compat/debug, conserve le comportement historique
     """
     uid = current_user["id"]
     include_meta_enabled = include_meta is True or str(include_meta).lower() in {"1", "true", "yes"}
+    requested_locale, effective_locale = _resolve_recipes_locale(locale, accept_language)
+    effective_filter = "all" if recipe_filter in {"all", "personalized"} else recipe_filter
     logger.info("RECIPES_DEBUG suggestions called — user=%s filter=%s", uid, recipe_filter)
     today_str = utc_now().strftime("%Y-%m-%d")
 
     # Récupérer les items actifs selon le filtre
     match: dict = {"user_id": uid, "status": "active"}
-    if recipe_filter == "urgent":
+    if effective_filter == "urgent":
         in_7_days = (utc_now().date() + timedelta(days=7)).strftime("%Y-%m-%d")
         match["expiry_date"] = {"$nin": [None, ""], "$gte": today_str, "$lte": in_7_days}
-    elif recipe_filter == "frigo":
+    elif effective_filter == "frigo":
         match["food_category"] = {"$in": _FRIGO_CATS}
-    elif recipe_filter == "placard":
+    elif effective_filter == "placard":
         match["food_category"] = {"$in": _PLACARD_CATS}
 
     max_stock_items = 1000
@@ -835,12 +876,18 @@ async def get_recipe_suggestions(
         ],
     )
     stock_names = [i.get("name", "") for i in items if i.get("name")]
-    storage_focus = recipe_filter if recipe_filter in {"frigo", "placard"} else None
+    storage_focus = effective_filter if effective_filter in {"frigo", "placard"} else None
     matches = suggest_recipes_from_catalog(stock_names, limit=5, storage_focus=storage_focus)
+
+    if recipe_filter == "personalized":
+        # Mode principal orienté expérience: limiter les cartes peu accessibles (scores bas / idées lointaines).
+        preferred = [m for m in matches if m.score >= 0.45 and m.suggestion_type in {"perfect", "near"}]
+        fallback = [m for m in matches if m not in preferred and m.score >= 0.35]
+        matches = (preferred + fallback)[:5]
 
     # Fallback contrôlé: si un filtre contraint retourne trop peu de recettes,
     # compléter avec des suggestions "all" pour éviter un écran trop vide.
-    if recipe_filter in {"urgent", "frigo", "placard"} and len(matches) < 3:
+    if effective_filter in {"urgent", "frigo", "placard"} and len(matches) < 3:
         initial_count = len(matches)
         all_items = await stock_col.find(
             {"user_id": uid, "status": "active"},
@@ -859,7 +906,7 @@ async def get_recipe_suggestions(
         logger.info(
             "RECIPES_DEBUG suggestions fallback_all_applied — user=%s filter=%s initial_count=%d final_count=%d",
             uid,
-            recipe_filter,
+            effective_filter,
             initial_count,
             len(matches),
         )
@@ -877,7 +924,13 @@ async def get_recipe_suggestions(
         [r.get("id") for r in recipes_payload],
         [r.get("title") for r in recipes_payload],
     )
-    meta = _build_recipes_debug_meta(endpoint="/api/recipes/suggestions", recipe_filter=recipe_filter)
+    meta = _build_recipes_debug_meta(
+        endpoint="/api/recipes/suggestions",
+        recipe_filter=recipe_filter,
+        effective_filter=effective_filter,
+        requested_locale=requested_locale,
+        effective_locale=effective_locale,
+    )
     _apply_recipes_debug_headers(response=response, meta=meta)
     if include_meta_enabled:
         return {"recipes": recipes_payload, "meta": meta}
