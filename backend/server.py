@@ -38,6 +38,8 @@ from alerts import (
 from app_core import days_until, logger, redirect_html, serialize_mongo, utc_now
 from auth_utils import create_token, get_current_user, hash_password, http_bearer, validate_password, verify_password
 from models import (
+    AlertPreferences,
+    AlertPreferencesUpdate,
     ForgotPasswordBody,
     ProductBase,
     ProductLookupResponse,
@@ -854,6 +856,41 @@ async def get_recalls_status(
     if doc and doc.get("checked_at"):
         last_check = doc["checked_at"].replace(tzinfo=timezone.utc).isoformat()
     return {"last_check": last_check}
+
+
+@api_router.get("/alerts/preferences", response_model=AlertPreferences)
+async def get_alert_preferences(
+    current_user: Dict[str, Any] = Depends(_get_current_user),
+):
+    doc = await users_col.find_one({"_id": ObjectId(current_user["id"])}, {"alert_prefs": 1})
+    prefs = (doc or {}).get("alert_prefs") or {}
+    return AlertPreferences(
+        alertJ2=bool(prefs.get("alertJ2", True)),
+        alertJ0=bool(prefs.get("alertJ0", True)),
+        alertWeekly=bool(prefs.get("alertWeekly", False)),
+        alertRecall=bool(prefs.get("alertRecall", True)),
+    )
+
+
+@api_router.put("/alerts/preferences", response_model=AlertPreferences)
+async def update_alert_preferences(
+    body: AlertPreferencesUpdate,
+    current_user: Dict[str, Any] = Depends(_get_current_user),
+):
+    existing = await users_col.find_one({"_id": ObjectId(current_user["id"])}, {"alert_prefs": 1})
+    current = (existing or {}).get("alert_prefs") or {}
+    patch = body.model_dump(exclude_none=True)
+    merged = {
+        "alertJ2": bool(patch.get("alertJ2", current.get("alertJ2", True))),
+        "alertJ0": bool(patch.get("alertJ0", current.get("alertJ0", True))),
+        "alertWeekly": bool(patch.get("alertWeekly", current.get("alertWeekly", False))),
+        "alertRecall": bool(patch.get("alertRecall", current.get("alertRecall", True))),
+    }
+    await users_col.update_one(
+        {"_id": ObjectId(current_user["id"])},
+        {"$set": {"alert_prefs": merged}},
+    )
+    return AlertPreferences(**merged)
 
 
 @api_router.get("/recipes/suggestions")

@@ -58,6 +58,27 @@ export default function SettingsScreen() {
     } catch {}
   }, []);
 
+  const loadAlertPrefsFromServer = useCallback(async () => {
+    if (!token) return;
+    try {
+      const res = await fetch(buildApiUrl('/api/alerts/preferences'), {
+        headers: { Authorization: `Bearer ${token}` },
+      });
+      if (!res.ok) {
+        logger.warn('[Settings] load alert prefs from server failed', { status: res.status });
+        return;
+      }
+      const prefs = await res.json();
+      if (prefs.alertJ2 !== undefined) setAlertJ2(Boolean(prefs.alertJ2));
+      if (prefs.alertJ0 !== undefined) setAlertJ0(Boolean(prefs.alertJ0));
+      if (prefs.alertWeekly !== undefined) setAlertWeekly(Boolean(prefs.alertWeekly));
+      if (prefs.alertRecall !== undefined) setAlertRecall(Boolean(prefs.alertRecall));
+      await AsyncStorage.setItem(ALERT_PREFS_KEY, JSON.stringify(prefs));
+    } catch (err) {
+      logger.warn('[Settings] load alert prefs from server exception', { message: err instanceof Error ? err.message : String(err) });
+    }
+  }, [token]);
+
   useEffect(() => {
     loadLanguage();
     fetchStats();
@@ -74,13 +95,28 @@ export default function SettingsScreen() {
     loadAlertPrefs().catch((err) => {
       logger.warn('[Settings] load alert prefs failed', { message: err instanceof Error ? err.message : String(err) });
     });
-  }, [fetchStats, loadAlertPrefs, loadLanguage, token]);
+    loadAlertPrefsFromServer().catch((err) => {
+      logger.warn('[Settings] load alert prefs from server failed', { message: err instanceof Error ? err.message : String(err) });
+    });
+  }, [fetchStats, loadAlertPrefs, loadAlertPrefsFromServer, loadLanguage, token]);
 
   const saveAlertPrefs = (patch: object) => {
     const current = { alertJ2, alertJ0, alertWeekly, alertRecall, ...patch };
     AsyncStorage.setItem(ALERT_PREFS_KEY, JSON.stringify(current)).catch((err) => {
       logger.warn('[Settings] save alert prefs failed', { message: err instanceof Error ? err.message : String(err) });
     });
+    if (token) {
+      fetch(buildApiUrl('/api/alerts/preferences'), {
+        method: 'PUT',
+        headers: {
+          Authorization: `Bearer ${token}`,
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify(patch),
+      }).catch((err) => {
+        logger.warn('[Settings] save alert prefs to server failed', { message: err instanceof Error ? err.message : String(err) });
+      });
+    }
   };
 
   const runDiagnostics = useCallback(async () => {

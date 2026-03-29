@@ -17,6 +17,7 @@ import { useRouter } from 'expo-router';
 import { Ionicons } from '@expo/vector-icons';
 import { useAuthStore } from '../store/authStore';
 import { useLanguageStore } from '../store/languageStore';
+import { APP_CONFIG } from '../utils/appConfig';
 
 function VeggiePastille() {
   return (
@@ -294,14 +295,16 @@ export default function LoginScreen() {
               </Text>
             </TouchableOpacity>
 
-            <TouchableOpacity
-              style={styles.bypassBtn}
-              onPress={handleDevLogin}
-              disabled={isLoading}
-            >
-              <Ionicons name="construct-outline" size={14} color="#555" />
-              <Text style={styles.bypassBtnText}>Connexion dev (fesperiquette)</Text>
-            </TouchableOpacity>
+            {APP_CONFIG.enableDebugTools && (
+              <TouchableOpacity
+                style={styles.bypassBtn}
+                onPress={handleDevLogin}
+                disabled={isLoading}
+              >
+                <Ionicons name="construct-outline" size={14} color="#555" />
+                <Text style={styles.bypassBtnText}>Connexion dev (fesperiquette)</Text>
+              </TouchableOpacity>
+            )}
           </View>
         </ScrollView>
       </KeyboardAvoidingView>

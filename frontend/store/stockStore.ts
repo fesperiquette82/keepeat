@@ -9,6 +9,7 @@ import {
   rescheduleAllNotifications,
 } from '../utils/notificationService';
 import { buildApiUrl } from '../utils/config';
+import { logger } from '../utils/logger';
 
 const authHeaders = () => {
   const token = useAuthStore.getState().token;
@@ -394,7 +395,7 @@ export const useStockStore = create<StockStore>()(
             set({ isOnline: false });
             return get().addItem(item);
           }
-          console.error("Erreur lors de l'ajout :", err);
+          logger.error("[Stock] addItem failed", { message: err instanceof Error ? err.message : String(err) });
           return null;
         }
       },

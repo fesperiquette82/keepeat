@@ -1,5 +1,6 @@
 import { create } from 'zustand';
 import AsyncStorage from '@react-native-async-storage/async-storage';
+import { logger } from '../utils/logger';
 
 export type Language = 'fr' | 'en';
 
@@ -106,7 +107,7 @@ export const useLanguageStore = create<LanguageStore>((set, get) => ({
         set({ language: savedLang });
       }
     } catch (error) {
-      console.error('Error loading language:', error);
+      logger.error('Error loading language', { message: error instanceof Error ? error.message : String(error) });
     }
   },
 }));

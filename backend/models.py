@@ -110,6 +110,20 @@ class PushTokenBody(BaseModel):
     token: str
 
 
+class AlertPreferences(BaseModel):
+    alertJ2: bool = True
+    alertJ0: bool = True
+    alertWeekly: bool = False
+    alertRecall: bool = True
+
+
+class AlertPreferencesUpdate(BaseModel):
+    alertJ2: Optional[bool] = None
+    alertJ0: Optional[bool] = None
+    alertWeekly: Optional[bool] = None
+    alertRecall: Optional[bool] = None
+
+
 class RecipeDifficulty(str, Enum):
     easy = "easy"
     medium = "medium"
