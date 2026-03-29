@@ -90,6 +90,19 @@ cd frontend
 npm run lint
 ```
 
+## Métadonnées debug (source de vérité)
+
+Pour la popup debug Recettes, les champs version/build utilisent les sources suivantes :
+
+- `app_version` : `EXPO_PUBLIC_APP_VERSION` (prioritaire) → `APP_VERSION` → `expo.version` (via `frontend/app.config.js`).
+- `app_commit` : `EXPO_PUBLIC_APP_COMMIT` → `GIT_COMMIT_SHA` / `RENDER_GIT_COMMIT` → `git rev-parse --short=12 HEAD` (build-time) → `unavailable`.
+- `build_time` : `EXPO_PUBLIC_BUILD_TIME` → `BUILD_TIME` → timestamp ISO généré au build (`app.config.js`).
+- `backend_version` : `APP_VERSION` → `RENDER_SERVICE_VERSION` / `RELEASE_VERSION` → `1.0.0` (`backend/server.py`).
+- `backend_commit` : `RENDER_GIT_COMMIT` → `GIT_COMMIT_SHA` / `COMMIT_SHA` / `SOURCE_VERSION` → `git rev-parse --short=12 HEAD` (runtime) → `unavailable`.
+- `recipes_source` : header backend `X-Recipes-Source` ou méta réponse (`/api/recipes/suggestions*`).
+
+En production, renseigner explicitement `EXPO_PUBLIC_APP_VERSION`, `EXPO_PUBLIC_APP_COMMIT`, `EXPO_PUBLIC_BUILD_TIME`, et `APP_VERSION` côté backend pour éviter les valeurs de fallback.
+
 ### Backend
 
 ```bash

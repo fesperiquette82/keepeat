@@ -81,12 +81,26 @@ class RecipeMatchingTests(unittest.TestCase):
         payload.update(overrides)
         return payload
 
-    def _suggest_from_temp_catalog(self, recipes: list[dict], stock: list[str], limit: int = 5):
+    def _suggest_from_temp_catalog(
+        self,
+        recipes: list[dict],
+        stock: list[str],
+        limit: int = 5,
+        *,
+        allow_world_cuisines: bool = False,
+        suggestion_style: str | None = None,
+    ):
         with tempfile.TemporaryDirectory() as tmpdir:
             catalog = Path(tmpdir) / "recipes.catalog.json"
             catalog.write_text(json.dumps(recipes, ensure_ascii=False), encoding="utf-8")
             clear_recipe_catalog_cache()
-            return suggest_recipes_from_catalog(stock, limit=limit, catalog_path=catalog)
+            return suggest_recipes_from_catalog(
+                stock,
+                limit=limit,
+                catalog_path=catalog,
+                allow_world_cuisines=allow_world_cuisines,
+                suggestion_style=suggestion_style,
+            )
 
     def test_single_ultra_generic_ingredient_does_not_qualify_recipe(self):
         recipes = [self._build_catalog_recipe("ultra_only", "Eau salée", ["sel"])]
@@ -132,6 +146,168 @@ class RecipeMatchingTests(unittest.TestCase):
         matches = self._suggest_from_temp_catalog(recipes, ["oeufs", "gruyere"], limit=3)
         self.assertEqual(len(matches), 2)
         self.assertEqual(matches[0].recipe.id, "simple_omelette")
+
+    def test_default_ranking_deprioritizes_exotic_recipe_even_with_same_stock_score(self):
+        recipes = [
+            self._build_catalog_recipe(
+                "daily_pasta",
+                "Pâtes jambon fromage",
+                ["pates", "jambon"],
+                tags=["rapide", "familial"],
+            ),
+            self._build_catalog_recipe(
+                "thai_pasta",
+                "Pad thai maison",
+                ["pates", "jambon"],
+                tags=["fusion", "wok"],
+                search_terms=["thai", "curry"],
+            ),
+        ]
+        matches = self._suggest_from_temp_catalog(recipes, ["pates", "jambon"], limit=3)
+        self.assertEqual(len(matches), 1)
+        self.assertEqual(matches[0].recipe.id, "daily_pasta")
+        self.assertGreater(matches[0].familiarity_score, 0.35)
+
+    def test_simple_french_stock_prioritizes_familiar_recipes(self):
+        recipes = [
+            self._build_catalog_recipe(
+                "crepe_familiale",
+                "Crêpe familiale",
+                ["oeuf", "lait", "farine", "beurre"],
+                tags=["rapide", "familial"],
+            ),
+            self._build_catalog_recipe(
+                "curry_fusion",
+                "Curry fusion",
+                ["oeuf", "lait", "farine", "beurre"],
+                tags=["wok", "fusion"],
+                search_terms=["thai", "curry"],
+            ),
+        ]
+        matches = self._suggest_from_temp_catalog(recipes, ["oeufs", "lait", "farine", "beurre"], limit=5)
+        self.assertGreaterEqual(len(matches), 1)
+        self.assertEqual(matches[0].recipe.id, "crepe_familiale")
+        self.assertTrue(all(match.recipe.id != "curry_fusion" for match in matches))
+
+    def test_recipe_suggestion_debug_exposes_familiarity_reason(self):
+        recipe = self._recipe(
+            id="familiarity_debug",
+            title="Pad thai test",
+            tags=["wok"],
+            ingredients_required=["oeuf", "fromage"],
+            search_terms=["thai", "curry"],
+        )
+        match = score_recipe_against_stock(recipe, ["oeufs", "gruyere"])
+        match.familiarity_score = 0.2
+        match.familiarity_reason = "locale=fr-FR|exotic_markers=thai,curry,wok"
+        suggestion = recipe_match_to_suggestion(match)
+        self.assertEqual(suggestion.debug["familiarity_score"], 0.2)
+        self.assertIn("exotic_markers", str(suggestion.debug["familiarity_reason"]))
+        self.assertEqual(suggestion.debug["matchedIngredients"], ["oeuf", "fromage"])
+        self.assertEqual(suggestion.debug["missingIngredients"], [])
+        self.assertIn("final_score", suggestion.debug)
+        self.assertIn("ranking_reason", suggestion.debug)
+
+    def test_single_generic_match_is_not_strongly_recommended(self):
+        recipes = [
+            self._build_catalog_recipe(
+                "egg_only",
+                "Oeuf minute",
+                ["oeuf"],
+                tags=["rapide"],
+            ),
+            self._build_catalog_recipe(
+                "omelette_complete",
+                "Omelette complète",
+                ["oeuf", "fromage", "persil"],
+                tags=["rapide", "familial"],
+            ),
+        ]
+        matches = self._suggest_from_temp_catalog(recipes, ["oeufs", "gruyere", "persil"], limit=5)
+        by_id = {m.recipe.id: m for m in matches}
+        self.assertNotIn("egg_only", by_id)
+        self.assertIn("omelette_complete", by_id)
+        self.assertGreaterEqual(by_id["omelette_complete"].score, 0.55)
+
+    def test_allow_world_cuisines_expands_default_ranking(self):
+        recipes = [
+            self._build_catalog_recipe(
+                "omelette_française",
+                "Omelette française",
+                ["oeuf", "fromage", "beurre"],
+                tags=["familial"],
+            ),
+            self._build_catalog_recipe(
+                "pad_thai_ouvert",
+                "Pad thai ouvert",
+                ["oeuf", "fromage", "beurre"],
+                tags=["fusion", "wok"],
+                search_terms=["thai", "curry"],
+            ),
+        ]
+        stock = ["oeufs", "gruyere", "beurre"]
+        strict_matches = self._suggest_from_temp_catalog(recipes, stock, limit=5, allow_world_cuisines=False)
+        open_matches = self._suggest_from_temp_catalog(recipes, stock, limit=5, allow_world_cuisines=True)
+
+        self.assertEqual([m.recipe.id for m in strict_matches], ["omelette_française"])
+        self.assertEqual(len(open_matches), 2)
+        self.assertIn("pad_thai_ouvert", [m.recipe.id for m in open_matches])
+
+    def test_suggestion_style_ouvert_mixes_familiar_and_world(self):
+        recipes = [
+            self._build_catalog_recipe(
+                "gratin_classique",
+                "Gratin classique",
+                ["oeuf", "fromage", "beurre"],
+                tags=["familial"],
+            ),
+            self._build_catalog_recipe(
+                "fusion_ouverte",
+                "Fusion ouverte",
+                ["oeuf", "fromage", "beurre"],
+                tags=["fusion", "wok"],
+                search_terms=["thai", "curry"],
+            ),
+        ]
+        stock = ["oeufs", "gruyere", "beurre"]
+        matches = self._suggest_from_temp_catalog(recipes, stock, limit=5, suggestion_style="ouvert")
+        self.assertEqual(len(matches), 2)
+        self.assertEqual(matches[0].recipe.id, "gratin_classique")
+        self.assertEqual(matches[1].recipe.id, "fusion_ouverte")
+
+    def test_incomplete_recipe_signals_do_not_crash_scoring(self):
+        minimal_recipe = self._build_catalog_recipe(
+            "minimal_fields",
+            "Recette minimale",
+            ["oeuf", "lait", "farine"],
+            tags=[],
+            search_terms=[],
+            source={"type": "", "name": ""},
+        )
+        matches = self._suggest_from_temp_catalog([minimal_recipe], ["oeufs", "lait", "farine"], limit=3)
+        self.assertEqual(len(matches), 1)
+        self.assertIn(
+            matches[0].ranking_reason,
+            {"only_generic_matches", "good_multi_ingredient_coverage", "partial_but_acceptable_match"},
+        )
+
+    def test_ranking_penalizes_too_many_missing_ingredients(self):
+        accessible = self._recipe(
+            id="quiche_accessible",
+            title="Quiche accessible",
+            ingredients_required=["oeuf", "fromage", "lardons"],
+            tags=["familial"],
+        )
+        incomplete = self._recipe(
+            id="quiche_incomplete",
+            title="Quiche incomplète",
+            ingredients_required=["oeuf", "fromage", "lardons", "creme", "poireau", "oignon", "farine"],
+            tags=["familial"],
+        )
+        accessible_match = score_recipe_against_stock(accessible, ["oeufs", "gruyere", "lardons"])
+        incomplete_match = score_recipe_against_stock(incomplete, ["oeufs", "gruyere", "lardons"])
+        self.assertGreater(accessible_match.score, incomplete_match.score)
+        self.assertEqual(incomplete_match.ranking_reason, "too_many_missing_ingredients")
 
 
     def test_classify_recipe_match_ready_almost_inspiration(self):
