@@ -216,3 +216,4 @@ class RecipeSuggestion(BaseModel):
     suggestion_type: str = Field(default="perfect")
     used_ingredients_count: int = Field(default=0, ge=0)
     missing_ingredients_count: int = Field(default=0, ge=0)
+    debug: dict[str, object] = Field(default_factory=dict)

@@ -172,6 +172,31 @@ class RecipeSuggestionsEndpointTests(unittest.TestCase):
         self.assertEqual(payload["meta"]["filter_effective"], "all")
         self.assertEqual(response.headers.get("X-Recipes-Filter"), "all")
 
+    def test_suggestion_style_is_forwarded_and_exposed_in_headers(self):
+        fake_stock = _FakeStockCol(
+            aggregate_items=[{"name": "oeufs"}, {"name": "gruyere"}],
+            find_items=[{"name": "oeufs"}, {"name": "gruyere"}],
+        )
+        matches = [score_recipe_against_stock(self._recipe(id="style_1", title="Style 1"), ["oeufs", "gruyere"])]
+
+        async def _run():
+            with patch("server.stock_col", fake_stock):
+                with patch("server.suggest_recipes_from_catalog", return_value=matches) as mocked:
+                    response = Response()
+                    payload = await get_recipe_suggestions(
+                        response=response,
+                        recipe_filter="all",
+                        suggestion_style="open",
+                        include_meta=True,
+                        current_user={"id": "u1"},
+                    )
+                    return payload, response, mocked
+
+        payload, response, mocked = asyncio.run(_run())
+        self.assertEqual(payload["meta"]["suggestion_style"], "ouvert")
+        self.assertEqual(response.headers.get("X-Recipes-Suggestion-Style"), "ouvert")
+        self.assertEqual(mocked.call_args.kwargs.get("suggestion_style"), "ouvert")
+
 
 if __name__ == "__main__":
     unittest.main()

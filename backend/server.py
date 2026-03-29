@@ -5,6 +5,7 @@ import asyncio
 import json
 import os
 import secrets
+import subprocess
 import time
 from contextlib import asynccontextmanager
 from datetime import datetime, timedelta, timezone
@@ -68,6 +69,7 @@ from recipes_service import (
     fr_to_en_ingredient,
     recipe_match_to_grouped_suggestion,
     recipe_match_to_suggestion,
+    resolve_suggestion_style,
     suggest_recipe_groups_from_catalog,
     suggest_recipes_from_catalog,
 )
@@ -91,8 +93,38 @@ community_recipes_col = db["community_recipes"]
 ADMIN_KEY = os.getenv("ADMIN_KEY", "")
 SPOONACULAR_KEY = os.getenv("SPOONACULAR_KEY", "")
 _BACKEND_URL = os.getenv("BACKEND_URL", "https://keepeat-backend.onrender.com")
-_BACKEND_VERSION = os.getenv("APP_VERSION", "1.0.0")
-_BACKEND_COMMIT = os.getenv("RENDER_GIT_COMMIT", os.getenv("GIT_COMMIT_SHA", "unknown"))
+
+
+def _resolve_backend_commit() -> str:
+    for key in ("RENDER_GIT_COMMIT", "GIT_COMMIT_SHA", "COMMIT_SHA", "SOURCE_VERSION"):
+        value = os.getenv(key, "").strip()
+        if value:
+            return value
+    try:
+        commit = subprocess.check_output(
+            ["git", "rev-parse", "--short=12", "HEAD"],
+            cwd=os.path.dirname(__file__),
+            stderr=subprocess.DEVNULL,
+            text=True,
+            timeout=1.5,
+        ).strip()
+        if commit:
+            return commit
+    except Exception:
+        pass
+    return "unavailable"
+
+
+def _resolve_backend_version() -> str:
+    for key in ("APP_VERSION", "RENDER_SERVICE_VERSION", "RELEASE_VERSION"):
+        value = os.getenv(key, "").strip()
+        if value:
+            return value
+    return "1.0.0"
+
+
+_BACKEND_VERSION = _resolve_backend_version()
+_BACKEND_COMMIT = _resolve_backend_commit()
 
 
 def _normalize_locale_tag(raw_locale: Any) -> str | None:
@@ -124,6 +156,7 @@ def _build_recipes_debug_meta(
     effective_filter: str | None = None,
     requested_locale: str | None = None,
     effective_locale: str | None = None,
+    suggestion_style: str | None = None,
 ) -> dict[str, Any]:
     catalog_info = get_recipe_catalog_debug_info()
     return {
@@ -138,6 +171,7 @@ def _build_recipes_debug_meta(
         "endpoint": endpoint,
         "filter": recipe_filter,
         "filter_effective": effective_filter or recipe_filter,
+        "suggestion_style": suggestion_style or "classique",
         "served_at": utc_now().isoformat(),
     }
 
@@ -153,6 +187,7 @@ def _apply_recipes_debug_headers(response: Response | None, meta: dict[str, Any]
     response.headers["X-Catalog-Hash"] = str(meta.get("catalog_hash", "unknown"))
     response.headers["X-Catalog-Locale"] = str(meta.get("catalog_locale", "unknown"))
     response.headers["X-Recipes-Filter"] = str(meta.get("filter_effective", meta.get("filter", "unknown")))
+    response.headers["X-Recipes-Suggestion-Style"] = str(meta.get("suggestion_style", "classique"))
     response.headers["X-Requested-Locale"] = str(meta.get("requested_locale", "fr-FR"))
     response.headers["X-Effective-Locale"] = str(meta.get("effective_locale", "fr-FR"))
 
@@ -826,6 +861,7 @@ async def get_recipe_suggestions(
     response: Response = None,
     recipe_filter: str = Query("urgent", alias="filter"),
     include_meta: bool = Query(False, alias="include_meta"),
+    suggestion_style: str = Query("classique", alias="suggestion_style"),
     locale: str | None = Query(None),
     accept_language: str | None = Header(None, alias="Accept-Language"),
     current_user: Dict[str, Any] = Depends(_get_current_user),
@@ -838,8 +874,14 @@ async def get_recipe_suggestions(
     uid = current_user["id"]
     include_meta_enabled = include_meta is True or str(include_meta).lower() in {"1", "true", "yes"}
     requested_locale, effective_locale = _resolve_recipes_locale(locale, accept_language)
+    resolved_suggestion_style = resolve_suggestion_style(suggestion_style)
     effective_filter = "all" if recipe_filter in {"all", "personalized"} else recipe_filter
-    logger.info("RECIPES_DEBUG suggestions called — user=%s filter=%s", uid, recipe_filter)
+    logger.info(
+        "RECIPES_DEBUG suggestions called — user=%s filter=%s suggestion_style=%s",
+        uid,
+        recipe_filter,
+        resolved_suggestion_style,
+    )
     today_str = utc_now().strftime("%Y-%m-%d")
 
     # Récupérer les items actifs selon le filtre
@@ -877,7 +919,12 @@ async def get_recipe_suggestions(
     )
     stock_names = [i.get("name", "") for i in items if i.get("name")]
     storage_focus = effective_filter if effective_filter in {"frigo", "placard"} else None
-    matches = suggest_recipes_from_catalog(stock_names, limit=5, storage_focus=storage_focus)
+    matches = suggest_recipes_from_catalog(
+        stock_names,
+        limit=5,
+        storage_focus=storage_focus,
+        suggestion_style=resolved_suggestion_style,
+    )
 
     if recipe_filter == "personalized":
         # Mode principal orienté expérience: limiter les cartes peu accessibles (scores bas / idées lointaines).
@@ -894,7 +941,12 @@ async def get_recipe_suggestions(
             {"name": 1},
         ).sort("expiry_date", 1).limit(max_stock_items).to_list(length=max_stock_items)
         all_stock_names = [i.get("name", "") for i in all_items if i.get("name")]
-        fallback_matches = suggest_recipes_from_catalog(all_stock_names, limit=8, storage_focus=None)
+        fallback_matches = suggest_recipes_from_catalog(
+            all_stock_names,
+            limit=8,
+            storage_focus=None,
+            suggestion_style=resolved_suggestion_style,
+        )
         existing_ids = {m.recipe.id for m in matches}
         for fallback in fallback_matches:
             if fallback.recipe.id in existing_ids:
@@ -930,6 +982,7 @@ async def get_recipe_suggestions(
         effective_filter=effective_filter,
         requested_locale=requested_locale,
         effective_locale=effective_locale,
+        suggestion_style=resolved_suggestion_style,
     )
     _apply_recipes_debug_headers(response=response, meta=meta)
     if include_meta_enabled:
@@ -941,6 +994,7 @@ async def get_recipe_suggestions(
 async def get_recipe_suggestions_grouped(
     response: Response = None,
     recipe_filter: str = Query("urgent", alias="filter"),
+    suggestion_style: str = Query("classique", alias="suggestion_style"),
     per_group_limit: int = Query(5, ge=1, le=20),
     current_user: Dict[str, Any] = Depends(_get_current_user),
 ):
@@ -948,11 +1002,13 @@ async def get_recipe_suggestions_grouped(
     filter: urgent (≤7j) | all | frigo | placard
     """
     uid = current_user["id"]
+    resolved_suggestion_style = resolve_suggestion_style(suggestion_style)
     logger.info(
-        "RECIPES_DEBUG suggestions-grouped called — user=%s filter=%s per_group_limit=%s",
+        "RECIPES_DEBUG suggestions-grouped called — user=%s filter=%s per_group_limit=%s suggestion_style=%s",
         uid,
         recipe_filter,
         per_group_limit,
+        resolved_suggestion_style,
     )
     today_str = utc_now().strftime("%Y-%m-%d")
 
@@ -994,6 +1050,7 @@ async def get_recipe_suggestions_grouped(
         stock_names,
         limit_per_group=per_group_limit,
         storage_focus=storage_focus,
+        suggestion_style=resolved_suggestion_style,
     )
 
     grouped_response = RecipeSuggestionGroupsResponse(
@@ -1015,7 +1072,11 @@ async def get_recipe_suggestions_grouped(
         [r.id for r in grouped_response.almost],
         [r.id for r in grouped_response.inspiration],
     )
-    meta = _build_recipes_debug_meta(endpoint="/api/recipes/suggestions-grouped", recipe_filter=recipe_filter)
+    meta = _build_recipes_debug_meta(
+        endpoint="/api/recipes/suggestions-grouped",
+        recipe_filter=recipe_filter,
+        suggestion_style=resolved_suggestion_style,
+    )
     _apply_recipes_debug_headers(response=response, meta=meta)
     return grouped_response
 
@@ -1303,10 +1364,12 @@ _ai_recipe_cache: dict[str, dict] = {}
 async def get_ai_recipes(
     response: Response = None,
     include_meta: bool = Query(False, alias="include_meta"),
+    suggestion_style: str = Query("classique", alias="suggestion_style"),
     current_user: Dict[str, Any] = Depends(_get_current_user),
 ):
     """Génère 3 recettes personnalisées via GPT-4o-mini basées sur le stock de l'utilisateur."""
     uid = current_user["id"]
+    resolved_suggestion_style = resolve_suggestion_style(suggestion_style)
     include_meta_enabled = include_meta is True or str(include_meta).lower() in {"1", "true", "yes"}
     logger.info("RECIPES_DEBUG ai called — user=%s", uid)
     openai_key = os.environ.get("KEEPEAT_OPENAI_TOKEN", "")
@@ -1322,7 +1385,7 @@ async def get_ai_recipes(
             (utc_now() - cached["created_at"]).total_seconds(),
             len(cached["recipes"]),
         )
-        meta = _build_recipes_debug_meta(endpoint="/api/recipes/ai")
+        meta = _build_recipes_debug_meta(endpoint="/api/recipes/ai", suggestion_style=resolved_suggestion_style)
         _apply_recipes_debug_headers(response=response, meta=meta)
         if include_meta_enabled:
             return {"recipes": cached["recipes"], "meta": meta}
@@ -1334,7 +1397,7 @@ async def get_ai_recipes(
 
     if not items:
         logger.info("RECIPES_DEBUG ai empty_stock — user=%s", uid)
-        meta = _build_recipes_debug_meta(endpoint="/api/recipes/ai")
+        meta = _build_recipes_debug_meta(endpoint="/api/recipes/ai", suggestion_style=resolved_suggestion_style)
         _apply_recipes_debug_headers(response=response, meta=meta)
         if include_meta_enabled:
             return {"recipes": [], "meta": meta}
@@ -1421,7 +1484,11 @@ async def get_ai_recipes(
 
     if rejected_titles:
         needed = len(rejected_titles)
-        catalog_fallbacks = suggest_recipes_from_catalog(stock_names, limit=needed + 2)
+        catalog_fallbacks = suggest_recipes_from_catalog(
+            stock_names,
+            limit=needed + 2,
+            suggestion_style=resolved_suggestion_style,
+        )
         existing_lower = {r["title"].lower() for r in valid}
         for match in catalog_fallbacks:
             if len(valid) >= 3:
@@ -1448,7 +1515,7 @@ async def get_ai_recipes(
         uid,
         [r.get("title") for r in recipes],
     )
-    meta = _build_recipes_debug_meta(endpoint="/api/recipes/ai")
+    meta = _build_recipes_debug_meta(endpoint="/api/recipes/ai", suggestion_style=resolved_suggestion_style)
     _apply_recipes_debug_headers(response=response, meta=meta)
     if include_meta_enabled:
         return {"recipes": recipes, "meta": meta}

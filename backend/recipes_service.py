@@ -7,7 +7,7 @@ import unicodedata as _ud
 from dataclasses import dataclass
 from functools import lru_cache
 from pathlib import Path
-from typing import Iterable, Literal
+from typing import Any, Iterable, Literal
 
 import httpx
 from pydantic import ValidationError
@@ -34,6 +34,13 @@ WEAK_INGREDIENTS = {
     "beurre", "butter",
 }
 _DAILY_FRENCH_TAGS = {"rapide", "familial", "economique", "anti-gaspi", "batch cooking"}
+_FAMILIAR_DEFAULT_LOCALE = "fr-FR"
+_FAMILIAR_CUISINES = {"francaise", "francais", "europeenne", "mediterraneenne"}
+_EXOTIC_MARKERS = {
+    "thai", "thailand", "japon", "japonaise", "ramen", "sushi", "teriyaki",
+    "indien", "indienne", "curry", "masala", "mexicain", "mexicaine", "tacos",
+    "kebab", "libanais", "coreen", "kimchi", "wok", "pho", "bo bun", "pad thai",
+}
 
 # Dictionnaire FR → EN pour les alertes quotidiennes (daily alert, _check_daily_expiry_alert)
 _FR_EN: dict[str, str] = {
@@ -127,6 +134,9 @@ class RecipeMatch:
     missing_required: list[str]
     optional_used: list[str]
     suggestion_type: Literal["perfect", "near", "idea"] = "perfect"
+    familiarity_score: float = 0.0
+    familiarity_reason: str = ""
+    ranking_reason: str = ""
 
 
 class RecipeCatalogError(RuntimeError):
@@ -343,16 +353,83 @@ def _compute_score(match: RecipeMatch) -> float:
     optional_total = len(match.recipe.ingredients_optional)
     optional_coverage = (len(match.optional_used) / optional_total) if optional_total else 0.0
     missing_required_ratio = (len(match.missing_required) / required_total) if required_total else 1.0
+    required_strengths = {ingredient: _ingredient_strength(ingredient) for ingredient in match.recipe.ingredients_required}
+    used_strong_count = sum(1 for ingredient in match.used_required if required_strengths.get(ingredient) == "strong")
+    used_weak_or_ultra_count = len(match.used_required) - used_strong_count
     score = (
-        0.6 * required_coverage
+        0.75 * required_coverage
+        + 0.08 * min(1.0, used_strong_count / 3)
+        - 0.12 * min(1.0, used_weak_or_ultra_count / 2)
         + 0.2 * optional_coverage
-        - 0.4 * missing_required_ratio
+        - 0.55 * missing_required_ratio
     )
+    if used_strong_count >= 2:
+        score += 0.08
+    if len(match.used_required) >= 3:
+        score += 0.04
     if match.recipe.difficulty == RecipeDifficulty.easy:
         score += 0.1
     if (match.recipe.prep_time_min + match.recipe.cook_time_min) < 40:
         score += 0.05
     return round(max(0.0, min(1.0, score)), 4)
+
+
+def _resolve_ranking_reason(match: RecipeMatch) -> str:
+    required_total = len(match.used_required) + len(match.missing_required)
+    required_strengths = {ingredient: _ingredient_strength(ingredient) for ingredient in match.recipe.ingredients_required}
+    used_strong_count = sum(1 for ingredient in match.used_required if required_strengths.get(ingredient) == "strong")
+
+    if not match.used_required:
+        return "no_match_required_ingredients"
+    if used_strong_count == 0:
+        return "only_generic_matches"
+    missing_ratio = (len(match.missing_required) / required_total) if required_total else 1.0
+    if missing_ratio >= 0.5:
+        return "too_many_missing_ingredients"
+    if used_strong_count >= 2 and len(match.missing_required) == 0:
+        return "strong_multi_ingredient_match"
+    if len(match.used_required) >= 3:
+        return "good_multi_ingredient_coverage"
+    return "partial_but_acceptable_match"
+
+
+def _compute_familiarity(match: RecipeMatch, *, locale: str = _FAMILIAR_DEFAULT_LOCALE) -> tuple[float, str]:
+    recipe = match.recipe
+    ingredients_blob = " ".join(recipe.ingredients_required + recipe.ingredients_optional)
+    signals = " ".join(
+        [
+            recipe.title,
+            ingredients_blob,
+            " ".join(recipe.tags),
+            " ".join(recipe.search_terms),
+            recipe.source.type,
+            recipe.source.name,
+            recipe.cuisine.value,
+        ]
+    )
+    normalized_signals = _normalize_fr(signals)
+    normalized_cuisine = _normalize_fr(recipe.cuisine.value)
+
+    exotic_hits = sorted(marker for marker in _EXOTIC_MARKERS if marker in normalized_signals)
+    daily_tag_hits = sorted(tag for tag in _DAILY_FRENCH_TAGS if _normalize_fr(tag) in normalized_signals)
+
+    score = 0.45
+    reasons = [f"locale={locale}"]
+    if normalized_cuisine in _FAMILIAR_CUISINES:
+        score += 0.3
+        reasons.append("cuisine_familiar")
+    if daily_tag_hits:
+        score += min(0.15, 0.05 * len(daily_tag_hits))
+        reasons.append(f"daily_tags={','.join(daily_tag_hits)}")
+    if _normalize_fr(recipe.source.type) == "local_catalog":
+        score += 0.05
+        reasons.append("source_local_catalog")
+    if exotic_hits:
+        penalty = 0.55 if len(exotic_hits) >= 2 else 0.35
+        score -= penalty
+        reasons.append(f"exotic_markers={','.join(exotic_hits)}")
+
+    return round(max(0.0, min(1.0, score)), 4), "|".join(reasons)
 
 
 def _evaluate_recipe_eligibility(match: RecipeMatch, *, relaxed: bool = False) -> tuple[bool, list[str]]:
@@ -362,15 +439,23 @@ def _evaluate_recipe_eligibility(match: RecipeMatch, *, relaxed: bool = False) -
     used_weak_or_ultra = [
         ingredient for ingredient in match.used_required if required_strengths.get(ingredient) in {"weak", "ultra"}
     ]
+    required_total = len(match.recipe.ingredients_required)
+    used_required_count = len(match.used_required)
+    high_coverage_daily_exception = (
+        not used_strong
+        and required_total > 0
+        and required_total <= 4
+        and used_required_count >= 3
+        and (used_required_count / required_total) >= 0.75
+    )
 
     if not match.used_required:
         reasons.append("no_required_match")
     min_strong_needed = 1 if relaxed else 2
-    if len(used_strong) < min_strong_needed:
+    if len(used_strong) < min_strong_needed and not high_coverage_daily_exception:
         reasons.append(f"strong_matches_below_{min_strong_needed}")
-    if used_weak_or_ultra and not used_strong:
+    if used_weak_or_ultra and not used_strong and not high_coverage_daily_exception:
         reasons.append("only_weak_or_ultra_matches")
-
     return (len(reasons) == 0), reasons
 
 
@@ -404,16 +489,20 @@ def score_recipe_against_stock(recipe: Recipe, stock_items: Iterable[str | dict]
         optional_used=optional_used,
     )
     match.score = _compute_score(match)
+    match.ranking_reason = _resolve_ranking_reason(match)
     return match
 
 
-def _sort_matches(match: RecipeMatch) -> tuple[float, int, int, int, int, str]:
+def _sort_matches(match: RecipeMatch, *, suggestion_style: SuggestionStyle = "classique") -> tuple[float, float, float, int, int, int, int, int, str]:
     difficulty_rank = {
         RecipeDifficulty.easy: 3,
         RecipeDifficulty.medium: 2,
         RecipeDifficulty.hard: 1,
     }
+    rank_score = _compute_rank_score(match, suggestion_style=suggestion_style)
     return (
+        rank_score,
+        match.familiarity_score,
         match.score,
         len(match.used_required),
         -len(match.missing_required),
@@ -424,6 +513,15 @@ def _sort_matches(match: RecipeMatch) -> tuple[float, int, int, int, int, str]:
     )
 
 
+def _compute_rank_score(match: RecipeMatch, *, suggestion_style: SuggestionStyle = "classique") -> float:
+    familiarity_weight = {
+        "classique": 0.55,
+        "ouvert": 0.30,
+        "toutes_cuisines": 0.0,
+    }[suggestion_style]
+    return round(match.score + (familiarity_weight * match.familiarity_score), 4)
+
+
 
 
 def _ranked_matches_from_catalog(
@@ -432,7 +530,10 @@ def _ranked_matches_from_catalog(
     catalog_path: str | os.PathLike[str] | None = None,
     meal_type: str | None = None,
     storage_focus: str | None = None,
+    suggestion_style: str | None = None,
+    allow_world_cuisines: bool | None = None,
 ) -> list[RecipeMatch]:
+    resolved_style = _normalize_suggestion_style(suggestion_style, allow_world_cuisines)
     raw_stock = normalize_stock_items(stock_items)
     normalized_stock = [_normalize_fr(item) for item in raw_stock]
     logger.info(
@@ -448,15 +549,25 @@ def _ranked_matches_from_catalog(
         storage_focus=storage_focus,
     )
     scored_matches = [score_recipe_against_stock(recipe, raw_stock) for recipe in recipes]
-    pre_sorted_matches = sorted(scored_matches, key=_sort_matches, reverse=True)
+    for match in scored_matches:
+        match.familiarity_score, match.familiarity_reason = _compute_familiarity(match)
+    pre_sorted_matches = sorted(
+        scored_matches,
+        key=lambda match: _sort_matches(match, suggestion_style=resolved_style),
+        reverse=True,
+    )
     logger.info(
         "RECIPES_DEBUG scoring top10_pre_threshold=%s",
         [
             {
                 "title": m.recipe.title,
                 "score": m.score,
-                "used_required": m.used_required,
-                "missing_required": m.missing_required,
+                "final_rank_score": _compute_rank_score(m, suggestion_style=resolved_style),
+                "familiarity_score": m.familiarity_score,
+                "familiarity_reason": m.familiarity_reason,
+                "matchedIngredients": m.used_required,
+                "missingIngredients": m.missing_required,
+                "ranking_reason": m.ranking_reason,
             }
             for m in pre_sorted_matches[:10]
         ],
@@ -470,7 +581,9 @@ def _ranked_matches_from_catalog(
                 {
                     "title": match.recipe.title,
                     "score": match.score,
+                    "final_rank_score": _compute_rank_score(match, suggestion_style=resolved_style),
                     "reasons": reasons,
+                    "ranking_reason": match.ranking_reason,
                 }
             )
             continue
@@ -479,7 +592,21 @@ def _ranked_matches_from_catalog(
                 {
                     "title": match.recipe.title,
                     "score": match.score,
+                    "final_rank_score": _compute_rank_score(match, suggestion_style=resolved_style),
                     "reasons": ["below_min_score"],
+                    "ranking_reason": match.ranking_reason,
+                }
+            )
+            continue
+        familiarity_gate = 0.35 if resolved_style == "classique" else (0.2 if resolved_style == "ouvert" else 0.0)
+        if familiarity_gate > 0 and match.familiarity_score < familiarity_gate:
+            rejected_reasons.append(
+                {
+                    "title": match.recipe.title,
+                    "score": match.score,
+                    "final_rank_score": _compute_rank_score(match, suggestion_style=resolved_style),
+                    "reasons": [f"low_familiarity:{match.familiarity_reason}"],
+                    "ranking_reason": match.ranking_reason,
                 }
             )
             continue
@@ -506,7 +633,10 @@ def _ranked_matches_from_catalog(
             )
         matches = strict_matches + relaxed_candidates
 
-    matches.sort(key=_sort_matches, reverse=True)
+    matches.sort(
+        key=lambda match: _sort_matches(match, suggestion_style=resolved_style),
+        reverse=True,
+    )
     logger.info(
         "RECIPES_DEBUG scoring summary total=%d strict_kept=%d final_kept=%d rejected=%d",
         len(scored_matches),
@@ -524,8 +654,12 @@ def _ranked_matches_from_catalog(
             {
                 "title": m.recipe.title,
                 "score": m.score,
-                "used_required": m.used_required,
-                "missing_required": m.missing_required,
+                "final_rank_score": _compute_rank_score(m, suggestion_style=resolved_style),
+                "familiarity_score": m.familiarity_score,
+                "familiarity_reason": m.familiarity_reason,
+                "matchedIngredients": m.used_required,
+                "missingIngredients": m.missing_required,
+                "ranking_reason": m.ranking_reason,
             }
             for m in matches[:10]
         ],
@@ -544,16 +678,22 @@ def suggest_recipes_from_catalog(
     catalog_path: str | os.PathLike[str] | None = None,
     meal_type: str | None = None,
     storage_focus: str | None = None,
+    suggestion_style: str | None = None,
+    allow_world_cuisines: bool | None = None,
 ) -> list[RecipeMatch]:
+    resolved_style = _normalize_suggestion_style(suggestion_style, allow_world_cuisines)
     raw_stock = normalize_stock_items(stock_items)
     recipes = get_recipes_catalog(
         catalog_path=catalog_path,
         meal_type=meal_type,
         storage_focus=storage_focus,
     )
+    scored_matches = [score_recipe_against_stock(recipe, raw_stock) for recipe in recipes]
+    for match in scored_matches:
+        match.familiarity_score, match.familiarity_reason = _compute_familiarity(match)
     scored_matches = sorted(
-        [score_recipe_against_stock(recipe, raw_stock) for recipe in recipes],
-        key=_sort_matches,
+        scored_matches,
+        key=lambda match: _sort_matches(match, suggestion_style=resolved_style),
         reverse=True,
     )
 
@@ -567,6 +707,7 @@ def suggest_recipes_from_catalog(
         RecipeMealType.aperitif,
     }
 
+    familiarity_gate = 0.35 if resolved_style == "classique" else (0.2 if resolved_style == "ouvert" else 0.0)
     for match in scored_matches:
         if not match.used_required:
             continue
@@ -578,6 +719,7 @@ def suggest_recipes_from_catalog(
         if (
             match.score >= _MIN_SCORE_MAIN_SUGGESTION
             and (eligible_strict or (eligible_relaxed and len(match.missing_required) == 0))
+            and (familiarity_gate == 0.0 or match.familiarity_score >= familiarity_gate)
         ):
             match.suggestion_type = "perfect"
             perfect_matches.append(match)
@@ -607,6 +749,30 @@ def suggest_recipes_from_catalog(
 
 
 RecipeMatchGroup = Literal["ready", "almost", "inspiration"]
+SuggestionStyle = Literal["classique", "ouvert", "toutes_cuisines"]
+
+
+def _normalize_suggestion_style(
+    suggestion_style: str | Any | None,
+    allow_world_cuisines: bool | None = None,
+) -> SuggestionStyle:
+    if allow_world_cuisines is True:
+        return "toutes_cuisines"
+    raw_style = suggestion_style if isinstance(suggestion_style, str) else None
+    style = _normalize_fr(raw_style or "classique").replace(" ", "_")
+    if style in {"ouvert", "open"}:
+        return "ouvert"
+    if style in {"toutes_cuisines", "toutes", "world", "all_cuisines"}:
+        return "toutes_cuisines"
+    return "classique"
+
+
+def resolve_suggestion_style(
+    suggestion_style: str | None,
+    allow_world_cuisines: bool | None = None,
+) -> SuggestionStyle:
+    """Public helper used by API layer to expose the resolved style in debug/meta."""
+    return _normalize_suggestion_style(suggestion_style, allow_world_cuisines)
 
 
 def classify_recipe_match(match: RecipeMatch) -> RecipeMatchGroup:
@@ -625,12 +791,16 @@ def suggest_recipe_groups_from_catalog(
     catalog_path: str | os.PathLike[str] | None = None,
     meal_type: str | None = None,
     storage_focus: str | None = None,
+    suggestion_style: str | None = None,
+    allow_world_cuisines: bool | None = None,
 ) -> dict[RecipeMatchGroup, list[RecipeMatch]]:
     matches = _ranked_matches_from_catalog(
         stock_items,
         catalog_path=catalog_path,
         meal_type=meal_type,
         storage_focus=storage_focus,
+        suggestion_style=suggestion_style,
+        allow_world_cuisines=allow_world_cuisines,
     )
 
     grouped: dict[RecipeMatchGroup, list[RecipeMatch]] = {
@@ -688,6 +858,14 @@ def recipe_match_to_suggestion(match: RecipeMatch) -> RecipeSuggestion:
         suggestion_type=match.suggestion_type,
         used_ingredients_count=len(match.used_required),
         missing_ingredients_count=len(match.missing_required),
+        debug={
+            "matchedIngredients": list(match.used_required),
+            "missingIngredients": list(match.missing_required),
+            "final_score": _compute_rank_score(match),
+            "ranking_reason": match.ranking_reason,
+            "familiarity_score": match.familiarity_score,
+            "familiarity_reason": match.familiarity_reason,
+        },
     )
 
 
