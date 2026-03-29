@@ -13,6 +13,7 @@ sys.path.insert(0, str(Path(__file__).resolve().parents[1] / "backend"))
 from models import Recipe
 from recipes_service import score_recipe_against_stock
 from server import get_recipe_suggestions
+from starlette.responses import Response
 
 
 class _FakeAgg:
@@ -99,6 +100,77 @@ class RecipeSuggestionsEndpointTests(unittest.TestCase):
         self.assertIn("urgent_1", ids)
         self.assertIn("all_1", ids)
         self.assertIn("all_2", ids)
+
+    def test_include_meta_exposes_requested_and_effective_locale(self):
+        fake_stock = _FakeStockCol(
+            aggregate_items=[{"name": "oeufs"}, {"name": "gruyere"}],
+            find_items=[{"name": "oeufs"}, {"name": "gruyere"}],
+        )
+        matches = [
+            score_recipe_against_stock(self._recipe(id="locale_1", title="Locale 1"), ["oeufs", "gruyere"]),
+        ]
+
+        async def _run():
+            with patch("server.stock_col", fake_stock):
+                with patch("server.suggest_recipes_from_catalog", return_value=matches):
+                    response = Response()
+                    payload = await get_recipe_suggestions(
+                        response=response,
+                        recipe_filter="all",
+                        include_meta=True,
+                        locale=None,
+                        accept_language="en-US,en;q=0.9",
+                        current_user={"id": "u1"},
+                    )
+                    return payload, response
+
+        payload, response = asyncio.run(_run())
+        meta = payload["meta"]
+        self.assertEqual(meta["requested_locale"], "en-US")
+        self.assertEqual(meta["effective_locale"], "fr-FR")
+        self.assertEqual(response.headers.get("X-Requested-Locale"), "en-US")
+        self.assertEqual(response.headers.get("X-Effective-Locale"), "fr-FR")
+
+    def test_personalized_filter_is_mapped_and_prunes_low_accessible_matches(self):
+        fake_stock = _FakeStockCol(
+            aggregate_items=[{"name": "oeufs"}, {"name": "gruyere"}],
+            find_items=[{"name": "oeufs"}, {"name": "gruyere"}],
+        )
+        perfect = score_recipe_against_stock(self._recipe(id="pf1", title="Perfect"), ["oeufs", "gruyere"])
+        perfect.suggestion_type = "perfect"
+        near = score_recipe_against_stock(
+            self._recipe(id="nr1", title="Near", ingredients_required=["oeuf", "fromage", "pain"]),
+            ["oeufs", "gruyere"],
+        )
+        near.suggestion_type = "near"
+        low_idea = score_recipe_against_stock(
+            self._recipe(id="id1", title="Low idea", ingredients_required=["oeuf", "fromage", "pain", "lait", "tomate", "oignon"]),
+            ["oeufs", "gruyere"],
+        )
+        low_idea.suggestion_type = "idea"
+        low_idea.score = 0.2
+
+        async def _run():
+            with patch("server.stock_col", fake_stock):
+                with patch("server.suggest_recipes_from_catalog", return_value=[perfect, near, low_idea]):
+                    response = Response()
+                    payload = await get_recipe_suggestions(
+                        response=response,
+                        recipe_filter="personalized",
+                        include_meta=True,
+                        current_user={"id": "u1"},
+                    )
+                    return payload, response
+
+        payload, response = asyncio.run(_run())
+        ids = [r["id"] for r in payload["recipes"]]
+
+        self.assertIn("pf1", ids)
+        self.assertIn("nr1", ids)
+        self.assertNotIn("id1", ids)
+        self.assertEqual(payload["meta"]["filter"], "personalized")
+        self.assertEqual(payload["meta"]["filter_effective"], "all")
+        self.assertEqual(response.headers.get("X-Recipes-Filter"), "all")
 
 
 if __name__ == "__main__":

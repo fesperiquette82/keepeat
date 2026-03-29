@@ -46,8 +46,11 @@ interface RecipesDebugMeta {
   catalog_hash?: string;
   catalog_name?: string;
   catalog_locale?: string;
+  requested_locale?: string;
+  effective_locale?: string;
   endpoint?: string;
   filter?: string | null;
+  filter_effective?: string | null;
   served_at?: string;
 }
 
@@ -61,19 +64,57 @@ interface RecipesDiagnosticsState {
   recipesSource: string;
   catalogHash: string;
   catalogLocale: string;
+  localeSent: string;
+  acceptLanguageSent: string;
+  requestedLocale: string;
+  effectiveLocale: string;
+  filterSent: string;
+  filterUsed: string;
 }
 
 const RECIPES_DEBUG_CACHE_KEY = 'keepeat:recipes:debug:last_response';
+const RECIPES_DEBUG_ENABLED = typeof __DEV__ !== 'undefined' && __DEV__;
+
+function recipesDebugLog(message: string, payload?: unknown) {
+  if (!RECIPES_DEBUG_ENABLED) return;
+  if (payload !== undefined) {
+    console.info(message, payload);
+    return;
+  }
+  console.info(message);
+}
 
 function headerValue(headers: any, key: string): string | undefined {
   const direct = headers?.[key] ?? headers?.[key.toLowerCase()] ?? headers?.[key.toUpperCase()];
   return typeof direct === 'string' ? direct : undefined;
 }
 
+function resolveUserLocale(language: string | undefined): string {
+  if (language === 'en') return 'en-US';
+  return 'fr-FR';
+}
+
 function getRecipesPayload(data: any): { recipes: any[]; meta: RecipesDebugMeta | null; shape: RecipesDiagnosticsState['responseShape'] } {
   if (Array.isArray(data)) return { recipes: data, meta: null, shape: 'array' };
   if (data && Array.isArray(data.recipes)) return { recipes: data.recipes, meta: (data.meta ?? null) as RecipesDebugMeta | null, shape: 'object_with_meta' };
+  if (data && Array.isArray(data.data)) return { recipes: data.data, meta: (data.meta ?? null) as RecipesDebugMeta | null, shape: 'object_with_meta' };
   return { recipes: [], meta: null, shape: 'unknown' };
+}
+
+function normalizeSuggestionRecipe(raw: any, index: number): RecipeSuggestion {
+  return {
+    id: raw?.id ?? `recipe-${index}`,
+    title: raw?.title ?? '',
+    image: raw?.image ?? '',
+    usedIngredients: raw?.usedIngredients ?? raw?.used_ingredients ?? raw?.matchedIngredients ?? raw?.matched_ingredients ?? [],
+    missedIngredients: raw?.missedIngredients ?? raw?.missingIngredients ?? raw?.missing_ingredients ?? [],
+    sourceUrl: raw?.sourceUrl ?? raw?.source_url ?? '',
+    is_fallback: Boolean(raw?.is_fallback),
+    is_ai: Boolean(raw?.is_ai),
+    ingredients_used: raw?.ingredients_used ?? [],
+    instructions_summary: raw?.instructions_summary ?? '',
+    prep_time_min: typeof raw?.prep_time_min === 'number' ? raw.prep_time_min : undefined,
+  };
 }
 
 type FilterTab = 'tous' | 'urgents' | 'frigo' | 'placard' | 'ai';
@@ -86,7 +127,8 @@ const FILTER_TABS: { key: FilterTab; labelFr: string; labelEn: string }[] = [
 ];
 
 const TAB_TO_FILTER: Record<FilterTab, string> = {
-  tous:    'all',
+  // Vue principale: privilégier un flux personnalisé (accessible) plutôt qu'un "all" brut.
+  tous:    'personalized',
   urgents: 'urgent',
   frigo:   'frigo',
   placard: 'placard',
@@ -134,6 +176,12 @@ export default function RecipesScreen() {
     recipesSource: 'unknown',
     catalogHash: 'unknown',
     catalogLocale: 'unknown',
+    localeSent: 'unknown',
+    acceptLanguageSent: 'unknown',
+    requestedLocale: 'unknown',
+    effectiveLocale: 'unknown',
+    filterSent: 'unknown',
+    filterUsed: 'unknown',
   });
 
   const t = (fr: string, en: string) => isFr ? fr : en;
@@ -177,7 +225,7 @@ export default function RecipesScreen() {
 
   const purgeRecipesDebugCache = useCallback(async () => {
     await AsyncStorage.removeItem(RECIPES_DEBUG_CACHE_KEY);
-    console.info('[RECIPES_DEBUG] local diagnostics cache purged', { key: RECIPES_DEBUG_CACHE_KEY });
+    recipesDebugLog('[RECIPES_DEBUG] local diagnostics cache purged', { key: RECIPES_DEBUG_CACHE_KEY });
   }, []);
 
   const fetchRecipes = useCallback(async (tab: FilterTab, silent = false) => {
@@ -187,14 +235,18 @@ export default function RecipesScreen() {
     try {
       const endpointPath = tab === 'ai'
         ? '/api/recipes/ai?include_meta=true'
-        : `/api/recipes/suggestions?filter=${TAB_TO_FILTER[tab]}&include_meta=true`;
+        : `/api/recipes/suggestions?filter=${TAB_TO_FILTER[tab]}&include_meta=true&locale=${encodeURIComponent(resolveUserLocale(language))}`;
       const url = buildApiUrl(endpointPath);
-      console.info('[RECIPES_DEBUG] fetchRecipes call', { tab, url, silent });
+      const userLocale = resolveUserLocale(language);
+      recipesDebugLog('[RECIPES_DEBUG] fetchRecipes call', { tab, url, silent });
       const res = await axios.get(url, {
-        headers: { Authorization: `Bearer ${token}` },
+        headers: {
+          Authorization: `Bearer ${token}`,
+          'Accept-Language': userLocale,
+        },
       });
       const payload = getRecipesPayload(res.data);
-      console.info('[RECIPES_DEBUG] fetchRecipes response', {
+      recipesDebugLog('[RECIPES_DEBUG] fetchRecipes response', {
         tab,
         status: res.status,
         shape: payload.shape,
@@ -207,10 +259,14 @@ export default function RecipesScreen() {
       const recipesSource = headerValue(res.headers, 'x-recipes-source') ?? payload.meta?.recipes_source ?? 'unknown';
       const catalogHash = headerValue(res.headers, 'x-catalog-hash') ?? payload.meta?.catalog_hash ?? 'unknown';
       const catalogLocale = headerValue(res.headers, 'x-catalog-locale') ?? payload.meta?.catalog_locale ?? 'unknown';
+      const requestedLocale = headerValue(res.headers, 'x-requested-locale') ?? payload.meta?.requested_locale ?? 'unknown';
+      const effectiveLocale = headerValue(res.headers, 'x-effective-locale') ?? payload.meta?.effective_locale ?? 'unknown';
+      const filterSent = TAB_TO_FILTER[tab];
+      const filterUsed = headerValue(res.headers, 'x-recipes-filter') ?? payload.meta?.filter_effective ?? payload.meta?.filter ?? filterSent;
       const nowIso = new Date().toISOString();
       const transformation = tab === 'ai'
         ? 'transformed: ai response normalized to RecipeSuggestion card model'
-        : 'raw: /api/recipes/suggestions response displayed without recipe data fallback';
+        : 'transformed: /api/recipes/suggestions response normalized to RecipeSuggestion card model';
       setDiagnostics({
         lastEndpoint: payload.meta?.endpoint ?? endpointPath,
         lastFetchAt: nowIso,
@@ -221,6 +277,12 @@ export default function RecipesScreen() {
         recipesSource,
         catalogHash,
         catalogLocale,
+        localeSent: userLocale,
+        acceptLanguageSent: userLocale,
+        requestedLocale,
+        effectiveLocale,
+        filterSent,
+        filterUsed,
       });
       await AsyncStorage.setItem(
         RECIPES_DEBUG_CACHE_KEY,
@@ -231,10 +293,16 @@ export default function RecipesScreen() {
           backendCommit,
           backendVersion,
           recipesSource,
-          catalogHash,
-          catalogLocale,
-          shape: payload.shape,
-        }),
+            catalogHash,
+            catalogLocale,
+            localeSent: userLocale,
+            acceptLanguageSent: userLocale,
+            requestedLocale,
+            effectiveLocale,
+            filterSent,
+            filterUsed,
+            shape: payload.shape,
+          }),
       );
       // Normaliser les recettes IA au même format
       if (tab === 'ai') {
@@ -252,11 +320,17 @@ export default function RecipesScreen() {
         }));
         setRecipes(aiRecipes);
       } else {
-        console.info('[RECIPES_DEBUG] using /recipes/suggestions response directly (no legacy fallback/mocks)', { tab });
-        setRecipes(payload.recipes);
+        const normalizedRecipes = payload.recipes.map((recipe, index) => normalizeSuggestionRecipe(recipe, index));
+        recipesDebugLog('[RECIPES_DEBUG] suggestions normalization summary', {
+          tab,
+          count_raw: payload.recipes.length,
+          count_normalized: normalizedRecipes.length,
+          sample_keys: payload.recipes[0] ? Object.keys(payload.recipes[0]).slice(0, 20) : [],
+        });
+        setRecipes(normalizedRecipes);
       }
     } catch (err: any) {
-      console.info('[RECIPES_DEBUG] fetchRecipes error', { tab, message: err?.message, status: err?.response?.status });
+      recipesDebugLog('[RECIPES_DEBUG] fetchRecipes error', { tab, message: err?.message, status: err?.response?.status });
       setError(
         isFr
           ? 'Impossible de charger les recettes. Vérifiez votre connexion.'
@@ -266,36 +340,41 @@ export default function RecipesScreen() {
       setIsLoading(false);
       setIsRefreshing(false);
     }
-  }, [isFr, token]);
+  }, [isFr, language, token]);
 
   useEffect(() => { fetchRecipes(activeTab); }, [fetchRecipes, activeTab]);
 
   // Chargement silencieux des 3 recettes preview (urgent en priorité, all en fallback)
   useEffect(() => {
     if (!token) return;
+    const userLocale = resolveUserLocale(language);
     const load = async () => {
       try {
-        console.info('[RECIPES_DEBUG] preview request urgent');
-        let res = await axios.get(buildApiUrl('/api/recipes/suggestions?filter=urgent'), {
-          headers: { Authorization: `Bearer ${token}` },
+        recipesDebugLog('[RECIPES_DEBUG] preview request urgent');
+        let res = await axios.get(buildApiUrl(`/api/recipes/suggestions?filter=urgent&locale=${encodeURIComponent(userLocale)}`), {
+          headers: { Authorization: `Bearer ${token}`, 'Accept-Language': userLocale },
         });
-        if ((res.data as RecipeSuggestion[]).length > 0) {
-          console.info('[RECIPES_DEBUG] preview uses urgent', { count: (res.data as RecipeSuggestion[]).length });
-          setPreviewRecipes((res.data as RecipeSuggestion[]).slice(0, 3));
+        const urgentPayload = getRecipesPayload(res.data);
+        const urgentNormalized = urgentPayload.recipes.map((recipe, index) => normalizeSuggestionRecipe(recipe, index));
+        if (urgentNormalized.length > 0) {
+          recipesDebugLog('[RECIPES_DEBUG] preview uses urgent', { count: urgentNormalized.length, shape: urgentPayload.shape });
+          setPreviewRecipes(urgentNormalized.slice(0, 3));
           return;
         }
-        console.info('[RECIPES_DEBUG] preview urgent empty, fallback to all');
-        res = await axios.get(buildApiUrl('/api/recipes/suggestions?filter=all'), {
-          headers: { Authorization: `Bearer ${token}` },
+        recipesDebugLog('[RECIPES_DEBUG] preview urgent empty, fallback to all');
+        res = await axios.get(buildApiUrl(`/api/recipes/suggestions?filter=personalized&locale=${encodeURIComponent(userLocale)}`), {
+          headers: { Authorization: `Bearer ${token}`, 'Accept-Language': userLocale },
         });
-        console.info('[RECIPES_DEBUG] preview uses all', { count: (res.data as RecipeSuggestion[]).length });
-        setPreviewRecipes((res.data as RecipeSuggestion[]).slice(0, 3));
+        const allPayload = getRecipesPayload(res.data);
+        const allNormalized = allPayload.recipes.map((recipe, index) => normalizeSuggestionRecipe(recipe, index));
+        recipesDebugLog('[RECIPES_DEBUG] preview uses all', { count: allNormalized.length, shape: allPayload.shape });
+        setPreviewRecipes(allNormalized.slice(0, 3));
       } catch (err: any) {
-        console.info('[RECIPES_DEBUG] preview load error', { message: err?.message, status: err?.response?.status });
+        recipesDebugLog('[RECIPES_DEBUG] preview load error', { message: err?.message, status: err?.response?.status });
       }
     };
     load();
-  }, [token]);
+  }, [language, token]);
 
   const handleRefresh = () => {
     setIsRefreshing(true);
@@ -576,6 +655,12 @@ export default function RecipesScreen() {
             <Text style={styles.debugLine}>recipes_source: {diagnostics.recipesSource}</Text>
             <Text style={styles.debugLine}>catalog_hash: {diagnostics.catalogHash}</Text>
             <Text style={styles.debugLine}>catalog_locale: {diagnostics.catalogLocale}</Text>
+            <Text style={styles.debugLine}>locale_sent: {diagnostics.localeSent}</Text>
+            <Text style={styles.debugLine}>accept_language_sent: {diagnostics.acceptLanguageSent}</Text>
+            <Text style={styles.debugLine}>requested_locale: {diagnostics.requestedLocale}</Text>
+            <Text style={styles.debugLine}>effective_locale: {diagnostics.effectiveLocale}</Text>
+            <Text style={styles.debugLine}>filter_sent: {diagnostics.filterSent}</Text>
+            <Text style={styles.debugLine}>filter_used: {diagnostics.filterUsed}</Text>
             <Text style={styles.debugLine}>last_endpoint: {diagnostics.lastEndpoint ?? 'none'}</Text>
             <Text style={styles.debugLine}>last_fetch_at: {diagnostics.lastFetchAt ?? 'none'}</Text>
             <Text style={styles.debugLine}>response_shape: {diagnostics.responseShape}</Text>
