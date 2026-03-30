@@ -11,7 +11,7 @@ import {
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { useRouter } from 'expo-router';
-import { Ionicons } from '@expo/vector-icons';
+import Ionicons from '@expo/vector-icons/Ionicons';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { useLanguageStore } from '../store/languageStore';
 import { useStockStore } from '../store/stockStore';
@@ -432,7 +432,7 @@ export default function SettingsScreen() {
             <View style={styles.appInfo}>
               <View style={styles.appLogo}>
                 <Image
-                  source={require('../assets/images/branding/keepeat-logo.png')}
+                  source={require('../assets/images/icon.png')}
                   style={styles.appLogoImage}
                   resizeMode="contain"
                 />

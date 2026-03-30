@@ -48,3 +48,24 @@ Join our community of developers creating universal apps.
 
 - [Expo on GitHub](https://github.com/expo/expo): View our open source platform and contribute.
 - [Discord community](https://chat.expo.dev): Chat with Expo users and ask questions.
+
+## Mesurer la taille Android de façon représentative (release)
+
+Pour éviter de confondre un export JS/assets avec la taille Play finale:
+
+1. Mesurer le payload JS/assets (comparaison rapide):
+
+```bash
+cd frontend
+npx expo export --platform android --output-dir dist-export --dump-assetmap
+```
+
+2. Mesurer un vrai artefact release Android (AAB) via votre pipeline EAS/CI, puis analyser:
+   - Android Studio: **Build > Analyze APK** (APK/AAB)
+   - `bundletool get-size total` pour estimer la taille livrée par device
+
+Comparer au minimum:
+- taille bundle JS (`.hbc`)
+- top assets (images/fonts)
+- poids des libs natives (`lib/*.so`) par ABI
+- différence AAB vs APK universel (ce dernier surestime la taille utilisateur)

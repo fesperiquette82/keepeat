@@ -45,7 +45,7 @@ export default function PremiumAnimatedLogo({ onAnimationEnd }: PremiumAnimatedL
     <Animated.View style={[styles.wrapper, { opacity, transform: [{ scale }] }]}>
       <View style={styles.logoContainer}>
         <Image
-          source={require('../assets/images/branding/keepeat-logo.png')}
+          source={require('../assets/images/icon.png')}
           style={styles.logo}
           resizeMode="contain"
         />

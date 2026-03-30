@@ -13,7 +13,7 @@ import {
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { useRouter } from 'expo-router';
-import { Ionicons } from '@expo/vector-icons';
+import Ionicons from '@expo/vector-icons/Ionicons';
 import { useAuthStore } from '../store/authStore';
 import { useLanguageStore } from '../store/languageStore';
 
@@ -118,7 +118,7 @@ export default function RegisterScreen() {
           <View style={styles.logoSection}>
             <View style={styles.logoIcon}>
               <Image
-                source={require('../assets/images/branding/keepeat-logo.png')}
+                source={require('../assets/images/icon.png')}
                 style={styles.logoImage}
                 resizeMode="contain"
               />
