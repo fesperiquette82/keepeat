@@ -7,6 +7,7 @@ import { useLanguageStore } from '../../store/languageStore';
 export default function TabsLayout() {
   const { language } = useLanguageStore();
   const insets = useSafeAreaInsets();
+  const isFr = language === 'fr';
 
   return (
     <Tabs
@@ -16,11 +17,11 @@ export default function TabsLayout() {
         tabBarInactiveTintColor: '#9CA3AF',
         tabBarStyle: {
           backgroundColor: '#ffffff',
-          borderTopColor: '#F0EDE8',
+          borderTopColor: '#E5E7EB',
           borderTopWidth: 1,
-          height: 60 + insets.bottom,
+          height: 62 + insets.bottom,
           paddingBottom: 8 + insets.bottom,
-          paddingTop: 4,
+          paddingTop: 6,
         },
         tabBarLabelStyle: {
           fontSize: 11,
@@ -31,16 +32,25 @@ export default function TabsLayout() {
       <Tabs.Screen
         name="index"
         options={{
-          title: language === 'fr' ? 'Stock' : 'Stock',
+          title: isFr ? 'Accueil' : 'Home',
           tabBarIcon: ({ color, size }) => (
             <Ionicons name="home-outline" size={size} color={color} />
           ),
         }}
       />
       <Tabs.Screen
+        name="stock"
+        options={{
+          title: isFr ? 'Stock' : 'Stock',
+          tabBarIcon: ({ color, size }) => (
+            <Ionicons name="cube-outline" size={size} color={color} />
+          ),
+        }}
+      />
+      <Tabs.Screen
         name="recipes"
         options={{
-          title: language === 'fr' ? 'Recettes' : 'Recipes',
+          title: isFr ? 'Recettes' : 'Recipes',
           tabBarIcon: ({ color, size }) => (
             <Ionicons name="restaurant-outline" size={size} color={color} />
           ),
@@ -49,9 +59,9 @@ export default function TabsLayout() {
       <Tabs.Screen
         name="stats"
         options={{
-          title: language === 'fr' ? 'Score' : 'Score',
+          title: isFr ? 'Stats' : 'Stats',
           tabBarIcon: ({ color, size }) => (
-            <Ionicons name="stats-chart-outline" size={size} color={color} />
+            <Ionicons name="person-circle-outline" size={size} color={color} />
           ),
         }}
       />
