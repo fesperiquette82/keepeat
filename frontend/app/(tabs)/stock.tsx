@@ -1,11 +1,13 @@
 import React, { useEffect, useMemo, useState } from 'react';
 import { SafeAreaView } from 'react-native-safe-area-context';
-import { View, Text, StyleSheet, TouchableOpacity, FlatList } from 'react-native';
+import { View, Text, StyleSheet, TouchableOpacity, FlatList, Image } from 'react-native';
+import Ionicons from '@expo/vector-icons/Ionicons';
 import { useStockStore } from '../../store/stockStore';
 import { C } from '../../utils/theme';
 import { daysUntil, resolveStockItems } from '../../data/mockDashboardData';
 
 type StockFilter = 'tous' | 'urgents' | 'frigo' | 'placard';
+type StockSort = 'expiry' | 'alpha' | 'recent' | 'oldest';
 
 const FILTERS: { key: StockFilter; label: string }[] = [
   { key: 'tous', label: 'Tous' },
@@ -14,9 +16,32 @@ const FILTERS: { key: StockFilter; label: string }[] = [
   { key: 'placard', label: 'Placard' },
 ];
 
+const SORTS: { key: StockSort; label: string }[] = [
+  { key: 'expiry', label: 'Péremption' },
+  { key: 'alpha', label: 'A → Z' },
+  { key: 'recent', label: 'Ajout récent' },
+  { key: 'oldest', label: 'Ajout ancien' },
+];
+
+function formatExpiryLabel(expiryDate?: string): string {
+  const days = daysUntil(expiryDate);
+  if (days === null) return 'Date inconnue';
+  if (days < 0) return `Périmé depuis ${Math.abs(days)} j`;
+  if (days === 0) return 'Aujourd’hui';
+  if (days === 1) return 'Demain';
+  if (days <= 7) return `Dans ${days} j`;
+  if (days > 365) return '> 12 mois';
+  if (days > 180) return 'Longue conservation';
+  if (!expiryDate) return 'Date inconnue';
+  const expiry = new Date(expiryDate);
+  return `Le ${new Intl.DateTimeFormat('fr-FR', { day: 'numeric', month: 'short', year: 'numeric' }).format(expiry)}`;
+}
+
 export default function StockScreen() {
   const { items: storeItems, fetchStock } = useStockStore();
   const [activeFilter, setActiveFilter] = useState<StockFilter>('tous');
+  const [activeSort, setActiveSort] = useState<StockSort>('expiry');
+  const [imageErrors, setImageErrors] = useState<Record<string, boolean>>({});
 
   useEffect(() => {
     fetchStock();
@@ -36,6 +61,21 @@ export default function StockScreen() {
     return items;
   }, [activeFilter, items]);
 
+  const sortedItems = useMemo(() => {
+    const list = [...filteredItems];
+
+    if (activeSort === 'alpha') {
+      return list.sort((a, b) => a.name.localeCompare(b.name, 'fr'));
+    }
+    if (activeSort === 'recent') {
+      return list.sort((a, b) => new Date(b.added_date).getTime() - new Date(a.added_date).getTime());
+    }
+    if (activeSort === 'oldest') {
+      return list.sort((a, b) => new Date(a.added_date).getTime() - new Date(b.added_date).getTime());
+    }
+    return list.sort((a, b) => (daysUntil(a.expiry_date) ?? 9999) - (daysUntil(b.expiry_date) ?? 9999));
+  }, [activeSort, filteredItems]);
+
   const emptyLabel = useMemo(() => {
     if (items.length === 0) return 'Aucun ingrédient en stock pour le moment.';
     if (activeFilter === 'urgents') return 'Aucun produit urgent actuellement 🎉';
@@ -48,7 +88,7 @@ export default function StockScreen() {
     <SafeAreaView style={styles.container}>
       <View style={styles.header}>
         <Text style={styles.title}>Stock complet</Text>
-        <Text style={styles.subtitle}>{filteredItems.length} ingrédients affichés</Text>
+        <Text style={styles.subtitle}>{sortedItems.length} ingrédients affichés</Text>
         {isMock && <Text style={styles.mockInfo}>Données de démonstration</Text>}
       </View>
 
@@ -67,25 +107,52 @@ export default function StockScreen() {
         })}
       </View>
 
-      {filteredItems.length === 0 ? (
+      <View style={styles.sortRow}>
+        {SORTS.map((sort) => {
+          const selected = sort.key === activeSort;
+          return (
+            <TouchableOpacity
+              key={sort.key}
+              style={[styles.sortChip, selected && styles.sortChipActive]}
+              onPress={() => setActiveSort(sort.key)}
+            >
+              <Text style={[styles.sortChipLabel, selected && styles.sortChipLabelActive]}>{sort.label}</Text>
+            </TouchableOpacity>
+          );
+        })}
+      </View>
+
+      {sortedItems.length === 0 ? (
         <View style={styles.emptyWrap}>
           <Text style={styles.emptyTitle}>Stock vide</Text>
           <Text style={styles.emptyText}>{emptyLabel}</Text>
         </View>
       ) : (
         <FlatList
-          data={filteredItems}
+          data={sortedItems}
           keyExtractor={(item) => item.id}
           contentContainerStyle={styles.listContent}
           renderItem={({ item }) => {
-            const days = daysUntil(item.expiry_date);
             return (
               <View style={styles.card}>
-                <View>
-                  <Text style={styles.name}>{item.name}</Text>
-                  <Text style={styles.meta}>{item.storageZone === 'frigo' ? 'Frigo' : 'Placard'} · {item.quantity ?? 'Qté non précisée'}</Text>
+                <View style={styles.cardMain}>
+                  <View style={styles.thumb}>
+                    {item.image_url && !imageErrors[item.id] ? (
+                      <Image
+                        source={{ uri: item.image_url }}
+                        style={styles.thumbImage}
+                        onError={() => setImageErrors((prev) => ({ ...prev, [item.id]: true }))}
+                      />
+                    ) : (
+                      <Ionicons name="nutrition-outline" size={17} color={C.textMid} />
+                    )}
+                  </View>
+                  <View style={styles.cardText}>
+                    <Text style={styles.name}>{item.name}</Text>
+                    <Text style={styles.meta}>{item.storageZone === 'frigo' ? 'Frigo' : 'Placard'} · {item.quantity ?? 'Qté non précisée'}</Text>
+                  </View>
                 </View>
-                <Text style={styles.expiry}>{days === null ? 'Date inconnue' : days <= 0 ? 'À cuisiner' : `${days} jour(s)`}</Text>
+                <Text style={styles.expiry}>{formatExpiryLabel(item.expiry_date)}</Text>
               </View>
             );
           }}
@@ -106,8 +173,17 @@ const styles = StyleSheet.create({
   filterChipActive: { backgroundColor: C.primary },
   filterChipLabel: { color: '#166534', fontSize: 13, fontWeight: '700' },
   filterChipLabelActive: { color: '#fff' },
+  sortRow: { flexDirection: 'row', gap: 6, paddingHorizontal: 16, paddingBottom: 8, flexWrap: 'wrap' },
+  sortChip: { paddingVertical: 6, paddingHorizontal: 10, borderRadius: 999, backgroundColor: '#F3F4F6' },
+  sortChipActive: { backgroundColor: '#D1FAE5' },
+  sortChipLabel: { color: C.textMid, fontSize: 12, fontWeight: '700' },
+  sortChipLabelActive: { color: '#166534' },
   listContent: { padding: 16, gap: 8, paddingBottom: 24 },
   card: { backgroundColor: '#fff', borderRadius: 12, padding: 13, flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', gap: 10 },
+  cardMain: { flexDirection: 'row', alignItems: 'center', gap: 10, flex: 1 },
+  cardText: { flex: 1 },
+  thumb: { width: 42, height: 42, borderRadius: 10, backgroundColor: '#F3F4F6', overflow: 'hidden', alignItems: 'center', justifyContent: 'center' },
+  thumbImage: { width: '100%', height: '100%' },
   name: { color: C.text, fontSize: 15, fontWeight: '700' },
   meta: { color: C.textMid, fontSize: 12, marginTop: 2 },
   expiry: { color: '#15803d', fontSize: 12, fontWeight: '700' },
