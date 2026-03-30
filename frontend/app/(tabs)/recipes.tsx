@@ -1,25 +1,42 @@
 import React, { useEffect, useMemo } from 'react';
 import { SafeAreaView } from 'react-native-safe-area-context';
-import { View, Text, StyleSheet, FlatList, TouchableOpacity } from 'react-native';
+import { View, Text, StyleSheet, FlatList, TouchableOpacity, Image } from 'react-native';
+import Ionicons from '@expo/vector-icons/Ionicons';
 import { useRouter } from 'expo-router';
 import { useStockStore } from '../../store/stockStore';
 import { C } from '../../utils/theme';
 import { buildRecipeSuggestions, resolveStockItems } from '../../data/mockDashboardData';
 
+const TYPE_LABEL: Record<string, string> = {
+  apero: 'Apéro',
+  toast: 'Toast',
+  tartine: 'Tartine',
+  poelee: 'Poêlée',
+  salade: 'Salade',
+  bol: 'Bol',
+  rapide: 'Rapide',
+};
+
+function previewIngredients(values: string[], max = 3): string {
+  if (values.length <= max) return values.join(', ');
+  return `${values.slice(0, max).join(', ')} +${values.length - max}`;
+}
+
 export default function RecipesScreen() {
   const router = useRouter();
   const { items: storeItems, fetchStock } = useStockStore();
+  const [imageErrors, setImageErrors] = React.useState<Record<string, boolean>>({});
 
   useEffect(() => {
     fetchStock();
   }, [fetchStock]);
 
   const { items } = useMemo(() => resolveStockItems(storeItems, { useMockFallback: false }), [storeItems]);
-  const suggestions = useMemo(() => buildRecipeSuggestions(items).filter((recipe) => recipe.matchRate >= 34), [items]);
+  const suggestions = useMemo(() => buildRecipeSuggestions(items), [items]);
 
   const emptyMessage = items.length === 0
     ? 'Aucune recette disponible : ajoutez d’abord des ingrédients au stock.'
-    : 'Aucune recette pertinente pour le stock actuel.';
+    : 'Suggestions indisponibles pour le moment.';
 
   return (
     <SafeAreaView style={styles.container}>
@@ -43,11 +60,39 @@ export default function RecipesScreen() {
           contentContainerStyle={styles.listContent}
           renderItem={({ item }) => (
             <View style={styles.card}>
-              <Text style={styles.cardTitle}>{item.title}</Text>
-              <Text style={styles.cardMeta}>{item.timeMinutes} min · Compatibilité {item.matchRate}%</Text>
-              <Text style={styles.cardInfo}>
-                {item.missingCount === 0 ? 'Tout est disponible ✅' : `Il manque ${item.missingCount} ingrédient(s)`}
-              </Text>
+              <View style={styles.cardMain}>
+                <View style={styles.thumb}>
+                  {item.image_url && !imageErrors[item.id] ? (
+                    <Image
+                      source={{ uri: item.image_url }}
+                      style={styles.thumbImage}
+                      onError={() => setImageErrors((prev) => ({ ...prev, [item.id]: true }))}
+                    />
+                  ) : (
+                    <Ionicons name="restaurant-outline" size={18} color={C.textMid} />
+                  )}
+                </View>
+                <View style={styles.cardText}>
+                  <Text style={styles.cardTitle}>{item.title}</Text>
+                  <Text style={styles.cardMeta}>{item.timeMinutes} min · {TYPE_LABEL[item.type] ?? 'Idée simple'}</Text>
+                  <Text style={styles.cardInfo}>
+                    {item.matchedCount} dispo · {item.missingCount === 0 ? 'Tout est là ✅' : `Il manque ${item.missingCount}`}
+                  </Text>
+                  <Text style={styles.ingredientsLine} numberOfLines={2}>
+                    Disponibles : {previewIngredients(item.availableIngredients)}
+                  </Text>
+                  {item.missingIngredients.length > 0 && (
+                    <Text style={styles.ingredientsHint} numberOfLines={2}>
+                      Manquants : {previewIngredients(item.missingIngredients)}
+                    </Text>
+                  )}
+                  {item.optionalBasics && item.optionalBasics.length > 0 && (
+                    <Text style={styles.ingredientsHint} numberOfLines={2}>
+                      Option simple du quotidien (si vous avez) : {previewIngredients(item.optionalBasics)}
+                    </Text>
+                  )}
+                </View>
+              </View>
             </View>
           )}
           ListFooterComponent={
@@ -68,9 +113,15 @@ const styles = StyleSheet.create({
   subtitle: { marginTop: 6, color: C.textMid, fontSize: 14 },
   listContent: { padding: 16, gap: 8, paddingBottom: 24 },
   card: { backgroundColor: '#fff', borderRadius: 12, padding: 13, gap: 5 },
+  cardMain: { flexDirection: 'row', gap: 10 },
+  cardText: { flex: 1 },
+  thumb: { width: 48, height: 48, borderRadius: 12, backgroundColor: '#F3F4F6', overflow: 'hidden', alignItems: 'center', justifyContent: 'center' },
+  thumbImage: { width: '100%', height: '100%' },
   cardTitle: { color: C.text, fontSize: 16, fontWeight: '700' },
   cardMeta: { color: C.textMid, fontSize: 13 },
   cardInfo: { color: '#166534', fontWeight: '700', fontSize: 12 },
+  ingredientsLine: { marginTop: 2, color: C.textMid, fontSize: 12 },
+  ingredientsHint: { color: C.textLight, fontSize: 11 },
   cta: { marginTop: 10, backgroundColor: C.primary, borderRadius: 12, paddingVertical: 12, alignItems: 'center' },
   ctaText: { color: '#fff', fontWeight: '700' },
   emptyWrap: { flex: 1, justifyContent: 'center', paddingHorizontal: 28 },

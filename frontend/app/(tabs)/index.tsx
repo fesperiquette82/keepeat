@@ -1,6 +1,6 @@
 import React, { useEffect, useMemo } from 'react';
 import { SafeAreaView } from 'react-native-safe-area-context';
-import { View, Text, StyleSheet, ScrollView, TouchableOpacity } from 'react-native';
+import { View, Text, StyleSheet, ScrollView, TouchableOpacity, Image } from 'react-native';
 import { useRouter } from 'expo-router';
 import Ionicons from '@expo/vector-icons/Ionicons';
 import { useStockStore } from '../../store/stockStore';
@@ -37,6 +37,11 @@ export default function HomeDashboardScreen() {
 
   const expiringSoon = useMemo(() => findExpiringSoon(items), [items]);
   const recipes = useMemo(() => buildRecipeSuggestions(items).slice(0, 2), [items]);
+  const summaryCards = useMemo(() => ([
+    { key: 'placard', label: 'Placard', value: summary.placard, icon: 'file-tray-stacked-outline' as const },
+    { key: 'frigo', label: 'Frigo', value: summary.frigo, icon: 'snow-outline' as const },
+    { key: 'urgents', label: 'Urgents', value: summary.urgents, icon: 'alarm-outline' as const, urgent: true },
+  ]), [summary.frigo, summary.placard, summary.urgents]);
 
   return (
     <SafeAreaView style={styles.container}>
@@ -56,16 +61,24 @@ export default function HomeDashboardScreen() {
         </TouchableOpacity>
 
         <View style={styles.summaryGrid}>
-          <View style={styles.summaryCard}><Text style={styles.summaryLabel}>Placard</Text><Text style={styles.summaryValue}>{summary.placard}</Text></View>
-          <View style={styles.summaryCard}><Text style={styles.summaryLabel}>Frigo</Text><Text style={styles.summaryValue}>{summary.frigo}</Text></View>
-          <View style={styles.summaryCard}><Text style={styles.summaryLabel}>Urgents</Text><Text style={[styles.summaryValue, styles.urgentValue]}>{summary.urgents}</Text></View>
+          {summaryCards.map((card) => (
+            <View key={card.key} style={styles.summaryCard}>
+              <View style={styles.summaryCardHeader}>
+                <View style={styles.summaryIconBadge}>
+                  <Ionicons name={card.icon} size={14} color="#166534" />
+                </View>
+                <Text style={styles.summaryLabel}>{card.label}</Text>
+              </View>
+              <Text style={[styles.summaryValue, card.urgent && styles.urgentValue]}>{card.value}</Text>
+            </View>
+          ))}
         </View>
 
         <View style={styles.sectionCard}>
           <View style={styles.sectionHeader}>
             <Text style={styles.sectionTitle}>À consommer bientôt</Text>
             <TouchableOpacity onPress={() => router.push('/(tabs)/stock')}>
-              <Text style={styles.linkText}>Voir stock</Text>
+              <Text style={styles.linkText}>Voir le stock</Text>
             </TouchableOpacity>
           </View>
           {expiringSoon.length === 0 ? (
@@ -73,9 +86,18 @@ export default function HomeDashboardScreen() {
           ) : (
             expiringSoon.map((item) => (
               <View key={item.id} style={styles.rowItem}>
-                <View>
-                  <Text style={styles.rowTitle}>{item.name}</Text>
-                  <Text style={styles.rowMeta}>{item.storageZone === 'frigo' ? 'Frigo' : 'Placard'} · {item.quantity ?? 'Qté non précisée'}</Text>
+                <View style={styles.rowMain}>
+                  <View style={styles.squareThumb}>
+                    {item.image_url ? (
+                      <Image source={{ uri: item.image_url }} style={styles.squareThumbImage} />
+                    ) : (
+                      <Ionicons name="nutrition-outline" size={16} color={C.textMid} />
+                    )}
+                  </View>
+                  <View style={styles.rowText}>
+                    <Text style={styles.rowTitle}>{item.name}</Text>
+                    <Text style={styles.rowMeta}>{item.storageZone === 'frigo' ? 'Frigo' : 'Placard'} · {item.quantity ?? 'Qté non précisée'}</Text>
+                  </View>
                 </View>
                 <Text style={styles.rowExpiry}>{expiryText(daysUntil(item.expiry_date))}</Text>
               </View>
@@ -95,8 +117,23 @@ export default function HomeDashboardScreen() {
           ) : (
             recipes.map((recipe) => (
               <View key={recipe.id} style={styles.recipeRow}>
-                <Text style={styles.rowTitle}>{recipe.title}</Text>
-                <Text style={styles.recipeMeta}>{recipe.timeMinutes} min · {recipe.matchRate}% du stock</Text>
+                <View style={styles.rowMain}>
+                  <View style={styles.squareThumb}>
+                    {recipe.image_url ? (
+                      <Image source={{ uri: recipe.image_url }} style={styles.squareThumbImage} />
+                    ) : (
+                      <Ionicons name="restaurant-outline" size={16} color={C.textMid} />
+                    )}
+                  </View>
+                  <View style={styles.rowText}>
+                    <Text style={styles.rowTitle}>{recipe.title}</Text>
+                    <Text style={styles.recipeMeta}>
+                      {recipe.timeMinutes} min
+                      {` · ${recipe.matchedCount} ingrédient${recipe.matchedCount > 1 ? 's' : ''} disponible${recipe.matchedCount > 1 ? 's' : ''}`}
+                      {recipe.missingCount > 0 ? ` · Il manque ${recipe.missingCount} ingrédient${recipe.missingCount > 1 ? 's' : ''}` : ''}
+                    </Text>
+                  </View>
+                </View>
               </View>
             ))
           )}
@@ -117,7 +154,7 @@ const styles = StyleSheet.create({
   content: { padding: 16, gap: 12, paddingBottom: 28 },
   title: { fontSize: 28, fontWeight: '800', color: C.text },
   subtitle: { marginTop: 4, color: C.textMid, fontSize: 14 },
-  mockText: { color: C.textLight, fontSize: 12 },
+  mockText: { color: C.textLight, fontSize: 11, opacity: 0.75 },
   scannerCta: {
     backgroundColor: C.primary,
     borderRadius: 18,
@@ -130,8 +167,10 @@ const styles = StyleSheet.create({
   },
   scannerCtaText: { color: '#fff', fontSize: 21, fontWeight: '800' },
   summaryGrid: { flexDirection: 'row', gap: 8 },
-  summaryCard: { flex: 1, backgroundColor: '#fff', borderRadius: 12, padding: 12 },
-  summaryLabel: { color: C.textMid, fontSize: 12, marginBottom: 4 },
+  summaryCard: { flex: 1, backgroundColor: '#fff', borderRadius: 12, padding: 12, gap: 6 },
+  summaryCardHeader: { flexDirection: 'row', alignItems: 'center', gap: 6 },
+  summaryIconBadge: { width: 20, height: 20, borderRadius: 10, alignItems: 'center', justifyContent: 'center', backgroundColor: '#DCFCE7' },
+  summaryLabel: { color: C.textMid, fontSize: 12 },
   summaryValue: { color: C.text, fontSize: 23, fontWeight: '800' },
   urgentValue: { color: '#15803d' },
   sectionCard: { backgroundColor: '#fff', borderRadius: 14, padding: 13, gap: 8, ...shadowSm },
@@ -141,6 +180,10 @@ const styles = StyleSheet.create({
   linkText: { color: '#166534', fontWeight: '700', fontSize: 13 },
   emptyText: { color: C.textMid, fontSize: 13, paddingVertical: 8 },
   rowItem: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', paddingVertical: 5, gap: 8 },
+  rowMain: { flexDirection: 'row', alignItems: 'center', gap: 10, flex: 1 },
+  rowText: { flex: 1 },
+  squareThumb: { width: 42, height: 42, borderRadius: 10, backgroundColor: '#F3F4F6', overflow: 'hidden', alignItems: 'center', justifyContent: 'center' },
+  squareThumbImage: { width: '100%', height: '100%' },
   rowTitle: { fontSize: 15, color: C.text, fontWeight: '600' },
   rowMeta: { color: C.textMid, fontSize: 12, marginTop: 2 },
   rowExpiry: { color: '#166534', fontSize: 12, fontWeight: '700' },
