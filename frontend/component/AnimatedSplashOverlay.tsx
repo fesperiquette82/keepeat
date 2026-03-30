@@ -1,5 +1,5 @@
 import React, { useEffect, useMemo, useState } from 'react';
-import { Platform, StyleSheet, useColorScheme, View } from 'react-native';
+import { StyleSheet, useColorScheme, View } from 'react-native';
 import PremiumAnimatedLogo from './PremiumAnimatedLogo';
 
 interface AnimatedSplashOverlayProps {
@@ -28,14 +28,7 @@ export default function AnimatedSplashOverlay({ visible, onAnimationFinished }: 
   if (!visible) return null;
 
   return (
-    <View
-      pointerEvents="none"
-      style={[
-        styles.overlay,
-        { backgroundColor },
-        Platform.OS === 'web' ? styles.overlayWeb : undefined,
-      ]}
-    >
+    <View pointerEvents="none" style={[styles.overlay, { backgroundColor }]}>
       <PremiumAnimatedLogo
         onAnimationEnd={() => {
           if (!hasAnimated) {
@@ -54,8 +47,5 @@ const styles = StyleSheet.create({
     zIndex: 999,
     alignItems: 'center',
     justifyContent: 'center',
-  },
-  overlayWeb: {
-    position: 'fixed',
   },
 });
