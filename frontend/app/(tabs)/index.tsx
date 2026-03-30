@@ -14,7 +14,7 @@ import {
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { useRouter } from 'expo-router';
 import Ionicons from '@expo/vector-icons/Ionicons';
-import { useStockStore, StockItem, HistoryItem } from '../../store/stockStore';
+import { useStockStore, StockItem } from '../../store/stockStore';
 import { useLanguageStore } from '../../store/languageStore';
 import { useAuthStore } from '../../store/authStore';
 import axios from 'axios';
@@ -84,10 +84,10 @@ interface GamifData {
 
 export default function HomeScreen() {
   const router = useRouter();
-  const { user, token } = useAuthStore();
+  const { token } = useAuthStore();
   const {
-    items, stats, historyItems,
-    fetchStock, fetchPriorityItems, fetchStats, fetchHistory,
+    items, stats,
+    fetchStock, fetchPriorityItems, fetchStats,
     markConsumed, markThrown,
     isLoading, isOnline, pendingMutations,
   } = useStockStore();
@@ -98,15 +98,9 @@ export default function HomeScreen() {
   const [riskyItemIds, setRiskyItemIds] = useState<Set<string>>(new Set());
   const isFr = language === 'fr';
 
-  // Prénom depuis l'email
-  const firstName = useMemo(() => {
-    const raw = user?.email?.split('@')[0] ?? '';
-    return raw ? raw.charAt(0).toUpperCase() + raw.slice(1) : '';
-  }, [user?.email]);
-
   const loadData = useCallback(async () => {
-    await Promise.all([fetchStock(), fetchPriorityItems(), fetchStats(), fetchHistory()]);
-  }, [fetchStock, fetchPriorityItems, fetchStats, fetchHistory]);
+    await Promise.all([fetchStock(), fetchPriorityItems(), fetchStats()]);
+  }, [fetchStock, fetchPriorityItems, fetchStats]);
 
   useEffect(() => { loadData(); }, [loadData]);
 
@@ -298,22 +292,14 @@ export default function HomeScreen() {
   return (
     <SafeAreaView style={styles.container}>
 
-      {/* Header */}
+      {/* Header compact */}
       <View style={styles.header}>
         <View style={styles.headerLeft}>
-          <Text style={styles.greeting}>
-            {isFr ? `Bonjour ${firstName} 👋` : `Hello ${firstName} 👋`}
-          </Text>
+          <Text style={styles.greeting}>{isFr ? 'Stock' : 'Stock'}</Text>
           <Text style={styles.headerSub}>
-            {items.length === 0
-              ? (isFr ? 'Votre stock est vide 🛒' : 'Your stock is empty 🛒')
-              : stats.consumed_this_week > 0
-                ? (isFr
-                    ? `${items.length} produit${items.length > 1 ? 's' : ''} en stock · ~${Math.round(stats.consumed_this_week * 2.5)}€ sauvés`
-                    : `${items.length} product${items.length > 1 ? 's' : ''} in stock · ~${Math.round(stats.consumed_this_week * 2.5)}€ saved`)
-                : (isFr
-                    ? `${items.length} produit${items.length > 1 ? 's' : ''} en stock`
-                    : `${items.length} product${items.length > 1 ? 's' : ''} in stock`)}
+            {isFr
+              ? `${items.length} produit${items.length > 1 ? 's' : ''} actif${items.length > 1 ? 's' : ''}`
+              : `${items.length} active product${items.length > 1 ? 's' : ''}`}
           </Text>
         </View>
         <TouchableOpacity style={styles.settingsBtn} onPress={() => router.push('/settings')}>
@@ -331,188 +317,64 @@ export default function HomeScreen() {
         </View>
       )}
 
-      {/* Hero card — urgence (ligne 1) + économie (ligne 2) */}
-      {(() => {
-        const isExpired = expiredCount > 0;
-        const isUrgent  = urgentCount > 0;
-        const hasUrgence = isExpired || isUrgent;
-        const hasEco     = stats.consumed_this_week > 0;
-
-        const bgColor     = isExpired ? '#FEF2F2' : isUrgent ? '#FFF7ED' : items.length === 0 ? '#F7F5F2' : '#F0FDF4';
-        const borderColor = isExpired ? '#FECACA' : isUrgent ? '#FED7AA' : items.length === 0 ? '#E8E5E0' : '#BBF7D0';
-        const urgColor    = isExpired ? '#ef4444' : '#f97316';
-        const iconName: any = isExpired ? 'warning' : isUrgent ? 'time-outline' : items.length === 0 ? 'cart-outline' : 'checkmark-circle';
-        const iconColor   = isExpired ? '#ef4444' : isUrgent ? '#f97316' : items.length === 0 ? '#9ca3af' : '#16a34a';
-
-        const urgenceText = isExpired
-          ? (isFr ? `⛔ ${expiredCount} produit${expiredCount > 1 ? 's' : ''} périmé${expiredCount > 1 ? 's' : ''}` : `⛔ ${expiredCount} expired product${expiredCount > 1 ? 's' : ''}`)
-          : (isFr ? `⚠️ ${urgentCount} produit${urgentCount > 1 ? 's' : ''} à consommer rapidement` : `⚠️ ${urgentCount} product${urgentCount > 1 ? 's' : ''} to use soon`);
-
-        const ctaUrgenceLabel = isExpired ? (isFr ? 'Voir →' : 'See →') : (isFr ? 'Voir →' : 'See →');
-        const ctaUrgenceAction = () => setSelectedTab('urgents');
-
-        const fallbackText  = items.length === 0
-          ? (isFr ? '🛒 Votre stock est vide' : '🛒 Your stock is empty')
-          : (isFr ? '✅ Tout est sous contrôle' : '✅ Everything under control');
-        const fallbackColor = items.length === 0 ? '#9ca3af' : '#16a34a';
-        const fallbackCta   = items.length === 0
-          ? (isFr ? 'Scanner maintenant →' : 'Scan now →')
-          : (isFr ? 'Voir les recettes →' : 'See recipes →');
-        const fallbackAction = items.length === 0
-          ? () => router.push('/scan')
-          : () => router.push('/(tabs)/recipes' as any);
-
-        return (
-          <View style={[styles.heroCard, { backgroundColor: bgColor, borderColor }]}>
-            <Ionicons name={iconName} size={24} color={iconColor} style={styles.heroCardIcon} />
-            <View style={[styles.heroCardBody, { gap: hasUrgence && hasEco ? 6 : 2 }]}>
-              {/* Ligne urgence */}
-              {hasUrgence ? (
-                <View style={styles.heroRow}>
-                  <Text style={[styles.heroCardText, { color: urgColor, flex: 1 }]} numberOfLines={1}>
-                    {urgenceText}
-                  </Text>
-                  <TouchableOpacity onPress={ctaUrgenceAction}>
-                    <Text style={[styles.heroCardCta, { color: urgColor }]}>{ctaUrgenceLabel}</Text>
-                  </TouchableOpacity>
-                </View>
-              ) : (
-                /* Fallback si aucun urgent */
-                <View style={styles.heroRow}>
-                  <Text style={[styles.heroCardText, { color: fallbackColor, flex: 1 }]}>
-                    {fallbackText}
-                  </Text>
-                  {!hasEco && (
-                    <TouchableOpacity onPress={fallbackAction}>
-                      <Text style={[styles.heroCardCta, { color: fallbackColor }]}>{fallbackCta}</Text>
-                    </TouchableOpacity>
-                  )}
-                </View>
-              )}
-              {/* Ligne économie */}
-              {hasEco && (
-                <View style={styles.heroRow}>
-                  <Text style={[styles.heroCardText, { color: '#16a34a', flex: 1 }]}>
-                    {isFr
-                      ? `💶 ~${Math.round(stats.consumed_this_week * 2.5)}€ économisés cette semaine`
-                      : `💶 ~${Math.round(stats.consumed_this_week * 2.5)}€ saved this week`}
-                  </Text>
-                </View>
-              )}
-            </View>
-          </View>
-        );
-      })()}
-
-      {/* Widget gamification compact */}
-      {gamif && (
-        <TouchableOpacity
-          style={styles.gamifWidget}
-          onPress={() => router.push('/(tabs)/stats' as any)}
-          activeOpacity={0.8}
-        >
-          <Text style={styles.gamifEmoji}>{gamif.level_emoji}</Text>
-          <Text style={styles.gamifName}>{gamif.level_name}</Text>
-          {/* Barre de progression */}
-          <View style={styles.gamifBarTrack}>
-            <View style={[styles.gamifBarFill, { flex: gamif.progress_to_next }]} />
-            <View style={{ flex: 1 - gamif.progress_to_next }} />
-          </View>
-          {gamif.current_streak > 0 && (
-            <Text style={styles.gamifStreak}>🔥 {gamif.current_streak}j</Text>
-          )}
-          <Ionicons name="chevron-forward" size={12} color={C.textLight} />
-        </TouchableOpacity>
-      )}
-
-      {/* Action buttons */}
-      <View style={styles.actionsRow}>
-        {urgentCount > 0 ? (
-          <TouchableOpacity
-            style={[styles.scanBtnLarge, { backgroundColor: expiredCount > 0 ? '#ef4444' : C.orange }]}
-            onPress={() => setSelectedTab('urgents')}
-          >
-            <Ionicons name="time-outline" size={22} color="#fff" />
-            <View style={styles.scanBtnTextBlock}>
-              <Text style={styles.scanBtnLargeText}>
-                {isFr ? 'Gérer les urgents' : 'Handle urgent items'}
-              </Text>
-              <Text style={styles.scanBtnSubText}>
-                {isFr ? `${urgentCount} produit${urgentCount > 1 ? 's' : ''} à traiter` : `${urgentCount} item${urgentCount > 1 ? 's' : ''} to handle`}
-              </Text>
-            </View>
-            <View style={styles.tabUrgentBadge}>
-              <Text style={styles.tabUrgentBadgeText}>{urgentCount}</Text>
-            </View>
-          </TouchableOpacity>
-        ) : (
-          <TouchableOpacity style={styles.scanBtnLarge} onPress={() => router.push('/scan')}>
-            <Ionicons name="scan-outline" size={22} color="#fff" />
-            <View style={styles.scanBtnTextBlock}>
-              <Text style={styles.scanBtnLargeText}>{isFr ? 'Scanner un produit' : 'Scan a product'}</Text>
-              <Text style={styles.scanBtnSubText}>{isFr ? 'Code-barres, ticket ou date' : 'Barcode, receipt or date'}</Text>
-            </View>
-          </TouchableOpacity>
+      {/* Carte de synthèse unique */}
+      <View style={styles.summaryCard}>
+        <View style={styles.summaryTopRow}>
+          <Text style={styles.summaryTitle}>
+            {items.length === 0
+              ? (isFr ? 'Votre stock est vide' : 'Your stock is empty')
+              : (isFr ? 'État global du stock' : 'Global stock status')}
+          </Text>
+          <Ionicons name={expiredCount > 0 ? 'warning' : urgentCount > 0 ? 'time-outline' : 'checkmark-circle'} size={18} color={expiredCount > 0 ? C.red : urgentCount > 0 ? C.orange : '#16a34a'} />
+        </View>
+        <Text style={styles.summaryText}>
+          {expiredCount > 0
+            ? (isFr ? `${expiredCount} produit${expiredCount > 1 ? 's' : ''} périmé${expiredCount > 1 ? 's' : ''}` : `${expiredCount} expired product${expiredCount > 1 ? 's' : ''}`)
+            : urgentCount > 0
+              ? (isFr ? `${urgentCount} produit${urgentCount > 1 ? 's' : ''} à utiliser bientôt` : `${urgentCount} product${urgentCount > 1 ? 's' : ''} to use soon`)
+              : (isFr ? 'Tout est sous contrôle ✅' : 'Everything looks good ✅')}
+        </Text>
+        {stats.consumed_this_week > 0 && (
+          <Text style={styles.summaryMeta}>
+            {isFr
+              ? `~${Math.round(stats.consumed_this_week * 2.5)}€ économisés cette semaine`
+              : `~${Math.round(stats.consumed_this_week * 2.5)}€ saved this week`}
+          </Text>
         )}
+      </View>
+
+      {/* CTA principal */}
+      <View style={styles.actionsRow}>
+        <TouchableOpacity style={styles.scanBtnLarge} onPress={() => router.push('/scan')}>
+          <Ionicons name="scan-outline" size={22} color="#fff" />
+          <View style={styles.scanBtnTextBlock}>
+            <Text style={styles.scanBtnLargeText}>{isFr ? 'Scanner un produit' : 'Scan a product'}</Text>
+            <Text style={styles.scanBtnSubText}>{isFr ? 'Code-barres, ticket ou date' : 'Barcode, receipt or date'}</Text>
+          </View>
+        </TouchableOpacity>
         <View style={styles.actionsBtnsRow}>
           <TouchableOpacity style={styles.outlineBtn} onPress={() => router.push('/add-product' as any)}>
             <Ionicons name="add" size={17} color={C.textMid} />
             <Text style={styles.outlineBtnText}>{isFr ? 'Ajouter' : 'Add'}</Text>
           </TouchableOpacity>
+          {urgentCount > 0 && (
+            <TouchableOpacity style={styles.outlineBtn} onPress={() => setSelectedTab('urgents')}>
+              <Ionicons name="time-outline" size={15} color={C.textMid} />
+              <Text style={styles.outlineBtnText}>{isFr ? 'Urgents' : 'Urgent'}</Text>
+            </TouchableOpacity>
+          )}
           <TouchableOpacity style={styles.outlineBtn} onPress={() => router.push('/recipes' as any)}>
             <Ionicons name="book-outline" size={15} color={C.textMid} />
             <Text style={styles.outlineBtnText}>{isFr ? 'Recettes' : 'Recipes'}</Text>
           </TouchableOpacity>
+          {gamif && (
+            <TouchableOpacity style={styles.outlineBtn} onPress={() => router.push('/(tabs)/stats' as any)}>
+              <Text style={styles.outlineBtnText}>{gamif.level_emoji}</Text>
+              <Text style={styles.outlineBtnText}>{isFr ? 'Niveau' : 'Level'}</Text>
+            </TouchableOpacity>
+          )}
         </View>
       </View>
-
-      {/* Réapprovisionner — scroll horizontal des produits récents */}
-      {historyItems.length > 0 && (
-        <View style={styles.historySection}>
-          <Text style={styles.historySectionTitle}>
-            {isFr ? '🔁 Réapprovisionner' : '🔁 Re-stock'}
-          </Text>
-          <ScrollView
-            horizontal
-            showsHorizontalScrollIndicator={false}
-            contentContainerStyle={styles.historyScroll}
-          >
-            {historyItems.map((item: HistoryItem, idx: number) => {
-              const emoji = CATEGORY_EMOJI[item.food_category] ?? '📦';
-              const params: Record<string, string> = { name: item.name, found: 'true' };
-              if (item.brand)              params.brand              = item.brand;
-              if (item.image_url)          params.image_url          = item.image_url;
-              if (item.category)           params.category           = item.category;
-              if (item.barcode)            params.barcode            = item.barcode;
-              if (item.shelf_life_fridge)  params.shelf_life_fridge  = String(item.shelf_life_fridge);
-              if (item.shelf_life_pantry)  params.shelf_life_pantry  = String(item.shelf_life_pantry);
-              if (item.shelf_life_freezer) params.shelf_life_freezer = String(item.shelf_life_freezer);
-              if (item.shelf_life_category) params.shelf_life_category = item.shelf_life_category;
-              if (item.shelf_life_tips)    params.shelf_life_tips    = item.shelf_life_tips;
-              return (
-                <TouchableOpacity
-                  key={`${item.name}_${idx}`}
-                  style={styles.historyCard}
-                  onPress={() => router.push({ pathname: '/add-product', params })}
-                  activeOpacity={0.8}
-                >
-                  {item.image_url ? (
-                    <Image source={{ uri: item.image_url }} style={styles.historyCardImg} />
-                  ) : (
-                    <View style={styles.historyCardImgPlaceholder}>
-                      <Text style={styles.historyCardEmoji}>{emoji}</Text>
-                    </View>
-                  )}
-                  <Text style={styles.historyCardName} numberOfLines={2}>{item.name}</Text>
-                  <View style={styles.historyCardPlusBtn}>
-                    <Ionicons name="add" size={14} color={C.primary} />
-                  </View>
-                </TouchableOpacity>
-              );
-            })}
-          </ScrollView>
-        </View>
-      )}
 
       {/* Category tabs */}
       <View style={styles.tabsRow}>
@@ -614,52 +476,28 @@ const styles = StyleSheet.create({
     borderWidth: 1, borderColor: '#E8E5E0',
   },
 
-  // ── Hero card ──
-  heroCard: {
+  // ── Carte synthèse ──
+  summaryCard: {
     marginHorizontal: 16,
     marginTop: 12,
-    marginBottom: 4,
+    marginBottom: 6,
     borderRadius: 16,
-    borderWidth: 1.5,
-    flexDirection: 'row',
-    alignItems: 'center',
-    paddingHorizontal: 14,
-    paddingVertical: 14,
-    gap: 12,
-    backgroundColor: '#fff',
-  },
-  heroCardIcon: { flexShrink: 0 },
-  heroCardBody: { flex: 1, gap: 4 },
-  heroCardText: { fontSize: 14, fontWeight: '700', lineHeight: 19 },
-  heroCardCta:  { fontSize: 12, fontWeight: '600', opacity: 0.85, marginTop: 2 },
-  heroRow:      { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', gap: 8 },
-
-  // ── Gamification widget ──
-  gamifWidget: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 8,
-    marginHorizontal: 16,
-    marginTop: 8,
-    backgroundColor: C.primaryLight,
-    borderRadius: 12,
-    paddingHorizontal: 12,
-    paddingVertical: 8,
     borderWidth: 1,
-    borderColor: C.primaryMid,
+    borderColor: '#E8E5E0',
+    backgroundColor: '#fff',
+    paddingHorizontal: 14,
+    paddingVertical: 12,
+    gap: 4,
   },
-  gamifEmoji:    { fontSize: 16 },
-  gamifName:     { fontSize: 12, fontWeight: '700', color: C.primary },
-  gamifBarTrack: {
-    flex: 1,
-    height: 5,
-    backgroundColor: C.primaryMid,
-    borderRadius: 3,
+  summaryTopRow: {
     flexDirection: 'row',
-    overflow: 'hidden',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    gap: 8,
   },
-  gamifBarFill:  { height: '100%', backgroundColor: C.primary, borderRadius: 3 },
-  gamifStreak:   { fontSize: 11, fontWeight: '600', color: C.orange },
+  summaryTitle: { fontSize: 14, fontWeight: '700', color: '#1A1A1A', flex: 1 },
+  summaryText: { fontSize: 13, color: C.text, fontWeight: '600' },
+  summaryMeta: { fontSize: 12, color: C.textMid },
 
   // ── Badge risque prédiction ──
   riskyBadge: {
@@ -679,27 +517,6 @@ const styles = StyleSheet.create({
     paddingHorizontal: 16, paddingVertical: 6,
   },
   offlineText: { color: '#fff', fontSize: 12, fontWeight: '600' },
-
-  // ── Stat cards ──
-  statsRow: {
-    flexDirection: 'row',
-    paddingHorizontal: 16,
-    paddingTop: 14,
-    paddingBottom: 0,
-    gap: 10,
-    backgroundColor: '#fff',
-  },
-  statCard: {
-    flex: 1,
-    borderRadius: 14,
-    paddingVertical: 10,
-    paddingHorizontal: 8,
-    alignItems: 'center',
-    gap: 1,
-  },
-  statEmoji: { fontSize: 22, marginBottom: 2 },
-  statNum:   { fontSize: 20, fontWeight: '800' },
-  statLbl:   { fontSize: 10, color: C.textMid, fontWeight: '500', textAlign: 'center', lineHeight: 14 },
 
   // ── Action buttons ──
   actionsRow: {
@@ -727,22 +544,13 @@ const styles = StyleSheet.create({
   scanBtnLargeText: { color: '#fff', fontSize: 16, fontWeight: '800', letterSpacing: 0.3 },
   scanBtnTextBlock: { flex: 1, gap: 1 },
   scanBtnSubText: { color: 'rgba(255,255,255,0.72)', fontSize: 11, fontWeight: '500' },
-  urgentBadge: {
-    backgroundColor: 'rgba(255,255,255,0.25)',
-    borderRadius: 12,
-    minWidth: 26,
-    height: 26,
-    alignItems: 'center',
-    justifyContent: 'center',
-    paddingHorizontal: 6,
-  },
-  urgentBadgeText: { color: '#fff', fontSize: 13, fontWeight: '800' },
   actionsBtnsRow: {
     flexDirection: 'row',
+    flexWrap: 'wrap',
     gap: 8,
   },
   outlineBtn: {
-    flex: 1,
+    minWidth: 92,
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'center',
@@ -754,64 +562,6 @@ const styles = StyleSheet.create({
     borderColor: '#E8E5E0',
   },
   outlineBtnText: { color: C.textMid, fontSize: 13, fontWeight: '600' },
-
-  // ── History / Re-stock ──
-  historySection: {
-    backgroundColor: '#fff',
-    paddingTop: 10,
-    paddingBottom: 12,
-    marginBottom: 8,
-  },
-  historySectionTitle: {
-    fontSize: 11,
-    fontWeight: '700',
-    color: C.textLight,
-    paddingHorizontal: 16,
-    marginBottom: 8,
-    textTransform: 'uppercase',
-    letterSpacing: 0.6,
-  },
-  historyScroll: {
-    paddingHorizontal: 16,
-    gap: 10,
-  },
-  historyCard: {
-    width: 76,
-    alignItems: 'center',
-    gap: 5,
-  },
-  historyCardImg: {
-    width: 56,
-    height: 56,
-    borderRadius: 12,
-    resizeMode: 'cover',
-  },
-  historyCardImgPlaceholder: {
-    width: 56,
-    height: 56,
-    borderRadius: 12,
-    backgroundColor: C.primaryLight,
-    alignItems: 'center',
-    justifyContent: 'center',
-  },
-  historyCardEmoji: { fontSize: 24 },
-  historyCardName: {
-    fontSize: 10,
-    color: C.text,
-    fontWeight: '600',
-    textAlign: 'center',
-    lineHeight: 13,
-  },
-  historyCardPlusBtn: {
-    width: 22,
-    height: 22,
-    borderRadius: 11,
-    backgroundColor: C.primaryLight,
-    borderWidth: 1,
-    borderColor: C.primaryMid,
-    alignItems: 'center',
-    justifyContent: 'center',
-  },
 
   // ── Category tabs ──
   tabsRow: {

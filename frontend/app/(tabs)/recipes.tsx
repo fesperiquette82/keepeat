@@ -95,6 +95,11 @@ interface RecipesDiagnosticsState {
   cacheSource: string;
   cacheItemCount: number;
   cacheInvalidatedReason: string;
+  stockTotalCount: number;
+  stockEligibleForRecipesCount: number;
+  emptyStateReason: string;
+  stockSignatureUsed: string;
+  feasibilityBuckets: string;
 }
 
 const RECIPES_DEBUG_CACHE_KEY = 'keepeat:recipes:debug:last_response';
@@ -122,6 +127,38 @@ function summarizeList(values: string[], max = 8): string {
   const preview = unique.slice(0, max);
   const suffix = unique.length > max ? ` (+${unique.length - max})` : '';
   return `${preview.join(', ')}${suffix}`;
+}
+
+type FeasibilityLevel = 'ready_now' | 'missing_1' | 'missing_2_3' | 'to_complete';
+
+interface FeasibilityInfo {
+  level: FeasibilityLevel;
+  rank: number;
+  fr: string;
+  en: string;
+}
+
+function requiredIngredientsCount(recipe: RecipeSuggestion): number {
+  const debugCount = recipe.debug?.required_ingredients_count;
+  if (typeof debugCount === 'number' && Number.isFinite(debugCount) && debugCount > 0) {
+    return debugCount;
+  }
+  return recipe.usedIngredients.length + recipe.missedIngredients.length;
+}
+
+function getFeasibilityInfo(recipe: RecipeSuggestion): FeasibilityInfo {
+  const missing = recipe.missedIngredients.length;
+  const required = requiredIngredientsCount(recipe);
+  if (missing === 0 && required > 0) {
+    return { level: 'ready_now', rank: 0, fr: '✅ Faisable maintenant', en: '✅ Cookable now' };
+  }
+  if (missing === 1) {
+    return { level: 'missing_1', rank: 1, fr: '🧂 Il manque 1 ingrédient', en: '🧂 Missing 1 ingredient' };
+  }
+  if (missing >= 2 && missing <= 3) {
+    return { level: 'missing_2_3', rank: 2, fr: '🛒 Il manque 2 à 3 ingrédients', en: '🛒 Missing 2 to 3 ingredients' };
+  }
+  return { level: 'to_complete', rank: 3, fr: '🧩 À compléter', en: '🧩 Needs more ingredients' };
 }
 
 function resolveAppVersion(): string {
@@ -218,7 +255,7 @@ export default function RecipesScreen() {
   const router = useRouter();
   const { token } = useAuthStore();
   const { language } = useLanguageStore();
-  const { items } = useStockStore();
+  const { items, fetchStock } = useStockStore();
   const isFr = language === 'fr';
 
   const [recipes, setRecipes]         = useState<RecipeSuggestion[]>([]);
@@ -231,6 +268,7 @@ export default function RecipesScreen() {
   const [suggestionStyle, setSuggestionStyle] = useState<SuggestionStyle>('classique');
   const [isDebugVisible, setIsDebugVisible] = useState(false);
   const [titleTapCount, setTitleTapCount] = useState(0);
+  const [hasSyncedStockAtLeastOnce, setHasSyncedStockAtLeastOnce] = useState(false);
   const [diagnostics, setDiagnostics] = useState<RecipesDiagnosticsState>({
     lastEndpoint: null,
     lastFetchAt: null,
@@ -275,6 +313,11 @@ export default function RecipesScreen() {
     cacheSource: 'none',
     cacheItemCount: 0,
     cacheInvalidatedReason: 'none',
+    stockTotalCount: 0,
+    stockEligibleForRecipesCount: 0,
+    emptyStateReason: 'unknown',
+    stockSignatureUsed: 'none',
+    feasibilityBuckets: 'none',
   });
   const [cacheInvalidatedReason, setCacheInvalidatedReason] = useState('none');
   const suggestionsCacheRef = React.useRef<Record<string, {
@@ -319,6 +362,20 @@ export default function RecipesScreen() {
     () => JSON.stringify(items.map((item) => `${item.id}:${item.name}:${item.expiry_date ?? ''}:${item.location ?? ''}`).sort()),
     [items],
   );
+  const stockEligibleForRecipesCount = useMemo(
+    () => items.filter((item) => item.name?.trim().length).length,
+    [items],
+  );
+
+  useEffect(() => {
+    if (!token) {
+      setHasSyncedStockAtLeastOnce(false);
+      return;
+    }
+    fetchStock()
+      .catch(() => {})
+      .finally(() => setHasSyncedStockAtLeastOnce(true));
+  }, [fetchStock, token]);
 
   useEffect(() => {
     suggestionsCacheRef.current = {};
@@ -376,7 +433,7 @@ export default function RecipesScreen() {
     filter: string,
     options?: { strictPersonalized?: boolean },
   ) => {
-    if (options?.strictPersonalized && suggestionStyle === 'classique' && items.length === 0) {
+    if (options?.strictPersonalized && suggestionStyle === 'classique' && hasSyncedStockAtLeastOnce && items.length === 0) {
       return {
         endpointPath: `/api/recipes/suggestions?filter=${encodeURIComponent(filter)}&include_meta=true`,
         payload: { recipes: [], meta: null, shape: 'object_with_meta' as const },
@@ -437,7 +494,7 @@ export default function RecipesScreen() {
     }
 
     return { ...result, cacheHit: false, cacheKey, cacheSource: 'network', cacheItemCount: validatedRecipes.length };
-  }, [items.length, language, stockSignature, suggestionStyle, token]);
+  }, [hasSyncedStockAtLeastOnce, items.length, language, stockSignature, suggestionStyle, token]);
 
   const fetchRecipes = useCallback(async (tab: FilterTab, silent = false) => {
     if (!token) return;
@@ -640,10 +697,43 @@ export default function RecipesScreen() {
 
   const previewRecipes = useMemo(() => personalizedValidatedRecipes.slice(0, 3), [personalizedValidatedRecipes]);
   const isClassicPersonalizedMode = suggestionStyle === 'classique';
-  const shouldHideSuggestedByEmptyStock = isClassicPersonalizedMode && items.length === 0;
+  const hasVisibleStock = items.length > 0;
+  const shouldHideSuggestedByEmptyStock = isClassicPersonalizedMode && !hasVisibleStock;
   const shouldShowSuggestedPreview = !shouldHideSuggestedByEmptyStock && previewRecipes.length > 0;
   const shouldShowDiscoverySection = activeTab === 'tous' && discoveryRecipes.length > 0;
   const shouldShowEmptyTous = activeTab === 'tous' && !shouldShowSuggestedPreview && !shouldShowDiscoverySection;
+  const emptyStateReason = useMemo(() => {
+    if (activeTab !== 'tous') return 'tab_specific_empty';
+    if (!hasSyncedStockAtLeastOnce) return 'stock_sync_pending';
+    if (!hasVisibleStock) return 'stock_empty';
+    if (shouldShowEmptyTous) return 'no_direct_recipe_match';
+    return 'not_empty';
+  }, [activeTab, hasSyncedStockAtLeastOnce, hasVisibleStock, shouldShowEmptyTous]);
+  const orderedRecipes = useMemo(() => {
+    return [...recipes].sort((a, b) => {
+      const fa = getFeasibilityInfo(a);
+      const fb = getFeasibilityInfo(b);
+      if (fa.rank !== fb.rank) return fa.rank - fb.rank;
+      if (a.missedIngredients.length !== b.missedIngredients.length) {
+        return a.missedIngredients.length - b.missedIngredients.length;
+      }
+      const scoreA = typeof a.score === 'number' ? a.score : (typeof a.debug?.final_score === 'number' ? a.debug.final_score : 0);
+      const scoreB = typeof b.score === 'number' ? b.score : (typeof b.debug?.final_score === 'number' ? b.debug.final_score : 0);
+      return scoreB - scoreA;
+    });
+  }, [recipes]);
+  const feasibilityBuckets = useMemo(() => {
+    const counters: Record<FeasibilityLevel, number> = {
+      ready_now: 0,
+      missing_1: 0,
+      missing_2_3: 0,
+      to_complete: 0,
+    };
+    for (const recipe of orderedRecipes) {
+      counters[getFeasibilityInfo(recipe).level] += 1;
+    }
+    return `ready_now:${counters.ready_now}|missing_1:${counters.missing_1}|missing_2_3:${counters.missing_2_3}|to_complete:${counters.to_complete}`;
+  }, [orderedRecipes]);
 
   useEffect(() => {
     const suggestedMode = shouldHideSuggestedByEmptyStock
@@ -658,12 +748,6 @@ export default function RecipesScreen() {
       mode: suggestedMode,
     });
     setDiagnostics((prev) => {
-      if (
-        prev.suggestionsSectionMode === suggestedMode
-        && prev.suggestionsSectionCount === (shouldShowSuggestedPreview ? Math.min(previewRecipes.length, 3) : 0)
-      ) {
-        return prev;
-      }
       return {
         ...prev,
         suggestionsSectionSource: 'suggestions',
@@ -676,9 +760,36 @@ export default function RecipesScreen() {
         discoverySectionCount: shouldShowDiscoverySection ? discoveryRecipes.length : 0,
         discoverySectionFallback: shouldShowDiscoverySection,
         discoverySectionCacheUsed: false,
+        stockTotalCount: items.length,
+        stockEligibleForRecipesCount,
+        emptyStateReason,
+        stockSignatureUsed: stockSignature,
+        feasibilityBuckets,
       };
     });
-  }, [discoveryRecipes.length, items.length, previewRecipes.length, shouldHideSuggestedByEmptyStock, shouldShowDiscoverySection, shouldShowSuggestedPreview, suggestionStyle]);
+  }, [
+    discoveryRecipes.length,
+    emptyStateReason,
+    feasibilityBuckets,
+    items.length,
+    previewRecipes.length,
+    shouldHideSuggestedByEmptyStock,
+    shouldShowDiscoverySection,
+    shouldShowSuggestedPreview,
+    stockEligibleForRecipesCount,
+    stockSignature,
+    suggestionStyle,
+  ]);
+
+  useEffect(() => {
+    recipesDebugLog('[RECIPES_DEBUG] feasibility buckets', {
+      tab: activeTab,
+      stock_total_count: items.length,
+      stock_eligible_for_recipes_count: stockEligibleForRecipesCount,
+      feasibility_buckets: feasibilityBuckets,
+      empty_state_reason: emptyStateReason,
+    });
+  }, [activeTab, emptyStateReason, feasibilityBuckets, items.length, stockEligibleForRecipesCount]);
 
   const handleRefresh = () => {
     setIsRefreshing(true);
@@ -812,13 +923,32 @@ export default function RecipesScreen() {
             </>
           ) : activeTab === 'tous' ? (
             <>
-              <Text style={styles.emptyEmoji}>🛒</Text>
-              <Text style={styles.emptyTitle}>{t('Stock vide', 'Empty stock')}</Text>
-              <Text style={styles.emptyText}>{t('Ajoutez des produits à votre stock pour obtenir des suggestions.', 'Add products to your stock to get recipe suggestions.')}</Text>
-              <TouchableOpacity style={styles.emptyBtn} onPress={() => router.push('/scan' as any)}>
-                <Ionicons name="scan-outline" size={16} color="#fff" />
-                <Text style={styles.emptyBtnText}>{t('Scanner un produit', 'Scan a product')}</Text>
-              </TouchableOpacity>
+              {emptyStateReason === 'stock_empty' || emptyStateReason === 'stock_sync_pending' ? (
+                <>
+                  <Text style={styles.emptyEmoji}>🛒</Text>
+                  <Text style={styles.emptyTitle}>{t('Stock vide', 'Empty stock')}</Text>
+                  <Text style={styles.emptyText}>{t('Ajoutez des produits à votre stock pour obtenir des suggestions.', 'Add products to your stock to get recipe suggestions.')}</Text>
+                  <TouchableOpacity style={styles.emptyBtn} onPress={() => router.push('/scan' as any)}>
+                    <Ionicons name="scan-outline" size={16} color="#fff" />
+                    <Text style={styles.emptyBtnText}>{t('Scanner un produit', 'Scan a product')}</Text>
+                  </TouchableOpacity>
+                </>
+              ) : (
+                <>
+                  <Text style={styles.emptyEmoji}>🍳</Text>
+                  <Text style={styles.emptyTitle}>{t('Aucune recette directement faisable', 'No directly cookable recipe')}</Text>
+                  <Text style={styles.emptyText}>
+                    {t(
+                      'Aucune recette directement faisable avec votre stock actuel. Essayez le mode Ouvert pour voir des recettes à compléter.',
+                      'No recipe is directly feasible with your current stock. Try Open mode to see recipes you can complete.',
+                    )}
+                  </Text>
+                  <TouchableOpacity style={styles.emptyBtn} onPress={handleRefresh}>
+                    <Ionicons name="refresh-outline" size={16} color="#fff" />
+                    <Text style={styles.emptyBtnText}>{t('Actualiser', 'Refresh')}</Text>
+                  </TouchableOpacity>
+                </>
+              )}
             </>
           ) : (
             <>
@@ -843,7 +973,7 @@ export default function RecipesScreen() {
           }
         >
           {/* Bannière contextuelle urgents */}
-          {activeTab === 'urgents' && urgentItems.length > 0 && !recipes[0]?.is_fallback && (
+          {activeTab === 'urgents' && urgentItems.length > 0 && !orderedRecipes[0]?.is_fallback && (
             <View style={styles.urgentBanner}>
               <Ionicons name="time-outline" size={15} color={C.orange} />
               <View style={styles.urgentBannerBody}>
@@ -878,7 +1008,7 @@ export default function RecipesScreen() {
                 {t('Suggestions personnalisées ✅', 'Personalized suggestions ✅')}
               </Text>
             </View>
-          ) : recipes[0]?.is_fallback ? (
+          ) : orderedRecipes[0]?.is_fallback ? (
             <View style={[styles.sectionHeader, styles.fallbackHeader]}>
               <Ionicons name="sparkles-outline" size={15} color={C.primary} />
               <Text style={styles.sectionTitleFallback}>
@@ -893,7 +1023,9 @@ export default function RecipesScreen() {
             </View>
           )}
 
-          {recipes.map((recipe) => (
+          {orderedRecipes.map((recipe) => {
+            const feasibility = getFeasibilityInfo(recipe);
+            return (
             <TouchableOpacity
               key={recipe.id}
               style={[styles.card, recipe.is_ai && styles.cardAi]}
@@ -924,6 +1056,13 @@ export default function RecipesScreen() {
               {/* Body */}
               <View style={styles.cardBody}>
                 <Text style={styles.cardTitle} numberOfLines={2}>{recipe.title}</Text>
+                {!recipe.is_ai && (
+                  <View style={styles.feasibilityBadge}>
+                    <Text style={styles.feasibilityBadgeText}>
+                      {isFr ? feasibility.fr : feasibility.en}
+                    </Text>
+                  </View>
+                )}
 
                 {/* Résumé instructions (IA seulement) */}
                 {recipe.is_ai && recipe.instructions_summary && (
@@ -966,7 +1105,8 @@ export default function RecipesScreen() {
                 </View>
               </View>
             </TouchableOpacity>
-          ))}
+            );
+          })}
 
           {shouldShowDiscoverySection && (
             <>
@@ -1070,6 +1210,11 @@ export default function RecipesScreen() {
             <Text style={styles.debugLine}>cache_source: {formatDebugValue(diagnostics.cacheSource)}</Text>
             <Text style={styles.debugLine}>cache_item_count: {diagnostics.cacheItemCount}</Text>
             <Text style={styles.debugLine}>cache_invalidated_reason: {formatDebugValue(diagnostics.cacheInvalidatedReason)}</Text>
+            <Text style={styles.debugLine}>stock_total_count: {diagnostics.stockTotalCount}</Text>
+            <Text style={styles.debugLine}>stock_eligible_for_recipes_count: {diagnostics.stockEligibleForRecipesCount}</Text>
+            <Text style={styles.debugLine}>empty_state_reason: {formatDebugValue(diagnostics.emptyStateReason)}</Text>
+            <Text style={styles.debugLine}>stock_signature_used: {formatDebugValue(diagnostics.stockSignatureUsed)}</Text>
+            <Text style={styles.debugLine}>feasibility_buckets: {formatDebugValue(diagnostics.feasibilityBuckets)}</Text>
             <Text style={styles.debugLine}>section_main_source: {formatDebugValue(diagnostics.mainSectionSource)}</Text>
             <Text style={styles.debugLine}>section_main_mode: {formatDebugValue(diagnostics.mainSectionMode)}</Text>
             <Text style={styles.debugLine}>section_main_count: {diagnostics.mainSectionCount}</Text>
@@ -1235,6 +1380,19 @@ const styles = StyleSheet.create({
     justifyContent: 'space-between',
   },
   cardTitle: { fontSize: 14, fontWeight: '700', color: '#1A1A1A', lineHeight: 19 },
+  feasibilityBadge: {
+    alignSelf: 'flex-start',
+    marginTop: 6,
+    paddingHorizontal: 8,
+    paddingVertical: 4,
+    borderRadius: 999,
+    backgroundColor: '#EEF2FF',
+  },
+  feasibilityBadgeText: {
+    fontSize: 10,
+    fontWeight: '700',
+    color: '#3730A3',
+  },
 
   ingredientsRow: { flexDirection: 'row', flexWrap: 'wrap', gap: 4, marginTop: 4 },
   badgeUsed: {
