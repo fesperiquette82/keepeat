@@ -1,16 +1,17 @@
 import React, { useMemo } from 'react';
 import { SafeAreaView } from 'react-native-safe-area-context';
-import { View, Text, StyleSheet, TouchableOpacity, Switch } from 'react-native';
+import { View, Text, StyleSheet, TouchableOpacity, Switch, ActivityIndicator } from 'react-native';
 import Ionicons from '@expo/vector-icons/Ionicons';
 import { useRouter } from 'expo-router';
 import { C, T } from '../utils/theme';
 import { useAppSettingsStore, type ReminderLeadDays } from '../store/appSettingsStore';
+import { useStockStore } from '../store/stockStore';
 
-function formatLastUpdate(value: string | null): string {
-  if (!value) return 'Pas encore mis à jour';
+function formatLastUpdate(value: string | null, language: 'fr' | 'en'): string {
+  if (!value) return language === 'en' ? 'Not updated yet' : 'Pas encore mis à jour';
   const date = new Date(value);
-  if (Number.isNaN(date.getTime())) return 'Pas encore mis à jour';
-  return date.toLocaleString('fr-FR', {
+  if (Number.isNaN(date.getTime())) return language === 'en' ? 'Not updated yet' : 'Pas encore mis à jour';
+  return date.toLocaleString(language === 'en' ? 'en-US' : 'fr-FR', {
     day: '2-digit',
     month: '2-digit',
     year: 'numeric',
@@ -26,12 +27,16 @@ export default function SettingsScreen() {
     householdSize,
     productRemindersEnabled,
     reminderDaysBefore,
-    lastRemindersUpdate,
+    lastReminderRefreshAt,
+    reminderRefreshError,
+    reminderRefreshSuccessAt,
     setLanguage,
     setHouseholdSize,
     setProductRemindersEnabled,
     setReminderDaysBefore,
+    forceRefreshReminderProducts,
   } = useAppSettingsStore();
+  const isRefreshingPriorityItems = useStockStore((state) => state.isRefreshingPriorityItems);
 
   const reminderOptions: ReminderLeadDays[] = useMemo(() => [1, 2, 3], []);
 
@@ -90,16 +95,38 @@ export default function SettingsScreen() {
                 key={days}
                 style={[styles.chip, reminderDaysBefore === days && styles.chipActive]}
                 onPress={() => setReminderDaysBefore(days)}
-                disabled={!productRemindersEnabled}
+                disabled={!productRemindersEnabled || isRefreshingPriorityItems}
               >
-                <Text style={[styles.chipText, reminderDaysBefore === days && styles.chipTextActive, !productRemindersEnabled && styles.disabledText]}>
+                <Text style={[styles.chipText, reminderDaysBefore === days && styles.chipTextActive, (!productRemindersEnabled || isRefreshingPriorityItems) && styles.disabledText]}>
                   J-{days}
                 </Text>
               </TouchableOpacity>
             ))}
           </View>
 
-          <Text style={styles.systemInfo}>Dernière mise à jour des rappels : {formatLastUpdate(lastRemindersUpdate)}</Text>
+          <Text style={styles.systemInfo}>Dernière mise à jour des rappels : {formatLastUpdate(lastReminderRefreshAt, language)}</Text>
+
+          <TouchableOpacity
+            style={[styles.refreshButton, isRefreshingPriorityItems && styles.refreshButtonDisabled]}
+            onPress={forceRefreshReminderProducts}
+            disabled={isRefreshingPriorityItems}
+          >
+            {isRefreshingPriorityItems ? (
+              <ActivityIndicator size="small" color="#FFFFFF" />
+            ) : (
+              <Ionicons name="refresh" size={16} color="#FFFFFF" />
+            )}
+            <Text style={styles.refreshButtonText}>
+              {isRefreshingPriorityItems ? 'Mise à jour…' : 'Mettre à jour maintenant'}
+            </Text>
+          </TouchableOpacity>
+
+          {!!reminderRefreshSuccessAt && (
+            <Text style={styles.successText}>
+              {language === 'en' ? 'Reminder products updated successfully.' : 'Produits rappelés mis à jour avec succès.'}
+            </Text>
+          )}
+          {!!reminderRefreshError && <Text style={styles.errorText}>{reminderRefreshError}</Text>}
         </View>
       </View>
     </SafeAreaView>
@@ -127,4 +154,19 @@ const styles = StyleSheet.create({
   inlineRow: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between' },
   disabledText: { opacity: 0.5 },
   systemInfo: { color: C.textLight, fontSize: 12, fontWeight: '500' },
+  refreshButton: {
+    marginTop: 4,
+    backgroundColor: '#16A34A',
+    borderRadius: 10,
+    minHeight: 40,
+    paddingHorizontal: 14,
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    gap: 8,
+  },
+  refreshButtonDisabled: { opacity: 0.7 },
+  refreshButtonText: { color: '#FFFFFF', fontWeight: '700', fontSize: 14 },
+  successText: { color: '#166534', fontSize: 12, fontWeight: '500' },
+  errorText: { color: '#B91C1C', fontSize: 12, fontWeight: '500' },
 });

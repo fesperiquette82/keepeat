@@ -56,6 +56,15 @@ export interface Stats {
   thrown_this_week: number;
 }
 
+export interface PriorityRefreshResult {
+  items: StockItem[];
+  last_refresh_at: string;
+  item_ids: string[];
+  count: number;
+  lead_days: 1 | 2 | 3;
+  reminders_enabled: boolean;
+}
+
 type MutationType = 'ADD' | 'CONSUME' | 'THROW' | 'UPDATE';
 
 interface PendingMutation {
@@ -88,9 +97,11 @@ interface StockStore {
   pendingMutations: PendingMutation[];
   isOnline: boolean;
   isSyncing: boolean;
+  isRefreshingPriorityItems: boolean;
 
   fetchStock: () => Promise<void>;
   fetchPriorityItems: () => Promise<void>;
+  refreshPriorityItems: (leadDays: 1 | 2 | 3, remindersEnabled: boolean) => Promise<PriorityRefreshResult | null>;
   fetchStats: () => Promise<void>;
   fetchHistory: () => Promise<void>;
   markConsumed: (itemId: string) => Promise<void>;
@@ -130,6 +141,7 @@ export const useStockStore = create<StockStore>()(
       pendingMutations: [],
       isOnline: true,
       isSyncing: false,
+      isRefreshingPriorityItems: false,
 
       setOnline: (online: boolean) => {
         const { isOnline, pendingMutations, flushPendingMutations, fetchStock } = get();
@@ -216,13 +228,47 @@ export const useStockStore = create<StockStore>()(
         set(state => ({ loadingCount: state.loadingCount + 1, isLoading: true }));
         try {
           const res = await axios.get(buildApiUrl('/api/stock/priority'), { headers: authHeaders() });
-          set({ priorityItems: res.data });
+          set({ priorityItems: res.data, error: null });
         } catch {
           // Garder le cache en cas d'erreur réseau
         } finally {
           set(state => {
             const next = Math.max(0, state.loadingCount - 1);
             return { loadingCount: next, isLoading: next > 0 };
+          });
+        }
+      },
+
+      refreshPriorityItems: async (leadDays, remindersEnabled) => {
+        if (get().isRefreshingPriorityItems) {
+          return null;
+        }
+        set(state => ({
+          loadingCount: state.loadingCount + 1,
+          isLoading: true,
+          isRefreshingPriorityItems: true,
+        }));
+        try {
+          const res = await axios.post<PriorityRefreshResult>(
+            buildApiUrl('/api/stock/priority/refresh'),
+            { lead_days: leadDays, reminders_enabled: remindersEnabled },
+            { headers: authHeaders() },
+          );
+          set({ priorityItems: res.data.items, error: null });
+          return res.data;
+        } catch (err: any) {
+          if (!isNetworkError(err)) {
+            set({ error: err.message });
+          }
+          throw err;
+        } finally {
+          set(state => {
+            const next = Math.max(0, state.loadingCount - 1);
+            return {
+              loadingCount: next,
+              isLoading: next > 0,
+              isRefreshingPriorityItems: false,
+            };
           });
         }
       },
