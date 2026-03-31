@@ -34,6 +34,9 @@ Tous protégés par auth utilisateur + contrôle admin **côté serveur**.
 - `GET /api/admin/monitoring/users`
 - `GET /api/admin/monitoring/subscriptions`
 - `GET /api/admin/monitoring/services-usage`
+- `GET /api/admin/monitoring/services`
+- `GET /api/admin/monitoring/usage`
+- `GET /api/admin/monitoring/costs`
 - `GET /api/admin/monitoring/events`
 
 ## Modèle de sécurité admin (V2)
@@ -67,6 +70,22 @@ Tous protégés par auth utilisateur + contrôle admin **côté serveur**.
 - OCR (`ocr/receipt`) + coût estimé configurable (`OCR_ESTIMATED_COST_EUR`)
 - Génération recettes IA (`recipes/ai`) + coût estimé configurable (`AI_RECIPE_ESTIMATED_COST_EUR`)
 - Refresh rappels externes (`recalls/refresh`) + coût estimé configurable (`RECALL_REFRESH_ESTIMATED_COST_EUR`)
+- Open Food Facts lookup (`/api/product/{barcode}`) + compteur d'usage (`service_name=openfoodfacts`)
+
+## Service Control Center (V1)
+- `services`: statut de connexion/health agrégé pour backend, MongoDB, Open Food Facts, OCR provider, connectivité frontend→backend.
+- `usage`: compteurs mensuels OCR + Open Food Facts, volumétrie produits Mongo, total users, projection fin de mois en prorata.
+- `costs`: recommandations simples d'upgrade (Render/Mongo/OCR) basées sur des hypothèses configurables.
+
+### Variables d'environnement optionnelles (estimations V1)
+- Quotas usage:
+  - `MONITORING_FREE_QUOTA_OCR_CALLS`
+  - `MONITORING_FREE_QUOTA_OPENFOODFACTS_CALLS`
+- Références pricing/reco:
+  - `MONITORING_RENDER_CURRENT_PLAN`, `MONITORING_RENDER_FREE_REQUESTS`, `MONITORING_RENDER_NEXT_PLAN`, `MONITORING_RENDER_NEXT_PLAN_COST`
+  - `MONITORING_MONGO_CURRENT_PLAN`, `MONITORING_MONGO_FREE_PRODUCTS`, `MONITORING_MONGO_NEXT_PLAN`, `MONITORING_MONGO_NEXT_PLAN_COST`
+  - `MONITORING_OCR_CURRENT_PLAN`
+- Remarque: ces valeurs sont **indicatives** et ne remplacent pas la facturation fournisseur.
 
 ## KPIs calculés
 - Users: total, nouveaux (today/7d/30d), DAU/WAU/MAU, free vs premium
@@ -76,6 +95,7 @@ Tous protégés par auth utilisateur + contrôle admin **côté serveur**.
 
 ## Limites actuelles
 - Coûts: estimations tant que la facturation réelle n'est pas intégrée.
+- Certains compteurs d'usage reposent sur des logs applicatifs; un redéploiement ne supprime pas Mongo mais des chemins non instrumentés peuvent manquer.
 - MRR/ARR: basé sur `PREMIUM_MONTHLY_PRICE_EUR` (défaut `4.99`).
 - `/health` externe: vérifie configuration critique, pas un ping exhaustif de tous services tiers.
 - Les conversions/churn fins dépendent de données subscription historiques plus détaillées.

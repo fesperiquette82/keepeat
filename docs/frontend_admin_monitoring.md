@@ -25,6 +25,9 @@
   - `GET /api/admin/monitoring/users`
   - `GET /api/admin/monitoring/subscriptions`
   - `GET /api/admin/monitoring/services-usage`
+  - `GET /api/admin/monitoring/services`
+  - `GET /api/admin/monitoring/usage`
+  - `GET /api/admin/monitoring/costs`
   - `GET /api/admin/monitoring/events`
 - Auth admin API: `Authorization: Bearer <token utilisateur>` uniquement.
 - Aucun secret admin public (`EXPO_PUBLIC_ADMIN_MONITORING_KEY`) n’est utilisé.
@@ -40,6 +43,7 @@
 - Chaque vue gère loading / error / empty.
 - Vue events: pagination + filtres simples (`event_name`, `event_category`, période).
 - Vue APIs/services: filtres période rapides (`24h/7d/30d` ou `7d/30d`).
+- Vue Service Control Center (`services-usage`): 3 sections lisibles (Services / Usage / Coûts), y compris état partiel si un endpoint échoue.
 
 ## Limites actuelles
 - UI table simplifiée en listes structurées (pas de tri colonne avancé).

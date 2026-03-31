@@ -93,6 +93,7 @@ from observability import (
     track_business_event,
     track_service_usage,
 )
+from admin_service_control import build_cost_recommendations, build_services_status, build_usage_metrics
 from product_catalog import infer_food_category, infer_shelf_life, lookup_product_openfoodfacts
 from recipes_service import (
     _FRIGO_CATS,
@@ -1220,6 +1221,16 @@ async def get_stats(current_user: Dict[str, Any] = Depends(_get_current_user)):
 @api_router.get("/product/{barcode}", response_model=ProductLookupResponse)
 async def get_product(barcode: str):
     product = await lookup_product_openfoodfacts(barcode, products_cache_col)
+    await track_service_usage(
+        service_usage_logs_col=service_usage_logs_col,
+        user_id=None,
+        service_name="openfoodfacts",
+        action_name="product_lookup",
+        units_consumed=1,
+        estimated_cost=float(os.getenv("OPENFOODFACTS_ESTIMATED_COST_EUR", "0")),
+        plan_type_at_time="unknown",
+        metadata_json={"barcode": barcode, "found": bool(product)},
+    )
     shelf_life = infer_shelf_life(product if product else ProductBase(barcode=barcode))
     return ProductLookupResponse(
         found=product is not None,
@@ -2323,6 +2334,41 @@ async def admin_monitoring_services_usage(
         start_iso=start_iso,
         end_iso=end_iso,
     )
+
+
+@api_router.get("/admin/monitoring/services")
+async def admin_monitoring_services(
+    _admin_user: Dict[str, Any] = Depends(_require_admin_user),
+):
+    payload = await build_services_status(
+        db=db,
+        api_request_logs_col=api_request_logs_col,
+    )
+    payload["uptime_seconds"] = max(0, int((utc_now() - APP_STARTED_AT).total_seconds()))
+    return payload
+
+
+@api_router.get("/admin/monitoring/usage")
+async def admin_monitoring_usage(
+    _admin_user: Dict[str, Any] = Depends(_require_admin_user),
+):
+    return await build_usage_metrics(
+        users_col=users_col,
+        stock_col=stock_col,
+        service_usage_logs_col=service_usage_logs_col,
+    )
+
+
+@api_router.get("/admin/monitoring/costs")
+async def admin_monitoring_costs(
+    _admin_user: Dict[str, Any] = Depends(_require_admin_user),
+):
+    usage_payload = await build_usage_metrics(
+        users_col=users_col,
+        stock_col=stock_col,
+        service_usage_logs_col=service_usage_logs_col,
+    )
+    return await build_cost_recommendations(usage_payload=usage_payload)
 
 
 @api_router.get("/admin/monitoring/events")

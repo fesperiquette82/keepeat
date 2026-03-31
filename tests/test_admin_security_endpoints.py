@@ -99,6 +99,12 @@ class AdminSecurityEndpointTests(unittest.TestCase):
             response = client.get("/api/admin/monitoring/health")
         self.assertEqual(response.status_code, 401)
 
+    def test_admin_services_without_auth_returns_401(self):
+        with patch("server.api_request_logs_col", _FakeApiLogsCol()), patch("server.db", _FakeDB()):
+            client = TestClient(server.app)
+            response = client.get("/api/admin/monitoring/services")
+        self.assertEqual(response.status_code, 401)
+
     def test_admin_health_with_non_admin_returns_403(self):
         async def _override_user():
             return {"id": self.user_id, "email": "user@keepeat.app", "is_admin": False}
