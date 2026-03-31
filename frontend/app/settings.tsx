@@ -7,14 +7,15 @@ import { C, T } from '../utils/theme';
 import { useAppSettingsStore, type ReminderLeadDays } from '../store/appSettingsStore';
 import { useStockStore } from '../store/stockStore';
 import { useAuthStore } from '../store/authStore';
+import { useLanguageStore } from '../store/languageStore';
 import { restorePremiumPurchase } from '../utils/billingService';
 import { isAdminUser } from '../utils/adminAccess';
 import { logger } from '../utils/logger';
 
-function formatLastUpdate(value: string | null, language: 'fr' | 'en'): string {
-  if (!value) return language === 'en' ? 'Not updated yet' : 'Pas encore mis à jour';
+function formatLastUpdate(value: string | null, language: 'fr' | 'en', fallbackText: string): string {
+  if (!value) return fallbackText;
   const date = new Date(value);
-  if (Number.isNaN(date.getTime())) return language === 'en' ? 'Not updated yet' : 'Pas encore mis à jour';
+  if (Number.isNaN(date.getTime())) return fallbackText;
   return date.toLocaleString(language === 'en' ? 'en-US' : 'fr-FR', {
     day: '2-digit',
     month: '2-digit',
@@ -48,6 +49,7 @@ export default function SettingsScreen() {
   const refreshEntitlements = useAuthStore((state) => state.refreshEntitlements);
   const plan = useAuthStore((state) => state.plan);
   const canAccessAdmin = isAdminUser(user);
+  const { t } = useLanguageStore();
   const onPressRefreshRecalls = useCallback(() => {
     logger.info('[SETTINGS] refresh button pressed');
     logger.info('[SETTINGS] calling forceRefreshReminderProducts');
@@ -62,40 +64,40 @@ export default function SettingsScreen() {
         <TouchableOpacity style={styles.backButton} onPress={() => router.back()}>
           <Ionicons name="arrow-back" size={20} color={C.text} />
         </TouchableOpacity>
-        <Text style={styles.title}>Paramètres</Text>
+        <Text style={styles.title}>{t('settingsTitle')}</Text>
         <View style={styles.backButton} />
       </View>
 
       <View style={styles.content}>
         <View style={styles.card}>
-          <Text style={styles.sectionTitle}>Langue</Text>
+          <Text style={styles.sectionTitle}>{t('languageSection')}</Text>
           <View style={styles.rowWrap}>
             <TouchableOpacity style={[styles.chip, language === 'fr' && styles.chipActive]} onPress={() => setLanguage('fr')}>
-              <Text style={[styles.chipText, language === 'fr' && styles.chipTextActive]}>🇫🇷 Français</Text>
+              <Text style={[styles.chipText, language === 'fr' && styles.chipTextActive]}>🇫🇷 {t('french')}</Text>
             </TouchableOpacity>
             <TouchableOpacity style={[styles.chip, language === 'en' && styles.chipActive]} onPress={() => setLanguage('en')}>
-              <Text style={[styles.chipText, language === 'en' && styles.chipTextActive]}>🇬🇧 English</Text>
+              <Text style={[styles.chipText, language === 'en' && styles.chipTextActive]}>🇬🇧 {t('english')}</Text>
             </TouchableOpacity>
           </View>
         </View>
 
         <View style={styles.card}>
-          <Text style={styles.sectionTitle}>Nombre de personnes du foyer</Text>
+          <Text style={styles.sectionTitle}>{t('householdSize')}</Text>
           <View style={styles.counterRow}>
             <TouchableOpacity style={styles.counterBtn} onPress={() => setHouseholdSize(householdSize - 1)}>
               <Ionicons name="remove" size={16} color={C.text} />
             </TouchableOpacity>
-            <Text style={styles.counterValue}>{householdSize} personnes</Text>
+            <Text style={styles.counterValue}>{t('peopleCount', { count: householdSize })}</Text>
             <TouchableOpacity style={styles.counterBtn} onPress={() => setHouseholdSize(householdSize + 1)}>
               <Ionicons name="add" size={16} color={C.text} />
             </TouchableOpacity>
           </View>
-          <Text style={styles.hint}>Valeur par défaut utilisée pour les recettes.</Text>
+          <Text style={styles.hint}>{t('defaultRecipeHint')}</Text>
         </View>
 
         <View style={styles.card}>
           <View style={styles.inlineRow}>
-            <Text style={styles.sectionTitle}>Rappels produits</Text>
+            <Text style={styles.sectionTitle}>{t('productReminders')}</Text>
             <Switch
               trackColor={{ false: '#D1D5DB', true: '#86EFAC' }}
               thumbColor={productRemindersEnabled ? '#16A34A' : '#F3F4F6'}
@@ -104,7 +106,7 @@ export default function SettingsScreen() {
             />
           </View>
 
-          <Text style={styles.subLabel}>Délai avant péremption</Text>
+          <Text style={styles.subLabel}>{t('reminderLeadTime')}</Text>
           <View style={styles.rowWrap}>
             {reminderOptions.map((days) => (
               <TouchableOpacity
@@ -120,7 +122,9 @@ export default function SettingsScreen() {
             ))}
           </View>
 
-          <Text style={styles.systemInfo}>Dernière mise à jour des rappels : {formatLastUpdate(lastReminderRefreshAt, language)}</Text>
+          <Text style={styles.systemInfo}>
+            {t('remindersLastUpdate', { date: formatLastUpdate(lastReminderRefreshAt, language, t('notUpdatedYet')) })}
+          </Text>
 
           <TouchableOpacity
             style={[styles.refreshButton, refreshInProgress && styles.refreshButtonDisabled]}
@@ -132,25 +136,25 @@ export default function SettingsScreen() {
             ) : (
               <Ionicons name="refresh" size={16} color="#FFFFFF" />
             )}
-            <Text style={styles.refreshButtonText}>
-              {refreshInProgress ? 'Mise à jour…' : 'Mettre à jour maintenant'}
+              <Text style={styles.refreshButtonText}>
+              {refreshInProgress ? t('updateInProgress') : t('updateNow')}
             </Text>
           </TouchableOpacity>
 
           {!!reminderRefreshSuccessAt && (
             <Text style={styles.successText}>
-              {language === 'en' ? 'Reminder products updated successfully.' : 'Produits rappelés mis à jour avec succès.'}
+              {t('remindersUpdatedSuccess')}
             </Text>
           )}
           {!!reminderRefreshError && <Text style={styles.errorText}>{reminderRefreshError}</Text>}
         </View>
 
         <View style={styles.card}>
-          <Text style={styles.sectionTitle}>Premium</Text>
-          <Text style={styles.systemInfo}>Plan actuel : {plan}</Text>
+          <Text style={styles.sectionTitle}>{t('premium')}</Text>
+          <Text style={styles.systemInfo}>{t('currentPlan', { plan })}</Text>
           <TouchableOpacity style={styles.refreshButton} onPress={() => router.push('/premium')}>
             <Ionicons name="diamond-outline" size={16} color="#FFFFFF" />
-            <Text style={styles.refreshButtonText}>Passer Premium</Text>
+            <Text style={styles.refreshButtonText}>{t('upgradePremium')}</Text>
           </TouchableOpacity>
           <TouchableOpacity
             style={styles.restoreButton}
@@ -159,23 +163,23 @@ export default function SettingsScreen() {
               try {
                 await restorePremiumPurchase(token);
                 await refreshEntitlements();
-                Alert.alert('Restauration', 'Vos droits premium ont été synchronisés.');
+                Alert.alert(t('restoreTitle'), t('restoreSuccess'));
               } catch {
-                Alert.alert('Erreur', 'Impossible de restaurer les achats.');
+                Alert.alert(t('errorTitle'), t('restoreError'));
               }
             }}
           >
-            <Text style={styles.restoreButtonText}>Restaurer mes achats</Text>
+            <Text style={styles.restoreButtonText}>{t('restorePurchases')}</Text>
           </TouchableOpacity>
         </View>
 
         {canAccessAdmin && (
           <View style={styles.card}>
-            <Text style={styles.sectionTitle}>Administration</Text>
-            <Text style={styles.systemInfo}>Accès monitoring backend (admin only).</Text>
+            <Text style={styles.sectionTitle}>{t('adminSection')}</Text>
+            <Text style={styles.systemInfo}>{t('adminMonitoringAccess')}</Text>
             <TouchableOpacity style={styles.refreshButton} onPress={() => router.push('/admin')}>
               <Ionicons name="analytics-outline" size={16} color="#FFFFFF" />
-              <Text style={styles.refreshButtonText}>Ouvrir le back-office monitoring</Text>
+              <Text style={styles.refreshButtonText}>{t('openMonitoringBackoffice')}</Text>
             </TouchableOpacity>
           </View>
         )}

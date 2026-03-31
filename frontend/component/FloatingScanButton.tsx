@@ -2,6 +2,7 @@ import React from 'react';
 import { Pressable, StyleSheet, Text, View } from 'react-native';
 import Ionicons from '@expo/vector-icons/Ionicons';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
+import { useLanguageStore } from '../store/languageStore';
 
 type FloatingScanButtonProps = {
   onPress: () => void;
@@ -9,13 +10,14 @@ type FloatingScanButtonProps = {
 
 export default function FloatingScanButton({ onPress }: FloatingScanButtonProps) {
   const insets = useSafeAreaInsets();
+  const { t } = useLanguageStore();
   const bottomOffset = insets.bottom + 76;
 
   return (
     <View pointerEvents="box-none" style={StyleSheet.absoluteFill}>
       <Pressable
         accessibilityRole="button"
-        accessibilityLabel="Scan"
+        accessibilityLabel={t('scanner')}
         onPress={onPress}
         style={({ pressed }) => [
           styles.button,
@@ -26,7 +28,7 @@ export default function FloatingScanButton({ onPress }: FloatingScanButtonProps)
         ]}
       >
         <Ionicons name="scan" size={18} color="#FFFFFF" />
-        <Text style={styles.label}>Scan</Text>
+        <Text style={styles.label}>{t('scanner')}</Text>
       </Pressable>
     </View>
   );

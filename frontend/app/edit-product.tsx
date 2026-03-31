@@ -76,8 +76,8 @@ export default function EditProductScreen() {
   const handleSave = async () => {
     if (!name.trim()) {
       Alert.alert(
-        language === 'fr' ? 'Erreur' : 'Error',
-        language === 'fr' ? 'Le nom du produit est requis' : 'Product name is required',
+        t('errorTitle'),
+        t('productNameRequired'),
       );
       return;
     }
@@ -95,14 +95,14 @@ export default function EditProductScreen() {
       await fetchStock();
 
       Alert.alert(
-        language === 'fr' ? 'Modifié !' : 'Updated!',
+        t('updateProductSuccessTitle'),
         '',
-        [{ text: 'OK', onPress: () => router.back() }],
+        [{ text: t('confirm'), onPress: () => router.back() }],
       );
     } catch {
       Alert.alert(
-        language === 'fr' ? 'Erreur' : 'Error',
-        language === 'fr' ? 'Impossible de modifier le produit' : 'Unable to update product',
+        t('errorTitle'),
+        t('updateProductError'),
       );
     } finally {
       setIsSaving(false);
@@ -127,7 +127,7 @@ export default function EditProductScreen() {
           <Ionicons name="arrow-back" size={24} color="#fff" />
         </TouchableOpacity>
         <Text style={styles.headerTitle}>
-          {language === 'fr' ? 'Modifier le produit' : 'Edit product'}
+          {t('editProduct')}
         </Text>
         <View style={{ width: 40 }} />
       </View>
@@ -140,7 +140,7 @@ export default function EditProductScreen() {
               style={styles.input}
               value={name}
               onChangeText={setName}
-              placeholder={language === 'fr' ? 'Nom du produit' : 'Product name'}
+              placeholder={t('productName')}
               placeholderTextColor="#666"
             />
           </View>
@@ -151,7 +151,7 @@ export default function EditProductScreen() {
               style={styles.input}
               value={brand}
               onChangeText={setBrand}
-              placeholder={language === 'fr' ? 'Marque' : 'Brand'}
+              placeholder={t('brand')}
               placeholderTextColor="#666"
             />
           </View>
@@ -162,7 +162,7 @@ export default function EditProductScreen() {
               style={styles.input}
               value={quantity}
               onChangeText={setQuantity}
-              placeholder="Ex: 1L, 500g"
+              placeholder={t('exampleQuantity')}
               placeholderTextColor="#666"
             />
           </View>
@@ -177,7 +177,7 @@ export default function EditProductScreen() {
               >
                 <Ionicons name="time-outline" size={18} color={dateInputMode === 'duration' ? '#fff' : '#888'} />
                 <Text style={[styles.modeBtnText, dateInputMode === 'duration' && styles.modeBtnTextActive]}>
-                  {language === 'fr' ? 'Durée' : 'Duration'}
+                  {t('dateModeDuration')}
                 </Text>
               </TouchableOpacity>
 
@@ -187,7 +187,7 @@ export default function EditProductScreen() {
               >
                 <Ionicons name="calendar-outline" size={18} color={dateInputMode === 'date' ? '#fff' : '#888'} />
                 <Text style={[styles.modeBtnText, dateInputMode === 'date' && styles.modeBtnTextActive]}>
-                  {language === 'fr' ? 'Date' : 'Date'}
+                  {t('dateModeDate')}
                 </Text>
               </TouchableOpacity>
 
@@ -197,7 +197,7 @@ export default function EditProductScreen() {
               >
                 <Ionicons name="camera-outline" size={18} color={dateInputMode === 'camera' ? '#fff' : '#888'} />
                 <Text style={[styles.modeBtnText, dateInputMode === 'camera' && styles.modeBtnTextActive]}>
-                  {language === 'fr' ? 'Scanner' : 'Scan'}
+                  {t('dateModeScan')}
                 </Text>
               </TouchableOpacity>
             </View>
@@ -208,7 +208,7 @@ export default function EditProductScreen() {
                   style={styles.durationField}
                   value={durationDays}
                   onChangeText={setDurationDays}
-                  placeholder={language === 'fr' ? 'Nombre de jours' : 'Number of days'}
+                  placeholder={t('durationPlaceholder')}
                   placeholderTextColor="#666"
                   keyboardType="numeric"
                 />
@@ -218,7 +218,7 @@ export default function EditProductScreen() {
                   disabled={!durationDays}
                 >
                   <Text style={styles.applyBtnText}>
-                    {language === 'fr' ? 'Appliquer' : 'Apply'}
+                    {t('apply')}
                   </Text>
                 </TouchableOpacity>
               </View>
@@ -252,7 +252,7 @@ export default function EditProductScreen() {
               style={[styles.input, styles.notesInput]}
               value={notes}
               onChangeText={setNotes}
-              placeholder={language === 'fr' ? 'Notes optionnelles...' : 'Optional notes...'}
+              placeholder={t('optionalNotesPlaceholder')}
               placeholderTextColor="#666"
               multiline
               numberOfLines={3}

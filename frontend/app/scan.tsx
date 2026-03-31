@@ -110,7 +110,7 @@ export default function ScanScreen() {
             style={styles.barcodeInput}
             value={manualBarcode}
             onChangeText={setManualBarcode}
-            placeholder="Code-barres (EAN)"
+            placeholder={t('barcodePlaceholder')}
             placeholderTextColor="#666"
             keyboardType="numeric"
             autoFocus
@@ -133,7 +133,7 @@ export default function ScanScreen() {
         >
           <Ionicons name={showManualInput ? 'camera' : 'keypad'} size={24} color={showManualInput ? '#22c55e' : '#fff'} />
           <Text style={[styles.actionBtnText, showManualInput && styles.actionBtnTextActive]}>
-            {showManualInput ? 'Scanner' : t('manualEntry')}
+            {showManualInput ? t('scanner') : t('manualEntry')}
           </Text>
         </TouchableOpacity>
 
@@ -144,13 +144,13 @@ export default function ScanScreen() {
 
         <TouchableOpacity style={styles.actionBtn} onPress={() => router.push('/scan-receipt' as any)}>
           <Ionicons name="receipt-outline" size={24} color="#fff" />
-          <Text style={styles.actionBtnText}>Ticket</Text>
+          <Text style={styles.actionBtnText}>{t('ticket')}</Text>
         </TouchableOpacity>
 
         {scanned && (
           <TouchableOpacity style={[styles.actionBtn, styles.rescanBtn]} onPress={() => setScanned(false)}>
             <Ionicons name="refresh" size={24} color="#22c55e" />
-            <Text style={[styles.actionBtnText, { color: '#22c55e' }]}>Rescanner</Text>
+            <Text style={[styles.actionBtnText, { color: '#22c55e' }]}>{t('rescan')}</Text>
           </TouchableOpacity>
         )}
       </View>
