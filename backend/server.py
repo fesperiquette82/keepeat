@@ -1077,8 +1077,18 @@ async def _compute_priority_items(*, user_id: str, lead_days: int, reminders_ena
 @api_router.post("/stock/priority/refresh", response_model=PriorityRefreshResponse)
 async def refresh_priority_items(
     body: PriorityRefreshBody,
+    request: Request,
     current_user: Dict[str, Any] = Depends(_get_current_user),
 ):
+    state_id = _priority_refresh_state_id(current_user["id"])
+    previous_state = await app_state_col.find_one({"_id": state_id})
+    logger.info(
+        "Priority refresh request user=%s method=%s path=%s payload=%s",
+        current_user["id"],
+        request.method,
+        str(request.url.path),
+        body.model_dump(),
+    )
     try:
         docs = await _compute_priority_items(
             user_id=current_user["id"],
@@ -1090,7 +1100,7 @@ async def refresh_priority_items(
         item_ids = [item["id"] for item in items]
 
         state_doc = build_priority_refresh_state(
-            None,
+            previous_state,
             succeeded=True,
             last_refresh_at=refreshed_at,
             item_ids=item_ids,
@@ -1099,24 +1109,53 @@ async def refresh_priority_items(
             reminders_enabled=body.reminders_enabled,
         )
         await app_state_col.update_one(
-            {"_id": _priority_refresh_state_id(current_user["id"])},
+            {"_id": state_id},
             {"$set": state_doc},
             upsert=True,
         )
 
-        return PriorityRefreshResponse(
+        payload = PriorityRefreshResponse(
             items=items,
             last_refresh_at=refreshed_at,
-            item_ids=item_ids,
             count=len(item_ids),
-            lead_days=body.lead_days,
+            lead_days_used=body.lead_days,
             reminders_enabled=body.reminders_enabled,
         )
+        logger.info(
+            "Priority refresh success user=%s method=%s path=%s count=%d last_refresh_at=%s",
+            current_user["id"],
+            request.method,
+            str(request.url.path),
+            payload.count,
+            payload.last_refresh_at,
+        )
+        return payload
     except HTTPException:
         raise
     except Exception as exc:
-        logger.error("Priority refresh failed for user=%s: %s", current_user["id"], exc)
-        raise HTTPException(status_code=500, detail="Priority refresh failed")
+        preserved_state = build_priority_refresh_state(
+            previous_state,
+            succeeded=False,
+            last_refresh_at=utc_now().isoformat(),
+            item_ids=[],
+            count=0,
+            lead_days=body.lead_days,
+            reminders_enabled=body.reminders_enabled,
+        )
+        if preserved_state:
+            await app_state_col.update_one(
+                {"_id": state_id},
+                {"$set": preserved_state},
+                upsert=True,
+            )
+        logger.exception(
+            "Priority refresh failed user=%s method=%s path=%s payload=%s",
+            current_user["id"],
+            request.method,
+            str(request.url.path),
+            body.model_dump(),
+        )
+        raise HTTPException(status_code=500, detail={"message": "Impossible de mettre à jour les produits prioritaires.", "reason": str(exc)})
 
 
 @api_router.get("/stock/history")

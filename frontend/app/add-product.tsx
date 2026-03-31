@@ -1,4 +1,4 @@
-import React, { useEffect, useMemo, useState } from 'react';
+import React, { useEffect, useMemo, useRef, useState } from 'react';
 import {
   View,
   Text,
@@ -22,6 +22,16 @@ import { useOcrDatePicker } from '../utils/useOcrDatePicker';
 import { DatePickerModal, CameraModal } from '../component/CameraDateModal';
 
 type DateInputMode = 'auto' | 'duration' | 'date' | 'camera';
+
+function paramToString(value: string | string[] | undefined): string {
+  if (Array.isArray(value)) return value[0] ?? '';
+  return value ?? '';
+}
+
+function parseOptionalInt(value: string | string[] | undefined): number | null {
+  const parsed = parseInt(paramToString(value), 10);
+  return Number.isFinite(parsed) ? parsed : null;
+}
 
 // ─── AddProductScreen ──────────────────────────────────────────────────────────
 
@@ -47,9 +57,9 @@ export default function AddProductScreen() {
   const [permission, requestPermission] = useCameraPermissions();
 
   // Form fields
-  const [name, setName] = useState(params.name || '');
-  const [brand, setBrand] = useState(params.brand || '');
-  const [quantity, setQuantity] = useState(params.quantity || '');
+  const [name, setName] = useState(paramToString(params.name));
+  const [brand, setBrand] = useState(paramToString(params.brand));
+  const [quantity, setQuantity] = useState(paramToString(params.quantity));
   const [notes, setNotes] = useState('');
   const [expiryDate, setExpiryDate] = useState<Date | null>(null);
   const [showDatePicker, setShowDatePicker] = useState(false);
@@ -59,39 +69,94 @@ export default function AddProductScreen() {
   const [durationDays, setDurationDays] = useState('');
 
   // Product metadata — initially from params, updated after async lookup
-  const [productFound, setProductFound] = useState(params.found !== 'false');
-  const [imageUrl, setImageUrl] = useState(params.image_url || '');
-  const [foodCategory, setFoodCategory] = useState(params.category || '');
-  const [shelfLifeCategory, setShelfLifeCategory] = useState(params.shelf_life_category || '');
-  const [shelfLifeFridge, setShelfLifeFridge]   = useState<number | null>(params.shelf_life_fridge  ? parseInt(params.shelf_life_fridge,  10) : null);
-  const [shelfLifeFreezer, setShelfLifeFreezer] = useState<number | null>(params.shelf_life_freezer ? parseInt(params.shelf_life_freezer, 10) : null);
-  const [shelfLifePantry, setShelfLifePantry]   = useState<number | null>(params.shelf_life_pantry  ? parseInt(params.shelf_life_pantry,  10) : null);
-  const [shelfLifeTips, setShelfLifeTips] = useState(params.shelf_life_tips || '');
+  const [productFound, setProductFound] = useState(paramToString(params.found) !== 'false');
+  const [imageUrl, setImageUrl] = useState(paramToString(params.image_url));
+  const [foodCategory, setFoodCategory] = useState(paramToString(params.category));
+  const [shelfLifeCategory, setShelfLifeCategory] = useState(paramToString(params.shelf_life_category));
+  const [shelfLifeFridge, setShelfLifeFridge] = useState<number | null>(parseOptionalInt(params.shelf_life_fridge));
+  const [shelfLifeFreezer, setShelfLifeFreezer] = useState<number | null>(parseOptionalInt(params.shelf_life_freezer));
+  const [shelfLifePantry, setShelfLifePantry] = useState<number | null>(parseOptionalInt(params.shelf_life_pantry));
+  const [shelfLifeTips, setShelfLifeTips] = useState(paramToString(params.shelf_life_tips));
+  const [hasPrefilledFromLookup, setHasPrefilledFromLookup] = useState(false);
+  const lastAppliedParamKeyRef = useRef<string>('');
 
   // Async barcode lookup — fires when barcode is provided but product name is absent (navigate-first)
-  const [lookupLoading, setLookupLoading] = useState(() => !!params.barcode && !params.name);
+  const normalizedBarcode = paramToString(params.barcode).trim();
+  const normalizedParamName = paramToString(params.name).trim();
+  const normalizedParamFound = paramToString(params.found);
+  const [lookupLoading, setLookupLoading] = useState(() => !!normalizedBarcode && !normalizedParamName);
 
   useEffect(() => {
-    if (!params.barcode || params.name) return;
+    const paramKey = JSON.stringify({
+      barcode: normalizedBarcode,
+      name: normalizedParamName,
+      brand: paramToString(params.brand),
+      quantity: paramToString(params.quantity),
+      image_url: paramToString(params.image_url),
+      category: paramToString(params.category),
+      found: normalizedParamFound,
+      shelf_life_category: paramToString(params.shelf_life_category),
+      shelf_life_fridge: paramToString(params.shelf_life_fridge),
+      shelf_life_freezer: paramToString(params.shelf_life_freezer),
+      shelf_life_pantry: paramToString(params.shelf_life_pantry),
+      shelf_life_tips: paramToString(params.shelf_life_tips),
+    });
+    if (lastAppliedParamKeyRef.current === paramKey) return;
+    lastAppliedParamKeyRef.current = paramKey;
+
+    setName(normalizedParamName);
+    setBrand(paramToString(params.brand));
+    setQuantity(paramToString(params.quantity));
+    setImageUrl(paramToString(params.image_url));
+    setFoodCategory(paramToString(params.category));
+    setProductFound(normalizedParamFound !== 'false');
+    setShelfLifeCategory(paramToString(params.shelf_life_category));
+    setShelfLifeFridge(parseOptionalInt(params.shelf_life_fridge));
+    setShelfLifeFreezer(parseOptionalInt(params.shelf_life_freezer));
+    setShelfLifePantry(parseOptionalInt(params.shelf_life_pantry));
+    setShelfLifeTips(paramToString(params.shelf_life_tips));
+    setHasPrefilledFromLookup(false);
+    setLookupLoading(Boolean(normalizedBarcode) && !normalizedParamName);
+  }, [
+    normalizedBarcode,
+    normalizedParamFound,
+    normalizedParamName,
+    params.brand,
+    params.category,
+    params.image_url,
+    params.quantity,
+    params.shelf_life_category,
+    params.shelf_life_freezer,
+    params.shelf_life_fridge,
+    params.shelf_life_pantry,
+    params.shelf_life_tips,
+  ]);
+
+  useEffect(() => {
+    if (!normalizedBarcode || normalizedParamName || hasPrefilledFromLookup) return;
     setLookupLoading(true);
-    lookupProduct(params.barcode).then((product) => {
-      if (product) {
+    lookupProduct(normalizedBarcode).then((response) => {
+      if (response?.found) {
+        const apiProduct = response.product ?? {};
+        const shelfLife = response.shelf_life ?? {};
+        const fallbackName = apiProduct.name || apiProduct.brand || (language === 'fr' ? 'Produit scanné' : 'Scanned product');
         setProductFound(true);
-        setName(product.name || '');
-        setBrand(product.brand || '');
-        setImageUrl(product.image_url || '');
-        setFoodCategory(product.category || '');
-        setShelfLifeCategory(product.shelf_life_category || '');
-        setShelfLifeFridge(product.shelf_life_fridge   ? parseInt(String(product.shelf_life_fridge),   10) : null);
-        setShelfLifeFreezer(product.shelf_life_freezer ? parseInt(String(product.shelf_life_freezer),  10) : null);
-        setShelfLifePantry(product.shelf_life_pantry   ? parseInt(String(product.shelf_life_pantry),   10) : null);
-        setShelfLifeTips(product.shelf_life_tips || '');
+        setName(String(fallbackName || ''));
+        setBrand(String(apiProduct.brand || ''));
+        setQuantity(String(apiProduct.quantity || ''));
+        setImageUrl(String(apiProduct.image_url || ''));
+        setFoodCategory(String(apiProduct.category || ''));
+        setShelfLifeCategory(String(shelfLife.category_fr || ''));
+        setShelfLifeFridge(shelfLife.refrigerator_days ?? null);
+        setShelfLifeFreezer(shelfLife.freezer_days ?? null);
+        setShelfLifePantry(shelfLife.pantry_days ?? null);
+        setShelfLifeTips(String(shelfLife.tips_fr || ''));
       } else {
         setProductFound(false);
       }
+      setHasPrefilledFromLookup(true);
     }).finally(() => setLookupLoading(false));
-  // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [params.barcode]);
+  }, [hasPrefilledFromLookup, language, lookupProduct, normalizedBarcode, normalizedParamName]);
 
   const ocr = useOcrDatePicker(language, !!permission?.granted, (date) => {
     setExpiryDate(date);
@@ -138,7 +203,7 @@ export default function AddProductScreen() {
     setIsSaving(true);
     try {
       await addItem({
-        barcode:   params.barcode || undefined,
+        barcode:   normalizedBarcode || undefined,
         name:      name.trim(),
         brand:     brand.trim()    || undefined,
         image_url: imageUrl        || undefined,
@@ -164,7 +229,7 @@ export default function AddProductScreen() {
     setIsSaving(true);
     try {
       await addItem({
-        barcode:     params.barcode  || undefined,
+        barcode:     normalizedBarcode || undefined,
         name:        name.trim(),
         brand:       brand.trim()    || undefined,
         image_url:   imageUrl        || undefined,
@@ -196,7 +261,7 @@ export default function AddProductScreen() {
 
       <ScrollView style={styles.scrollView} contentContainerStyle={styles.scrollContent}>
 
-        {params.barcode && (
+        {normalizedBarcode && (
           <View style={[styles.foundBadge, productFound ? styles.foundBadgeSuccess : styles.foundBadgeWarning]}>
             {lookupLoading ? (
               <ActivityIndicator size="small" color="#22c55e" />

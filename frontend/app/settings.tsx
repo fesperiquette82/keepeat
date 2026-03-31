@@ -42,6 +42,7 @@ export default function SettingsScreen() {
     forceRefreshReminderProducts,
   } = useAppSettingsStore();
   const isRefreshingPriorityItems = useStockStore((state) => state.isRefreshingPriorityItems);
+  const refreshInProgress = reminderRefreshLoading || isRefreshingPriorityItems;
   const token = useAuthStore((state) => state.token);
   const user = useAuthStore((state) => state.user);
   const refreshEntitlements = useAuthStore((state) => state.refreshEntitlements);
@@ -122,17 +123,17 @@ export default function SettingsScreen() {
           <Text style={styles.systemInfo}>Dernière mise à jour des rappels : {formatLastUpdate(lastReminderRefreshAt, language)}</Text>
 
           <TouchableOpacity
-            style={[styles.refreshButton, reminderRefreshLoading && styles.refreshButtonDisabled]}
+            style={[styles.refreshButton, refreshInProgress && styles.refreshButtonDisabled]}
             onPress={onPressRefreshRecalls}
-            disabled={reminderRefreshLoading}
+            disabled={refreshInProgress}
           >
-            {reminderRefreshLoading ? (
+            {refreshInProgress ? (
               <ActivityIndicator size="small" color="#FFFFFF" />
             ) : (
               <Ionicons name="refresh" size={16} color="#FFFFFF" />
             )}
             <Text style={styles.refreshButtonText}>
-              {reminderRefreshLoading ? 'Mise à jour…' : 'Mettre à jour maintenant'}
+              {refreshInProgress ? 'Mise à jour…' : 'Mettre à jour maintenant'}
             </Text>
           </TouchableOpacity>
 

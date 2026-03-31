@@ -123,16 +123,15 @@ class StockItemUpdate(BaseModel):
 
 
 class PriorityRefreshBody(BaseModel):
-    lead_days: Literal[1, 2, 3]
-    reminders_enabled: bool
+    lead_days: Literal[1, 2, 3] = 2
+    reminders_enabled: bool = True
 
 
 class PriorityRefreshResponse(BaseModel):
     items: list[StockItem]
     last_refresh_at: str
-    item_ids: list[str]
     count: int
-    lead_days: Literal[1, 2, 3]
+    lead_days_used: Literal[1, 2, 3]
     reminders_enabled: bool
 
 
