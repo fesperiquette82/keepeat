@@ -48,9 +48,14 @@ export default function HomeDashboardScreen() {
   return (
     <SafeAreaView style={styles.container}>
       <ScrollView style={styles.scroll} contentContainerStyle={styles.content} showsVerticalScrollIndicator={false}>
-        <View>
-          <Text style={styles.title}>Stock maison</Text>
-          <Text style={styles.subtitle}>{countLabelFr(items.length, 'ingrédient')} au total</Text>
+        <View style={styles.headerRow}>
+          <View>
+            <Text style={styles.title}>Stock maison</Text>
+            <Text style={styles.subtitle}>{countLabelFr(items.length, 'ingrédient')} au total</Text>
+          </View>
+          <TouchableOpacity style={styles.settingsButton} onPress={() => router.push('/settings')}>
+            <Ionicons name="settings-outline" size={19} color={C.text} />
+          </TouchableOpacity>
         </View>
 
         {isMock && (
@@ -154,6 +159,8 @@ const styles = StyleSheet.create({
   container: { flex: 1, backgroundColor: C.bg },
   scroll: { flex: 1 },
   content: { padding: 16, gap: 12, paddingBottom: 28 },
+  headerRow: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center' },
+  settingsButton: { width: 36, height: 36, borderRadius: 18, backgroundColor: '#fff', alignItems: 'center', justifyContent: 'center' },
   title: { fontSize: 28, fontWeight: '800', color: C.text },
   subtitle: { marginTop: 4, ...T.secondary },
   mockText: { ...T.tertiary, opacity: 0.85 },

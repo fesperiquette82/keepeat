@@ -6,6 +6,7 @@ export interface AppConfig {
   enableVerboseLogs: boolean;
   enableDiagnosticScreen: boolean;
   enableNetworkTracing: boolean;
+  defaultRecipeServings: number;
 }
 
 function parseBooleanFlag(value: string | undefined, fallback: boolean): boolean {
@@ -14,6 +15,14 @@ function parseBooleanFlag(value: string | undefined, fallback: boolean): boolean
   if (['1', 'true', 'yes', 'on'].includes(normalized)) return true;
   if (['0', 'false', 'no', 'off'].includes(normalized)) return false;
   return fallback;
+}
+
+
+function parseIntegerFlag(value: string | undefined, fallback: number, min = 1, max = 12): number {
+  if (!value) return fallback;
+  const parsed = Number.parseInt(value.trim(), 10);
+  if (!Number.isFinite(parsed)) return fallback;
+  return Math.min(max, Math.max(min, parsed));
 }
 
 function resolveAppVariant(): AppVariant {
@@ -26,6 +35,8 @@ function resolveAppVariant(): AppVariant {
 const appVariant = resolveAppVariant();
 const debugByDefault = appVariant === 'debug';
 
+export const DEFAULT_HOUSEHOLD_SIZE = parseIntegerFlag(process.env.EXPO_PUBLIC_DEFAULT_RECIPE_SERVINGS, 4);
+
 export const APP_CONFIG: AppConfig = {
   appVariant,
   enableDebugTools: appVariant === 'debug'
@@ -36,4 +47,5 @@ export const APP_CONFIG: AppConfig = {
     ? parseBooleanFlag(process.env.EXPO_PUBLIC_ENABLE_DIAGNOSTIC_SCREEN, debugByDefault)
     : false,
   enableNetworkTracing: parseBooleanFlag(process.env.EXPO_PUBLIC_ENABLE_NETWORK_TRACING, debugByDefault),
+  defaultRecipeServings: DEFAULT_HOUSEHOLD_SIZE,
 };
