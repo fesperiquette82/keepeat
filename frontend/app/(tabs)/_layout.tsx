@@ -1,6 +1,6 @@
 import React from 'react';
 import { View } from 'react-native';
-import { Tabs, useRouter, useSegments } from 'expo-router';
+import { Tabs, usePathname, useRouter, useSegments } from 'expo-router';
 import Ionicons from '@expo/vector-icons/Ionicons';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useLanguageStore } from '../../store/languageStore';
@@ -9,11 +9,14 @@ import FloatingScanButton from '../../component/FloatingScanButton';
 export default function TabsLayout() {
   const router = useRouter();
   const segments = useSegments();
+  const pathname = usePathname();
   const { language } = useLanguageStore();
   const insets = useSafeAreaInsets();
   const isFr = language === 'fr';
   const activeLeaf = segments[segments.length - 1];
-  const showScanFab = activeLeaf === '(tabs)' || activeLeaf === 'index' || activeLeaf === 'stock';
+  const hideFabRoutes = new Set(['/scan', '/add-product', '/settings']);
+  const shouldHideFabForPath = hideFabRoutes.has(pathname);
+  const showScanFab = !shouldHideFabForPath && (activeLeaf === '(tabs)' || activeLeaf === 'index' || activeLeaf === 'stock');
 
   return (
     <View style={{ flex: 1 }}>

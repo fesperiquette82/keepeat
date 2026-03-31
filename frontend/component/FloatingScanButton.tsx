@@ -1,7 +1,6 @@
 import React from 'react';
 import { Pressable, StyleSheet, Text, View } from 'react-native';
 import Ionicons from '@expo/vector-icons/Ionicons';
-import { useBottomTabBarHeight } from '@react-navigation/bottom-tabs';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
 type FloatingScanButtonProps = {
@@ -10,8 +9,7 @@ type FloatingScanButtonProps = {
 
 export default function FloatingScanButton({ onPress }: FloatingScanButtonProps) {
   const insets = useSafeAreaInsets();
-  const tabBarHeight = useBottomTabBarHeight();
-  const bottomOffset = Math.max(insets.bottom + 12, tabBarHeight + 10);
+  const bottomOffset = insets.bottom + 76;
 
   return (
     <View pointerEvents="box-none" style={StyleSheet.absoluteFill}>
