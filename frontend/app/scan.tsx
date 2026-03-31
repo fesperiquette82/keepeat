@@ -6,12 +6,14 @@ import {
   TouchableOpacity,
   ActivityIndicator,
   TextInput,
+  Alert,
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
-import { CameraView, useCameraPermissions } from 'expo-camera';
+import { CameraView, scanFromURLAsync, useCameraPermissions } from 'expo-camera';
 import { useRouter } from 'expo-router';
 import Ionicons from '@expo/vector-icons/Ionicons';
 import { useLanguageStore } from '../store/languageStore';
+import { pickImageFromGallery } from '../utils/galleryPicker';
 
 export default function ScanScreen() {
   const router = useRouter();
@@ -23,10 +25,41 @@ export default function ScanScreen() {
 
   // Navigate-first : navigation immédiate sans attendre le lookup API.
   // Le lookup est effectué dans add-product.tsx (avec cache mémoire).
-  const handleBarCodeScanned = ({ data }: { type: string; data: string }) => {
+  const handleBarcodeDetected = (data: string) => {
     if (scanned) return;
     setScanned(true);
     router.push({ pathname: '/add-product', params: { barcode: data } });
+  };
+  const handleBarCodeScanned = ({ data }: { type: string; data: string }) => {
+    handleBarcodeDetected(data);
+  };
+
+  const handleImportBarcode = async () => {
+    const picked = await pickImageFromGallery({ includeBase64: false, quality: 0.9 });
+    if (picked.status === 'cancelled') return;
+    if (picked.status === 'permission_denied') {
+      Alert.alert(t('errorTitle'), t('galleryPermissionRequired'));
+      return;
+    }
+    if (picked.status === 'unavailable') {
+      Alert.alert(t('errorTitle'), t('galleryUnavailable'));
+      return;
+    }
+    if (picked.status !== 'success') {
+      Alert.alert(t('errorTitle'), t('invalidImage'));
+      return;
+    }
+    try {
+      const results = await scanFromURLAsync(picked.asset.uri, ['ean13', 'ean8', 'upc_a', 'upc_e', 'code128', 'code39']);
+      const barcode = results?.[0]?.data;
+      if (!barcode) {
+        Alert.alert(t('errorTitle'), t('barcodeNotDetected'));
+        return;
+      }
+      handleBarcodeDetected(barcode);
+    } catch {
+      Alert.alert(t('errorTitle'), t('scanFailed'));
+    }
   };
 
   const handleManualSearch = () => {
@@ -131,20 +164,29 @@ export default function ScanScreen() {
           style={[styles.actionBtn, showManualInput && styles.actionBtnActive]}
           onPress={() => setShowManualInput(!showManualInput)}
         >
-          <Ionicons name={showManualInput ? 'camera' : 'keypad'} size={24} color={showManualInput ? '#22c55e' : '#fff'} />
+          <Ionicons
+            name={showManualInput ? 'camera' : 'keypad'}
+            size={22}
+            color={showManualInput ? '#16A34A' : '#1F2937'}
+          />
           <Text style={[styles.actionBtnText, showManualInput && styles.actionBtnTextActive]}>
             {showManualInput ? t('scanner') : t('manualEntry')}
           </Text>
         </TouchableOpacity>
 
         <TouchableOpacity style={styles.actionBtn} onPress={handleManualAdd}>
-          <Ionicons name="add-circle-outline" size={24} color="#fff" />
+          <Ionicons name="add-circle-outline" size={22} color="#1F2937" />
           <Text style={styles.actionBtnText}>{t('addManually')}</Text>
         </TouchableOpacity>
 
         <TouchableOpacity style={styles.actionBtn} onPress={() => router.push('/scan-receipt' as any)}>
-          <Ionicons name="receipt-outline" size={24} color="#fff" />
+          <Ionicons name="receipt-outline" size={22} color="#1F2937" />
           <Text style={styles.actionBtnText}>{t('ticket')}</Text>
+        </TouchableOpacity>
+
+        <TouchableOpacity style={styles.actionBtn} onPress={handleImportBarcode}>
+          <Ionicons name="images-outline" size={22} color="#1F2937" />
+          <Text style={styles.actionBtnText}>{t('gallery')}</Text>
         </TouchableOpacity>
 
         {scanned && (
@@ -166,39 +208,65 @@ const styles = StyleSheet.create({
     justifyContent: 'space-between',
     paddingHorizontal: 16,
     paddingVertical: 12,
-    backgroundColor: '#FFFFFF',
+    backgroundColor: '#F8FAFC',
+    borderBottomWidth: 1,
+    borderBottomColor: '#E2E8F0',
     shadowColor: '#000',
     shadowOffset: { width: 0, height: 1 },
-    shadowOpacity: 0.05,
+    shadowOpacity: 0.08,
     shadowRadius: 4,
     elevation: 2,
   },
   backButton: {
     padding: 8,
-    backgroundColor: '#F3F4F6',
-    borderRadius: 10,
+    backgroundColor: '#111827',
+    borderRadius: 12,
     borderWidth: 1,
-    borderColor: '#E5E7EB',
+    borderColor: '#374151',
   },
-  headerTitle: { fontSize: 18, fontWeight: '800', color: '#111827' },
+  headerTitle: { fontSize: 19, fontWeight: '900', color: '#0F172A', letterSpacing: 0.2 },
 
   cameraContainer: { flex: 1, overflow: 'hidden' },
   camera: { flex: 1 },
   overlay: {
     flex: 1,
-    backgroundColor: 'rgba(0,0,0,0.55)',
+    backgroundColor: 'rgba(0,0,0,0.62)',
     justifyContent: 'center',
     alignItems: 'center',
   },
   scanFrame: { width: 280, height: 150, position: 'relative' },
-  corner: { position: 'absolute', width: 32, height: 32, borderColor: '#22c55e' },
-  topLeft: { top: 0, left: 0, borderTopWidth: 3, borderLeftWidth: 3, borderTopLeftRadius: 4 },
-  topRight: { top: 0, right: 0, borderTopWidth: 3, borderRightWidth: 3, borderTopRightRadius: 4 },
-  bottomLeft: { bottom: 0, left: 0, borderBottomWidth: 3, borderLeftWidth: 3, borderBottomLeftRadius: 4 },
-  bottomRight: { bottom: 0, right: 0, borderBottomWidth: 3, borderRightWidth: 3, borderBottomRightRadius: 4 },
+  corner: {
+    position: 'absolute',
+    width: 34,
+    height: 34,
+    borderColor: '#22C55E',
+    shadowColor: '#22C55E',
+    shadowOpacity: 0.45,
+    shadowOffset: { width: 0, height: 0 },
+    shadowRadius: 5,
+    elevation: 3,
+  },
+  topLeft: { top: 0, left: 0, borderTopWidth: 3.5, borderLeftWidth: 3.5, borderTopLeftRadius: 5 },
+  topRight: { top: 0, right: 0, borderTopWidth: 3.5, borderRightWidth: 3.5, borderTopRightRadius: 5 },
+  bottomLeft: { bottom: 0, left: 0, borderBottomWidth: 3.5, borderLeftWidth: 3.5, borderBottomLeftRadius: 5 },
+  bottomRight: { bottom: 0, right: 0, borderBottomWidth: 3.5, borderRightWidth: 3.5, borderBottomRightRadius: 5 },
 
-  instructions: { padding: 20, alignItems: 'center' },
-  instructionsText: { color: 'rgba(255,255,255,0.7)', fontSize: 14, textAlign: 'center' },
+  instructions: {
+    paddingHorizontal: 20,
+    paddingTop: 14,
+    paddingBottom: 18,
+    alignItems: 'center',
+    backgroundColor: 'rgba(2,6,23,0.86)',
+    borderTopWidth: 1,
+    borderTopColor: 'rgba(255,255,255,0.18)',
+  },
+  instructionsText: {
+    color: '#F8FAFC',
+    fontSize: 16,
+    lineHeight: 21,
+    textAlign: 'center',
+    fontWeight: '700',
+  },
 
   manualInputContainer: { flex: 1, padding: 24, justifyContent: 'center', backgroundColor: '#F7F8FA' },
   barcodeInput: {
@@ -238,10 +306,12 @@ const styles = StyleSheet.create({
     gap: 12,
     paddingHorizontal: 20,
     paddingVertical: 16,
-    backgroundColor: '#FFFFFF',
+    backgroundColor: '#F8FAFC',
+    borderTopWidth: 1,
+    borderTopColor: '#E2E8F0',
     shadowColor: '#000',
     shadowOffset: { width: 0, height: -2 },
-    shadowOpacity: 0.06,
+    shadowOpacity: 0.08,
     shadowRadius: 8,
     elevation: 4,
   },
@@ -250,15 +320,15 @@ const styles = StyleSheet.create({
     paddingVertical: 12,
     paddingHorizontal: 16,
     borderRadius: 14,
-    backgroundColor: '#F3F4F6',
+    backgroundColor: '#FFFFFF',
     minWidth: 100,
     borderWidth: 1,
-    borderColor: '#E5E7EB',
+    borderColor: '#CBD5E1',
   },
-  actionBtnActive: { backgroundColor: '#F0FDF4', borderColor: '#22c55e' },
-  actionBtnText: { color: '#6B7280', fontSize: 12, marginTop: 4, fontWeight: '600' },
-  actionBtnTextActive: { color: '#22c55e' },
-  rescanBtn: { backgroundColor: '#F0FDF4', borderColor: '#22c55e' },
+  actionBtnActive: { backgroundColor: '#ECFDF3', borderColor: '#22C55E' },
+  actionBtnText: { color: '#111827', fontSize: 12, marginTop: 4, fontWeight: '700' },
+  actionBtnTextActive: { color: '#166534' },
+  rescanBtn: { backgroundColor: '#ECFDF3', borderColor: '#22C55E' },
 
   permissionContainer: {
     flex: 1,

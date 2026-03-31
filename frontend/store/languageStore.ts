@@ -45,6 +45,19 @@ const translations: Translations = {
   scanner: { fr: 'Scanner', en: 'Scan' },
   ticket: { fr: 'Ticket', en: 'Receipt' },
   rescan: { fr: 'Rescanner', en: 'Rescan' },
+  gallery: { fr: 'Galerie', en: 'Gallery' },
+  importPhoto: { fr: 'Importer une photo', en: 'Import photo' },
+  galleryPermissionRequired: {
+    fr: "Autorisez l'accès à la galerie pour importer une photo.",
+    en: 'Allow photo library access to import an image.',
+  },
+  galleryUnavailable: {
+    fr: "Le module d'import photo est indisponible sur cet appareil.",
+    en: 'Photo import module is unavailable on this device.',
+  },
+  invalidImage: { fr: 'Image invalide ou non exploitable.', en: 'Invalid or unusable image.' },
+  barcodeNotDetected: { fr: 'Aucun code-barres détecté sur cette image.', en: 'No barcode detected in this image.' },
+  scanFailed: { fr: 'Analyse impossible. Réessayez avec une autre image.', en: 'Could not analyse. Try another image.' },
   searchProductLoading: { fr: 'Recherche du produit...', en: 'Looking up product...' },
 
   // Add Product

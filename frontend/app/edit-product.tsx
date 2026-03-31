@@ -301,6 +301,7 @@ export default function EditProductScreen() {
         language={language}
         t={t}
         onCaptureAndScan={ocr.handleCaptureAndScan}
+        onImportAndScan={ocr.handleImportAndScan}
         onScannedDateChange={ocr.handleScannedDateChange}
         onConfirm={ocr.handleScannedDateConfirm}
         onCameraLayout={ocr.handleCameraLayout}

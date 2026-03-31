@@ -10,6 +10,7 @@ import TextRecognition from '@react-native-ml-kit/text-recognition';
 import * as ImageManipulator from 'expo-image-manipulator';
 import { parseExpiryDate, DATE_FORMAT_EXAMPLES, getBestDateFromOCR } from './dateParser';
 import { addOcrCorrection, findOcrMatch } from './ocrLearning';
+import { pickImageFromGallery } from './galleryPicker';
 import type { ParsedDateInfo } from '../component/CameraDateModal';
 
 export interface UseOcrDatePickerResult {
@@ -20,6 +21,7 @@ export interface UseOcrDatePickerResult {
   ocrDebug: string | null;
   parsedDateInfo: ParsedDateInfo | null;
   handleCaptureAndScan: () => Promise<void>;
+  handleImportAndScan: () => Promise<void>;
   handleScannedDateChange: (text: string) => void;
   handleScannedDateConfirm: () => void;
   handleCameraLayout: (dims: { width: number; height: number }) => void;
@@ -73,7 +75,15 @@ export function useOcrDatePicker(
       Alert.alert(language === 'fr' ? 'Erreur caméra' : 'Camera error');
       return;
     }
+    const photo = await cameraRef.current.takePictureAsync({ quality: 0.7, skipProcessing: true });
+    if (!photo?.uri) throw new Error('No URI returned by camera');
+    await processImageUri(photo.uri, photo);
+  };
 
+  const processImageUri = async (
+    sourceUri: string,
+    sourceMeta?: { width?: number; height?: number },
+  ) => {
     setOcrError(null);
     setOcrDebug(null);
     setOcrFailed(false);
@@ -81,18 +91,17 @@ export function useOcrDatePicker(
     setIsOcrProcessing(true);
 
     try {
-      const photo = await cameraRef.current.takePictureAsync({ quality: 0.7, skipProcessing: true });
-      if (!photo?.uri) throw new Error('No URI returned by camera');
-
       // Recadrer sur la zone de scan (90% largeur, 160dp de haut, centrée)
-      let uriToScan = photo.uri;
+      let uriToScan = sourceUri;
       try {
         const { width: viewW, height: viewH } = cameraViewDimsRef.current;
-        if (viewW > 0 && viewH > 0 && photo.width > 0 && photo.height > 0) {
+        if (viewW > 0 && viewH > 0 && (sourceMeta?.width ?? 0) > 0 && (sourceMeta?.height ?? 0) > 0) {
           const zoneH = 160;
           const zoneY = Math.max(0, (viewH - zoneH) / 2);
-          const imgW = photo.width > photo.height ? photo.height : photo.width;
-          const imgH = photo.width > photo.height ? photo.width : photo.height;
+          const sourceW = sourceMeta?.width ?? 0;
+          const sourceH = sourceMeta?.height ?? 0;
+          const imgW = sourceW > sourceH ? sourceH : sourceW;
+          const imgH = sourceW > sourceH ? sourceW : sourceH;
           const sx = imgW / viewW;
           const sy = imgH / viewH;
           const cropX = Math.floor(viewW * 0.05 * sx);
@@ -101,7 +110,7 @@ export function useOcrDatePicker(
           const cropH = Math.min(imgH - cropY, Math.floor(zoneH * sy));
           if (cropW > 0 && cropH > 0) {
             const cropped = await ImageManipulator.manipulateAsync(
-              photo.uri,
+              sourceUri,
               [{ crop: { originX: cropX, originY: cropY, width: cropW, height: cropH } }],
               { compress: 0.9, format: ImageManipulator.SaveFormat.JPEG },
             );
@@ -159,6 +168,40 @@ export function useOcrDatePicker(
     }
   };
 
+  const handleImportAndScan = async () => {
+    const picked = await pickImageFromGallery({ includeBase64: false, quality: 0.85 });
+    if (picked.status === 'cancelled') return;
+    if (picked.status === 'permission_denied') {
+      Alert.alert(
+        language === 'fr' ? 'Accès galerie requis' : 'Gallery permission required',
+        language === 'fr'
+          ? "Autorisez l'accès à la galerie pour importer une photo."
+          : 'Allow photo library access to import an image.',
+      );
+      return;
+    }
+    if (picked.status === 'unavailable') {
+      Alert.alert(
+        language === 'fr' ? 'Galerie indisponible' : 'Gallery unavailable',
+        language === 'fr'
+          ? "Le module d'import photo n'est pas disponible."
+          : 'Photo import module is not available.',
+      );
+      return;
+    }
+    if (picked.status !== 'success') {
+      Alert.alert(
+        language === 'fr' ? 'Image invalide' : 'Invalid image',
+        language === 'fr' ? "Impossible d'analyser cette image." : 'Unable to analyse this image.',
+      );
+      return;
+    }
+    await processImageUri(picked.asset.uri, {
+      width: picked.asset.width,
+      height: picked.asset.height,
+    });
+  };
+
   const handleScannedDateConfirm = () => {
     const result = parseExpiryDate(scannedDateText);
     if (result.date) {
@@ -190,6 +233,7 @@ export function useOcrDatePicker(
     ocrDebug,
     parsedDateInfo,
     handleCaptureAndScan,
+    handleImportAndScan,
     handleScannedDateChange,
     handleScannedDateConfirm,
     handleCameraLayout,
