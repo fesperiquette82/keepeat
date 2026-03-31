@@ -6,6 +6,7 @@ import { APP_CONFIG } from '../utils/appConfig';
 import { buildApiUrl, getApiUrlDiagnostics } from '../utils/config';
 import { type Language, useLanguageStore } from './languageStore';
 import { useAuthStore } from './authStore';
+import { useStockStore } from './stockStore';
 
 const APP_SETTINGS_KEY = 'keepeat_app_settings_v1';
 
@@ -63,12 +64,12 @@ function buildReminderRefreshError(language: Language): string {
     : 'Impossible de mettre à jour les produits rappelés. Réessayez.';
 }
 
-interface RecallsRefreshResponse {
-  success: boolean;
-  message: string;
-  refreshedCount: number;
-  lastSuccessfulRefreshAt: string | null;
-  attemptedAt: string;
+interface PriorityRefreshResponse {
+  items: Array<{ id: string }>;
+  last_refresh_at: string;
+  count: number;
+  lead_days_used: ReminderLeadDays;
+  reminders_enabled: boolean;
 }
 
 function authHeaders(): Record<string, string> {
@@ -171,22 +172,30 @@ export const useAppSettingsStore = create<AppSettingsStore>((set, get) => ({
   },
 
   forceRefreshReminderProducts: async () => {
-    logger.info('[RECALLS] function entered');
+    logger.info('[SETTINGS] priority refresh requested');
 
-    if (get().reminderRefreshLoading) {
-      logger.info('[RECALLS] refresh already in progress, skipping duplicate click');
+    if (get().reminderRefreshLoading || useStockStore.getState().isRefreshingPriorityItems) {
+      logger.info('[SETTINGS] priority refresh skipped because another refresh is in progress');
       return false;
     }
 
     set({ reminderRefreshError: null, reminderRefreshSuccessAt: null, reminderRefreshLoading: true });
 
     try {
-      const endpoint = '/api/recalls/refresh';
+      const { reminderDaysBefore, productRemindersEnabled, language, lastReminderRefreshAt } = get();
+      const endpoint = '/api/stock/priority/refresh';
       const url = buildApiUrl(endpoint);
       const apiDiag = getApiUrlDiagnostics();
       const token = useAuthStore.getState().token;
-      logger.info('[RECALLS] backend url = ...', { url });
-      logger.info('[RECALLS] token exists = ...', { hasToken: Boolean(token) });
+      logger.info('[SETTINGS] priority refresh request', {
+        method: 'POST',
+        url,
+        body: {
+          lead_days: reminderDaysBefore,
+          reminders_enabled: productRemindersEnabled,
+        },
+        hasToken: Boolean(token),
+      });
 
       if (apiDiag.likelyInvalidOnAndroidDevice) {
         logger.warn('[SettingsStore] backend URL may be invalid on Android physical device', {
@@ -195,48 +204,34 @@ export const useAppSettingsStore = create<AppSettingsStore>((set, get) => ({
         });
       }
 
-      logger.info('[RECALLS] about to POST /api/recalls/refresh', { method: 'POST', url });
-      const response = await axios.post<RecallsRefreshResponse>(url, {}, { headers: authHeaders() });
-      const data = response.data;
-
-      logger.info('[RECALLS] status HTTP', { status: response.status });
-      logger.info('[RECALLS] body réponse', { body: data });
-      logger.info('[SettingsStore] manual recalls refresh response', {
-        method: 'POST',
-        url,
-        status: response.status,
-        body: data,
-      });
-
-      if (!data || data.success !== true || typeof data.lastSuccessfulRefreshAt !== 'string') {
-        const fallbackMessage = (typeof data?.message === 'string' && data.message.trim())
-          ? data.message
-          : buildReminderRefreshError(get().language);
+      const result = await useStockStore.getState().refreshPriorityItems(reminderDaysBefore, productRemindersEnabled) as PriorityRefreshResponse | null;
+      logger.info('[SETTINGS] priority refresh response payload', { body: result });
+      if (!result || typeof result.last_refresh_at !== 'string') {
+        const fallbackMessage = buildReminderRefreshError(language);
         set({ reminderRefreshError: fallbackMessage });
-        logger.warn('[RECALLS] message d’erreur final affiché', { userMessage: fallbackMessage });
-        logger.warn('[SettingsStore] manual recalls refresh returned unexpected payload', {
-          method: 'POST',
-          url,
-          status: response.status,
-          body: data,
-        });
+        logger.warn('[SETTINGS] invalid priority refresh payload', { body: result });
         return false;
       }
 
       set({
-        lastReminderRefreshAt: data.lastSuccessfulRefreshAt,
-        reminderRefreshSuccessAt: data.lastSuccessfulRefreshAt,
+        lastReminderRefreshAt: result.last_refresh_at,
+        reminderRefreshSuccessAt: result.last_refresh_at,
         reminderRefreshError: null,
       });
       await persistSettings(readPersistedSettings(get()));
+      logger.info('[SETTINGS] priority refresh succeeded', {
+        previousLastRefreshAt: lastReminderRefreshAt,
+        nextLastRefreshAt: result.last_refresh_at,
+        count: result.count,
+      });
       return true;
     } catch (error) {
-      const endpoint = '/api/recalls/refresh';
+      const endpoint = '/api/stock/priority/refresh';
       const url = buildApiUrl(endpoint);
       const status = axios.isAxiosError(error) ? (error.response?.status ?? null) : null;
       const responseBody = axios.isAxiosError(error) ? (error.response?.data ?? null) : null;
       const message = parseRefreshErrorMessage(get().language, error);
-      logger.warn('[SettingsStore] force refresh recalls failed', {
+      logger.warn('[SettingsStore] force refresh priority items failed', {
         method: 'POST',
         url,
         status,
@@ -244,7 +239,7 @@ export const useAppSettingsStore = create<AppSettingsStore>((set, get) => ({
         errorMessage: error instanceof Error ? error.message : String(error),
         userMessage: message,
       });
-      logger.warn('[RECALLS] message d’erreur final affiché', { userMessage: message });
+      logger.warn('[SETTINGS] final priority refresh error displayed', { userMessage: message });
       set({ reminderRefreshError: message });
       return false;
     } finally {

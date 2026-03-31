@@ -62,11 +62,6 @@ export default function HomeDashboardScreen() {
           <Text style={styles.mockText}>Mode démo actif (données mockées réalistes)</Text>
         )}
 
-        <TouchableOpacity style={styles.scannerCta} onPress={() => router.push('/scan')} activeOpacity={0.9}>
-          <Ionicons name="scan" size={24} color="#fff" />
-          <Text style={styles.scannerCtaText}>Scanner un produit</Text>
-        </TouchableOpacity>
-
         <View style={styles.summaryGrid}>
           {summaryCards.map((card) => (
             <View key={card.key} style={styles.summaryCard}>
@@ -164,17 +159,6 @@ const styles = StyleSheet.create({
   title: { fontSize: 28, fontWeight: '800', color: C.text },
   subtitle: { marginTop: 4, ...T.secondary },
   mockText: { ...T.tertiary, opacity: 0.85 },
-  scannerCta: {
-    backgroundColor: C.primary,
-    borderRadius: 18,
-    paddingVertical: 18,
-    alignItems: 'center',
-    justifyContent: 'center',
-    flexDirection: 'row',
-    gap: 10,
-    ...shadowSm,
-  },
-  scannerCtaText: { color: '#fff', fontSize: 21, fontWeight: '800' },
   summaryGrid: { flexDirection: 'row', gap: 8 },
   summaryCard: { flex: 1, backgroundColor: '#fff', borderRadius: 12, padding: 12, gap: 6 },
   summaryCardHeader: { flexDirection: 'row', alignItems: 'center', gap: 6 },

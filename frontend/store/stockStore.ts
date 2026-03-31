@@ -61,9 +61,8 @@ export interface Stats {
 export interface PriorityRefreshResult {
   items: StockItem[];
   last_refresh_at: string;
-  item_ids: string[];
   count: number;
-  lead_days: 1 | 2 | 3;
+  lead_days_used: 1 | 2 | 3;
   reminders_enabled: boolean;
 }
 
@@ -253,6 +252,7 @@ export const useStockStore = create<StockStore>()(
 
       refreshPriorityItems: async (leadDays, remindersEnabled) => {
         if (get().isRefreshingPriorityItems) {
+          logger.info('[STOCK] priority refresh skipped (already in progress)');
           return null;
         }
         set(state => ({
@@ -261,17 +261,33 @@ export const useStockStore = create<StockStore>()(
           isRefreshingPriorityItems: true,
         }));
         try {
+          const url = buildApiUrl('/api/stock/priority/refresh');
+          logger.info('[STOCK] priority refresh request', {
+            method: 'POST',
+            url,
+            body: { lead_days: leadDays, reminders_enabled: remindersEnabled },
+          });
           const res = await axios.post<PriorityRefreshResult>(
-            buildApiUrl('/api/stock/priority/refresh'),
+            url,
             { lead_days: leadDays, reminders_enabled: remindersEnabled },
             { headers: authHeaders() },
           );
           set({ priorityItems: res.data.items, error: null });
+          logger.info('[STOCK] priority refresh success', {
+            status: res.status,
+            count: res.data.count,
+            last_refresh_at: res.data.last_refresh_at,
+          });
           return res.data;
         } catch (err: any) {
           if (handlePremiumOrQuotaError(err)) {
             throw err;
           }
+          logger.warn('[STOCK] priority refresh failed', {
+            status: err?.response?.status ?? null,
+            responseBody: err?.response?.data ?? null,
+            errorMessage: err?.message ?? String(err),
+          });
           if (!isNetworkError(err)) {
             set({ error: err.message });
           }
