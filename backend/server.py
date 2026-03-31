@@ -32,6 +32,7 @@ from alerts import (
     check_inactivity_and_notify,
     check_recalls_and_notify,
     check_weekly_expiry_summary,
+    fetch_recent_recalls,
     seed_default_user,
     send_expo_push,
 )
@@ -49,6 +50,7 @@ from models import (
     ProductLookupResponse,
     PriorityRefreshBody,
     PriorityRefreshResponse,
+    RecallsRefreshResponse,
     PushTokenBody,
     RecipeCatalogResponse,
     RecipeSuggestionGroupsResponse,
@@ -1071,6 +1073,75 @@ async def get_recalls_status(
     if doc and doc.get("checked_at"):
         last_check = doc["checked_at"].replace(tzinfo=timezone.utc).isoformat()
     return {"last_check": last_check}
+
+
+@api_router.post("/recalls/refresh", response_model=RecallsRefreshResponse)
+async def refresh_recalls(
+    request: Request,
+    current_user: Dict[str, Any] = Depends(_get_current_user),
+):
+    attempted_at = utc_now().isoformat()
+    state_key = "recalls_refresh_state"
+    previous_state = await app_state_col.find_one({"key": state_key})
+    previous_success = previous_state.get("last_successful_refresh_at") if previous_state else None
+
+    try:
+        recalls = await fetch_recent_recalls(fail_on_error=True)
+        refreshed_count = len(recalls)
+        new_state = {
+            "key": state_key,
+            "last_successful_refresh_at": attempted_at,
+            "last_attempt_at": attempted_at,
+            "last_attempt_status": "success",
+            "last_attempt_error": None,
+            "refreshed_count": refreshed_count,
+            "updated_by_user_id": current_user["id"],
+        }
+        await app_state_col.update_one({"key": state_key}, {"$set": new_state}, upsert=True)
+        logger.info(
+            "Manual recalls refresh succeeded user=%s method=%s path=%s count=%d",
+            current_user["id"],
+            request.method,
+            str(request.url.path),
+            refreshed_count,
+        )
+        return RecallsRefreshResponse(
+            success=True,
+            message="Liste des produits rappelés mise à jour.",
+            refreshedCount=refreshed_count,
+            lastSuccessfulRefreshAt=attempted_at,
+            attemptedAt=attempted_at,
+        )
+    except Exception as exc:
+        logger.exception(
+            "Manual recalls refresh failed user=%s method=%s path=%s attempted_at=%s",
+            current_user["id"],
+            request.method,
+            str(request.url.path),
+            attempted_at,
+        )
+        await app_state_col.update_one(
+            {"key": state_key},
+            {
+                "$set": {
+                    "key": state_key,
+                    "last_attempt_at": attempted_at,
+                    "last_attempt_status": "error",
+                    "last_attempt_error": str(exc),
+                    "updated_by_user_id": current_user["id"],
+                }
+            },
+            upsert=True,
+        )
+        raise HTTPException(
+            status_code=502,
+            detail={
+                "message": "Impossible de mettre à jour les produits rappelés.",
+                "attemptedAt": attempted_at,
+                "lastSuccessfulRefreshAt": previous_success,
+                "reason": str(exc),
+            },
+        )
 
 
 @api_router.get("/alerts/preferences", response_model=AlertPreferences)

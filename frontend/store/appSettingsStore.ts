@@ -1,8 +1,11 @@
 import AsyncStorage from '@react-native-async-storage/async-storage';
+import axios from 'axios';
 import { create } from 'zustand';
 import { logger } from '../utils/logger';
 import { APP_CONFIG } from '../utils/appConfig';
+import { buildApiUrl, getApiUrlDiagnostics } from '../utils/config';
 import { type Language, useLanguageStore } from './languageStore';
+import { useAuthStore } from './authStore';
 import { useStockStore } from './stockStore';
 
 const APP_SETTINGS_KEY = 'keepeat_app_settings_v1';
@@ -58,6 +61,30 @@ function buildReminderRefreshError(language: Language): string {
   return language === 'en'
     ? 'Unable to refresh reminder products. Please try again.'
     : 'Impossible de mettre à jour les produits rappelés. Réessayez.';
+}
+
+interface RecallsRefreshResponse {
+  success: boolean;
+  message: string;
+  refreshedCount: number;
+  lastSuccessfulRefreshAt: string | null;
+  attemptedAt: string;
+}
+
+function authHeaders(): Record<string, string> {
+  const token = useAuthStore.getState().token;
+  return token ? { Authorization: `Bearer ${token}` } : {};
+}
+
+function parseRefreshErrorMessage(language: Language, error: unknown): string {
+  if (axios.isAxiosError(error)) {
+    const detail = error.response?.data?.detail;
+    if (typeof detail === 'string' && detail.trim()) return detail;
+    if (detail && typeof detail === 'object' && typeof detail.message === 'string' && detail.message.trim()) {
+      return detail.message;
+    }
+  }
+  return buildReminderRefreshError(language);
 }
 
 export const useAppSettingsStore = create<AppSettingsStore>((set, get) => ({
@@ -148,22 +175,61 @@ export const useAppSettingsStore = create<AppSettingsStore>((set, get) => ({
     set({ reminderRefreshError: null, reminderRefreshSuccessAt: null });
 
     try {
-      const { reminderDaysBefore, productRemindersEnabled } = get();
-      const refreshResult = await useStockStore
-        .getState()
-        .refreshPriorityItems(reminderDaysBefore, productRemindersEnabled);
-      if (!refreshResult) {
+      const endpoint = '/api/recalls/refresh';
+      const url = buildApiUrl(endpoint);
+      const apiDiag = getApiUrlDiagnostics();
+
+      if (apiDiag.likelyInvalidOnAndroidDevice) {
+        logger.warn('[SettingsStore] backend URL may be invalid on Android physical device', {
+          apiUrl: apiDiag.apiUrl,
+          hint: 'Set EXPO_PUBLIC_BACKEND_URL to LAN IP or public URL (not localhost/127.0.0.1)',
+        });
+      }
+
+      logger.info('[SettingsStore] manual recalls refresh request', { method: 'POST', url });
+      const response = await axios.post<RecallsRefreshResponse>(url, {}, { headers: authHeaders() });
+      const data = response.data;
+
+      logger.info('[SettingsStore] manual recalls refresh response', {
+        method: 'POST',
+        url,
+        status: response.status,
+        body: data,
+      });
+
+      if (!data || data.success !== true || typeof data.lastSuccessfulRefreshAt !== 'string') {
+        set({ reminderRefreshError: buildReminderRefreshError(get().language) });
+        logger.warn('[SettingsStore] manual recalls refresh returned unexpected payload', {
+          method: 'POST',
+          url,
+          status: response.status,
+          body: data,
+        });
         return false;
       }
+
       set({
-        lastReminderRefreshAt: refreshResult.last_refresh_at,
-        reminderRefreshSuccessAt: refreshResult.last_refresh_at,
+        lastReminderRefreshAt: data.lastSuccessfulRefreshAt,
+        reminderRefreshSuccessAt: data.lastSuccessfulRefreshAt,
+        reminderRefreshError: null,
       });
       await persistSettings(readPersistedSettings(get()));
       return true;
     } catch (error) {
-      logger.warn('[SettingsStore] force refresh reminders failed', { message: error instanceof Error ? error.message : String(error) });
-      set({ reminderRefreshError: buildReminderRefreshError(get().language) });
+      const endpoint = '/api/recalls/refresh';
+      const url = buildApiUrl(endpoint);
+      const status = axios.isAxiosError(error) ? (error.response?.status ?? null) : null;
+      const responseBody = axios.isAxiosError(error) ? (error.response?.data ?? null) : null;
+      const message = parseRefreshErrorMessage(get().language, error);
+      logger.warn('[SettingsStore] force refresh recalls failed', {
+        method: 'POST',
+        url,
+        status,
+        responseBody,
+        errorMessage: error instanceof Error ? error.message : String(error),
+        userMessage: message,
+      });
+      set({ reminderRefreshError: message });
       return false;
     }
   },
