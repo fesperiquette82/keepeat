@@ -83,6 +83,16 @@ from entitlements import (
 )
 from ocr_service import ocr_receipt
 from priority_refresh import build_priority_refresh_state
+from observability import (
+    build_monitoring_kpis,
+    extract_user_id_from_auth_header,
+    log_api_request,
+    resolve_plan_type_at_time,
+    summarize_api_metrics,
+    summarize_services_usage,
+    track_business_event,
+    track_service_usage,
+)
 from product_catalog import infer_food_category, infer_shelf_life, lookup_product_openfoodfacts
 from recipes_service import (
     _FRIGO_CATS,
@@ -113,10 +123,30 @@ user_alerts_col = db["user_alerts"]
 app_state_col = db["app_state"]
 products_cache_col = db["products_cache"]
 community_recipes_col = db["community_recipes"]
+api_request_logs_col = db["api_request_logs"]
+business_events_col = db["business_events"]
+service_usage_logs_col = db["service_usage_logs"]
+daily_metrics_col = db["daily_metrics"]
 
-ADMIN_KEY = os.getenv("ADMIN_KEY", "")
 SPOONACULAR_KEY = os.getenv("SPOONACULAR_KEY", "")
 _BACKEND_URL = os.getenv("BACKEND_URL", "https://keepeat-backend.onrender.com")
+APP_STARTED_AT = utc_now()
+
+
+def _parse_admin_emails(raw: str | None) -> set[str]:
+    if not raw:
+        return set()
+    normalized = raw.replace(";", ",")
+    emails: set[str] = set()
+    for item in normalized.split(","):
+        token = item.strip().lower()
+        if not token or "@" not in token:
+            continue
+        emails.add(token)
+    return emails
+
+
+_ADMIN_EMAILS = _parse_admin_emails(os.getenv("ADMIN_EMAILS"))
 
 
 def _resolve_backend_commit() -> str:
@@ -283,6 +313,14 @@ async def lifespan(app: FastAPI):
     await products_cache_col.create_index("cached_at", expireAfterSeconds=7 * 24 * 3600)
     await products_cache_col.create_index("barcode", unique=True)
     await community_recipes_col.create_index("created_at")
+    await api_request_logs_col.create_index([("created_at", -1)])
+    await api_request_logs_col.create_index([("endpoint_key", 1), ("created_at", -1)])
+    await api_request_logs_col.create_index([("status_code", 1), ("created_at", -1)])
+    await business_events_col.create_index([("event_name", 1), ("created_at", -1)])
+    await business_events_col.create_index([("user_id", 1), ("created_at", -1)])
+    await service_usage_logs_col.create_index([("service_name", 1), ("created_at", -1)])
+    await service_usage_logs_col.create_index([("plan_type_at_time", 1), ("created_at", -1)])
+    await daily_metrics_col.create_index("date", unique=True)
     await stock_col.create_index([("user_id", 1), ("status", 1), ("expiry_date", 1)])
     await stock_col.create_index([("user_id", 1), ("status", 1), ("consumed_date", 1)])
     await stock_col.create_index([("user_id", 1), ("status", 1), ("thrown_date", 1)])
@@ -343,6 +381,91 @@ app.add_middleware(
 
 async def _get_current_user(credentials=Depends(http_bearer)):
     return await get_current_user(users_col, credentials)
+
+
+def _is_admin_user(user_doc: dict[str, Any] | None) -> bool:
+    if not user_doc:
+        return False
+    if bool(user_doc.get("is_admin")):
+        return True
+    email = str(user_doc.get("email", "")).strip().lower()
+    return bool(email and email in _ADMIN_EMAILS)
+
+
+async def _require_admin_user(
+    request: Request,
+    current_user: Dict[str, Any] = Depends(_get_current_user),
+) -> Dict[str, Any]:
+    user_doc = await users_col.find_one(
+        {"_id": ObjectId(current_user["id"])},
+        {"email": 1, "is_admin": 1, "is_premium": 1, "subscription_status": 1},
+    ) or current_user
+    email = str(user_doc.get("email", "")).strip().lower()
+    if not _is_admin_user(user_doc):
+        logger.warning(
+            "ADMIN_ACCESS denied route=%s email=%s result=denied",
+            str(request.url.path),
+            email or "unknown",
+        )
+        raise HTTPException(status_code=403, detail="Admin access required")
+    logger.info("ADMIN_ACCESS allowed route=%s email=%s result=allowed", str(request.url.path), email or "unknown")
+    return user_doc
+
+
+def _parse_date_param(date_str: str | None, *, default_days_ago: int) -> str:
+    if not date_str:
+        return (utc_now() - timedelta(days=default_days_ago)).isoformat()
+    try:
+        parsed = datetime.fromisoformat(date_str)
+    except ValueError:
+        raise HTTPException(status_code=422, detail=f"Invalid ISO date: {date_str}")
+    if parsed.tzinfo is None:
+        parsed = parsed.replace(tzinfo=timezone.utc)
+    return parsed.isoformat()
+
+
+@app.middleware("http")
+async def api_request_logging_middleware(request: Request, call_next):
+    started = time.perf_counter()
+    status_code = 500
+    response: Response | None = None
+    caught_exc: Exception | None = None
+
+    try:
+        response = await call_next(request)
+        status_code = response.status_code
+        return response
+    except Exception as exc:
+        caught_exc = exc
+        raise
+    finally:
+        path = str(request.url.path)
+        if path.startswith("/api/"):
+            user_id = extract_user_id_from_auth_header(request.headers.get("Authorization"))
+            duration_ms = (time.perf_counter() - started) * 1000
+            status = status_code if response is not None else 500
+            try:
+                await log_api_request(
+                    api_request_logs_col=api_request_logs_col,
+                    method=request.method,
+                    path=path,
+                    user_id=user_id,
+                    status_code=status,
+                    duration_ms=duration_ms,
+                )
+            except Exception as log_exc:
+                logger.warning("api_request_logging_middleware failed: %s", log_exc)
+            if path.startswith("/api/admin/") and status in (401, 403):
+                logger.warning(
+                    "ADMIN_ACCESS request_denied route=%s method=%s status=%s user_id=%s auth_header=%s",
+                    path,
+                    request.method,
+                    status,
+                    user_id or "unknown",
+                    "present" if request.headers.get("Authorization") else "missing",
+                )
+            if caught_exc is not None:
+                logger.exception("API request failed method=%s path=%s", request.method, path)
 
 
 async def _send_email(to: str, subject: str, html_body: str) -> None:
@@ -475,6 +598,14 @@ async def register(body: UserCreate):
         "last_login": None,
     }
     await users_col.insert_one(doc)
+    created_user = await users_col.find_one({"email": body.email.lower()}, {"_id": 1})
+    await track_business_event(
+        business_events_col=business_events_col,
+        user_id=str(created_user["_id"]) if created_user else None,
+        event_name="user_registered",
+        event_category="auth",
+        metadata_json={"method": "email_password"},
+    )
 
     redirect_link = f"{_BACKEND_URL}/redirect/verify-email?token={verification_token}"
     html_body = f"""
@@ -644,9 +775,18 @@ async def me(current_user: Dict[str, Any] = Depends(_get_current_user)):
 
 @api_router.get("/billing/entitlements", response_model=BillingEntitlementsResponse)
 async def get_billing_entitlements(
+    source: str | None = Query(None),
     current_user: Dict[str, Any] = Depends(_get_current_user),
 ):
     user_doc = await users_col.find_one({"_id": ObjectId(current_user["id"])}) or current_user
+    if source == "paywall":
+        await track_business_event(
+            business_events_col=business_events_col,
+            user_id=current_user["id"],
+            event_name="premium_paywall_viewed",
+            event_category="premium",
+            metadata_json={"source": "billing_entitlements"},
+        )
     snapshot = build_entitlements_snapshot(user_doc)
     return BillingEntitlementsResponse(**snapshot)
 
@@ -667,6 +807,13 @@ async def verify_google_subscription(
     body: BillingVerifyRequest,
     current_user: Dict[str, Any] = Depends(_get_current_user),
 ):
+    await track_business_event(
+        business_events_col=business_events_col,
+        user_id=current_user["id"],
+        event_name="premium_checkout_started",
+        event_category="premium",
+        metadata_json={"platform": body.platform, "product_id": body.product_id},
+    )
     if body.product_id != PREMIUM_PRODUCT_ID:
         raise HTTPException(
             status_code=400,
@@ -688,6 +835,13 @@ async def verify_google_subscription(
             "subscription_updated_at": utc_now().isoformat(),
         }},
     )
+    await track_business_event(
+        business_events_col=business_events_col,
+        user_id=current_user["id"],
+        event_name="premium_checkout_succeeded",
+        event_category="premium",
+        metadata_json={"platform": body.platform, "product_id": body.product_id},
+    )
     return BillingRestoreResponse(
         ok=True,
         plan=PREMIUM_PLAN,
@@ -704,6 +858,13 @@ async def restore_subscription(
     plan = resolve_plan(user_doc)
     status = user_doc.get("subscription_status") or ("active" if plan == PREMIUM_PLAN else "inactive")
     if plan == PREMIUM_PLAN:
+        await track_business_event(
+            business_events_col=business_events_col,
+            user_id=current_user["id"],
+            event_name="premium_restored",
+            event_category="premium",
+            metadata_json={"subscription_status": status},
+        )
         return BillingRestoreResponse(
             ok=True,
             plan=PREMIUM_PLAN,
@@ -726,14 +887,16 @@ async def restore_subscription(
 async def set_premium(
     email: str,
     premium: bool = Query(True),
-    x_admin_key: Optional[str] = Header(None, alias="X-Admin-Key"),
+    admin_user: Dict[str, Any] = Depends(_require_admin_user),
 ):
-    """Met à jour le statut premium d'un utilisateur.
-
-    Authentification : header HTTP `X-Admin-Key: <valeur de ADMIN_KEY>`.
-    """
-    if not ADMIN_KEY or x_admin_key != ADMIN_KEY:
-        raise HTTPException(status_code=403, detail="Invalid admin key")
+    """Met à jour le statut premium d'un utilisateur (admin authentifié)."""
+    admin_email = str(admin_user.get("email", "")).strip().lower()
+    logger.info(
+        "ADMIN_ACTION action=set_premium target_email=%s premium=%s actor=%s",
+        email.lower(),
+        premium,
+        admin_email or "unknown",
+    )
     res = await users_col.update_one(
         {"email": email.lower()},
         {"$set": {"is_premium": premium}},
@@ -772,6 +935,25 @@ async def add_stock(
 
     res = await stock_col.insert_one(doc)
     created = await stock_col.find_one({"_id": res.inserted_id})
+    await track_business_event(
+        business_events_col=business_events_col,
+        user_id=current_user["id"],
+        event_name="product_added",
+        event_category="stock",
+        metadata_json={"food_category": doc.get("food_category"), "has_expiry_date": bool(doc.get("expiry_date"))},
+    )
+    onboarding_update = await users_col.update_one(
+        {"_id": ObjectId(current_user["id"]), "onboarding_completed_at": {"$exists": False}},
+        {"$set": {"onboarding_completed_at": utc_now().isoformat()}},
+    )
+    if getattr(onboarding_update, "modified_count", 0) > 0:
+        await track_business_event(
+            business_events_col=business_events_col,
+            user_id=current_user["id"],
+            event_name="onboarding_completed",
+            event_category="lifecycle",
+            metadata_json={"trigger": "first_product_added"},
+        )
     return serialize_mongo(created)
 
 
@@ -801,6 +983,13 @@ async def update_stock(
         raise HTTPException(status_code=404, detail="Active item not found")
 
     updated = await stock_col.find_one({"_id": oid})
+    await track_business_event(
+        business_events_col=business_events_col,
+        user_id=current_user["id"],
+        event_name="product_updated",
+        event_category="stock",
+        metadata_json={"updated_fields": list(update_data.keys())[:20]},
+    )
     return serialize_mongo(updated)
 
 
@@ -823,6 +1012,13 @@ async def consume_item(
     await users_col.update_one(
         {"_id": ObjectId(current_user["id"])},
         {"$set": {"last_stock_action": utc_now().isoformat()}},
+    )
+    await track_business_event(
+        business_events_col=business_events_col,
+        user_id=current_user["id"],
+        event_name="stock_consumed",
+        event_category="stock",
+        metadata_json={"item_id": item_id},
     )
     return {"ok": True}
 
@@ -1085,6 +1281,13 @@ async def refresh_recalls(
     previous_state = await app_state_col.find_one({"key": state_key})
     previous_success = previous_state.get("last_successful_refresh_at") if previous_state else None
 
+    await track_business_event(
+        business_events_col=business_events_col,
+        user_id=current_user["id"],
+        event_name="recall_refresh_triggered",
+        event_category="recall",
+        metadata_json={"source": "manual"},
+    )
     try:
         recalls = await fetch_recent_recalls(fail_on_error=True)
         refreshed_count = len(recalls)
@@ -1098,6 +1301,17 @@ async def refresh_recalls(
             "updated_by_user_id": current_user["id"],
         }
         await app_state_col.update_one({"key": state_key}, {"$set": new_state}, upsert=True)
+        user_doc = await users_col.find_one({"_id": ObjectId(current_user["id"])}, {"is_premium": 1, "admin_granted": 1, "trial_ends_at": 1})
+        await track_service_usage(
+            service_usage_logs_col=service_usage_logs_col,
+            user_id=current_user["id"],
+            service_name="recall_service",
+            action_name="manual_refresh",
+            units_consumed=1,
+            estimated_cost=float(os.getenv("RECALL_REFRESH_ESTIMATED_COST_EUR", "0")),
+            plan_type_at_time=resolve_plan_type_at_time(user_doc or current_user),
+            metadata_json={"refreshed_count": refreshed_count},
+        )
         logger.info(
             "Manual recalls refresh succeeded user=%s method=%s path=%s count=%d",
             current_user["id"],
@@ -1469,12 +1683,47 @@ async def ocr_receipt_route(
     current_user: Dict[str, Any] = Depends(_get_current_user),
 ):
     """Analyse un ticket de caisse via GPT-4o-mini vision et retourne la liste des produits alimentaires."""
+    await track_business_event(
+        business_events_col=business_events_col,
+        user_id=current_user["id"],
+        event_name="ocr_scan_started",
+        event_category="ocr",
+        metadata_json={},
+    )
     await _enforce_feature_access(
         current_user=current_user,
         feature=FEATURE_OCR,
         consume_quota=True,
     )
-    return await ocr_receipt(request, current_user)
+    result = await ocr_receipt(request, current_user)
+    plan_type = resolve_plan_type_at_time(current_user)
+    await track_service_usage(
+        service_usage_logs_col=service_usage_logs_col,
+        user_id=current_user["id"],
+        service_name="ocr",
+        action_name="receipt_scan",
+        units_consumed=1,
+        estimated_cost=float(os.getenv("OCR_ESTIMATED_COST_EUR", "0.01")),
+        plan_type_at_time=plan_type,
+        metadata_json={"items_count": len(result)},
+    )
+    if result:
+        await track_business_event(
+            business_events_col=business_events_col,
+            user_id=current_user["id"],
+            event_name="ocr_scan_succeeded",
+            event_category="ocr",
+            metadata_json={"items_count": len(result)},
+        )
+    else:
+        await track_business_event(
+            business_events_col=business_events_col,
+            user_id=current_user["id"],
+            event_name="ocr_scan_failed",
+            event_category="ocr",
+            metadata_json={"reason": "empty_or_parse_failed"},
+        )
+    return result
 
 
 # -----------------------------------------------------------------------------
@@ -1844,6 +2093,24 @@ async def get_ai_recipes(
         recipes = valid
 
     _ai_recipe_cache[uid] = {"recipes": recipes, "created_at": utc_now()}
+    plan_type = resolve_plan_type_at_time(current_user)
+    await track_service_usage(
+        service_usage_logs_col=service_usage_logs_col,
+        user_id=uid,
+        service_name="ai_recipes",
+        action_name="generate_recipes",
+        units_consumed=1,
+        estimated_cost=float(os.getenv("AI_RECIPE_ESTIMATED_COST_EUR", "0.03")),
+        plan_type_at_time=plan_type,
+        metadata_json={"recipes_count": len(recipes)},
+    )
+    await track_business_event(
+        business_events_col=business_events_col,
+        user_id=uid,
+        event_name="recipe_generated",
+        event_category="recipes",
+        metadata_json={"count": len(recipes), "source": "openai"},
+    )
     logger.info("AI recipes generated — user=%s count=%d", uid, len(recipes))
     logger.info(
         "RECIPES_DEBUG ai response — user=%s titles=%s",
@@ -1928,6 +2195,162 @@ async def get_predictions(
         {"id": str(i["_id"]), "name": i["name"], "category": i.get("food_category", "")}
         for i in items
     ]
+
+
+# -----------------------------------------------------------------------------
+# Admin Monitoring / Observability
+# -----------------------------------------------------------------------------
+
+@api_router.get("/admin/monitoring/health")
+async def admin_monitoring_health(
+    _admin_user: Dict[str, Any] = Depends(_require_admin_user),
+):
+    db_ok = True
+    try:
+        await db.command("ping")
+    except Exception:
+        db_ok = False
+
+    external_status = {
+        "openai_configured": bool(os.getenv("KEEPEAT_OPENAI_TOKEN")),
+        "brevo_configured": bool(os.getenv("BREVO_API_KEY")),
+        "openfoodfacts_configured": bool(os.getenv("OPENFOODFACTS_USER_AGENT", "KeepEat/1.0")),
+    }
+    last_critical = await api_request_logs_col.find_one(
+        {"status_code": {"$gte": 500}},
+        sort=[("created_at", -1)],
+        projection={"method": 1, "path": 1, "status_code": 1, "error_type": 1, "created_at": 1},
+    )
+    uptime_seconds = max(0, int((utc_now() - APP_STARTED_AT).total_seconds()))
+    global_ok = db_ok
+    return {
+        "status": "ok" if global_ok else "degraded",
+        "db": {"ok": db_ok},
+        "external_services": external_status,
+        "uptime_seconds": uptime_seconds,
+        "last_critical_error": serialize_mongo(last_critical),
+        "generated_at": utc_now().isoformat(),
+    }
+
+
+@api_router.get("/admin/monitoring/dashboard")
+async def admin_monitoring_dashboard(
+    _admin_user: Dict[str, Any] = Depends(_require_admin_user),
+):
+    kpis = await build_monitoring_kpis(
+        users_col=users_col,
+        api_request_logs_col=api_request_logs_col,
+        service_usage_logs_col=service_usage_logs_col,
+    )
+    apis = await summarize_api_metrics(
+        api_request_logs_col=api_request_logs_col,
+        start_iso=(utc_now() - timedelta(days=7)).isoformat(),
+        end_iso=utc_now().isoformat(),
+        limit=10,
+    )
+    return {
+        "generated_at": utc_now().isoformat(),
+        "users": kpis["users"],
+        "subscriptions": kpis["subscriptions"],
+        "top_api_issues": apis["highest_error_rate"][:5],
+        "top_service_usage": kpis["services"]["top_usage_30d"],
+        "estimated_cost_summary": {
+            "services_30d_estimated_cost_eur": round(sum(x.get("estimated_cost", 0.0) for x in kpis["services"]["top_usage_30d"]), 6)
+        },
+    }
+
+
+@api_router.get("/admin/monitoring/apis")
+async def admin_monitoring_apis(
+    start_date: str | None = Query(None),
+    end_date: str | None = Query(None),
+    limit: int = Query(20, ge=1, le=100),
+    _admin_user: Dict[str, Any] = Depends(_require_admin_user),
+):
+    start_iso = _parse_date_param(start_date, default_days_ago=7)
+    end_iso = _parse_date_param(end_date, default_days_ago=0)
+    return await summarize_api_metrics(
+        api_request_logs_col=api_request_logs_col,
+        start_iso=start_iso,
+        end_iso=end_iso,
+        limit=limit,
+    )
+
+
+@api_router.get("/admin/monitoring/users")
+async def admin_monitoring_users(
+    _admin_user: Dict[str, Any] = Depends(_require_admin_user),
+):
+    kpis = await build_monitoring_kpis(
+        users_col=users_col,
+        api_request_logs_col=api_request_logs_col,
+        service_usage_logs_col=service_usage_logs_col,
+    )
+    return {"generated_at": utc_now().isoformat(), **kpis["users"]}
+
+
+@api_router.get("/admin/monitoring/subscriptions")
+async def admin_monitoring_subscriptions(
+    _admin_user: Dict[str, Any] = Depends(_require_admin_user),
+):
+    kpis = await build_monitoring_kpis(
+        users_col=users_col,
+        api_request_logs_col=api_request_logs_col,
+        service_usage_logs_col=service_usage_logs_col,
+    )
+    active = kpis["subscriptions"]["active"]
+    inactive = await users_col.count_documents({"$or": [{"is_premium": False}, {"subscription_status": {"$in": ["inactive", "cancelled", "expired"]}}]})
+    return {
+        "generated_at": utc_now().isoformat(),
+        "active_subscriptions": active,
+        "subscriptions_by_plan": kpis["subscriptions"]["by_plan"],
+        "inactive_or_expired": inactive,
+        "estimated_mrr_eur": kpis["subscriptions"]["estimated_mrr_eur"],
+        "estimated_arr_eur": kpis["subscriptions"]["estimated_arr_eur"],
+    }
+
+
+@api_router.get("/admin/monitoring/services-usage")
+async def admin_monitoring_services_usage(
+    start_date: str | None = Query(None),
+    end_date: str | None = Query(None),
+    _admin_user: Dict[str, Any] = Depends(_require_admin_user),
+):
+    start_iso = _parse_date_param(start_date, default_days_ago=30)
+    end_iso = _parse_date_param(end_date, default_days_ago=0)
+    return await summarize_services_usage(
+        service_usage_logs_col=service_usage_logs_col,
+        start_iso=start_iso,
+        end_iso=end_iso,
+    )
+
+
+@api_router.get("/admin/monitoring/events")
+async def admin_monitoring_events(
+    start_date: str | None = Query(None),
+    end_date: str | None = Query(None),
+    event_name: str | None = Query(None),
+    event_category: str | None = Query(None),
+    page: int = Query(1, ge=1),
+    page_size: int = Query(50, ge=1, le=100),
+    _admin_user: Dict[str, Any] = Depends(_require_admin_user),
+):
+    start_iso = _parse_date_param(start_date, default_days_ago=7)
+    end_iso = _parse_date_param(end_date, default_days_ago=0)
+    query: dict[str, Any] = {"created_at": {"$gte": start_iso, "$lte": end_iso}}
+    if event_name:
+        query["event_name"] = event_name
+    if event_category:
+        query["event_category"] = event_category
+    total = await business_events_col.count_documents(query)
+    cursor = business_events_col.find(query).sort("created_at", -1).skip((page - 1) * page_size).limit(page_size)
+    rows = await cursor.to_list(length=page_size)
+    return {
+        "page": page,
+        "page_size": page_size,
+        "total": total,
+        "events": [serialize_mongo(r) for r in rows],
+    }
 
 
 # Redirect pages (deep link fallback for email clients)
