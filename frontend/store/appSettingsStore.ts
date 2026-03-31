@@ -6,7 +6,6 @@ import { APP_CONFIG } from '../utils/appConfig';
 import { buildApiUrl, getApiUrlDiagnostics } from '../utils/config';
 import { type Language, useLanguageStore } from './languageStore';
 import { useAuthStore } from './authStore';
-import { useStockStore } from './stockStore';
 
 const APP_SETTINGS_KEY = 'keepeat_app_settings_v1';
 
@@ -22,6 +21,7 @@ interface PersistedSettings {
 interface AppSettingsStore extends PersistedSettings {
   language: Language;
   isLoaded: boolean;
+  reminderRefreshLoading: boolean;
   reminderRefreshError: string | null;
   reminderRefreshSuccessAt: string | null;
   loadSettings: () => Promise<void>;
@@ -83,6 +83,8 @@ function parseRefreshErrorMessage(language: Language, error: unknown): string {
     if (detail && typeof detail === 'object' && typeof detail.message === 'string' && detail.message.trim()) {
       return detail.message;
     }
+    const message = error.response?.data?.message;
+    if (typeof message === 'string' && message.trim()) return message;
   }
   return buildReminderRefreshError(language);
 }
@@ -91,6 +93,7 @@ export const useAppSettingsStore = create<AppSettingsStore>((set, get) => ({
   ...DEFAULT_SETTINGS,
   language: 'fr',
   isLoaded: false,
+  reminderRefreshLoading: false,
   reminderRefreshError: null,
   reminderRefreshSuccessAt: null,
 
@@ -168,16 +171,22 @@ export const useAppSettingsStore = create<AppSettingsStore>((set, get) => ({
   },
 
   forceRefreshReminderProducts: async () => {
-    if (useStockStore.getState().isRefreshingPriorityItems) {
+    logger.info('[RECALLS] function entered');
+
+    if (get().reminderRefreshLoading) {
+      logger.info('[RECALLS] refresh already in progress, skipping duplicate click');
       return false;
     }
 
-    set({ reminderRefreshError: null, reminderRefreshSuccessAt: null });
+    set({ reminderRefreshError: null, reminderRefreshSuccessAt: null, reminderRefreshLoading: true });
 
     try {
       const endpoint = '/api/recalls/refresh';
       const url = buildApiUrl(endpoint);
       const apiDiag = getApiUrlDiagnostics();
+      const token = useAuthStore.getState().token;
+      logger.info('[RECALLS] backend url = ...', { url });
+      logger.info('[RECALLS] token exists = ...', { hasToken: Boolean(token) });
 
       if (apiDiag.likelyInvalidOnAndroidDevice) {
         logger.warn('[SettingsStore] backend URL may be invalid on Android physical device', {
@@ -186,10 +195,12 @@ export const useAppSettingsStore = create<AppSettingsStore>((set, get) => ({
         });
       }
 
-      logger.info('[SettingsStore] manual recalls refresh request', { method: 'POST', url });
+      logger.info('[RECALLS] about to POST /api/recalls/refresh', { method: 'POST', url });
       const response = await axios.post<RecallsRefreshResponse>(url, {}, { headers: authHeaders() });
       const data = response.data;
 
+      logger.info('[RECALLS] status HTTP', { status: response.status });
+      logger.info('[RECALLS] body réponse', { body: data });
       logger.info('[SettingsStore] manual recalls refresh response', {
         method: 'POST',
         url,
@@ -198,7 +209,11 @@ export const useAppSettingsStore = create<AppSettingsStore>((set, get) => ({
       });
 
       if (!data || data.success !== true || typeof data.lastSuccessfulRefreshAt !== 'string') {
-        set({ reminderRefreshError: buildReminderRefreshError(get().language) });
+        const fallbackMessage = (typeof data?.message === 'string' && data.message.trim())
+          ? data.message
+          : buildReminderRefreshError(get().language);
+        set({ reminderRefreshError: fallbackMessage });
+        logger.warn('[RECALLS] message d’erreur final affiché', { userMessage: fallbackMessage });
         logger.warn('[SettingsStore] manual recalls refresh returned unexpected payload', {
           method: 'POST',
           url,
@@ -229,8 +244,11 @@ export const useAppSettingsStore = create<AppSettingsStore>((set, get) => ({
         errorMessage: error instanceof Error ? error.message : String(error),
         userMessage: message,
       });
+      logger.warn('[RECALLS] message d’erreur final affiché', { userMessage: message });
       set({ reminderRefreshError: message });
       return false;
+    } finally {
+      set({ reminderRefreshLoading: false });
     }
   },
 }));

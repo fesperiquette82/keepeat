@@ -1,4 +1,4 @@
-import React, { useMemo } from 'react';
+import React, { useCallback, useMemo } from 'react';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { View, Text, StyleSheet, TouchableOpacity, Switch, ActivityIndicator, Alert } from 'react-native';
 import Ionicons from '@expo/vector-icons/Ionicons';
@@ -9,6 +9,7 @@ import { useStockStore } from '../store/stockStore';
 import { useAuthStore } from '../store/authStore';
 import { restorePremiumPurchase } from '../utils/billingService';
 import { isAdminUser } from '../utils/adminAccess';
+import { logger } from '../utils/logger';
 
 function formatLastUpdate(value: string | null, language: 'fr' | 'en'): string {
   if (!value) return language === 'en' ? 'Not updated yet' : 'Pas encore mis à jour';
@@ -31,6 +32,7 @@ export default function SettingsScreen() {
     productRemindersEnabled,
     reminderDaysBefore,
     lastReminderRefreshAt,
+    reminderRefreshLoading,
     reminderRefreshError,
     reminderRefreshSuccessAt,
     setLanguage,
@@ -45,6 +47,11 @@ export default function SettingsScreen() {
   const refreshEntitlements = useAuthStore((state) => state.refreshEntitlements);
   const plan = useAuthStore((state) => state.plan);
   const canAccessAdmin = isAdminUser(user);
+  const onPressRefreshRecalls = useCallback(() => {
+    logger.info('[SETTINGS] refresh button pressed');
+    logger.info('[SETTINGS] calling forceRefreshReminderProducts');
+    void forceRefreshReminderProducts();
+  }, [forceRefreshReminderProducts]);
 
   const reminderOptions: ReminderLeadDays[] = useMemo(() => [1, 2, 3], []);
 
@@ -115,17 +122,17 @@ export default function SettingsScreen() {
           <Text style={styles.systemInfo}>Dernière mise à jour des rappels : {formatLastUpdate(lastReminderRefreshAt, language)}</Text>
 
           <TouchableOpacity
-            style={[styles.refreshButton, isRefreshingPriorityItems && styles.refreshButtonDisabled]}
-            onPress={forceRefreshReminderProducts}
-            disabled={isRefreshingPriorityItems}
+            style={[styles.refreshButton, reminderRefreshLoading && styles.refreshButtonDisabled]}
+            onPress={onPressRefreshRecalls}
+            disabled={reminderRefreshLoading}
           >
-            {isRefreshingPriorityItems ? (
+            {reminderRefreshLoading ? (
               <ActivityIndicator size="small" color="#FFFFFF" />
             ) : (
               <Ionicons name="refresh" size={16} color="#FFFFFF" />
             )}
             <Text style={styles.refreshButtonText}>
-              {isRefreshingPriorityItems ? 'Mise à jour…' : 'Mettre à jour maintenant'}
+              {reminderRefreshLoading ? 'Mise à jour…' : 'Mettre à jour maintenant'}
             </Text>
           </TouchableOpacity>
 
