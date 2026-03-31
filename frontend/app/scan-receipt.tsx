@@ -20,6 +20,7 @@ import { useAuthStore } from '../store/authStore';
 import { C } from '../utils/theme';
 import { extractPremiumErrorDetail } from '../utils/premiumErrors';
 import { usePremiumUiStore } from '../store/premiumUiStore';
+import { pickImageFromGallery } from '../utils/galleryPicker';
 
 // ─── Types ────────────────────────────────────────────────────────────────────
 
@@ -68,16 +69,12 @@ export default function ScanReceiptScreen() {
 
   // ── Capture & analyse ──────────────────────────────────────────────────────
 
-  const handleCapture = async () => {
-    if (!cameraRef.current) return;
+  const processReceiptImage = async (base64Image: string) => {
     setMode('processing');
     try {
-      const photo = await cameraRef.current.takePictureAsync({ base64: true, quality: 0.5 });
-      if (!photo.base64) throw new Error('base64 vide');
-
       const res = await axios.post(
         buildApiUrl('/api/ocr/receipt'),
-        { image: photo.base64 },
+        { image: base64Image },
         { headers: { Authorization: `Bearer ${token}` } },
       );
       const detected: ReceiptProduct[] = res.data;
@@ -109,6 +106,45 @@ export default function ScanReceiptScreen() {
       }
       setMode('camera');
     }
+  };
+
+  const handleCapture = async () => {
+    if (!cameraRef.current) return;
+    const photo = await cameraRef.current.takePictureAsync({ base64: true, quality: 0.5 });
+    if (!photo.base64) {
+      Alert.alert(isFr ? 'Erreur' : 'Error', isFr ? "Photo invalide." : 'Invalid photo.');
+      return;
+    }
+    await processReceiptImage(photo.base64);
+  };
+
+  const handleImportFromGallery = async () => {
+    const picked = await pickImageFromGallery({ includeBase64: true, quality: 0.75 });
+    if (picked.status === 'cancelled') return;
+    if (picked.status === 'permission_denied') {
+      Alert.alert(
+        isFr ? 'Accès galerie requis' : 'Gallery permission required',
+        isFr
+          ? "Autorisez l'accès à la galerie pour importer une photo."
+          : 'Allow photo library access to import an image.',
+      );
+      return;
+    }
+    if (picked.status === 'unavailable') {
+      Alert.alert(
+        isFr ? 'Galerie indisponible' : 'Gallery unavailable',
+        isFr ? "Le module d'import photo est indisponible." : 'Photo import module is unavailable.',
+      );
+      return;
+    }
+    if (picked.status !== 'success' || !picked.asset.base64) {
+      Alert.alert(
+        isFr ? 'Image invalide' : 'Invalid image',
+        isFr ? "Impossible d'analyser cette image." : 'Unable to analyse this image.',
+      );
+      return;
+    }
+    await processReceiptImage(picked.asset.base64);
   };
 
   // ── Ajout des produits sélectionnés ───────────────────────────────────────
@@ -209,16 +245,28 @@ export default function ScanReceiptScreen() {
 
         {/* Capture button */}
         <View style={styles.captureRow}>
-          <TouchableOpacity
-            style={[styles.captureBtn, mode === 'processing' && styles.captureBtnDisabled]}
-            onPress={handleCapture}
-            disabled={mode === 'processing'}
-          >
-            <Ionicons name="camera" size={28} color="#fff" />
-            <Text style={styles.captureBtnText}>
-              {isFr ? 'Capturer le ticket' : 'Capture receipt'}
-            </Text>
-          </TouchableOpacity>
+          <View style={styles.captureActionsRow}>
+            <TouchableOpacity
+              style={[styles.captureBtn, mode === 'processing' && styles.captureBtnDisabled]}
+              onPress={handleCapture}
+              disabled={mode === 'processing'}
+            >
+              <Ionicons name="camera" size={24} color="#fff" />
+              <Text style={styles.captureBtnText}>
+                {isFr ? 'Capturer le ticket' : 'Capture receipt'}
+              </Text>
+            </TouchableOpacity>
+            <TouchableOpacity
+              style={[styles.galleryBtn, mode === 'processing' && styles.captureBtnDisabled]}
+              onPress={handleImportFromGallery}
+              disabled={mode === 'processing'}
+            >
+              <Ionicons name="images-outline" size={21} color="#111827" />
+              <Text style={styles.galleryBtnText}>
+                {isFr ? 'Galerie' : 'Gallery'}
+              </Text>
+            </TouchableOpacity>
+          </View>
         </View>
       </SafeAreaView>
     );
@@ -378,7 +426,9 @@ const styles = StyleSheet.create({
     borderTopWidth: 1,
     borderTopColor: '#F0EDE8',
   },
+  captureActionsRow: { flexDirection: 'row', alignItems: 'center', gap: 10 },
   captureBtn: {
+    flex: 1,
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'center',
@@ -394,6 +444,19 @@ const styles = StyleSheet.create({
   },
   captureBtnDisabled: { opacity: 0.6 },
   captureBtnText: { color: '#fff', fontSize: 16, fontWeight: '800' },
+  galleryBtn: {
+    borderWidth: 1,
+    borderColor: '#D1D5DB',
+    borderRadius: 16,
+    paddingVertical: 16,
+    paddingHorizontal: 14,
+    backgroundColor: '#FFFFFF',
+    alignItems: 'center',
+    justifyContent: 'center',
+    flexDirection: 'row',
+    gap: 6,
+  },
+  galleryBtnText: { color: '#111827', fontSize: 14, fontWeight: '700' },
 
   // ── Confirm ──
   confirmSub: {

@@ -124,6 +124,7 @@ export type CameraModalProps = {
   language: string;
   t: (key: string) => string;
   onCaptureAndScan: () => void;
+  onImportAndScan: () => void;
   onScannedDateChange: (text: string) => void;
   onConfirm: () => void;
   onCameraLayout: (dims: { width: number; height: number }) => void;
@@ -133,7 +134,7 @@ export const CameraModal = React.memo(function CameraModal({
   visible, onClose, permissionGranted, requestPermission,
   cameraRef, isOcrProcessing, ocrError, ocrDebug,
   scannedDateText, parsedDateInfo, language, t,
-  onCaptureAndScan, onScannedDateChange, onConfirm, onCameraLayout,
+  onCaptureAndScan, onImportAndScan, onScannedDateChange, onConfirm, onCameraLayout,
 }: CameraModalProps) {
   return (
     <Modal visible={visible} animationType="slide">
@@ -181,22 +182,32 @@ export const CameraModal = React.memo(function CameraModal({
         )}
 
         <View style={cmStyles.ocrActions}>
-          <TouchableOpacity
-            style={[cmStyles.captureBtn, (!permissionGranted || isOcrProcessing) && cmStyles.captureBtnDisabled]}
-            onPress={onCaptureAndScan}
-            disabled={!permissionGranted || isOcrProcessing}
-          >
-            {isOcrProcessing ? (
-              <ActivityIndicator color="#fff" />
-            ) : (
-              <>
-                <Ionicons name="scan-outline" size={18} color="#fff" />
-                <Text style={cmStyles.captureBtnText}>
-                  {t('captureAndScan')}
-                </Text>
-              </>
-            )}
-          </TouchableOpacity>
+          <View style={cmStyles.ocrActionsRow}>
+            <TouchableOpacity
+              style={[cmStyles.captureBtn, (!permissionGranted || isOcrProcessing) && cmStyles.captureBtnDisabled]}
+              onPress={onCaptureAndScan}
+              disabled={!permissionGranted || isOcrProcessing}
+            >
+              {isOcrProcessing ? (
+                <ActivityIndicator color="#fff" />
+              ) : (
+                <>
+                  <Ionicons name="scan-outline" size={18} color="#fff" />
+                  <Text style={cmStyles.captureBtnText}>
+                    {t('captureAndScan')}
+                  </Text>
+                </>
+              )}
+            </TouchableOpacity>
+            <TouchableOpacity
+              style={[cmStyles.galleryBtn, isOcrProcessing && cmStyles.captureBtnDisabled]}
+              onPress={onImportAndScan}
+              disabled={isOcrProcessing}
+            >
+              <Ionicons name="images-outline" size={18} color="#111" />
+              <Text style={cmStyles.galleryBtnText}>{t('importPhoto')}</Text>
+            </TouchableOpacity>
+          </View>
           {ocrError ? <Text style={cmStyles.ocrError}>{ocrError}</Text> : null}
           {__DEV__ && ocrDebug ? <Text style={cmStyles.ocrDebug}>{ocrDebug}</Text> : null}
         </View>
@@ -340,13 +351,28 @@ const cmStyles = StyleSheet.create({
   permissionBtnText: { color: '#fff', fontWeight: '700' },
 
   ocrActions: { paddingHorizontal: 16, paddingTop: 4, paddingBottom: 8 },
+  ocrActionsRow: { flexDirection: 'row', gap: 10 },
   captureBtn: {
+    flex: 1,
     height: 46, borderRadius: 12, backgroundColor: '#22c55e',
     alignItems: 'center', justifyContent: 'center',
     flexDirection: 'row', gap: 8,
   },
   captureBtnDisabled: { opacity: 0.6 },
   captureBtnText: { color: '#fff', fontWeight: '700', fontSize: 14 },
+  galleryBtn: {
+    height: 46,
+    borderRadius: 12,
+    paddingHorizontal: 14,
+    borderWidth: 1,
+    borderColor: '#3A3A3A',
+    backgroundColor: '#F3F4F6',
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    gap: 6,
+  },
+  galleryBtnText: { color: '#111827', fontWeight: '700', fontSize: 13 },
   ocrError: { marginTop: 8, color: '#f97316', fontSize: 12 },
   ocrDebug: { marginTop: 6, color: '#888', fontSize: 11 },
 
