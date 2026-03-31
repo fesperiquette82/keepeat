@@ -1,7 +1,7 @@
 from __future__ import annotations
 
 from enum import Enum
-from typing import Optional
+from typing import Literal, Optional
 
 from pydantic import BaseModel, EmailStr, Field
 
@@ -82,6 +82,20 @@ class StockItemUpdate(BaseModel):
     quantity: Optional[str] = None
     expiry_date: Optional[str] = None
     notes: Optional[str] = None
+
+
+class PriorityRefreshBody(BaseModel):
+    lead_days: Literal[1, 2, 3]
+    reminders_enabled: bool
+
+
+class PriorityRefreshResponse(BaseModel):
+    items: list[StockItem]
+    last_refresh_at: str
+    item_ids: list[str]
+    count: int
+    lead_days: Literal[1, 2, 3]
+    reminders_enabled: bool
 
 
 class ShelfLife(BaseModel):

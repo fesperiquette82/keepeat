@@ -3,6 +3,7 @@ import { create } from 'zustand';
 import { logger } from '../utils/logger';
 import { APP_CONFIG } from '../utils/appConfig';
 import { type Language, useLanguageStore } from './languageStore';
+import { useStockStore } from './stockStore';
 
 const APP_SETTINGS_KEY = 'keepeat_app_settings_v1';
 
@@ -12,25 +13,28 @@ interface PersistedSettings {
   householdSize: number;
   productRemindersEnabled: boolean;
   reminderDaysBefore: ReminderLeadDays;
-  lastRemindersUpdate: string | null;
+  lastReminderRefreshAt: string | null;
 }
 
 interface AppSettingsStore extends PersistedSettings {
   language: Language;
   isLoaded: boolean;
+  reminderRefreshError: string | null;
+  reminderRefreshSuccessAt: string | null;
   loadSettings: () => Promise<void>;
   setLanguage: (language: Language) => Promise<void>;
   setHouseholdSize: (size: number) => Promise<void>;
   setProductRemindersEnabled: (enabled: boolean) => Promise<void>;
   setReminderDaysBefore: (days: ReminderLeadDays) => Promise<void>;
   markRemindersUpdated: (iso?: string) => Promise<void>;
+  forceRefreshReminderProducts: () => Promise<boolean>;
 }
 
 const DEFAULT_SETTINGS: PersistedSettings = {
   householdSize: APP_CONFIG.defaultRecipeServings,
   productRemindersEnabled: true,
   reminderDaysBefore: 2,
-  lastRemindersUpdate: null,
+  lastReminderRefreshAt: null,
 };
 
 function clampHouseholdSize(value: number): number {
@@ -46,14 +50,22 @@ function readPersistedSettings(state: AppSettingsStore): PersistedSettings {
     householdSize: state.householdSize,
     productRemindersEnabled: state.productRemindersEnabled,
     reminderDaysBefore: state.reminderDaysBefore,
-    lastRemindersUpdate: state.lastRemindersUpdate,
+    lastReminderRefreshAt: state.lastReminderRefreshAt,
   };
+}
+
+function buildReminderRefreshError(language: Language): string {
+  return language === 'en'
+    ? 'Unable to refresh reminder products. Please try again.'
+    : 'Impossible de mettre à jour les produits rappelés. Réessayez.';
 }
 
 export const useAppSettingsStore = create<AppSettingsStore>((set, get) => ({
   ...DEFAULT_SETTINGS,
   language: 'fr',
   isLoaded: false,
+  reminderRefreshError: null,
+  reminderRefreshSuccessAt: null,
 
   loadSettings: async () => {
     try {
@@ -65,7 +77,7 @@ export const useAppSettingsStore = create<AppSettingsStore>((set, get) => ({
         return;
       }
 
-      const parsed = JSON.parse(raw) as Partial<PersistedSettings>;
+      const parsed = JSON.parse(raw) as Partial<PersistedSettings> & { lastRemindersUpdate?: string | null };
       set({
         language,
         householdSize: clampHouseholdSize(Number(parsed.householdSize ?? DEFAULT_SETTINGS.householdSize)),
@@ -73,7 +85,11 @@ export const useAppSettingsStore = create<AppSettingsStore>((set, get) => ({
         reminderDaysBefore: parsed.reminderDaysBefore === 1 || parsed.reminderDaysBefore === 2 || parsed.reminderDaysBefore === 3
           ? parsed.reminderDaysBefore
           : DEFAULT_SETTINGS.reminderDaysBefore,
-        lastRemindersUpdate: typeof parsed.lastRemindersUpdate === 'string' ? parsed.lastRemindersUpdate : null,
+        lastReminderRefreshAt: typeof parsed.lastReminderRefreshAt === 'string'
+          ? parsed.lastReminderRefreshAt
+          : typeof parsed.lastRemindersUpdate === 'string'
+            ? parsed.lastRemindersUpdate
+            : null,
         isLoaded: true,
       });
     } catch (error) {
@@ -98,8 +114,7 @@ export const useAppSettingsStore = create<AppSettingsStore>((set, get) => ({
   },
 
   setProductRemindersEnabled: async (enabled: boolean) => {
-    const updatedAt = new Date().toISOString();
-    set({ productRemindersEnabled: enabled, lastRemindersUpdate: updatedAt });
+    set({ productRemindersEnabled: enabled });
     try {
       await persistSettings(readPersistedSettings(get()));
     } catch (error) {
@@ -108,8 +123,7 @@ export const useAppSettingsStore = create<AppSettingsStore>((set, get) => ({
   },
 
   setReminderDaysBefore: async (days: ReminderLeadDays) => {
-    const updatedAt = new Date().toISOString();
-    set({ reminderDaysBefore: days, lastRemindersUpdate: updatedAt });
+    set({ reminderDaysBefore: days });
     try {
       await persistSettings(readPersistedSettings(get()));
     } catch (error) {
@@ -118,11 +132,39 @@ export const useAppSettingsStore = create<AppSettingsStore>((set, get) => ({
   },
 
   markRemindersUpdated: async (iso?: string) => {
-    set({ lastRemindersUpdate: iso ?? new Date().toISOString() });
+    set({ lastReminderRefreshAt: iso ?? new Date().toISOString() });
     try {
       await persistSettings(readPersistedSettings(get()));
     } catch (error) {
       logger.warn('[SettingsStore] persist reminder update date failed', { message: error instanceof Error ? error.message : String(error) });
+    }
+  },
+
+  forceRefreshReminderProducts: async () => {
+    if (useStockStore.getState().isRefreshingPriorityItems) {
+      return false;
+    }
+
+    set({ reminderRefreshError: null, reminderRefreshSuccessAt: null });
+
+    try {
+      const { reminderDaysBefore, productRemindersEnabled } = get();
+      const refreshResult = await useStockStore
+        .getState()
+        .refreshPriorityItems(reminderDaysBefore, productRemindersEnabled);
+      if (!refreshResult) {
+        return false;
+      }
+      set({
+        lastReminderRefreshAt: refreshResult.last_refresh_at,
+        reminderRefreshSuccessAt: refreshResult.last_refresh_at,
+      });
+      await persistSettings(readPersistedSettings(get()));
+      return true;
+    } catch (error) {
+      logger.warn('[SettingsStore] force refresh reminders failed', { message: error instanceof Error ? error.message : String(error) });
+      set({ reminderRefreshError: buildReminderRefreshError(get().language) });
+      return false;
     }
   },
 }));

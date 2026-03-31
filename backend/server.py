@@ -43,6 +43,8 @@ from models import (
     ForgotPasswordBody,
     ProductBase,
     ProductLookupResponse,
+    PriorityRefreshBody,
+    PriorityRefreshResponse,
     PushTokenBody,
     RecipeCatalogResponse,
     RecipeSuggestionGroupsResponse,
@@ -61,6 +63,7 @@ from models import (
     VerifyEmailBody,
 )
 from ocr_service import ocr_receipt
+from priority_refresh import build_priority_refresh_state
 from product_catalog import infer_food_category, infer_shelf_life, lookup_product_openfoodfacts
 from recipes_service import (
     _FRIGO_CATS,
@@ -695,14 +698,74 @@ async def throw_item(
 
 @api_router.get("/stock/priority", response_model=List[StockItem])
 async def get_priority_items(current_user: Dict[str, Any] = Depends(_get_current_user)):
-    threshold = (utc_now().date() + timedelta(days=3)).strftime("%Y-%m-%d")
+    docs = await _compute_priority_items(
+        user_id=current_user["id"],
+        lead_days=3,
+        reminders_enabled=True,
+    )
+    return [serialize_mongo(d) for d in docs]
+
+
+def _priority_refresh_state_id(user_id: str) -> str:
+    return f"priority_refresh_state:{user_id}"
+
+
+async def _compute_priority_items(*, user_id: str, lead_days: int, reminders_enabled: bool) -> list[dict[str, Any]]:
+    if not reminders_enabled:
+        return []
+
+    threshold = (utc_now().date() + timedelta(days=lead_days)).strftime("%Y-%m-%d")
     cursor = stock_col.find({
-        "user_id": current_user["id"],
+        "user_id": user_id,
         "status": "active",
         "expiry_date": {"$nin": [None, ""], "$lte": threshold},
     }).sort("expiry_date", 1)
-    docs = await cursor.to_list(length=500)
-    return [serialize_mongo(d) for d in docs]
+    return await cursor.to_list(length=500)
+
+
+@api_router.post("/stock/priority/refresh", response_model=PriorityRefreshResponse)
+async def refresh_priority_items(
+    body: PriorityRefreshBody,
+    current_user: Dict[str, Any] = Depends(_get_current_user),
+):
+    try:
+        docs = await _compute_priority_items(
+            user_id=current_user["id"],
+            lead_days=body.lead_days,
+            reminders_enabled=body.reminders_enabled,
+        )
+        items = [serialize_mongo(d) for d in docs]
+        refreshed_at = utc_now().isoformat()
+        item_ids = [item["id"] for item in items]
+
+        state_doc = build_priority_refresh_state(
+            None,
+            succeeded=True,
+            last_refresh_at=refreshed_at,
+            item_ids=item_ids,
+            count=len(item_ids),
+            lead_days=body.lead_days,
+            reminders_enabled=body.reminders_enabled,
+        )
+        await app_state_col.update_one(
+            {"_id": _priority_refresh_state_id(current_user["id"])},
+            {"$set": state_doc},
+            upsert=True,
+        )
+
+        return PriorityRefreshResponse(
+            items=items,
+            last_refresh_at=refreshed_at,
+            item_ids=item_ids,
+            count=len(item_ids),
+            lead_days=body.lead_days,
+            reminders_enabled=body.reminders_enabled,
+        )
+    except HTTPException:
+        raise
+    except Exception as exc:
+        logger.error("Priority refresh failed for user=%s: %s", current_user["id"], exc)
+        raise HTTPException(status_code=500, detail="Priority refresh failed")
 
 
 @api_router.get("/stock/history")
