@@ -1,6 +1,6 @@
 import { Slot, useRouter, useSegments } from 'expo-router';
 import { StatusBar } from 'expo-status-bar';
-import React, { useEffect, useMemo, useState } from 'react';
+import React, { useEffect, useMemo, useRef, useState } from 'react';
 import { View, StyleSheet, Platform } from 'react-native';
 import * as SplashScreen from 'expo-splash-screen';
 import { GestureHandlerRootView } from 'react-native-gesture-handler';
@@ -62,6 +62,7 @@ export default function RootLayout() {
   const [animationDone, setAnimationDone] = useState(false);
   const [showAnimatedOverlay, setShowAnimatedOverlay] = useState(true);
   const premiumModalOpen = usePremiumUiStore(state => state.isOpen);
+  const hasFetchedBillingOnSessionRef = useRef(false);
 
   // Surveillance de la connectivité réseau + sync automatique
   useNetworkSync();
@@ -136,17 +137,31 @@ export default function RootLayout() {
     };
   }, [appReady, animationDone]);
 
-  // Enregistrement du push token + notif locale urgente au démarrage
+  // Enregistrement du push token au login
   useEffect(() => {
-    if (user && token) {
-      registerPushToken(token);
-      refreshEntitlements();
-      refreshUsage();
-      if (items.length > 0) {
-        checkAndNotifyUrgentOnOpen(items);
-      }
+    if (!user || !token) {
+      hasFetchedBillingOnSessionRef.current = false;
+      return;
     }
-  }, [items, refreshEntitlements, refreshUsage, token, user]);
+    registerPushToken(token);
+  }, [token, user]);
+
+  // Notification locale urgente selon le stock chargé
+  useEffect(() => {
+    if (!user || !token || items.length === 0) return;
+    checkAndNotifyUrgentOnOpen(items);
+  }, [items, token, user]);
+
+  useEffect(() => {
+    if (!user || !token) {
+      hasFetchedBillingOnSessionRef.current = false;
+      return;
+    }
+    if (hasFetchedBillingOnSessionRef.current) return;
+    hasFetchedBillingOnSessionRef.current = true;
+    refreshEntitlements();
+    refreshUsage();
+  }, [refreshEntitlements, refreshUsage, token, user]);
 
   useEffect(() => {
     if (premiumModalOpen) {
