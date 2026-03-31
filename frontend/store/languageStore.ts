@@ -41,6 +41,11 @@ const translations: Translations = {
   },
   manualEntry: { fr: 'Saisie manuelle', en: 'Manual entry' },
   searching: { fr: 'Recherche...', en: 'Searching...' },
+  barcodePlaceholder: { fr: 'Code-barres (EAN)', en: 'Barcode (EAN)' },
+  scanner: { fr: 'Scanner', en: 'Scan' },
+  ticket: { fr: 'Ticket', en: 'Receipt' },
+  rescan: { fr: 'Rescanner', en: 'Rescan' },
+  searchProductLoading: { fr: 'Recherche du produit...', en: 'Looking up product...' },
 
   // Add Product
   addProduct: { fr: 'Ajouter un produit', en: 'Add a product' },
@@ -75,15 +80,78 @@ const translations: Translations = {
   apply: { fr: 'Appliquer', en: 'Apply' },
   productFound: { fr: 'Produit trouvé', en: 'Product found' },
   productNotFound: { fr: 'Produit introuvable', en: 'Product not found' },
+  scannedProductFallback: { fr: 'Produit scanné', en: 'Scanned product' },
+  errorTitle: { fr: 'Erreur', en: 'Error' },
+  productNameRequired: { fr: 'Le nom du produit est requis', en: 'Product name is required' },
+  addProductError: { fr: "Impossible d'ajouter le produit", en: 'Unable to add product' },
+  updateProductSuccessTitle: { fr: 'Modifié !', en: 'Updated!' },
+  updateProductError: { fr: 'Impossible de modifier le produit', en: 'Unable to update product' },
+  exampleProductName: { fr: 'Ex: Lait demi-écrémé', en: 'Ex: Semi-skimmed milk' },
+  exampleBrand: { fr: 'Ex: Lactel', en: 'Ex: Brand name' },
+  exampleQuantity: { fr: 'Ex: 1L, 500g', en: 'Ex: 1L, 500g' },
+  dateModeAuto: { fr: 'Auto', en: 'Auto' },
+  dateModeDuration: { fr: 'Durée', en: 'Duration' },
+  dateModeDate: { fr: 'Date', en: 'Date' },
+  dateModeScan: { fr: 'Scanner', en: 'Scan' },
+  categoryLabel: { fr: 'Catégorie: {name}', en: 'Category: {name}' },
+  durationPlaceholder: { fr: 'Nombre de jours', en: 'Number of days' },
+  chooseDate: { fr: 'Choisir une date', en: 'Choose a date' },
+  openOcrScanner: { fr: 'Ouvrir le scanner OCR', en: 'Open OCR scanner' },
+  additionalNotesPlaceholder: { fr: 'Infos complémentaires...', en: 'Additional notes...' },
+  optionalNotesPlaceholder: { fr: 'Notes optionnelles...', en: 'Optional notes...' },
+  quickAddNoDate: { fr: 'Ajouter rapidement (sans date)', en: 'Quick add (no date)' },
+  suggestionRefrigerator: { fr: 'Réfrigérateur ({days}j)', en: 'Refrigerator ({days}d)' },
+  suggestionPantry: { fr: 'Placard ({days}j)', en: 'Pantry ({days}d)' },
+  suggestionFreezer: { fr: 'Congélateur ({days}j)', en: 'Freezer ({days}d)' },
 
   // Mentionnée dans index.tsx
   addManually: { fr: 'Ajouter', en: 'Add' },
+
+  // Date picker / OCR camera modal
+  invalidDate: { fr: 'Date invalide', en: 'Invalid date' },
+  day: { fr: 'Jour', en: 'Day' },
+  month: { fr: 'Mois', en: 'Month' },
+  year: { fr: 'Année', en: 'Year' },
+  scanDate: { fr: 'Scanner la date', en: 'Scan date' },
+  placeDateHere: { fr: 'Placez la date ici', en: 'Place date here' },
+  cameraPermissionRequired: { fr: 'Autorisation caméra requise', en: 'Camera permission required' },
+  allow: { fr: 'Autoriser', en: 'Allow' },
+  captureAndScan: { fr: 'Capturer & analyser', en: 'Capture & scan' },
+  enterDateOnPackaging: { fr: "Saisissez la date vue sur l'emballage :", en: 'Enter the date seen on packaging:' },
+  dateInputExample: { fr: 'Ex: 15/03/2025, 15 mars 25, mars 2025...', en: 'Ex: 15/03/2025, 15 Mar 25, March 2025...' },
+  detectedFormat: { fr: 'Format détecté: ', en: 'Detected format: ' },
+  unrecognizedFormat: { fr: 'Format non reconnu', en: 'Unrecognized format' },
+  acceptedFormats: { fr: 'Formats acceptés :', en: 'Accepted formats:' },
+
+  // Settings
+  settingsTitle: { fr: 'Paramètres', en: 'Settings' },
+  languageSection: { fr: 'Langue', en: 'Language' },
+  householdSize: { fr: 'Nombre de personnes du foyer', en: 'Household size' },
+  peopleCount: { fr: '{count} personnes', en: '{count} people' },
+  defaultRecipeHint: { fr: 'Valeur par défaut utilisée pour les recettes.', en: 'Default value used for recipes.' },
+  productReminders: { fr: 'Rappels produits', en: 'Product reminders' },
+  reminderLeadTime: { fr: 'Délai avant péremption', en: 'Lead time before expiry' },
+  notUpdatedYet: { fr: 'Pas encore mis à jour', en: 'Not updated yet' },
+  remindersLastUpdate: { fr: 'Dernière mise à jour des rappels : {date}', en: 'Last reminder update: {date}' },
+  updateInProgress: { fr: 'Mise à jour…', en: 'Updating…' },
+  updateNow: { fr: 'Mettre à jour maintenant', en: 'Update now' },
+  remindersUpdatedSuccess: { fr: 'Produits rappelés mis à jour avec succès.', en: 'Reminder products updated successfully.' },
+  premium: { fr: 'Premium', en: 'Premium' },
+  currentPlan: { fr: 'Plan actuel : {plan}', en: 'Current plan: {plan}' },
+  upgradePremium: { fr: 'Passer Premium', en: 'Go Premium' },
+  restoreTitle: { fr: 'Restauration', en: 'Restore' },
+  restoreSuccess: { fr: 'Vos droits premium ont été synchronisés.', en: 'Your premium access has been synced.' },
+  restorePurchases: { fr: 'Restaurer mes achats', en: 'Restore purchases' },
+  restoreError: { fr: 'Impossible de restaurer les achats.', en: 'Unable to restore purchases.' },
+  adminSection: { fr: 'Administration', en: 'Administration' },
+  adminMonitoringAccess: { fr: 'Accès monitoring backend (admin only).', en: 'Backend monitoring access (admin only).' },
+  openMonitoringBackoffice: { fr: 'Ouvrir le back-office monitoring', en: 'Open monitoring back-office' },
 };
 
 interface LanguageStore {
   language: Language;
   setLanguage: (lang: Language) => Promise<void>;
-  t: (key: string) => string;
+  t: (key: string, params?: Record<string, string | number>) => string;
   loadLanguage: () => Promise<void>;
 }
 
@@ -95,9 +163,14 @@ export const useLanguageStore = create<LanguageStore>((set, get) => ({
     await AsyncStorage.setItem('keepeat_language', lang);
   },
 
-  t: (key: string) => {
+  t: (key: string, params) => {
     const { language } = get();
-    return translations[key]?.[language] || key;
+    const template = translations[key]?.[language] || key;
+    if (!params) return template;
+    return Object.entries(params).reduce(
+      (acc, [paramKey, value]) => acc.replace(new RegExp(`\\{${paramKey}\\}`, 'g'), String(value)),
+      template,
+    );
   },
 
   loadLanguage: async () => {

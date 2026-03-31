@@ -63,8 +63,8 @@ export const DatePickerModal = React.memo(function DatePickerModal({
       onConfirm(newDate);
     } else {
       Alert.alert(
-        language === 'fr' ? 'Erreur' : 'Error',
-        language === 'fr' ? 'Date invalide' : 'Invalid date',
+        t('errorTitle'),
+        t('invalidDate'),
       );
     }
   };
@@ -76,9 +76,9 @@ export const DatePickerModal = React.memo(function DatePickerModal({
           <Text style={dpStyles.title}>{t('selectDate')}</Text>
           <View style={dpStyles.row}>
             {[
-              { label: language === 'fr' ? 'Jour' : 'Day',   value: day,   set: setDay,   max: 2, ph: 'DD'   },
-              { label: language === 'fr' ? 'Mois' : 'Month', value: month, set: setMonth, max: 2, ph: 'MM'   },
-              { label: language === 'fr' ? 'Année' : 'Year', value: year,  set: setYear,  max: 4, ph: 'YYYY' },
+              { label: t('day'),   value: day,   set: setDay,   max: 2, ph: 'DD'   },
+              { label: t('month'), value: month, set: setMonth, max: 2, ph: 'MM'   },
+              { label: t('year'), value: year,  set: setYear,  max: 4, ph: 'YYYY' },
             ].map(({ label, value, set, max, ph }) => (
               <View key={label} style={dpStyles.group}>
                 <Text style={dpStyles.label}>{label}</Text>
@@ -144,7 +144,7 @@ export const CameraModal = React.memo(function CameraModal({
             <Ionicons name="close" size={28} color="#fff" />
           </TouchableOpacity>
           <Text style={cmStyles.title}>
-            {language === 'fr' ? 'Scanner la date' : 'Scan date'}
+            {t('scanDate')}
           </Text>
           <View style={{ width: 28 }} />
         </View>
@@ -161,7 +161,7 @@ export const CameraModal = React.memo(function CameraModal({
             <View style={cmStyles.overlay}>
               <View style={cmStyles.scanZone}>
                 <Text style={cmStyles.scanZoneText}>
-                  {language === 'fr' ? 'Placez la date ici' : 'Place date here'}
+                  {t('placeDateHere')}
                 </Text>
               </View>
             </View>
@@ -170,11 +170,11 @@ export const CameraModal = React.memo(function CameraModal({
           <View style={cmStyles.permissionBox}>
             <Ionicons name="camera-outline" size={48} color="#666" />
             <Text style={cmStyles.permissionText}>
-              {language === 'fr' ? 'Autorisation caméra requise' : 'Camera permission required'}
+              {t('cameraPermissionRequired')}
             </Text>
             <TouchableOpacity style={cmStyles.permissionBtn} onPress={requestPermission}>
               <Text style={cmStyles.permissionBtnText}>
-                {language === 'fr' ? 'Autoriser' : 'Allow'}
+                {t('allow')}
               </Text>
             </TouchableOpacity>
           </View>
@@ -192,7 +192,7 @@ export const CameraModal = React.memo(function CameraModal({
               <>
                 <Ionicons name="scan-outline" size={18} color="#fff" />
                 <Text style={cmStyles.captureBtnText}>
-                  {language === 'fr' ? 'Capturer & analyser' : 'Capture & scan'}
+                  {t('captureAndScan')}
                 </Text>
               </>
             )}
@@ -203,15 +203,13 @@ export const CameraModal = React.memo(function CameraModal({
 
         <View style={cmStyles.manualSection}>
           <Text style={cmStyles.manualLabel}>
-            {language === 'fr' ? "Saisissez la date vue sur l'emballage :" : 'Enter the date seen on packaging:'}
+            {t('enterDateOnPackaging')}
           </Text>
           <TextInput
             style={cmStyles.manualInput}
             value={scannedDateText}
             onChangeText={onScannedDateChange}
-            placeholder={language === 'fr'
-              ? 'Ex: 15/03/2025, 15 mars 25, mars 2025...'
-              : 'Ex: 15/03/2025, 15 Mar 25, March 2025...'}
+            placeholder={t('dateInputExample')}
             placeholderTextColor="#666"
             autoCapitalize="none"
           />
@@ -231,7 +229,7 @@ export const CameraModal = React.memo(function CameraModal({
                       })}
                     </Text>
                     <Text style={cmStyles.feedbackFmt}>
-                      {language === 'fr' ? 'Format détecté: ' : 'Detected format: '}
+                      {t('detectedFormat')}
                       {parsedDateInfo.format} · {parsedDateInfo.confidence}
                     </Text>
                   </View>
@@ -240,7 +238,7 @@ export const CameraModal = React.memo(function CameraModal({
                 <>
                   <Ionicons name="help-circle" size={18} color="#f97316" />
                   <Text style={cmStyles.feedbackErrText}>
-                    {language === 'fr' ? 'Format non reconnu' : 'Unrecognized format'}
+                    {t('unrecognizedFormat')}
                   </Text>
                 </>
               )}
@@ -250,7 +248,7 @@ export const CameraModal = React.memo(function CameraModal({
           {!parsedDateInfo?.date && (
             <View style={cmStyles.examples}>
               <Text style={cmStyles.examplesTitle}>
-                {language === 'fr' ? 'Formats acceptés :' : 'Accepted formats:'}
+                {t('acceptedFormats')}
               </Text>
               <Text style={cmStyles.examplesText}>
                 15/03/2025 • 15-03-25 • 15.03.25{'\n'}

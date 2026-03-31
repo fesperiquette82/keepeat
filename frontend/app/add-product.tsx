@@ -139,7 +139,7 @@ export default function AddProductScreen() {
       if (response?.found) {
         const apiProduct = response.product ?? {};
         const shelfLife = response.shelf_life ?? {};
-        const fallbackName = apiProduct.name || apiProduct.brand || (language === 'fr' ? 'Produit scanné' : 'Scanned product');
+        const fallbackName = apiProduct.name || apiProduct.brand || t('scannedProductFallback');
         setProductFound(true);
         setName(String(fallbackName || ''));
         setBrand(String(apiProduct.brand || ''));
@@ -156,7 +156,7 @@ export default function AddProductScreen() {
       }
       setHasPrefilledFromLookup(true);
     }).finally(() => setLookupLoading(false));
-  }, [hasPrefilledFromLookup, language, lookupProduct, normalizedBarcode, normalizedParamName]);
+  }, [hasPrefilledFromLookup, lookupProduct, normalizedBarcode, normalizedParamName, t]);
 
   const ocr = useOcrDatePicker(language, !!permission?.granted, (date) => {
     setExpiryDate(date);
@@ -168,19 +168,19 @@ export default function AddProductScreen() {
   const autoSuggestions = useMemo(() => {
     const out: { label: string; days: number; icon: keyof typeof Ionicons.glyphMap; color: string }[] = [];
     if (shelfLifeFridge) out.push({
-      label: language === 'fr' ? `Réfrigérateur (${shelfLifeFridge}j)` : `Refrigerator (${shelfLifeFridge}d)`,
+      label: t('suggestionRefrigerator', { days: shelfLifeFridge }),
       days: shelfLifeFridge, icon: 'snow-outline', color: '#3b82f6',
     });
     if (shelfLifePantry) out.push({
-      label: language === 'fr' ? `Placard (${shelfLifePantry}j)` : `Pantry (${shelfLifePantry}d)`,
+      label: t('suggestionPantry', { days: shelfLifePantry }),
       days: shelfLifePantry, icon: 'cube-outline', color: '#f59e0b',
     });
     if (shelfLifeFreezer) out.push({
-      label: language === 'fr' ? `Congélateur (${shelfLifeFreezer}j)` : `Freezer (${shelfLifeFreezer}d)`,
+      label: t('suggestionFreezer', { days: shelfLifeFreezer }),
       days: shelfLifeFreezer, icon: 'thermometer-outline', color: '#8b5cf6',
     });
     return out;
-  }, [shelfLifeFridge, shelfLifePantry, shelfLifeFreezer, language]);
+  }, [shelfLifeFridge, shelfLifePantry, shelfLifeFreezer, t]);
 
   const formatDisplayDate = (date: Date) =>
     format(date, 'EEEE d MMMM yyyy', { locale: language === 'fr' ? fr : enUS });
@@ -221,8 +221,8 @@ export default function AddProductScreen() {
   const handleSave = async () => {
     if (!name.trim()) {
       Alert.alert(
-        language === 'fr' ? 'Erreur' : 'Error',
-        language === 'fr' ? 'Le nom du produit est requis' : 'Product name is required',
+        t('errorTitle'),
+        t('productNameRequired'),
       );
       return;
     }
@@ -241,8 +241,8 @@ export default function AddProductScreen() {
       router.replace('/');
     } catch {
       Alert.alert(
-        language === 'fr' ? 'Erreur' : 'Error',
-        language === 'fr' ? "Impossible d'ajouter le produit" : 'Unable to add product',
+        t('errorTitle'),
+        t('addProductError'),
       );
     } finally {
       setIsSaving(false);
@@ -271,7 +271,7 @@ export default function AddProductScreen() {
             )}
             <Text style={[styles.foundBadgeText, { color: productFound ? '#22c55e' : '#f97316' }]}>
               {lookupLoading
-                ? (language === 'fr' ? 'Recherche du produit...' : 'Looking up product...')
+                ? t('searchProductLoading')
                 : productFound ? t('productFound') : t('productNotFound')}
             </Text>
           </View>
@@ -286,7 +286,7 @@ export default function AddProductScreen() {
           ) : (
             <TextInput
               style={styles.input} value={name} onChangeText={setName}
-              placeholder={language === 'fr' ? 'Ex: Lait demi-écrémé' : 'Ex: Semi-skimmed milk'}
+              placeholder={t('exampleProductName')}
               placeholderTextColor="#666" autoFocus={!productFound && !lookupLoading}
             />
           )}
@@ -296,7 +296,7 @@ export default function AddProductScreen() {
           <Text style={styles.label}>{t('brand')}</Text>
           <TextInput
             style={styles.input} value={brand} onChangeText={setBrand}
-            placeholder={language === 'fr' ? 'Ex: Lactel' : 'Ex: Brand name'}
+            placeholder={t('exampleBrand')}
             placeholderTextColor="#666"
           />
         </View>
@@ -305,7 +305,7 @@ export default function AddProductScreen() {
           <Text style={styles.label}>{t('quantity')}</Text>
           <TextInput
             style={styles.input} value={quantity} onChangeText={setQuantity}
-            placeholder="Ex: 1L, 500g" placeholderTextColor="#666"
+            placeholder={t('exampleQuantity')} placeholderTextColor="#666"
           />
         </View>
 
@@ -319,7 +319,7 @@ export default function AddProductScreen() {
                 onPress={() => setDateInputMode('auto')}
               >
                 <Ionicons name="flash" size={16} color={dateInputMode === 'auto' ? '#fff' : '#888'} />
-                <Text style={[styles.modeBtnText, dateInputMode === 'auto' && styles.modeBtnTextActive]}>Auto</Text>
+                <Text style={[styles.modeBtnText, dateInputMode === 'auto' && styles.modeBtnTextActive]}>{t('dateModeAuto')}</Text>
               </TouchableOpacity>
             )}
             <TouchableOpacity
@@ -328,7 +328,7 @@ export default function AddProductScreen() {
             >
               <Ionicons name="time-outline" size={16} color={dateInputMode === 'duration' ? '#fff' : '#888'} />
               <Text style={[styles.modeBtnText, dateInputMode === 'duration' && styles.modeBtnTextActive]}>
-                {language === 'fr' ? 'Durée' : 'Duration'}
+                {t('dateModeDuration')}
               </Text>
             </TouchableOpacity>
             <TouchableOpacity
@@ -336,14 +336,14 @@ export default function AddProductScreen() {
               onPress={() => setDateInputMode('date')}
             >
               <Ionicons name="calendar-outline" size={16} color={dateInputMode === 'date' ? '#fff' : '#888'} />
-              <Text style={[styles.modeBtnText, dateInputMode === 'date' && styles.modeBtnTextActive]}>Date</Text>
+              <Text style={[styles.modeBtnText, dateInputMode === 'date' && styles.modeBtnTextActive]}>{t('dateModeDate')}</Text>
             </TouchableOpacity>
             <TouchableOpacity
               style={[styles.modeBtn, dateInputMode === 'camera' && styles.modeBtnActive]}
               onPress={() => { setDateInputMode('camera'); setShowCameraModal(true); }}
             >
               <Ionicons name="camera-outline" size={16} color={dateInputMode === 'camera' ? '#fff' : '#888'} />
-              <Text style={[styles.modeBtnText, dateInputMode === 'camera' && styles.modeBtnTextActive]}>Scan</Text>
+              <Text style={[styles.modeBtnText, dateInputMode === 'camera' && styles.modeBtnTextActive]}>{t('dateModeScan')}</Text>
             </TouchableOpacity>
           </View>
 
@@ -353,7 +353,7 @@ export default function AddProductScreen() {
                 <View style={styles.categoryBadge}>
                   <Ionicons name="information-circle" size={16} color="#22c55e" />
                   <Text style={styles.categoryText}>
-                    {language === 'fr' ? 'Catégorie: ' : 'Category: '}{shelfLifeCategory}
+                    {t('categoryLabel', { name: shelfLifeCategory })}
                   </Text>
                 </View>
               )}
@@ -387,7 +387,7 @@ export default function AddProductScreen() {
                 <TextInput
                   style={styles.durationInput}
                   value={durationDays} onChangeText={setDurationDays}
-                  placeholder={language === 'fr' ? 'Nombre de jours' : 'Number of days'}
+                  placeholder={t('durationPlaceholder')}
                   placeholderTextColor="#666" keyboardType="numeric"
                 />
                 <TouchableOpacity style={styles.applyBtn} onPress={handleDurationApply}>
@@ -401,7 +401,7 @@ export default function AddProductScreen() {
             <TouchableOpacity style={styles.datePickerBtn} onPress={() => setShowDatePicker(true)}>
               <Ionicons name="calendar" size={18} color="#22c55e" />
               <Text style={styles.datePickerBtnText}>
-                {expiryDate ? formatDisplayDate(expiryDate) : language === 'fr' ? 'Choisir une date' : 'Choose a date'}
+                {expiryDate ? formatDisplayDate(expiryDate) : t('chooseDate')}
               </Text>
             </TouchableOpacity>
           )}
@@ -410,7 +410,7 @@ export default function AddProductScreen() {
             <TouchableOpacity style={styles.datePickerBtn} onPress={() => setShowCameraModal(true)}>
               <Ionicons name="scan-outline" size={18} color="#22c55e" />
               <Text style={styles.datePickerBtnText}>
-                {language === 'fr' ? 'Ouvrir le scanner OCR' : 'Open OCR scanner'}
+                {t('openOcrScanner')}
               </Text>
             </TouchableOpacity>
           )}
@@ -428,7 +428,7 @@ export default function AddProductScreen() {
           <TextInput
             style={[styles.input, styles.notesInput]}
             value={notes} onChangeText={setNotes}
-            placeholder={language === 'fr' ? 'Infos complémentaires...' : 'Additional notes...'}
+            placeholder={t('additionalNotesPlaceholder')}
             placeholderTextColor="#666" multiline
           />
         </View>
@@ -441,7 +441,7 @@ export default function AddProductScreen() {
           >
             <Ionicons name="flash" size={18} color="#f59e0b" />
             <Text style={styles.quickSaveBtnText}>
-              {language === 'fr' ? 'Ajouter rapidement (sans date)' : 'Quick add (no date)'}
+              {t('quickAddNoDate')}
             </Text>
           </TouchableOpacity>
         )}
