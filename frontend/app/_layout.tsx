@@ -16,6 +16,7 @@ import { API_ENV, API_URL, buildApiUrl } from '../utils/config';
 import { useNetworkSync } from '../utils/useNetworkSync';
 import { logger } from '../utils/logger';
 import { APP_CONFIG } from '../utils/appConfig';
+import { usePremiumUiStore } from '../store/premiumUiStore';
 
 
 // Garde le splash natif visible tant que le root n'est pas prêt.
@@ -52,12 +53,15 @@ export default function RootLayout() {
   const token = useAuthStore(state => state.token);
   const isLoaded = useAuthStore(state => state.isLoaded);
   const loadAuth = useAuthStore(state => state.loadAuth);
+  const refreshEntitlements = useAuthStore(state => state.refreshEntitlements);
+  const refreshUsage = useAuthStore(state => state.refreshUsage);
   const loadLanguage = useLanguageStore(state => state.loadLanguage);
   const items = useStockStore(state => state.items);
   const loadAppSettings = useAppSettingsStore(state => state.loadSettings);
   const [appReady, setAppReady] = useState(false);
   const [animationDone, setAnimationDone] = useState(false);
   const [showAnimatedOverlay, setShowAnimatedOverlay] = useState(true);
+  const premiumModalOpen = usePremiumUiStore(state => state.isOpen);
 
   // Surveillance de la connectivité réseau + sync automatique
   useNetworkSync();
@@ -136,11 +140,19 @@ export default function RootLayout() {
   useEffect(() => {
     if (user && token) {
       registerPushToken(token);
+      refreshEntitlements();
+      refreshUsage();
       if (items.length > 0) {
         checkAndNotifyUrgentOnOpen(items);
       }
     }
-  }, [items, token, user]);
+  }, [items, refreshEntitlements, refreshUsage, token, user]);
+
+  useEffect(() => {
+    if (premiumModalOpen) {
+      router.push('/premium');
+    }
+  }, [premiumModalOpen, router]);
 
   // Guard auth : redirige selon l'état de connexion
   useEffect(() => {

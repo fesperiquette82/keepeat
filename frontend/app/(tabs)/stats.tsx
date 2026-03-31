@@ -17,6 +17,8 @@ import { buildApiUrl } from '../../utils/config';
 import { C, shadowSm, T } from '../../utils/theme';
 import { generateLastSixMonthLabels } from '../../utils/monthlyLabels';
 import { countLabelFr, formatEuroFr } from '../../utils/uiText';
+import { extractPremiumErrorDetail } from '../../utils/premiumErrors';
+import { usePremiumUiStore } from '../../store/premiumUiStore';
 
 interface MonthlyStats {
   month: string;   // "YYYY-MM"
@@ -61,23 +63,33 @@ export default function StatsScreen() {
   const [isLoading, setIsLoading]       = useState(true);
   const [isRefreshing, setIsRefreshing] = useState(false);
   const [error, setError]               = useState<string | null>(null);
+  const [predictionsCount, setPredictionsCount] = useState(0);
+  const openPaywall = usePremiumUiStore(state => state.openPaywall);
 
   const fetchStats = useCallback(async (silent = false) => {
     if (!token) return;
     if (!silent) setIsLoading(true);
     setError(null);
     try {
-      const [monthly, gamifRes] = await Promise.all([
+      const [monthly, gamifRes, predictionsRes] = await Promise.all([
         axios.get(buildApiUrl('/api/stats/monthly?months=6'), {
           headers: { Authorization: `Bearer ${token}` },
         }),
         axios.get(buildApiUrl('/api/gamification'), {
           headers: { Authorization: `Bearer ${token}` },
         }),
+        axios.get(buildApiUrl('/api/predictions'), {
+          headers: { Authorization: `Bearer ${token}` },
+        }),
       ]);
       setData(monthly.data);
       setGamif(gamifRes.data);
-    } catch {
+      setPredictionsCount(Array.isArray(predictionsRes.data) ? predictionsRes.data.length : 0);
+    } catch (err: any) {
+      const premiumError = extractPremiumErrorDetail(err);
+      if (premiumError) {
+        openPaywall(premiumError);
+      }
       setError(
         isFr
           ? 'Impossible de charger les stats. Vérifiez votre connexion.'
@@ -87,7 +99,7 @@ export default function StatsScreen() {
       setIsLoading(false);
       setIsRefreshing(false);
     }
-  }, [isFr, token]);
+  }, [isFr, openPaywall, token]);
 
   useEffect(() => { fetchStats(); }, [fetchStats]);
 
@@ -248,6 +260,11 @@ export default function StatsScreen() {
 
           {/* Légende */}
           <View style={styles.legendRow}>
+            {predictionsCount > 0 && (
+              <Text style={styles.predictionsHint}>
+                {isFr ? `${predictionsCount} prédiction(s) active(s)` : `${predictionsCount} active prediction(s)`}
+              </Text>
+            )}
             <View style={styles.legendItem}>
               <View style={[styles.legendDot, { backgroundColor: C.primary }]} />
               <Text style={styles.legendText}>{t('Consommé', 'Consumed')}</Text>
@@ -410,6 +427,7 @@ const styles = StyleSheet.create({
 
   // ── Legend ──
   legendRow: { flexDirection: 'row', gap: 16 },
+  predictionsHint: { color: '#166534', fontSize: 12, fontWeight: '700' },
   legendItem: { flexDirection: 'row', alignItems: 'center', gap: 6 },
   legendDot:  { width: 10, height: 10, borderRadius: 5 },
   legendText: { ...T.secondarySmall },

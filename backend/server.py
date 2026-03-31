@@ -38,6 +38,10 @@ from alerts import (
 from app_core import days_until, logger, redirect_html, serialize_mongo, utc_now
 from auth_utils import create_token, get_current_user, hash_password, http_bearer, validate_password, verify_password
 from models import (
+    BillingEntitlementsResponse,
+    BillingRestoreResponse,
+    BillingUsageResponse,
+    BillingVerifyRequest,
     AlertPreferences,
     AlertPreferencesUpdate,
     ForgotPasswordBody,
@@ -61,6 +65,19 @@ from models import (
     UserLogin,
     UserResponse,
     VerifyEmailBody,
+)
+from entitlements import (
+    FEATURE_AI,
+    FEATURE_OCR,
+    FEATURE_PREDICTIONS,
+    FEATURE_STATS_ADVANCED,
+    PREMIUM_PLAN,
+    PREMIUM_PRODUCT_ID,
+    build_entitlements_snapshot,
+    check_access_or_raise,
+    consume_quota_or_raise,
+    feature_policy,
+    resolve_plan,
 )
 from ocr_service import ocr_receipt
 from priority_refresh import build_priority_refresh_state
@@ -354,6 +371,61 @@ async def _send_email(to: str, subject: str, html_body: str) -> None:
         logger.error("Échec envoi email à %s : %s", to, exc)
 
 
+def _current_period_key(now: datetime | None = None) -> str:
+    dt = now or utc_now()
+    return dt.strftime("%Y-%m")
+
+
+def _next_period_reset_at(now: datetime | None = None) -> str:
+    dt = now or utc_now()
+    year = dt.year + (1 if dt.month == 12 else 0)
+    month = 1 if dt.month == 12 else dt.month + 1
+    reset = datetime(year, month, 1, tzinfo=timezone.utc)
+    return reset.isoformat()
+
+
+async def _get_usage_snapshot(*, user_id: str, plan: str, period: str) -> dict[str, dict[str, int | None]]:
+    usage: dict[str, dict[str, int | None]] = {}
+    for feature in (FEATURE_OCR, FEATURE_AI):
+        policy = feature_policy(plan, feature)
+        limit = policy.get("monthly_limit")
+        if limit is None:
+            usage[feature] = {"used": 0, "limit": None, "remaining": 999999}
+            continue
+        counter_id = f"usage:{user_id}:{feature}:{period}"
+        doc = await app_state_col.find_one({"_id": counter_id}, {"used": 1})
+        used = int((doc or {}).get("used") or 0)
+        usage[feature] = {
+            "used": used,
+            "limit": int(limit),
+            "remaining": max(0, int(limit) - used),
+        }
+    return usage
+
+
+async def _enforce_feature_access(
+    *,
+    current_user: Dict[str, Any],
+    feature: str,
+    consume_quota: bool = False,
+) -> dict[str, Any]:
+    plan = resolve_plan(current_user)
+    policy = check_access_or_raise(plan=plan, feature=feature)
+    if consume_quota:
+        period = _current_period_key()
+        reset_at = _next_period_reset_at()
+        quota_result = await consume_quota_or_raise(
+            app_state_col=app_state_col,
+            user_id=current_user["id"],
+            feature=feature,
+            monthly_limit=policy.get("monthly_limit"),
+            period=period,
+            reset_at=reset_at,
+        )
+        return {"plan": plan, "policy": policy, "quota": quota_result}
+    return {"plan": plan, "policy": policy}
+
+
 # -----------------------------------------------------------------------------
 # Routes
 # -----------------------------------------------------------------------------
@@ -562,6 +634,86 @@ async def me(current_user: Dict[str, Any] = Depends(_get_current_user)):
         is_premium=current_user.get("is_premium", False),
         is_verified=current_user.get("email_verified", True),
     )
+
+
+# -----------------------------------------------------------------------------
+# Billing / Entitlements
+# -----------------------------------------------------------------------------
+
+@api_router.get("/billing/entitlements", response_model=BillingEntitlementsResponse)
+async def get_billing_entitlements(
+    current_user: Dict[str, Any] = Depends(_get_current_user),
+):
+    user_doc = await users_col.find_one({"_id": ObjectId(current_user["id"])}) or current_user
+    snapshot = build_entitlements_snapshot(user_doc)
+    return BillingEntitlementsResponse(**snapshot)
+
+
+@api_router.get("/billing/usage", response_model=BillingUsageResponse)
+async def get_billing_usage(
+    current_user: Dict[str, Any] = Depends(_get_current_user),
+):
+    user_doc = await users_col.find_one({"_id": ObjectId(current_user["id"])}) or current_user
+    plan = resolve_plan(user_doc)
+    period = _current_period_key()
+    usage = await _get_usage_snapshot(user_id=current_user["id"], plan=plan, period=period)
+    return BillingUsageResponse(period=period, usage=usage)
+
+
+@api_router.post("/billing/google/verify", response_model=BillingRestoreResponse)
+async def verify_google_subscription(
+    body: BillingVerifyRequest,
+    current_user: Dict[str, Any] = Depends(_get_current_user),
+):
+    if body.product_id != PREMIUM_PRODUCT_ID:
+        raise HTTPException(
+            status_code=400,
+            detail={"code": "INVALID_PRODUCT", "product_id": body.product_id},
+        )
+    if not body.purchase_token.strip():
+        raise HTTPException(status_code=400, detail={"code": "INVALID_PURCHASE_TOKEN"})
+
+    expires_at = (utc_now() + timedelta(days=30)).isoformat()
+    await users_col.update_one(
+        {"_id": ObjectId(current_user["id"])},
+        {"$set": {
+            "is_premium": True,
+            "subscription_status": "active",
+            "subscription_expires_at": expires_at,
+            "store_platform": body.platform,
+            "store_product_id": body.product_id,
+            "store_purchase_token": body.purchase_token,
+            "subscription_updated_at": utc_now().isoformat(),
+        }},
+    )
+    return BillingRestoreResponse(
+        ok=True,
+        plan=PREMIUM_PLAN,
+        subscription_status="active",
+        subscription_expires_at=expires_at,
+    )
+
+
+@api_router.post("/billing/restore", response_model=BillingRestoreResponse)
+async def restore_subscription(
+    current_user: Dict[str, Any] = Depends(_get_current_user),
+):
+    user_doc = await users_col.find_one({"_id": ObjectId(current_user["id"])}) or current_user
+    plan = resolve_plan(user_doc)
+    status = user_doc.get("subscription_status") or ("active" if plan == PREMIUM_PLAN else "inactive")
+    if plan == PREMIUM_PLAN:
+        return BillingRestoreResponse(
+            ok=True,
+            plan=PREMIUM_PLAN,
+            subscription_status=status,
+            subscription_expires_at=user_doc.get("subscription_expires_at"),
+        )
+
+    await users_col.update_one(
+        {"_id": ObjectId(current_user["id"])},
+        {"$set": {"is_premium": False, "subscription_status": "inactive"}},
+    )
+    return BillingRestoreResponse(ok=True, plan="free", subscription_status="inactive", subscription_expires_at=None)
 
 
 # -----------------------------------------------------------------------------
@@ -1246,6 +1398,11 @@ async def ocr_receipt_route(
     current_user: Dict[str, Any] = Depends(_get_current_user),
 ):
     """Analyse un ticket de caisse via GPT-4o-mini vision et retourne la liste des produits alimentaires."""
+    await _enforce_feature_access(
+        current_user=current_user,
+        feature=FEATURE_OCR,
+        consume_quota=True,
+    )
     return await ocr_receipt(request, current_user)
 
 
@@ -1272,11 +1429,13 @@ async def get_monthly_stats(
 ):
     """Retourne les stats mensuelles (consommé/jeté/score/saved_euros) sur les N derniers mois."""
     uid = current_user["id"]
+    plan = resolve_plan(current_user)
+    effective_months = min(months, 24 if plan == PREMIUM_PLAN else 6)
 
     # Générer la liste des N derniers mois (YYYY-MM)
     today = utc_now().date()
     month_list = []
-    for i in range(months - 1, -1, -1):
+    for i in range(effective_months - 1, -1, -1):
         target = today.replace(day=1) - timedelta(days=i * 30)
         month_list.append(target.strftime("%Y-%m"))
 
@@ -1468,6 +1627,11 @@ async def get_ai_recipes(
     current_user: Dict[str, Any] = Depends(_get_current_user),
 ):
     """Génère 3 recettes personnalisées via GPT-4o-mini basées sur le stock de l'utilisateur."""
+    await _enforce_feature_access(
+        current_user=current_user,
+        feature=FEATURE_AI,
+        consume_quota=True,
+    )
     uid = current_user["id"]
     resolved_suggestion_style = resolve_suggestion_style(suggestion_style)
     include_meta_enabled = include_meta is True or str(include_meta).lower() in {"1", "true", "yes"}
@@ -1629,6 +1793,11 @@ async def get_predictions(
     current_user: Dict[str, Any] = Depends(_get_current_user),
 ):
     """Retourne les items actifs dont la catégorie a un taux de gaspillage > 40% dans l'historique."""
+    await _enforce_feature_access(
+        current_user=current_user,
+        feature=FEATURE_PREDICTIONS,
+        consume_quota=False,
+    )
     uid = current_user["id"]
 
     pipeline = [

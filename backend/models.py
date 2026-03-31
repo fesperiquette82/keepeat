@@ -23,6 +23,44 @@ class UserResponse(BaseModel):
     is_verified: bool = True
 
 
+class BillingFeatureAccess(BaseModel):
+    allowed: bool
+    monthly_limit: Optional[int] = None
+
+
+class BillingEntitlementsResponse(BaseModel):
+    plan: Literal["free", "premium"]
+    is_premium: bool
+    subscription_status: str
+    subscription_expires_at: Optional[str] = None
+    features: dict[str, BillingFeatureAccess]
+    server_time: str
+
+
+class BillingFeatureUsage(BaseModel):
+    used: int = 0
+    limit: Optional[int] = None
+    remaining: int = 0
+
+
+class BillingUsageResponse(BaseModel):
+    period: str
+    usage: dict[str, BillingFeatureUsage]
+
+
+class BillingVerifyRequest(BaseModel):
+    platform: Literal["android"]
+    product_id: str
+    purchase_token: str
+
+
+class BillingRestoreResponse(BaseModel):
+    ok: bool
+    plan: Literal["free", "premium"]
+    subscription_status: str
+    subscription_expires_at: Optional[str] = None
+
+
 class TokenResponse(BaseModel):
     access_token: str
     token_type: str = "bearer"

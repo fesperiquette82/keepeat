@@ -14,11 +14,39 @@ export interface AuthUser {
   is_verified?: boolean;
 }
 
+export interface BillingFeatureAccess {
+  allowed: boolean;
+  monthly_limit: number | null;
+}
+
+export interface BillingEntitlements {
+  plan: 'free' | 'premium';
+  is_premium: boolean;
+  subscription_status: string;
+  subscription_expires_at: string | null;
+  features: Record<string, BillingFeatureAccess>;
+  server_time: string;
+}
+
+export interface BillingFeatureUsage {
+  used: number;
+  limit: number | null;
+  remaining: number;
+}
+
+export interface BillingUsage {
+  period: string;
+  usage: Record<string, BillingFeatureUsage>;
+}
+
 interface AuthStore {
   user: AuthUser | null;
   token: string | null;
   isLoaded: boolean;
   error: string | null;
+  plan: 'free' | 'premium';
+  entitlements: BillingEntitlements | null;
+  usage: BillingUsage | null;
 
   loadAuth: () => Promise<void>;
   login: (email: string, password: string) => Promise<void>;
@@ -29,6 +57,8 @@ interface AuthStore {
   resetPassword: (token: string, newPassword: string) => Promise<void>;
   logout: () => Promise<void>;
   clearError: () => void;
+  refreshEntitlements: () => Promise<void>;
+  refreshUsage: () => Promise<void>;
   /** DEV ONLY — bypass auth sans compte (token null, non persisté). Lance une erreur en production. */
   bypassAuth: () => void;
 }
@@ -54,6 +84,9 @@ export const useAuthStore = create<AuthStore>((set) => ({
   token: null,
   isLoaded: false,
   error: null,
+  plan: 'free',
+  entitlements: null,
+  usage: null,
 
   loadAuth: async () => {
     try {
@@ -61,7 +94,7 @@ export const useAuthStore = create<AuthStore>((set) => ({
       const userJson = await AsyncStorage.getItem(USER_KEY);
       if (token && userJson) {
         const user: AuthUser = JSON.parse(userJson);
-        set({ token, user, isLoaded: true });
+        set({ token, user, isLoaded: true, plan: user.is_premium ? 'premium' : 'free' });
       } else {
         set({ isLoaded: true });
       }
@@ -77,7 +110,9 @@ export const useAuthStore = create<AuthStore>((set) => ({
       const { access_token, user } = data as { access_token: string; user: AuthUser };
       await SecureStore.setItemAsync(TOKEN_KEY, access_token);
       await AsyncStorage.setItem(USER_KEY, JSON.stringify(user));
-      set({ token: access_token, user });
+      set({ token: access_token, user, plan: user.is_premium ? 'premium' : 'free' });
+      await useAuthStore.getState().refreshEntitlements();
+      await useAuthStore.getState().refreshUsage();
     } catch (err: any) {
       set({ error: err.message || 'Erreur de connexion' });
       throw err;
@@ -102,7 +137,9 @@ export const useAuthStore = create<AuthStore>((set) => ({
       const { access_token, user } = data as { access_token: string; user: AuthUser };
       await SecureStore.setItemAsync(TOKEN_KEY, access_token);
       await AsyncStorage.setItem(USER_KEY, JSON.stringify(user));
-      set({ token: access_token, user });
+      set({ token: access_token, user, plan: user.is_premium ? 'premium' : 'free' });
+      await useAuthStore.getState().refreshEntitlements();
+      await useAuthStore.getState().refreshUsage();
     } catch (err: any) {
       set({ error: err.message || 'Erreur de vérification' });
       throw err;
@@ -146,15 +183,60 @@ export const useAuthStore = create<AuthStore>((set) => ({
     }
     await SecureStore.deleteItemAsync(TOKEN_KEY);
     await AsyncStorage.removeItem(USER_KEY);
-    set({ token: null, user: null, error: null });
+    set({ token: null, user: null, error: null, plan: 'free', entitlements: null, usage: null });
   },
 
   clearError: () => set({ error: null }),
+
+  refreshEntitlements: async () => {
+    const token = useAuthStore.getState().token;
+    if (!token) return;
+    try {
+      const response = await fetch(buildApiUrl('/api/billing/entitlements'), {
+        headers: { Authorization: `Bearer ${token}` },
+      });
+      const data = await response.json();
+      if (!response.ok) {
+        throw new Error(data?.detail || `Error ${response.status}`);
+      }
+      const entitlements = data as BillingEntitlements;
+      set((state) => ({
+        entitlements,
+        plan: entitlements.plan,
+        user: state.user
+          ? { ...state.user, is_premium: entitlements.is_premium }
+          : state.user,
+      }));
+      const nextUser = useAuthStore.getState().user;
+      if (nextUser) {
+        await AsyncStorage.setItem(USER_KEY, JSON.stringify(nextUser));
+      }
+    } catch (err: any) {
+      set({ error: err.message || 'Erreur de synchronisation premium' });
+    }
+  },
+
+  refreshUsage: async () => {
+    const token = useAuthStore.getState().token;
+    if (!token) return;
+    try {
+      const response = await fetch(buildApiUrl('/api/billing/usage'), {
+        headers: { Authorization: `Bearer ${token}` },
+      });
+      const data = await response.json();
+      if (!response.ok) {
+        throw new Error(data?.detail || `Error ${response.status}`);
+      }
+      set({ usage: data as BillingUsage });
+    } catch (err: any) {
+      set({ error: err.message || 'Erreur de synchronisation quota' });
+    }
+  },
 
   bypassAuth: () => {
     if (!__DEV__) {
       throw new Error('bypassAuth is only available in development builds.');
     }
-    set({ user: { id: 'guest', email: 'Invité', is_premium: false }, token: null });
+    set({ user: { id: 'guest', email: 'Invité', is_premium: false }, token: null, plan: 'free' });
   },
 }));
