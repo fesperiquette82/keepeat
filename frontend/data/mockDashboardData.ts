@@ -6,11 +6,26 @@ export interface DashboardStockItem extends StockItem {
   storageZone: StorageZone;
 }
 
-export interface MockRecipe {
+export interface RecipeIngredient {
+  name: string;
+  quantity: number;
+  unit: string;
+  scalable?: boolean;
+}
+
+interface BaseMockRecipe {
   id: string;
   title: string;
   timeMinutes: number;
   type: 'apero' | 'toast' | 'tartine' | 'poelee' | 'salade' | 'bol' | 'rapide';
+  baseServings: number;
+  ingredientsDetailed: RecipeIngredient[];
+  optionalBasics?: string[];
+  steps: string[];
+  image_url?: string;
+}
+
+export interface MockRecipe extends BaseMockRecipe {
   missingCount: number;
   matchedCount: number;
   matchRate: number;
@@ -18,8 +33,6 @@ export interface MockRecipe {
   availableIngredients: string[];
   missingIngredients: string[];
   ingredients: string[];
-  optionalBasics?: string[];
-  image_url?: string;
 }
 
 const TODAY = new Date('2026-03-30T12:00:00Z');
@@ -43,14 +56,25 @@ export const MOCK_STOCK_ITEMS: DashboardStockItem[] = [
   { id: 'm10', name: 'Huile d’olive', brand: 'Puget', food_category: 'epicerie', storageZone: 'placard', quantity: '1 bouteille', expiry_date: isoInDays(320), added_date: isoInDays(-90), status: 'active', image_url: 'https://images.unsplash.com/photo-1474979266404-7eaacbcd87c5?auto=format&fit=crop&w=240&h=240&q=60' },
 ];
 
-export const MOCK_RECIPES: Omit<MockRecipe, 'missingCount' | 'matchedCount' | 'matchRate' | 'score' | 'availableIngredients' | 'missingIngredients'>[] = [
+const MOCK_RECIPES_BASE: BaseMockRecipe[] = [
   {
     id: 'r1',
     title: 'Poêlée courgettes & poulet',
     type: 'poelee',
     timeMinutes: 20,
-    ingredients: ['Courgettes', 'Poulet émincé', 'Huile d’olive'],
+    baseServings: 2,
+    ingredientsDetailed: [
+      { name: 'Courgettes', quantity: 2, unit: 'pièces' },
+      { name: 'Poulet émincé', quantity: 300, unit: 'g' },
+      { name: 'Huile d’olive', quantity: 1, unit: 'c. à soupe' },
+    ],
     optionalBasics: ['Ail', 'Herbes', 'Poivre'],
+    steps: [
+      'Coupez les courgettes en demi-rondelles et assaisonnez le poulet.',
+      'Faites revenir le poulet 5 min dans l’huile chaude.',
+      'Ajoutez les courgettes, couvrez 8 à 10 min et mélangez régulièrement.',
+      'Rectifiez l’assaisonnement et servez chaud.',
+    ],
     image_url: 'https://images.unsplash.com/photo-1512621776951-a57141f2eefd?auto=format&fit=crop&w=240&h=240&q=60',
   },
   {
@@ -58,8 +82,19 @@ export const MOCK_RECIPES: Omit<MockRecipe, 'missingCount' | 'matchedCount' | 'm
     title: 'Shakshuka express',
     type: 'poelee',
     timeMinutes: 25,
-    ingredients: ['Tomates concassées', 'Œufs', 'Huile d’olive'],
+    baseServings: 2,
+    ingredientsDetailed: [
+      { name: 'Tomates concassées', quantity: 400, unit: 'g' },
+      { name: 'Œufs', quantity: 4, unit: 'pièces' },
+      { name: 'Huile d’olive', quantity: 1, unit: 'c. à soupe' },
+    ],
     optionalBasics: ['Ail', 'Paprika', 'Pain'],
+    steps: [
+      'Faites chauffer l’huile et ajoutez l’ail si disponible.',
+      'Versez les tomates, salez et laissez réduire 10 min.',
+      'Formez 4 puits, cassez les œufs et couvrez 5 min.',
+      'Saupoudrez de paprika et servez avec du pain.',
+    ],
     image_url: 'https://images.unsplash.com/photo-1590301157890-4810ed352733?auto=format&fit=crop&w=240&h=240&q=60',
   },
   {
@@ -67,8 +102,19 @@ export const MOCK_RECIPES: Omit<MockRecipe, 'missingCount' | 'matchedCount' | 'm
     title: 'Salade pois chiches & yaourt',
     type: 'salade',
     timeMinutes: 15,
-    ingredients: ['Pois chiches', 'Yaourt nature', 'Tomates concassées'],
+    baseServings: 2,
+    ingredientsDetailed: [
+      { name: 'Pois chiches', quantity: 240, unit: 'g' },
+      { name: 'Yaourt nature', quantity: 2, unit: 'pots' },
+      { name: 'Tomates concassées', quantity: 150, unit: 'g' },
+    ],
     optionalBasics: ['Citron', 'Herbes', 'Huile d’olive'],
+    steps: [
+      'Rincez les pois chiches puis égouttez-les bien.',
+      'Mélangez le yaourt avec un filet de citron et des herbes.',
+      'Ajoutez les tomates et les pois chiches.',
+      'Répartissez dans des bols et servez frais.',
+    ],
     image_url: 'https://images.unsplash.com/photo-1540189549336-e6e99c3679fe?auto=format&fit=crop&w=240&h=240&q=60',
   },
   {
@@ -76,8 +122,19 @@ export const MOCK_RECIPES: Omit<MockRecipe, 'missingCount' | 'matchedCount' | 'm
     title: 'Pâtes crémeuses au lait',
     type: 'rapide',
     timeMinutes: 18,
-    ingredients: ['Pâtes complètes', 'Lait demi-écrémé', 'Courgettes'],
+    baseServings: 2,
+    ingredientsDetailed: [
+      { name: 'Pâtes complètes', quantity: 180, unit: 'g' },
+      { name: 'Lait demi-écrémé', quantity: 250, unit: 'ml' },
+      { name: 'Courgettes', quantity: 1, unit: 'pièce' },
+    ],
     optionalBasics: ['Fromage', 'Poivre'],
+    steps: [
+      'Faites cuire les pâtes al dente.',
+      'Poêlez la courgette en petits dés 5 min.',
+      'Ajoutez le lait puis laissez frémir 3 min.',
+      'Mélangez avec les pâtes et servez.',
+    ],
     image_url: 'https://images.unsplash.com/photo-1621996346565-e3dbc646d9a9?auto=format&fit=crop&w=240&h=240&q=60',
   },
   {
@@ -85,8 +142,19 @@ export const MOCK_RECIPES: Omit<MockRecipe, 'missingCount' | 'matchedCount' | 'm
     title: 'Tartines apéro rillettes & crudités',
     type: 'tartine',
     timeMinutes: 10,
-    ingredients: ['Rillettes de canard', 'Pain', 'Cornichons'],
+    baseServings: 2,
+    ingredientsDetailed: [
+      { name: 'Rillettes de canard', quantity: 120, unit: 'g' },
+      { name: 'Pain', quantity: 4, unit: 'tranches' },
+      { name: 'Cornichons', quantity: 8, unit: 'pièces' },
+    ],
     optionalBasics: ['Beurre', 'Moutarde', 'Herbes'],
+    steps: [
+      'Faites légèrement griller les tranches de pain.',
+      'Tartinez avec les rillettes.',
+      'Ajoutez les cornichons tranchés.',
+      'Servez immédiatement en apéro.',
+    ],
     image_url: 'https://images.unsplash.com/photo-1482049016688-2d3e1b311543?auto=format&fit=crop&w=240&h=240&q=60',
   },
   {
@@ -94,8 +162,19 @@ export const MOCK_RECIPES: Omit<MockRecipe, 'missingCount' | 'matchedCount' | 'm
     title: 'Toasts champignons poêlés',
     type: 'toast',
     timeMinutes: 12,
-    ingredients: ['Champignons de Paris', 'Pain', 'Beurre'],
+    baseServings: 2,
+    ingredientsDetailed: [
+      { name: 'Champignons de Paris', quantity: 250, unit: 'g' },
+      { name: 'Pain', quantity: 4, unit: 'tranches' },
+      { name: 'Beurre', quantity: 20, unit: 'g' },
+    ],
     optionalBasics: ['Ail', 'Persil', 'Fromage'],
+    steps: [
+      'Émincez les champignons puis poêlez-les avec le beurre.',
+      'Toastez le pain pendant la cuisson.',
+      'Répartissez les champignons sur les toasts.',
+      'Ajoutez persil ou fromage selon vos goûts.',
+    ],
     image_url: 'https://images.unsplash.com/photo-1528736235302-52922df5c122?auto=format&fit=crop&w=240&h=240&q=60',
   },
   {
@@ -103,8 +182,19 @@ export const MOCK_RECIPES: Omit<MockRecipe, 'missingCount' | 'matchedCount' | 'm
     title: 'Assiette composée frigo-placard',
     type: 'apero',
     timeMinutes: 8,
-    ingredients: ['Œufs', 'Pois chiches', 'Tomates concassées'],
+    baseServings: 2,
+    ingredientsDetailed: [
+      { name: 'Œufs', quantity: 3, unit: 'pièces' },
+      { name: 'Pois chiches', quantity: 150, unit: 'g' },
+      { name: 'Tomates concassées', quantity: 120, unit: 'g' },
+    ],
     optionalBasics: ['Huile d’olive', 'Pain', 'Herbes'],
+    steps: [
+      'Cuisez les œufs mollets 6 min puis écalez-les.',
+      'Mélangez pois chiches et tomates avec un filet d’huile.',
+      'Coupez les œufs en deux et dressez les assiettes.',
+      'Servez avec du pain si disponible.',
+    ],
     image_url: 'https://images.unsplash.com/photo-1504674900247-0877df9cc836?auto=format&fit=crop&w=240&h=240&q=60',
   },
   {
@@ -112,11 +202,26 @@ export const MOCK_RECIPES: Omit<MockRecipe, 'missingCount' | 'matchedCount' | 'm
     title: 'Bol rapide riz, œuf & yaourt',
     type: 'bol',
     timeMinutes: 14,
-    ingredients: ['Riz basmati', 'Œufs', 'Yaourt nature'],
+    baseServings: 2,
+    ingredientsDetailed: [
+      { name: 'Riz basmati', quantity: 160, unit: 'g' },
+      { name: 'Œufs', quantity: 2, unit: 'pièces' },
+      { name: 'Yaourt nature', quantity: 2, unit: 'pots' },
+    ],
     optionalBasics: ['Herbes', 'Huile d’olive'],
+    steps: [
+      'Cuisez le riz puis égouttez-le.',
+      'Pendant ce temps, faites cuire les œufs au plat ou mollets.',
+      'Mélangez le yaourt avec herbes et huile.',
+      'Assemblez riz, œufs et sauce au yaourt dans un bol.',
+    ],
     image_url: 'https://images.unsplash.com/photo-1546069901-ba9599a7e63c?auto=format&fit=crop&w=240&h=240&q=60',
   },
 ];
+
+export function findRecipeBaseById(recipeId: string): BaseMockRecipe | undefined {
+  return MOCK_RECIPES_BASE.find((recipe) => recipe.id === recipeId);
+}
 
 export function daysUntil(expiryDate?: string): number | null {
   if (!expiryDate) return null;
@@ -173,11 +278,12 @@ export function buildRecipeSuggestions(items: DashboardStockItem[]): MockRecipe[
   const easyTypes = new Set<MockRecipe['type']>(['apero', 'toast', 'tartine', 'poelee', 'salade', 'bol']);
   const isFastRecipe = (minutes: number) => minutes <= 15;
 
-  const scored = MOCK_RECIPES.map((recipe) => {
+  const scored = MOCK_RECIPES_BASE.map((recipe) => {
     const availableIngredients: string[] = [];
     const missingIngredients: string[] = [];
+    const ingredients = recipe.ingredientsDetailed.map((ingredient) => ingredient.name);
 
-    recipe.ingredients.forEach((ingredient) => {
+    ingredients.forEach((ingredient) => {
       const target = ingredient.toLowerCase();
       const ingredientTokens = target.split(/[\s,&'-]+/).filter((token) => token.length >= 4);
       const found = normalizedNames.some((name) => {
@@ -191,7 +297,7 @@ export function buildRecipeSuggestions(items: DashboardStockItem[]): MockRecipe[
 
     const matchedCount = availableIngredients.length;
     const missingCount = missingIngredients.length;
-    const matchRate = Math.round((matchedCount / recipe.ingredients.length) * 100);
+    const matchRate = Math.round((matchedCount / ingredients.length) * 100);
 
     const urgencyBonus = availableIngredients.some((ingredient) => urgentNames.has(ingredient.toLowerCase())) ? 10 : 0;
     const quickBonus = isFastRecipe(recipe.timeMinutes) ? 12 : recipe.timeMinutes <= 25 ? 6 : 0;
@@ -201,6 +307,7 @@ export function buildRecipeSuggestions(items: DashboardStockItem[]): MockRecipe[
 
     return {
       ...recipe,
+      ingredients,
       matchedCount,
       missingCount,
       matchRate,

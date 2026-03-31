@@ -10,6 +10,7 @@ import AnimatedSplashOverlay from '../component/AnimatedSplashOverlay';
 import { useAuthStore } from '../store/authStore';
 import { useLanguageStore } from '../store/languageStore';
 import { useStockStore } from '../store/stockStore';
+import { useAppSettingsStore } from '../store/appSettingsStore';
 import { requestNotificationPermissions, registerPushToken, checkAndNotifyUrgentOnOpen } from '../utils/notificationService';
 import { API_ENV, API_URL, buildApiUrl } from '../utils/config';
 import { useNetworkSync } from '../utils/useNetworkSync';
@@ -53,6 +54,7 @@ export default function RootLayout() {
   const loadAuth = useAuthStore(state => state.loadAuth);
   const loadLanguage = useLanguageStore(state => state.loadLanguage);
   const items = useStockStore(state => state.items);
+  const loadAppSettings = useAppSettingsStore(state => state.loadSettings);
   const [appReady, setAppReady] = useState(false);
   const [animationDone, setAnimationDone] = useState(false);
   const [showAnimatedOverlay, setShowAnimatedOverlay] = useState(true);
@@ -80,6 +82,7 @@ export default function RootLayout() {
     }
     loadAuth();
     loadLanguage();
+    loadAppSettings();
     requestNotificationPermissions();
     const keepAlive = setInterval(() => {
       fetch(buildApiUrl('/api/health'))
@@ -95,7 +98,7 @@ export default function RootLayout() {
         });
     }, 4 * 60 * 1000);
     return () => clearInterval(keepAlive);
-  }, [loadAuth, loadLanguage]);
+  }, [loadAppSettings, loadAuth, loadLanguage]);
 
 
   // Marque l'app prête dès que l'état critique d'auth est chargé.
