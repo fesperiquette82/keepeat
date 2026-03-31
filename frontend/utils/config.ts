@@ -94,6 +94,17 @@ export const API_URL_GUARDRAIL_STATUS = API_RESOLUTION.guardrailStatus;
 export const API_URL_GUARDRAIL_REASON = API_RESOLUTION.guardrailReason;
 export const ALLOWED_PROD_API_URLS = API_RESOLUTION.allowedProdUrls;
 
+export function isLocalhostUrl(url: string): boolean {
+  return /https?:\/\/(localhost|127\.0\.0\.1)(:\d+)?$/i.test(url.trim());
+}
+
+export function getApiUrlDiagnostics(): { apiUrl: string; likelyInvalidOnAndroidDevice: boolean } {
+  return {
+    apiUrl: API_URL,
+    likelyInvalidOnAndroidDevice: isLocalhostUrl(API_URL),
+  };
+}
+
 export function buildApiUrl(path: string): string {
   const normalizedPath = path.startsWith('/') ? path : `/${path}`;
   return `${API_URL}${normalizedPath}`;

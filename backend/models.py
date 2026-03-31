@@ -136,6 +136,14 @@ class PriorityRefreshResponse(BaseModel):
     reminders_enabled: bool
 
 
+class RecallsRefreshResponse(BaseModel):
+    success: bool
+    message: str
+    refreshedCount: int
+    lastSuccessfulRefreshAt: Optional[str] = None
+    attemptedAt: str
+
+
 class ShelfLife(BaseModel):
     category_fr: str = ""
     refrigerator_days: Optional[int] = None

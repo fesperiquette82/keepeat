@@ -51,7 +51,7 @@ async def send_expo_push(tokens: list[str], title: str, body: str, data: dict | 
         logger.warning("Expo push failed: %s", exc)
 
 
-async def fetch_recent_recalls() -> list[dict]:
+async def fetch_recent_recalls(*, fail_on_error: bool = False) -> list[dict]:
     since = (utc_now() - timedelta(days=30)).strftime("%Y-%m-%d")
     url = "https://data.economie.gouv.fr/api/explore/v2.1/catalog/datasets/rappelconso0/records"
     params: dict[str, Any] = {
@@ -72,6 +72,8 @@ async def fetch_recent_recalls() -> list[dict]:
                 response = await client_http.get(url, params=params)
                 if response.status_code != 200:
                     logger.warning("Rappel.conso API returned %s", response.status_code)
+                    if fail_on_error:
+                        raise RuntimeError(f"rappelconso_http_{response.status_code}")
                     break
                 page_data = response.json()
                 page_results = page_data.get("results", [])
@@ -81,6 +83,8 @@ async def fetch_recent_recalls() -> list[dict]:
                 params["offset"] += 100
     except Exception as exc:
         logger.warning("Rappel.conso fetch failed: %s", exc)
+        if fail_on_error:
+            raise
     logger.info("Rappel.conso : %d rappels récupérés", len(results))
     return results
 
