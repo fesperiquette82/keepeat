@@ -8,6 +8,7 @@ import { useAppSettingsStore, type ReminderLeadDays } from '../store/appSettings
 import { useStockStore } from '../store/stockStore';
 import { useAuthStore } from '../store/authStore';
 import { restorePremiumPurchase } from '../utils/billingService';
+import { isAdminUser } from '../utils/adminAccess';
 
 function formatLastUpdate(value: string | null, language: 'fr' | 'en'): string {
   if (!value) return language === 'en' ? 'Not updated yet' : 'Pas encore mis à jour';
@@ -40,8 +41,10 @@ export default function SettingsScreen() {
   } = useAppSettingsStore();
   const isRefreshingPriorityItems = useStockStore((state) => state.isRefreshingPriorityItems);
   const token = useAuthStore((state) => state.token);
+  const user = useAuthStore((state) => state.user);
   const refreshEntitlements = useAuthStore((state) => state.refreshEntitlements);
   const plan = useAuthStore((state) => state.plan);
+  const canAccessAdmin = isAdminUser(user);
 
   const reminderOptions: ReminderLeadDays[] = useMemo(() => [1, 2, 3], []);
 
@@ -157,6 +160,17 @@ export default function SettingsScreen() {
             <Text style={styles.restoreButtonText}>Restaurer mes achats</Text>
           </TouchableOpacity>
         </View>
+
+        {canAccessAdmin && (
+          <View style={styles.card}>
+            <Text style={styles.sectionTitle}>Administration</Text>
+            <Text style={styles.systemInfo}>Accès monitoring backend (admin only).</Text>
+            <TouchableOpacity style={styles.refreshButton} onPress={() => router.push('/admin')}>
+              <Ionicons name="analytics-outline" size={16} color="#FFFFFF" />
+              <Text style={styles.refreshButtonText}>Ouvrir le back-office monitoring</Text>
+            </TouchableOpacity>
+          </View>
+        )}
       </View>
     </SafeAreaView>
   );

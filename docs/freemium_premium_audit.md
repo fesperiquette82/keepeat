@@ -38,7 +38,7 @@ Périmètre: backend FastAPI + frontend Expo/React Native.
 ### Ce qui existe déjà
 
 - Champ utilisateur `is_premium` dans les modèles API, stocké en DB, injecté dans login/me/verify-email.
-- Endpoint admin dédié pour activer/désactiver le premium: `PUT /api/admin/users/{email}/set-premium` protégé par `X-Admin-Key`.
+- Endpoint admin dédié pour activer/désactiver le premium: `PUT /api/admin/users/{email}/set-premium` protégé par auth utilisateur + contrôle admin backend.
 - Frontend stocke `is_premium` dans `AuthUser` (Zustand), mais ne s'en sert pas pour conditionner des parcours.
 
 ### Ce qui n'existe pas
