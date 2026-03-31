@@ -85,6 +85,57 @@ export interface MonitoringServicesUsageResponse {
   }>;
 }
 
+export interface MonitoringServiceStatusResponse {
+  generated_at: string;
+  uptime_seconds?: number;
+  services: Array<{
+    id: string;
+    name: string;
+    type: 'internal' | 'external' | 'local' | string;
+    category?: string;
+    status: 'connected' | 'degraded' | 'down' | 'not_configured' | 'unknown' | string;
+    latency_ms?: number | null;
+    last_checked_at?: string;
+    message?: string;
+    configured: boolean;
+    details?: Record<string, unknown>;
+  }>;
+}
+
+export interface MonitoringUsageResponse {
+  generated_at: string;
+  period?: { start?: string; end?: string; label?: string };
+  usage: Array<{
+    service_id: string;
+    label: string;
+    current_usage: number;
+    projected_month_end_usage?: number | null;
+    free_quota?: number | null;
+    usage_percent?: number | null;
+    period: string;
+    warning_level: 'normal' | 'warning' | 'critical' | string;
+    confidence?: 'low' | 'medium' | 'high' | string;
+    is_estimated?: boolean;
+    note?: string | null;
+  }>;
+}
+
+export interface MonitoringCostsResponse {
+  generated_at: string;
+  pricing_note?: string;
+  costs: Array<{
+    service_id: string;
+    current_plan: string;
+    estimated_monthly_usage: number;
+    recommended_next_plan: string;
+    estimated_monthly_cost: number;
+    currency: string;
+    recommendation_reason: string;
+    confidence: 'low' | 'medium' | 'high' | string;
+    is_estimated: boolean;
+  }>;
+}
+
 export interface MonitoringEventsResponse {
   page: number;
   page_size: number;
@@ -190,4 +241,16 @@ export async function getMonitoringEvents(
   signal?: AbortSignal,
 ) {
   return adminGet<MonitoringEventsResponse>(`/api/admin/monitoring/events${buildQuery(options)}`, token, signal);
+}
+
+export async function getMonitoringServiceStatus(token: string, signal?: AbortSignal) {
+  return adminGet<MonitoringServiceStatusResponse>('/api/admin/monitoring/services', token, signal);
+}
+
+export async function getMonitoringUsage(token: string, signal?: AbortSignal) {
+  return adminGet<MonitoringUsageResponse>('/api/admin/monitoring/usage', token, signal);
+}
+
+export async function getMonitoringCosts(token: string, signal?: AbortSignal) {
+  return adminGet<MonitoringCostsResponse>('/api/admin/monitoring/costs', token, signal);
 }
