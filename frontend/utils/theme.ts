@@ -36,3 +36,21 @@ export const shadowSm = {
   shadowRadius: 4,
   elevation: 2,
 };
+
+export const T = {
+  secondary: {
+    color: C.textMid,
+    fontSize: 13,
+    fontWeight: '500' as const,
+  },
+  secondarySmall: {
+    color: C.textMid,
+    fontSize: 12,
+    fontWeight: '500' as const,
+  },
+  tertiary: {
+    color: C.textLight,
+    fontSize: 12,
+    fontWeight: '500' as const,
+  },
+};

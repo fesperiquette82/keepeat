@@ -4,8 +4,10 @@ import { View, Text, StyleSheet, ScrollView, TouchableOpacity, Image } from 'rea
 import { useRouter } from 'expo-router';
 import Ionicons from '@expo/vector-icons/Ionicons';
 import { useStockStore } from '../../store/stockStore';
-import { C, shadowSm } from '../../utils/theme';
+import { C, shadowSm, T } from '../../utils/theme';
 import { buildRecipeSuggestions, daysUntil, findExpiringSoon, resolveStockItems } from '../../data/mockDashboardData';
+import { countLabelFr } from '../../utils/uiText';
+import { storageZoneLabel, UI_LABELS } from '../../utils/uiLabels';
 
 function expiryText(days: number | null): string {
   if (days === null) return 'Date non renseignée';
@@ -48,7 +50,7 @@ export default function HomeDashboardScreen() {
       <ScrollView style={styles.scroll} contentContainerStyle={styles.content} showsVerticalScrollIndicator={false}>
         <View>
           <Text style={styles.title}>Stock maison</Text>
-          <Text style={styles.subtitle}>{items.length} ingrédients au total</Text>
+          <Text style={styles.subtitle}>{countLabelFr(items.length, 'ingrédient')} au total</Text>
         </View>
 
         {isMock && (
@@ -78,7 +80,7 @@ export default function HomeDashboardScreen() {
           <View style={styles.sectionHeader}>
             <Text style={styles.sectionTitle}>À consommer bientôt</Text>
             <TouchableOpacity onPress={() => router.push('/(tabs)/stock')}>
-              <Text style={styles.linkText}>Voir le stock</Text>
+              <Text style={styles.linkText}>{UI_LABELS.fr.actions.viewStock}</Text>
             </TouchableOpacity>
           </View>
           {expiringSoon.length === 0 ? (
@@ -96,7 +98,7 @@ export default function HomeDashboardScreen() {
                   </View>
                   <View style={styles.rowText}>
                     <Text style={styles.rowTitle}>{item.name}</Text>
-                    <Text style={styles.rowMeta}>{item.storageZone === 'frigo' ? 'Frigo' : 'Placard'} · {item.quantity ?? 'Qté non précisée'}</Text>
+                    <Text style={styles.rowMeta}>{storageZoneLabel(item.storageZone)} · {item.quantity ?? UI_LABELS.fr.unknownQuantity}</Text>
                   </View>
                 </View>
                 <Text style={styles.rowExpiry}>{expiryText(daysUntil(item.expiry_date))}</Text>
@@ -109,7 +111,7 @@ export default function HomeDashboardScreen() {
           <View style={styles.sectionHeader}>
             <Text style={styles.sectionTitle}>Recettes</Text>
             <TouchableOpacity onPress={() => router.push('/(tabs)/recipes')}>
-              <Text style={styles.linkText}>Voir les recettes</Text>
+              <Text style={styles.linkText}>{UI_LABELS.fr.actions.viewRecipes}</Text>
             </TouchableOpacity>
           </View>
           {recipes.length === 0 ? (
@@ -129,8 +131,8 @@ export default function HomeDashboardScreen() {
                     <Text style={styles.rowTitle}>{recipe.title}</Text>
                     <Text style={styles.recipeMeta}>
                       {recipe.timeMinutes} min
-                      {` · ${recipe.matchedCount} ingrédient${recipe.matchedCount > 1 ? 's' : ''} disponible${recipe.matchedCount > 1 ? 's' : ''}`}
-                      {recipe.missingCount > 0 ? ` · Il manque ${recipe.missingCount} ingrédient${recipe.missingCount > 1 ? 's' : ''}` : ''}
+                      {` · ${countLabelFr(recipe.matchedCount, 'ingrédient')} disponible${recipe.matchedCount > 1 ? 's' : ''}`}
+                      {recipe.missingCount > 0 ? ` · Il manque ${countLabelFr(recipe.missingCount, 'ingrédient')}` : ''}
                     </Text>
                   </View>
                 </View>
@@ -153,8 +155,8 @@ const styles = StyleSheet.create({
   scroll: { flex: 1 },
   content: { padding: 16, gap: 12, paddingBottom: 28 },
   title: { fontSize: 28, fontWeight: '800', color: C.text },
-  subtitle: { marginTop: 4, color: C.textMid, fontSize: 14 },
-  mockText: { color: C.textLight, fontSize: 11, opacity: 0.75 },
+  subtitle: { marginTop: 4, ...T.secondary },
+  mockText: { ...T.tertiary, opacity: 0.85 },
   scannerCta: {
     backgroundColor: C.primary,
     borderRadius: 18,
@@ -170,7 +172,7 @@ const styles = StyleSheet.create({
   summaryCard: { flex: 1, backgroundColor: '#fff', borderRadius: 12, padding: 12, gap: 6 },
   summaryCardHeader: { flexDirection: 'row', alignItems: 'center', gap: 6 },
   summaryIconBadge: { width: 20, height: 20, borderRadius: 10, alignItems: 'center', justifyContent: 'center', backgroundColor: '#DCFCE7' },
-  summaryLabel: { color: C.textMid, fontSize: 12 },
+  summaryLabel: { ...T.secondarySmall },
   summaryValue: { color: C.text, fontSize: 23, fontWeight: '800' },
   urgentValue: { color: '#15803d' },
   sectionCard: { backgroundColor: '#fff', borderRadius: 14, padding: 13, gap: 8, ...shadowSm },
@@ -178,17 +180,17 @@ const styles = StyleSheet.create({
   sectionHeader: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between' },
   sectionTitle: { fontSize: 17, fontWeight: '700', color: C.text },
   linkText: { color: '#166534', fontWeight: '700', fontSize: 13 },
-  emptyText: { color: C.textMid, fontSize: 13, paddingVertical: 8 },
+  emptyText: { ...T.secondary, paddingVertical: 8 },
   rowItem: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', paddingVertical: 5, gap: 8 },
   rowMain: { flexDirection: 'row', alignItems: 'center', gap: 10, flex: 1 },
   rowText: { flex: 1 },
   squareThumb: { width: 42, height: 42, borderRadius: 10, backgroundColor: '#F3F4F6', overflow: 'hidden', alignItems: 'center', justifyContent: 'center' },
   squareThumbImage: { width: '100%', height: '100%' },
   rowTitle: { fontSize: 15, color: C.text, fontWeight: '600' },
-  rowMeta: { color: C.textMid, fontSize: 12, marginTop: 2 },
+  rowMeta: { ...T.secondarySmall, marginTop: 2 },
   rowExpiry: { color: '#166534', fontSize: 12, fontWeight: '700' },
   recipeRow: { paddingVertical: 5 },
-  recipeMeta: { color: C.textMid, marginTop: 2, fontSize: 12 },
+  recipeMeta: { ...T.secondarySmall, marginTop: 2 },
   tipInline: { flexDirection: 'row', gap: 7, alignItems: 'center', paddingVertical: 2 },
   tipText: { flex: 1, color: '#166534', fontSize: 12, fontWeight: '600' },
 });

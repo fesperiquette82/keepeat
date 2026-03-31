@@ -3,8 +3,10 @@ import { SafeAreaView } from 'react-native-safe-area-context';
 import { View, Text, StyleSheet, TouchableOpacity, FlatList, Image } from 'react-native';
 import Ionicons from '@expo/vector-icons/Ionicons';
 import { useStockStore } from '../../store/stockStore';
-import { C } from '../../utils/theme';
+import { C, T } from '../../utils/theme';
 import { daysUntil, resolveStockItems } from '../../data/mockDashboardData';
+import { countLabelFr } from '../../utils/uiText';
+import { storageZoneLabel, UI_LABELS } from '../../utils/uiLabels';
 
 type StockFilter = 'tous' | 'urgents' | 'frigo' | 'placard';
 type StockSort = 'expiry' | 'alpha' | 'recent' | 'oldest';
@@ -88,38 +90,41 @@ export default function StockScreen() {
     <SafeAreaView style={styles.container}>
       <View style={styles.header}>
         <Text style={styles.title}>Stock complet</Text>
-        <Text style={styles.subtitle}>{sortedItems.length} ingrédients affichés</Text>
+        <Text style={styles.subtitle}>{countLabelFr(sortedItems.length, 'ingrédient')} affiché{sortedItems.length > 1 ? 's' : ''}</Text>
         {isMock && <Text style={styles.mockInfo}>Données de démonstration</Text>}
       </View>
 
-      <View style={styles.filterRow}>
-        {FILTERS.map((filter) => {
-          const selected = filter.key === activeFilter;
-          return (
-            <TouchableOpacity
-              key={filter.key}
-              style={[styles.filterChip, selected && styles.filterChipActive]}
-              onPress={() => setActiveFilter(filter.key)}
-            >
-              <Text style={[styles.filterChipLabel, selected && styles.filterChipLabelActive]}>{filter.label}</Text>
-            </TouchableOpacity>
-          );
-        })}
-      </View>
-
-      <View style={styles.sortRow}>
-        {SORTS.map((sort) => {
-          const selected = sort.key === activeSort;
-          return (
-            <TouchableOpacity
-              key={sort.key}
-              style={[styles.sortChip, selected && styles.sortChipActive]}
-              onPress={() => setActiveSort(sort.key)}
-            >
-              <Text style={[styles.sortChipLabel, selected && styles.sortChipLabelActive]}>{sort.label}</Text>
-            </TouchableOpacity>
-          );
-        })}
+      <View style={styles.controlsCard}>
+        <Text style={styles.controlsSectionLabel}>Filtres</Text>
+        <View style={styles.filterRow}>
+          {FILTERS.map((filter) => {
+            const selected = filter.key === activeFilter;
+            return (
+              <TouchableOpacity
+                key={filter.key}
+                style={[styles.filterChip, selected && styles.filterChipActive]}
+                onPress={() => setActiveFilter(filter.key)}
+              >
+                <Text style={[styles.filterChipLabel, selected && styles.filterChipLabelActive]}>{filter.label}</Text>
+              </TouchableOpacity>
+            );
+          })}
+        </View>
+        <Text style={styles.controlsSectionLabel}>Tri</Text>
+        <View style={styles.sortRow}>
+          {SORTS.map((sort) => {
+            const selected = sort.key === activeSort;
+            return (
+              <TouchableOpacity
+                key={sort.key}
+                style={[styles.sortChip, selected && styles.sortChipActive]}
+                onPress={() => setActiveSort(sort.key)}
+              >
+                <Text style={[styles.sortChipLabel, selected && styles.sortChipLabelActive]}>{sort.label}</Text>
+              </TouchableOpacity>
+            );
+          })}
+        </View>
       </View>
 
       {sortedItems.length === 0 ? (
@@ -149,7 +154,7 @@ export default function StockScreen() {
                   </View>
                   <View style={styles.cardText}>
                     <Text style={styles.name}>{item.name}</Text>
-                    <Text style={styles.meta}>{item.storageZone === 'frigo' ? 'Frigo' : 'Placard'} · {item.quantity ?? 'Qté non précisée'}</Text>
+                    <Text style={styles.meta}>{storageZoneLabel(item.storageZone)} · {item.quantity ?? UI_LABELS.fr.unknownQuantity}</Text>
                   </View>
                 </View>
                 <Text style={styles.expiry}>{formatExpiryLabel(item.expiry_date)}</Text>
@@ -166,14 +171,16 @@ const styles = StyleSheet.create({
   container: { flex: 1, backgroundColor: C.bg },
   header: { paddingHorizontal: 16, paddingTop: 8, paddingBottom: 10 },
   title: { fontSize: 26, fontWeight: '800', color: C.text },
-  subtitle: { marginTop: 4, color: C.textMid, fontSize: 14 },
-  mockInfo: { marginTop: 4, color: C.textLight, fontSize: 12 },
-  filterRow: { flexDirection: 'row', gap: 8, paddingHorizontal: 16, paddingBottom: 6 },
+  subtitle: { marginTop: 4, ...T.secondary },
+  mockInfo: { marginTop: 4, ...T.tertiary },
+  controlsCard: { marginHorizontal: 16, marginBottom: 8, padding: 12, borderRadius: 12, backgroundColor: '#fff', borderWidth: 1, borderColor: C.border, gap: 8 },
+  controlsSectionLabel: { ...T.secondarySmall, fontWeight: '700' },
+  filterRow: { flexDirection: 'row', gap: 8, paddingBottom: 2 },
   filterChip: { paddingVertical: 8, paddingHorizontal: 12, borderRadius: 999, backgroundColor: '#ECFDF3' },
   filterChipActive: { backgroundColor: C.primary },
   filterChipLabel: { color: '#166534', fontSize: 13, fontWeight: '700' },
   filterChipLabelActive: { color: '#fff' },
-  sortRow: { flexDirection: 'row', gap: 6, paddingHorizontal: 16, paddingBottom: 8, flexWrap: 'wrap' },
+  sortRow: { flexDirection: 'row', gap: 6, flexWrap: 'wrap' },
   sortChip: { paddingVertical: 6, paddingHorizontal: 10, borderRadius: 999, backgroundColor: '#F3F4F6' },
   sortChipActive: { backgroundColor: '#D1FAE5' },
   sortChipLabel: { color: C.textMid, fontSize: 12, fontWeight: '700' },
@@ -185,9 +192,9 @@ const styles = StyleSheet.create({
   thumb: { width: 42, height: 42, borderRadius: 10, backgroundColor: '#F3F4F6', overflow: 'hidden', alignItems: 'center', justifyContent: 'center' },
   thumbImage: { width: '100%', height: '100%' },
   name: { color: C.text, fontSize: 15, fontWeight: '700' },
-  meta: { color: C.textMid, fontSize: 12, marginTop: 2 },
+  meta: { ...T.secondarySmall, marginTop: 2 },
   expiry: { color: '#15803d', fontSize: 12, fontWeight: '700' },
   emptyWrap: { flex: 1, justifyContent: 'center', alignItems: 'center', paddingHorizontal: 28 },
   emptyTitle: { fontSize: 20, fontWeight: '800', color: C.text },
-  emptyText: { fontSize: 14, color: C.textMid, marginTop: 8, textAlign: 'center' },
+  emptyText: { ...T.secondary, marginTop: 8, textAlign: 'center' },
 });

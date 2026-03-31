@@ -14,7 +14,9 @@ import axios from 'axios';
 import { useAuthStore } from '../../store/authStore';
 import { useLanguageStore } from '../../store/languageStore';
 import { buildApiUrl } from '../../utils/config';
-import { C, shadowSm } from '../../utils/theme';
+import { C, shadowSm, T } from '../../utils/theme';
+import { generateLastSixMonthLabels } from '../../utils/monthlyLabels';
+import { countLabelFr, formatEuroFr } from '../../utils/uiText';
 
 interface MonthlyStats {
   month: string;   // "YYYY-MM"
@@ -91,8 +93,28 @@ export default function StatsScreen() {
 
   const handleRefresh = () => { setIsRefreshing(true); fetchStats(true); };
 
-  const currentMonth = data.length > 0 ? data[data.length - 1] : null;
-  const maxBar = data.length > 0 ? Math.max(...data.map(d => d.consumed + d.thrown), 1) : 1;
+  const monthLabels = generateLastSixMonthLabels(new Date());
+  const monthlyDataByMonth = new Map<string, MonthlyStats>();
+  data.forEach((entry) => {
+    monthlyDataByMonth.set(entry.month, entry);
+  });
+
+  const chartData = monthLabels.map(({ month }) => monthlyDataByMonth.get(month) ?? {
+    month,
+    consumed: 0,
+    thrown: 0,
+    score: 0,
+    saved_euros: 0,
+  });
+
+  const currentMonth = chartData[chartData.length - 1];
+  const maxBar = Math.max(...chartData.map(d => d.consumed + d.thrown), 1);
+  const previousMonth = chartData.length > 1 ? chartData[chartData.length - 2] : null;
+  const scoreDelta = previousMonth ? currentMonth.score - previousMonth.score : null;
+  const averageScore = chartData.length > 0
+    ? Math.round(chartData.reduce((acc, item) => acc + item.score, 0) / chartData.length)
+    : 0;
+  const bestMonth = [...chartData].sort((a, b) => b.score - a.score)[0];
 
   return (
     <SafeAreaView style={styles.container}>
@@ -154,7 +176,7 @@ export default function StatsScreen() {
                     : (isFr ? '💪 Zéro gaspi aujourd\'hui !' : '💪 No waste today!')}
                 </Text>
                 <Text style={styles.levelStat}>
-                  {`🌱 ~${gamif.total_saved_euros}€ ${isFr ? 'sauvés au total' : 'saved total'}`}
+                  {`🌱 ~${formatEuroFr(gamif.total_saved_euros)} ${isFr ? 'sauvés au total' : 'saved total'}`}
                 </Text>
               </View>
             </View>
@@ -181,14 +203,16 @@ export default function StatsScreen() {
                 {total > 0 ? (
                   <>
                     <Text style={styles.scoreSummary}>
-                      {currentMonth.consumed} {t('produit(s) sauvé(s)', 'product(s) saved')}
-                      {currentMonth.thrown > 0 ? ` · ${currentMonth.thrown} ${t('jeté(s)', 'wasted')}` : ''}
+                      {countLabelFr(currentMonth.consumed, t('produit sauvé', 'product saved'), t('produits sauvés', 'products saved'))}
+                      {currentMonth.thrown > 0
+                        ? ` · ${countLabelFr(currentMonth.thrown, t('produit jeté', 'product wasted'), t('produits jetés', 'products wasted'))}`
+                        : ''}
                     </Text>
                     {currentMonth.saved_euros > 0 && (
                       <View style={styles.savingsRow}>
                         <Text style={styles.savingsEmoji}>💶</Text>
                         <Text style={styles.savingsText}>
-                          ~{currentMonth.saved_euros.toFixed(1)}€ {t('économisés ce mois', 'saved this month')}
+                          ~{formatEuroFr(currentMonth.saved_euros)} {t('économisés ce mois', 'saved this month')}
                         </Text>
                       </View>
                     )}
@@ -201,6 +225,26 @@ export default function StatsScreen() {
               </View>
             );
           })()}
+
+          {/* Légende */}
+          <View style={styles.indicatorsCard}>
+            <View style={styles.indicatorBox}>
+              <Text style={styles.indicatorTitle}>{t('Évolution', 'Change')}</Text>
+              <Text style={styles.indicatorValue}>
+                {scoreDelta === null
+                  ? '—'
+                  : `${scoreDelta >= 0 ? '+' : ''}${scoreDelta}%`}
+              </Text>
+              <Text style={styles.indicatorHint}>{t('vs mois précédent', 'vs previous month')}</Text>
+            </View>
+            <View style={styles.indicatorBox}>
+              <Text style={styles.indicatorTitle}>{t('Moyenne 6 mois', '6-month average')}</Text>
+              <Text style={styles.indicatorValue}>{averageScore}%</Text>
+              <Text style={styles.indicatorHint}>
+                {bestMonth ? `${t('Meilleur', 'Best')}: ${monthLabels.find((m) => m.month === bestMonth.month)?.label ?? '—'}` : '—'}
+              </Text>
+            </View>
+          </View>
 
           {/* Légende */}
           <View style={styles.legendRow}>
@@ -216,7 +260,7 @@ export default function StatsScreen() {
 
           {/* Barres mensuelles */}
           <View style={styles.barsCard}>
-            {data.map((m) => {
+            {chartData.map((m, index) => {
               const total = m.consumed + m.thrown;
               const consumedRatio = total > 0 ? m.consumed / maxBar : 0;
               const thrownRatio   = total > 0 ? m.thrown   / maxBar : 0;
@@ -225,9 +269,9 @@ export default function StatsScreen() {
               return (
                 <View key={m.month} style={styles.barRow}>
                   <Text style={[styles.barLabel, isCurrentMonth && styles.barLabelActive]}>
-                    {formatMonth(m.month, language).split(' ')[0].slice(0, 3).toUpperCase()}
+                    {monthLabels[index].label.split(' ')[0]}
                     {'\n'}
-                    <Text style={styles.barYear}>{m.month.split('-')[0].slice(2)}</Text>
+                    <Text style={styles.barYear}>{monthLabels[index].label.split(' ')[1]}</Text>
                   </Text>
                   <View style={styles.barTrack}>
                     {total === 0 ? (
@@ -281,7 +325,7 @@ const styles = StyleSheet.create({
   },
   headerLeft: { flex: 1 },
   headerTitle: { fontSize: 24, fontWeight: '800', color: '#1A1A1A' },
-  headerSub:   { fontSize: 13, color: C.textMid, marginTop: 3 },
+  headerSub:   { ...T.secondary, marginTop: 3 },
 
   illustration: { width: 70, height: 52, position: 'relative', marginRight: 4, marginTop: -2 },
   illustEmoji1: { position: 'absolute', right: 0,  top: 0,  fontSize: 36 },
@@ -307,7 +351,7 @@ const styles = StyleSheet.create({
   levelEmoji: { fontSize: 32 },
   levelInfo: { flex: 1 },
   levelName: { fontSize: 17, fontWeight: '800', color: '#1A1A1A' },
-  levelNext: { fontSize: 12, color: C.textLight, marginTop: 2 },
+  levelNext: { ...T.tertiary, marginTop: 2 },
   levelBadge: {
     backgroundColor: C.primaryLight,
     borderRadius: 10,
@@ -327,7 +371,7 @@ const styles = StyleSheet.create({
     borderRadius: 4,
   },
   levelBottom: { flexDirection: 'row', justifyContent: 'space-between' },
-  levelStat: { fontSize: 12, color: C.textMid, fontWeight: '500' },
+  levelStat: { ...T.secondarySmall },
 
   // ── Score card ──
   scoreCard: {
@@ -339,22 +383,36 @@ const styles = StyleSheet.create({
     gap: 8,
     ...shadowSm,
   },
-  scoreCardMonth: { fontSize: 13, color: C.textMid, fontWeight: '500' },
+  scoreCardMonth: { ...T.secondary },
   scoreRow:       { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between' },
   scoreNumber:    { fontSize: 52, fontWeight: '800', lineHeight: 60 },
   scoreRight:     { alignItems: 'flex-end', gap: 4 },
   scoreEmoji:     { fontSize: 32 },
   scoreLabel:     { fontSize: 16, fontWeight: '700' },
-  scoreSummary:   { fontSize: 13, color: C.textMid },
+  scoreSummary:   { ...T.secondary },
   savingsRow:     { flexDirection: 'row', alignItems: 'center', gap: 6, marginTop: 2 },
   savingsEmoji:   { fontSize: 16 },
-  savingsText:    { fontSize: 13, color: '#16a34a', fontWeight: '600' },
+  savingsText:    { color: '#16a34a', fontSize: 13, fontWeight: '700' },
+  indicatorsCard: {
+    backgroundColor: '#fff',
+    borderRadius: 14,
+    borderWidth: 1,
+    borderColor: C.border,
+    padding: 12,
+    flexDirection: 'row',
+    gap: 10,
+    ...shadowSm,
+  },
+  indicatorBox: { flex: 1, backgroundColor: C.primaryLight, borderRadius: 10, padding: 10, gap: 2 },
+  indicatorTitle: { ...T.secondarySmall, fontWeight: '700' },
+  indicatorValue: { color: C.text, fontSize: 20, fontWeight: '800' },
+  indicatorHint: { ...T.tertiary },
 
   // ── Legend ──
   legendRow: { flexDirection: 'row', gap: 16 },
   legendItem: { flexDirection: 'row', alignItems: 'center', gap: 6 },
   legendDot:  { width: 10, height: 10, borderRadius: 5 },
-  legendText: { fontSize: 12, color: C.textMid },
+  legendText: { ...T.secondarySmall },
 
   // ── Bars ──
   barsCard: {
@@ -367,12 +425,9 @@ const styles = StyleSheet.create({
     ...shadowSm,
   },
   barRow:   { flexDirection: 'row', alignItems: 'center', gap: 10 },
-  barLabel: {
-    width: 34, fontSize: 11, color: C.textLight,
-    fontWeight: '600', textAlign: 'center', lineHeight: 14,
-  },
+  barLabel: { width: 34, fontSize: 11, color: C.textLight, fontWeight: '700', textAlign: 'center', lineHeight: 14 },
   barLabelActive: { color: C.primary },
-  barYear:  { fontSize: 10, color: C.textLight },
+  barYear:  { fontSize: 10, color: C.textLight, fontWeight: '600' },
   barTrack: {
     flex: 1, height: 22,
     backgroundColor: '#F0EDE8',
@@ -394,5 +449,5 @@ const styles = StyleSheet.create({
     borderRadius: 12, padding: 12,
     borderWidth: 1, borderColor: '#F0EDE8',
   },
-  infoText: { flex: 1, fontSize: 12, color: C.textLight, lineHeight: 18 },
+  infoText: { flex: 1, ...T.tertiary, lineHeight: 18 },
 });
