@@ -18,6 +18,8 @@ import { useLanguageStore } from '../store/languageStore';
 import { buildApiUrl } from '../utils/config';
 import { useAuthStore } from '../store/authStore';
 import { C } from '../utils/theme';
+import { extractPremiumErrorDetail } from '../utils/premiumErrors';
+import { usePremiumUiStore } from '../store/premiumUiStore';
 
 // ─── Types ────────────────────────────────────────────────────────────────────
 
@@ -51,6 +53,7 @@ type Mode = 'camera' | 'processing' | 'confirm';
 export default function ScanReceiptScreen() {
   const router = useRouter();
   const { token } = useAuthStore();
+  const openPaywall = usePremiumUiStore(state => state.openPaywall);
   const { addItem, fetchHistory } = useStockStore();
   const { language } = useLanguageStore();
   const isFr = language === 'fr';
@@ -93,11 +96,17 @@ export default function ScanReceiptScreen() {
       setProducts(detected);
       setSelected(new Set(detected.map((_, i) => i)));
       setMode('confirm');
-    } catch {
-      Alert.alert(
-        isFr ? 'Erreur' : 'Error',
-        isFr ? "Impossible d'analyser le ticket." : 'Unable to analyse the receipt.',
-      );
+    } catch (err: any) {
+      const premiumError = extractPremiumErrorDetail(err);
+      if (premiumError) {
+        openPaywall(premiumError);
+        router.push('/premium');
+      } else {
+        Alert.alert(
+          isFr ? 'Erreur' : 'Error',
+          isFr ? "Impossible d'analyser le ticket." : 'Unable to analyse the receipt.',
+        );
+      }
       setMode('camera');
     }
   };

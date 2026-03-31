@@ -10,6 +10,8 @@ import {
 } from '../utils/notificationService';
 import { buildApiUrl } from '../utils/config';
 import { logger } from '../utils/logger';
+import { extractPremiumErrorDetail } from '../utils/premiumErrors';
+import { usePremiumUiStore } from './premiumUiStore';
 
 const authHeaders = () => {
   const token = useAuthStore.getState().token;
@@ -122,6 +124,13 @@ function isNetworkError(err: any): boolean {
   );
 }
 
+function handlePremiumOrQuotaError(err: any): boolean {
+  const premiumError = extractPremiumErrorDetail(err);
+  if (!premiumError) return false;
+  usePremiumUiStore.getState().openPaywall(premiumError);
+  return true;
+}
+
 export const useStockStore = create<StockStore>()(
   persist(
     (set, get) => ({
@@ -212,6 +221,9 @@ export const useStockStore = create<StockStore>()(
           set({ items });
           rescheduleAllNotifications(items);
         } catch (err: any) {
+          if (handlePremiumOrQuotaError(err)) {
+            throw err;
+          }
           if (!isNetworkError(err)) {
             set({ error: err.message });
           }
@@ -257,6 +269,9 @@ export const useStockStore = create<StockStore>()(
           set({ priorityItems: res.data.items, error: null });
           return res.data;
         } catch (err: any) {
+          if (handlePremiumOrQuotaError(err)) {
+            throw err;
+          }
           if (!isNetworkError(err)) {
             set({ error: err.message });
           }

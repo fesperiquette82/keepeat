@@ -1,11 +1,13 @@
 import React, { useMemo } from 'react';
 import { SafeAreaView } from 'react-native-safe-area-context';
-import { View, Text, StyleSheet, TouchableOpacity, Switch, ActivityIndicator } from 'react-native';
+import { View, Text, StyleSheet, TouchableOpacity, Switch, ActivityIndicator, Alert } from 'react-native';
 import Ionicons from '@expo/vector-icons/Ionicons';
 import { useRouter } from 'expo-router';
 import { C, T } from '../utils/theme';
 import { useAppSettingsStore, type ReminderLeadDays } from '../store/appSettingsStore';
 import { useStockStore } from '../store/stockStore';
+import { useAuthStore } from '../store/authStore';
+import { restorePremiumPurchase } from '../utils/billingService';
 
 function formatLastUpdate(value: string | null, language: 'fr' | 'en'): string {
   if (!value) return language === 'en' ? 'Not updated yet' : 'Pas encore mis à jour';
@@ -37,6 +39,9 @@ export default function SettingsScreen() {
     forceRefreshReminderProducts,
   } = useAppSettingsStore();
   const isRefreshingPriorityItems = useStockStore((state) => state.isRefreshingPriorityItems);
+  const token = useAuthStore((state) => state.token);
+  const refreshEntitlements = useAuthStore((state) => state.refreshEntitlements);
+  const plan = useAuthStore((state) => state.plan);
 
   const reminderOptions: ReminderLeadDays[] = useMemo(() => [1, 2, 3], []);
 
@@ -128,6 +133,30 @@ export default function SettingsScreen() {
           )}
           {!!reminderRefreshError && <Text style={styles.errorText}>{reminderRefreshError}</Text>}
         </View>
+
+        <View style={styles.card}>
+          <Text style={styles.sectionTitle}>Premium</Text>
+          <Text style={styles.systemInfo}>Plan actuel : {plan}</Text>
+          <TouchableOpacity style={styles.refreshButton} onPress={() => router.push('/premium')}>
+            <Ionicons name="diamond-outline" size={16} color="#FFFFFF" />
+            <Text style={styles.refreshButtonText}>Passer Premium</Text>
+          </TouchableOpacity>
+          <TouchableOpacity
+            style={styles.restoreButton}
+            onPress={async () => {
+              if (!token) return;
+              try {
+                await restorePremiumPurchase(token);
+                await refreshEntitlements();
+                Alert.alert('Restauration', 'Vos droits premium ont été synchronisés.');
+              } catch {
+                Alert.alert('Erreur', 'Impossible de restaurer les achats.');
+              }
+            }}
+          >
+            <Text style={styles.restoreButtonText}>Restaurer mes achats</Text>
+          </TouchableOpacity>
+        </View>
       </View>
     </SafeAreaView>
   );
@@ -167,6 +196,8 @@ const styles = StyleSheet.create({
   },
   refreshButtonDisabled: { opacity: 0.7 },
   refreshButtonText: { color: '#FFFFFF', fontWeight: '700', fontSize: 14 },
+  restoreButton: { borderWidth: 1, borderColor: '#16A34A', borderRadius: 10, minHeight: 40, alignItems: 'center', justifyContent: 'center' },
+  restoreButtonText: { color: '#166534', fontWeight: '700', fontSize: 14 },
   successText: { color: '#166534', fontSize: 12, fontWeight: '500' },
   errorText: { color: '#B91C1C', fontSize: 12, fontWeight: '500' },
 });
