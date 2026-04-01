@@ -1,5 +1,4 @@
 import { create } from 'zustand';
-import AsyncStorage from '@react-native-async-storage/async-storage';
 import * as SecureStore from 'expo-secure-store';
 import { unregisterPushToken } from '../utils/notificationService';
 import { buildApiUrl } from '../utils/config';
@@ -91,8 +90,23 @@ export const useAuthStore = create<AuthStore>((set) => ({
   loadAuth: async () => {
     try {
       const token = await SecureStore.getItemAsync(TOKEN_KEY);
-      const userJson = await AsyncStorage.getItem(USER_KEY);
+      const userJson = await SecureStore.getItemAsync(USER_KEY);
       if (token && userJson) {
+        // Vérifier l'expiry du JWT sans appel réseau (décodage de la payload Base64)
+        try {
+          const payloadB64 = token.split('.')[1];
+          if (payloadB64) {
+            const payload = JSON.parse(atob(payloadB64));
+            if (payload.exp && payload.exp * 1000 < Date.now()) {
+              await SecureStore.deleteItemAsync(TOKEN_KEY);
+              await SecureStore.deleteItemAsync(USER_KEY);
+              set({ isLoaded: true });
+              return;
+            }
+          }
+        } catch {
+          // Décodage JWT échoué : continuer, le premier appel API retournera 401
+        }
         const user: AuthUser = JSON.parse(userJson);
         set({ token, user, isLoaded: true, plan: user.is_premium ? 'premium' : 'free' });
       } else {
@@ -109,7 +123,7 @@ export const useAuthStore = create<AuthStore>((set) => ({
       const data = await apiPost('login', { email, password });
       const { access_token, user } = data as { access_token: string; user: AuthUser };
       await SecureStore.setItemAsync(TOKEN_KEY, access_token);
-      await AsyncStorage.setItem(USER_KEY, JSON.stringify(user));
+      await SecureStore.setItemAsync(USER_KEY, JSON.stringify(user));
       set({ token: access_token, user, plan: user.is_premium ? 'premium' : 'free' });
       await useAuthStore.getState().refreshEntitlements();
       await useAuthStore.getState().refreshUsage();
@@ -136,7 +150,7 @@ export const useAuthStore = create<AuthStore>((set) => ({
       const data = await apiPost('verify-email', { token });
       const { access_token, user } = data as { access_token: string; user: AuthUser };
       await SecureStore.setItemAsync(TOKEN_KEY, access_token);
-      await AsyncStorage.setItem(USER_KEY, JSON.stringify(user));
+      await SecureStore.setItemAsync(USER_KEY, JSON.stringify(user));
       set({ token: access_token, user, plan: user.is_premium ? 'premium' : 'free' });
       await useAuthStore.getState().refreshEntitlements();
       await useAuthStore.getState().refreshUsage();
@@ -182,7 +196,7 @@ export const useAuthStore = create<AuthStore>((set) => ({
       await unregisterPushToken(token);
     }
     await SecureStore.deleteItemAsync(TOKEN_KEY);
-    await AsyncStorage.removeItem(USER_KEY);
+    await SecureStore.deleteItemAsync(USER_KEY);
     set({ token: null, user: null, error: null, plan: 'free', entitlements: null, usage: null });
   },
 
@@ -195,6 +209,10 @@ export const useAuthStore = create<AuthStore>((set) => ({
       const response = await fetch(buildApiUrl('/api/billing/entitlements'), {
         headers: { Authorization: `Bearer ${token}` },
       });
+      if (response.status === 401) {
+        await useAuthStore.getState().logout();
+        return;
+      }
       const data = await response.json();
       if (!response.ok) {
         throw new Error(data?.detail || `Error ${response.status}`);
@@ -209,7 +227,7 @@ export const useAuthStore = create<AuthStore>((set) => ({
       }));
       const nextUser = useAuthStore.getState().user;
       if (nextUser) {
-        await AsyncStorage.setItem(USER_KEY, JSON.stringify(nextUser));
+        await SecureStore.setItemAsync(USER_KEY, JSON.stringify(nextUser));
       }
     } catch (err: any) {
       set({ error: err.message || 'Erreur de synchronisation premium' });
@@ -223,6 +241,10 @@ export const useAuthStore = create<AuthStore>((set) => ({
       const response = await fetch(buildApiUrl('/api/billing/usage'), {
         headers: { Authorization: `Bearer ${token}` },
       });
+      if (response.status === 401) {
+        await useAuthStore.getState().logout();
+        return;
+      }
       const data = await response.json();
       if (!response.ok) {
         throw new Error(data?.detail || `Error ${response.status}`);

@@ -1,5 +1,7 @@
 from __future__ import annotations
 
+import html as _html
+import json as _json
 import logging
 from datetime import datetime, timezone
 from typing import Any
@@ -47,11 +49,19 @@ def days_until(expiry_date: str | None) -> int | None:
 
 
 def redirect_html(title: str, icon: str, heading: str, description: str, deep_link: str) -> str:
+    # Échapper toutes les valeurs pour prévenir les injections XSS
+    safe_title = _html.escape(title)
+    safe_icon = _html.escape(icon)
+    safe_heading = _html.escape(heading)
+    safe_description = _html.escape(description)
+    safe_deep_link_attr = _html.escape(deep_link, quote=True)
+    # Dans le contexte JS, on JSON-encode pour éviter l'injection de code
+    safe_deep_link_js = _json.dumps(deep_link)
     return f"""<!DOCTYPE html>
 <html lang=\"fr\"><head>
   <meta charset=\"utf-8\">
   <meta name=\"viewport\" content=\"width=device-width, initial-scale=1\">
-  <title>{title}</title>
+  <title>{safe_title}</title>
   <style>
     *{{box-sizing:border-box;margin:0;padding:0}}
     body{{font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif;background:#0a0a0a;color:#fff;display:flex;align-items:center;justify-content:center;min-height:100vh;padding:24px}}
@@ -64,11 +74,11 @@ def redirect_html(title: str, icon: str, heading: str, description: str, deep_li
   </style>
 </head><body>
   <div class=\"card\">
-    <div class=\"icon\">{icon}</div>
-    <h1>{heading}</h1>
-    <p>{description}</p>
-    <a href=\"{deep_link}\" class=\"btn\">Ouvrir KeepEat</a>
+    <div class=\"icon\">{safe_icon}</div>
+    <h1>{safe_heading}</h1>
+    <p>{safe_description}</p>
+    <a href=\"{safe_deep_link_attr}\" class=\"btn\">Ouvrir KeepEat</a>
     <p class=\"note\">Si l'application ne s'ouvre pas automatiquement, assurez-vous qu'elle est installée sur votre appareil mobile.</p>
   </div>
-  <script>setTimeout(function(){{window.location.href=\"{deep_link}\";}},600);</script>
+  <script>setTimeout(function(){{window.location.href={safe_deep_link_js};}},600);</script>
 </body></html>"""

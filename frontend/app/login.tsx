@@ -95,18 +95,10 @@ export default function LoginScreen() {
     return () => clearTimeout(timer);
   }, [badgeOpacity, badgeScale]);
 
-  const handleDevLogin = async () => {
-    setLocalError(null);
-    clearError();
-    setEmailNotVerified(false);
-    setIsLoading(true);
-    try {
-      await login('fesperiquette@hotmail.com', 'essai');
-    } catch (err: any) {
-      setLocalError(err.message || (fr ? 'Connexion dev échouée.' : 'Dev login failed.'));
-    } finally {
-      setIsLoading(false);
-    }
+  const handleDevLogin = () => {
+    // Identifiants de développement supprimés pour raisons de sécurité.
+    // Utiliser le formulaire de connexion standard.
+    setLocalError(fr ? 'Mode dev : utiliser le formulaire de connexion.' : 'Dev mode: use the login form.');
   };
 
   const handleLogin = async () => {
@@ -302,7 +294,7 @@ export default function LoginScreen() {
                 disabled={isLoading}
               >
                 <Ionicons name="construct-outline" size={14} color="#555" />
-                <Text style={styles.bypassBtnText}>Connexion dev (fesperiquette)</Text>
+                <Text style={styles.bypassBtnText}>Mode dev</Text>
               </TouchableOpacity>
             )}
           </View>

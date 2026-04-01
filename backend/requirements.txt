@@ -13,3 +13,5 @@ python-multipart>=0.0.9
 tzdata>=2024.2
 aiosmtplib>=2.0.0
 slowapi>=0.1.9
+google-auth>=2.29.0
+requests>=2.31.0

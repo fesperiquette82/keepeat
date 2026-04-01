@@ -42,6 +42,10 @@ async def ocr_receipt(request: Request, current_user: dict[str, Any]) -> list[di
     image_b64: str = body.get("image", "")
     if not image_b64:
         raise HTTPException(status_code=400, detail="Champ 'image' manquant")
+    # Limite à ~4 MB décodé (~5.5 MB en base64) pour éviter les abus mémoire et coûts API
+    _MAX_IMAGE_B64_LEN = 5_500_000
+    if len(image_b64) > _MAX_IMAGE_B64_LEN:
+        raise HTTPException(status_code=413, detail="Image trop grande (max 4 MB)")
 
     try:
         async with httpx.AsyncClient(timeout=30) as http_client:

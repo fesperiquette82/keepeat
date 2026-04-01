@@ -2,6 +2,7 @@
 from __future__ import annotations
 
 import asyncio
+import base64
 import json
 import os
 import secrets
@@ -16,6 +17,7 @@ from typing import Any, Dict, List, Optional
 import aiosmtplib
 import httpx
 from bson import ObjectId
+from pymongo.errors import DuplicateKeyError
 from dotenv import load_dotenv
 from fastapi import APIRouter, Depends, FastAPI, Header, HTTPException, Query, Request, Response, status
 from fastapi.middleware.cors import CORSMiddleware
@@ -129,8 +131,8 @@ business_events_col = db["business_events"]
 service_usage_logs_col = db["service_usage_logs"]
 daily_metrics_col = db["daily_metrics"]
 
-SPOONACULAR_KEY = os.getenv("SPOONACULAR_KEY", "")
 _BACKEND_URL = os.getenv("BACKEND_URL", "https://keepeat-backend.onrender.com")
+_GOOGLE_ANDROID_PACKAGE = os.getenv("GOOGLE_ANDROID_PACKAGE", "com.fesperiquette.keepeat")
 APP_STARTED_AT = utc_now()
 
 
@@ -148,6 +150,10 @@ def _parse_admin_emails(raw: str | None) -> set[str]:
 
 
 _ADMIN_EMAILS = _parse_admin_emails(os.getenv("ADMIN_EMAILS"))
+
+# Hash factice utilisé dans le login pour garantir un temps de réponse constant
+# même quand l'email n'existe pas (prévention d'oracle timing)
+_DUMMY_HASH = hash_password("_keepeat_timing_sentinel_xK9mP2qR7vL3nZ5j")
 
 
 def _resolve_backend_commit() -> str:
@@ -351,6 +357,78 @@ app.state.limiter = limiter
 app.add_exception_handler(RateLimitExceeded, _rate_limit_exceeded_handler)
 
 
+@app.get("/privacy-policy", response_class=HTMLResponse, include_in_schema=False)
+async def privacy_policy():
+    """Politique de confidentialité RGPD — URL à fournir dans la fiche Google Play Store."""
+    return HTMLResponse(content=_PRIVACY_POLICY_HTML)
+
+
+_PRIVACY_POLICY_HTML = """<!DOCTYPE html>
+<html lang="fr">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Politique de confidentialité — KeepEat</title>
+<style>
+  body { font-family: sans-serif; max-width: 800px; margin: 40px auto; padding: 0 20px; color: #1f2937; line-height: 1.6; }
+  h1 { color: #16A34A; } h2 { color: #374151; border-bottom: 1px solid #e5e7eb; padding-bottom: 4px; }
+  a { color: #16A34A; }
+</style>
+</head>
+<body>
+<h1>Politique de confidentialité — KeepEat</h1>
+<p><em>Dernière mise à jour : avril 2026</em></p>
+
+<h2>1. Qui sommes-nous ?</h2>
+<p>KeepEat est une application mobile de gestion des stocks alimentaires développée et exploitée par Félix Esperiquette.
+Contact : <a href="mailto:fesperiquette@gmail.com">fesperiquette@gmail.com</a></p>
+
+<h2>2. Données collectées</h2>
+<ul>
+  <li><strong>Compte</strong> : adresse e-mail, mot de passe (haché bcrypt, jamais en clair).</li>
+  <li><strong>Stock alimentaire</strong> : noms de produits, codes-barres, dates d'expiration, quantités.</li>
+  <li><strong>Photos (OCR)</strong> : les tickets de caisse envoyés sont transmis à l'API OpenAI pour extraction de texte puis supprimés immédiatement — aucune photo n'est stockée sur nos serveurs.</li>
+  <li><strong>Achats in-app</strong> : token d'achat Google Play (nécessaire pour valider l'abonnement Premium).</li>
+  <li><strong>Notifications push</strong> : token Expo Push (pour l'envoi d'alertes d'expiration).</li>
+  <li><strong>Logs techniques</strong> : requêtes API horodatées (sans données personnelles identifiantes).</li>
+</ul>
+
+<h2>3. Finalités du traitement</h2>
+<ul>
+  <li>Fonctionnement du service (gestion du stock, recettes, alertes).</li>
+  <li>Validation et gestion des abonnements Premium.</li>
+  <li>Amélioration du service et détection d'anomalies techniques.</li>
+</ul>
+
+<h2>4. Base légale</h2>
+<p>Le traitement est fondé sur l'exécution du contrat (CGU) lors de la création de compte, et sur votre consentement pour les notifications push.</p>
+
+<h2>5. Hébergement et sous-traitants</h2>
+<ul>
+  <li><strong>Render</strong> (serveur backend) — États-Unis, clauses contractuelles types UE.</li>
+  <li><strong>MongoDB Atlas</strong> (base de données) — région UE (Paris).</li>
+  <li><strong>OpenAI</strong> (OCR et recettes IA) — États-Unis, clauses contractuelles types UE.</li>
+  <li><strong>Google Play Billing</strong> — pour la validation des achats in-app.</li>
+  <li><strong>Expo / EAS</strong> — pour les notifications push.</li>
+</ul>
+
+<h2>6. Conservation des données</h2>
+<p>Les données de stock sont conservées pendant la durée d'utilisation du compte, plus 30 jours après suppression.
+Les logs API sont conservés 90 jours. Vous pouvez demander la suppression complète à tout moment.</p>
+
+<h2>7. Vos droits (RGPD)</h2>
+<p>Vous disposez des droits d'accès, rectification, effacement, portabilité et opposition.
+Pour exercer ces droits : <a href="mailto:fesperiquette@gmail.com">fesperiquette@gmail.com</a></p>
+
+<h2>8. Sécurité</h2>
+<p>Les mots de passe sont hachés (bcrypt). Les jetons d'authentification sont stockés dans le trousseau sécurisé de l'appareil (iOS Keychain / Android Keystore). Les communications sont chiffrées via HTTPS/TLS.</p>
+
+<h2>9. Modifications</h2>
+<p>Toute modification substantielle sera notifiée par e-mail et dans l'application.</p>
+</body>
+</html>"""
+
+
 @app.get("/health")
 async def health_root():
     mongo_ok = True
@@ -474,7 +552,10 @@ async def _send_email(to: str, subject: str, html_body: str) -> None:
     if not api_key:
         logger.warning("Email non envoyé vers %s : BREVO_API_KEY non configuré", to)
         return
-    sender_email = os.getenv("MAIL_FROM", "fesperiquette@hotmail.com")
+    sender_email = os.getenv("MAIL_FROM", "").strip()
+    if not sender_email:
+        logger.error("Email non envoyé vers %s : MAIL_FROM non configuré", to)
+        return
     sender_name = os.getenv("MAIL_FROM_NAME", "KeepEat")
     payload = {
         "sender": {"name": sender_name, "email": sender_email},
@@ -580,7 +661,8 @@ async def build_info():
 # -----------------------------------------------------------------------------
 
 @api_router.post("/auth/register", response_model=RegisterResponse, status_code=201)
-async def register(body: UserCreate):
+@limiter.limit("5/minute")
+async def register(request: Request, body: UserCreate):
     validate_password(body.password)
 
     existing = await users_col.find_one({"email": body.email.lower()})
@@ -598,7 +680,10 @@ async def register(body: UserCreate):
         "created_at": utc_now().isoformat(),
         "last_login": None,
     }
-    await users_col.insert_one(doc)
+    try:
+        await users_col.insert_one(doc)
+    except DuplicateKeyError:
+        raise HTTPException(status_code=409, detail="Email already registered")
     created_user = await users_col.find_one({"email": body.email.lower()}, {"_id": 1})
     await track_business_event(
         business_events_col=business_events_col,
@@ -625,9 +710,14 @@ async def register(body: UserCreate):
 
 
 @api_router.post("/auth/login", response_model=TokenResponse)
-async def login(body: UserLogin):
+@limiter.limit("10/minute")
+async def login(request: Request, body: UserLogin):
     doc = await users_col.find_one({"email": body.email.lower()})
-    if not doc or not verify_password(body.password, doc["hashed_password"]):
+    # Toujours appeler verify_password (même avec hash factice) pour éviter
+    # l'énumération d'emails par différence de temps de réponse
+    hash_to_check = doc["hashed_password"] if doc else _DUMMY_HASH
+    password_ok = verify_password(body.password, hash_to_check)
+    if not doc or not password_ok:
         raise HTTPException(status_code=401, detail="Invalid email or password")
 
     if not doc.get("email_verified", True):
@@ -681,7 +771,8 @@ async def verify_email(body: VerifyEmailBody):
 
 
 @api_router.post("/auth/resend-verification")
-async def resend_verification(body: ResendVerificationBody):
+@limiter.limit("3/minute")
+async def resend_verification(request: Request, body: ResendVerificationBody):
     doc = await users_col.find_one({"email": body.email.lower(), "email_verified": False})
     if doc:
         new_token = secrets.token_urlsafe(32)
@@ -709,7 +800,8 @@ async def resend_verification(body: ResendVerificationBody):
 
 
 @api_router.post("/auth/forgot-password")
-async def forgot_password(body: ForgotPasswordBody):
+@limiter.limit("5/minute")
+async def forgot_password(request: Request, body: ForgotPasswordBody):
     doc = await users_col.find_one({"email": body.email.lower()})
     if doc:
         reset_token = secrets.token_urlsafe(32)
@@ -736,7 +828,8 @@ async def forgot_password(body: ForgotPasswordBody):
 
 
 @api_router.post("/auth/reset-password")
-async def reset_password(body: ResetPasswordBody):
+@limiter.limit("5/minute")
+async def reset_password(request: Request, body: ResetPasswordBody):
     validate_password(body.new_password)
 
     doc = await users_col.find_one({"reset_token": body.token})
@@ -803,6 +896,104 @@ async def get_billing_usage(
     return BillingUsageResponse(period=period, usage=usage)
 
 
+async def _get_google_play_access_token(credentials_json: str) -> str | None:
+    """Obtient un token OAuth2 pour Google Play Developer API via un compte de service."""
+    def _sync_refresh() -> str:
+        try:
+            from google.oauth2 import service_account
+            import google.auth.transport.requests as _greq
+            creds = service_account.Credentials.from_service_account_info(
+                json.loads(credentials_json),
+                scopes=["https://www.googleapis.com/auth/androidpublisher"],
+            )
+            creds.refresh(_greq.Request())
+            return creds.token  # type: ignore[return-value]
+        except ImportError:
+            raise RuntimeError("google-auth non installé — ajouter google-auth aux requirements")
+
+    try:
+        return await asyncio.to_thread(_sync_refresh)
+    except Exception as exc:
+        logger.error("Échec du refresh du token Google Play service account: %s", exc)
+        return None
+
+
+async def _verify_google_play_subscription(
+    purchase_token: str,
+    subscription_id: str,
+) -> dict | None:
+    """
+    Vérifie un abonnement via Google Play Developer API.
+    Retourne le dict de réponse si disponible, None si non configuré ou en cas d'erreur.
+    Quand None est retourné en dev (GOOGLE_PLAY_SERVICE_ACCOUNT_JSON absent),
+    l'appelant doit appliquer une durée fixe de 30 jours (fail-open contrôlé).
+    """
+    sa_json = os.getenv("GOOGLE_PLAY_SERVICE_ACCOUNT_JSON", "").strip()
+    if not sa_json:
+        logger.warning(
+            "GOOGLE_PLAY_SERVICE_ACCOUNT_JSON non configuré — vérification Google Play ignorée (mode dev)"
+        )
+        return None
+
+    access_token = await _get_google_play_access_token(sa_json)
+    if not access_token:
+        return None
+
+    url = (
+        f"https://androidpublisher.googleapis.com/androidpublisher/v3/applications"
+        f"/{_GOOGLE_ANDROID_PACKAGE}/purchases/subscriptions/{subscription_id}/tokens/{purchase_token}"
+    )
+    try:
+        async with httpx.AsyncClient(timeout=15) as http_client:
+            resp = await http_client.get(url, headers={"Authorization": f"Bearer {access_token}"})
+        if resp.status_code == 200:
+            return resp.json()
+        logger.warning("Google Play Developer API returned HTTP %s", resp.status_code)
+        return None
+    except Exception as exc:
+        logger.error("Google Play Developer API request failed: %s", exc)
+        return None
+
+
+async def _handle_subscription_active(purchase_token: str, subscription_id: str) -> None:
+    """Marque l'abonnement comme actif suite à un RTDN d'achat ou de renouvellement."""
+    play_data = await _verify_google_play_subscription(purchase_token, subscription_id)
+    expiry_millis = play_data.get("expiryTimeMillis") if play_data else None
+    if expiry_millis:
+        expires_at = datetime.fromtimestamp(int(expiry_millis) / 1000, tz=timezone.utc).isoformat()
+    else:
+        expires_at = (utc_now() + timedelta(days=30)).isoformat()
+    result = await users_col.update_one(
+        {"store_purchase_token": purchase_token},
+        {"$set": {
+            "is_premium": True,
+            "subscription_status": "active",
+            "subscription_expires_at": expires_at,
+            "subscription_updated_at": utc_now().isoformat(),
+        }},
+    )
+    logger.info(
+        "RTDN subscription activated token=...%s matched=%d expires_at=%s",
+        purchase_token[-6:], result.matched_count, expires_at,
+    )
+
+
+async def _handle_subscription_inactive(purchase_token: str) -> None:
+    """Désactive le premium suite à un RTDN d'annulation/expiration."""
+    result = await users_col.update_one(
+        {"store_purchase_token": purchase_token},
+        {"$set": {
+            "is_premium": False,
+            "subscription_status": "inactive",
+            "subscription_updated_at": utc_now().isoformat(),
+        }},
+    )
+    logger.info(
+        "RTDN subscription deactivated token=...%s matched=%d",
+        purchase_token[-6:], result.matched_count,
+    )
+
+
 @api_router.post("/billing/google/verify", response_model=BillingRestoreResponse)
 async def verify_google_subscription(
     body: BillingVerifyRequest,
@@ -820,10 +1011,38 @@ async def verify_google_subscription(
             status_code=400,
             detail={"code": "INVALID_PRODUCT", "product_id": body.product_id},
         )
-    if not body.purchase_token.strip():
+    purchase_token = body.purchase_token.strip()
+    if not purchase_token:
         raise HTTPException(status_code=400, detail={"code": "INVALID_PURCHASE_TOKEN"})
+    if purchase_token.startswith("demo_"):
+        logger.warning("BILLING purchase_token demo rejeté user=%s", current_user["id"])
+        raise HTTPException(status_code=400, detail={"code": "INVALID_PURCHASE_TOKEN", "reason": "Demo tokens not accepted"})
 
-    expires_at = (utc_now() + timedelta(days=30)).isoformat()
+    # Vérification via Google Play Developer API
+    play_data = await _verify_google_play_subscription(
+        purchase_token=purchase_token,
+        subscription_id=body.product_id,
+    )
+    if play_data is not None:
+        # paymentState : 0=pending, 1=received, 2=free trial — null=deferred
+        payment_state = play_data.get("paymentState")
+        if payment_state not in (1, 2):
+            logger.warning(
+                "BILLING paymentState invalide=%s user=%s", payment_state, current_user["id"]
+            )
+            raise HTTPException(
+                status_code=402,
+                detail={"code": "PAYMENT_NOT_RECEIVED", "paymentState": payment_state},
+            )
+        expiry_millis = play_data.get("expiryTimeMillis")
+        if expiry_millis:
+            expires_at = datetime.fromtimestamp(int(expiry_millis) / 1000, tz=timezone.utc).isoformat()
+        else:
+            expires_at = (utc_now() + timedelta(days=30)).isoformat()
+    else:
+        # GOOGLE_PLAY_SERVICE_ACCOUNT_JSON absent (env dev) — durée fixe de 30 jours
+        expires_at = (utc_now() + timedelta(days=30)).isoformat()
+
     await users_col.update_one(
         {"_id": ObjectId(current_user["id"])},
         {"$set": {
@@ -880,6 +1099,64 @@ async def restore_subscription(
     return BillingRestoreResponse(ok=True, plan="free", subscription_status="inactive", subscription_expires_at=None)
 
 
+@api_router.post("/billing/google/rtdn")
+async def google_play_rtdn(request: Request):
+    """
+    Webhook Pub/Sub pour les Real-Time Developer Notifications (RTDN) Google Play.
+    Google Cloud Pub/Sub envoie : {"message": {"data": "<base64_json>"}, "subscription": "..."}
+    Toujours retourner HTTP 200 pour éviter les re-livraisons exponentielles Pub/Sub.
+
+    Configuration requise dans Google Play Console > Monétisation > Configuration > Notifications :
+      - URL de l'endpoint : https://keepeat-backend.onrender.com/api/billing/google/rtdn
+      - Définir GOOGLE_RTDN_TOKEN et ajouter ?token=<valeur> à l'URL OU configurer
+        l'authentification Pub/Sub native (recommandé).
+    """
+    # Vérification optionnelle par token Bearer (défini dans GOOGLE_RTDN_TOKEN)
+    rtdn_token = os.getenv("GOOGLE_RTDN_TOKEN", "").strip()
+    if rtdn_token:
+        auth_header = request.headers.get("Authorization", "")
+        if auth_header != f"Bearer {rtdn_token}":
+            raise HTTPException(status_code=401, detail="Unauthorized")
+
+    try:
+        body = await request.json()
+    except Exception:
+        return {"ok": True}
+
+    message = body.get("message", {})
+    data_b64 = message.get("data", "")
+    if not data_b64:
+        return {"ok": True}
+
+    try:
+        notification = json.loads(base64.b64decode(data_b64).decode("utf-8"))
+    except Exception as exc:
+        logger.warning("RTDN base64 decode failed: %s", exc)
+        return {"ok": True}
+
+    sub_notif = notification.get("subscriptionNotification", {})
+    notif_type = sub_notif.get("notificationType")
+    purchase_token = sub_notif.get("purchaseToken", "").strip()
+    subscription_id = sub_notif.get("subscriptionId", "")
+
+    logger.info("RTDN notificationType=%s subscriptionId=%s", notif_type, subscription_id)
+
+    if not purchase_token:
+        return {"ok": True}
+
+    # notificationType : 1=PURCHASED, 2=RENEWED, 4=PURCHASED_WITH_DEFERRED, 7=RESTARTED → actif
+    # 3=CANCELED, 6=IN_GRACE_PERIOD, 12=EXPIRED, 13=ON_HOLD → inactif
+    try:
+        if notif_type in (1, 2, 4, 7):
+            await _handle_subscription_active(purchase_token, subscription_id)
+        elif notif_type in (3, 12, 13):
+            await _handle_subscription_inactive(purchase_token)
+    except Exception as exc:
+        logger.error("RTDN processing error notificationType=%s: %s", notif_type, exc)
+
+    return {"ok": True}
+
+
 # -----------------------------------------------------------------------------
 # Admin routes
 # -----------------------------------------------------------------------------
@@ -911,11 +1188,15 @@ async def set_premium(
 # Stock routes (auth required — isolated by user_id)
 # -----------------------------------------------------------------------------
 
+_ALLOWED_STOCK_STATUSES = {"active", "consumed", "thrown", "expired"}
+
 @api_router.get("/stock", response_model=List[StockItem])
 async def get_stock(
     status: str = "active",
     current_user: Dict[str, Any] = Depends(_get_current_user),
 ):
+    if status not in _ALLOWED_STOCK_STATUSES:
+        raise HTTPException(status_code=422, detail=f"Statut invalide. Valeurs acceptées : {sorted(_ALLOWED_STOCK_STATUSES)}")
     cursor = stock_col.find({"user_id": current_user["id"], "status": status}).sort("added_date", -1)
     docs = await cursor.to_list(length=1000)
     return [serialize_mongo(d) for d in docs]
@@ -1258,11 +1539,17 @@ async def get_stats(current_user: Dict[str, Any] = Depends(_get_current_user)):
 
 
 @api_router.get("/product/{barcode}", response_model=ProductLookupResponse)
-async def get_product(barcode: str):
+async def get_product(
+    barcode: str,
+    current_user: Dict[str, Any] = Depends(_get_current_user),
+):
+    # Valider le format barcode : chiffres uniquement, 4 à 14 caractères (EAN-8, EAN-13, UPC-A…)
+    if not barcode.isdigit() or not (4 <= len(barcode) <= 14):
+        raise HTTPException(status_code=422, detail="Format de barcode invalide (4-14 chiffres)")
     product = await lookup_product_openfoodfacts(barcode, products_cache_col)
     await track_service_usage(
         service_usage_logs_col=service_usage_logs_col,
-        user_id=None,
+        user_id=current_user["id"],
         service_name="openfoodfacts",
         action_name="product_lookup",
         units_consumed=1,
@@ -1463,7 +1750,7 @@ async def get_recipe_suggestions(
     requested_locale, effective_locale = _resolve_recipes_locale(locale, accept_language)
     resolved_suggestion_style = resolve_suggestion_style(suggestion_style)
     effective_filter = "all" if recipe_filter in {"all", "personalized"} else recipe_filter
-    logger.info(
+    logger.debug(
         "RECIPES_DEBUG suggestions called — user=%s filter=%s suggestion_style=%s",
         uid,
         recipe_filter,
@@ -1489,7 +1776,7 @@ async def get_recipe_suggestions(
         {"$limit": max_stock_items},
     ]
     items = await stock_col.aggregate(pipeline).to_list(length=max_stock_items)
-    logger.info(
+    logger.debug(
         "RECIPES_DEBUG suggestions stock_items_raw — user=%s filter=%s count=%d sample=%s",
         uid,
         recipe_filter,
@@ -1542,7 +1829,7 @@ async def get_recipe_suggestions(
             existing_ids.add(fallback.recipe.id)
             if len(matches) >= 5:
                 break
-        logger.info(
+        logger.debug(
             "RECIPES_DEBUG suggestions fallback_all_applied — user=%s filter=%s initial_count=%d final_count=%d",
             uid,
             effective_filter,
@@ -1555,7 +1842,7 @@ async def get_recipe_suggestions(
         recipe_filter, stock_names[:5], [match.recipe.title for match in matches],
     )
     recipes_payload = [recipe_match_to_suggestion(match).model_dump(mode="json") for match in matches]
-    logger.info(
+    logger.debug(
         "RECIPES_DEBUG suggestions response — user=%s filter=%s count=%d ids=%s titles=%s",
         uid,
         recipe_filter,
@@ -1590,7 +1877,7 @@ async def get_recipe_suggestions_grouped(
     """
     uid = current_user["id"]
     resolved_suggestion_style = resolve_suggestion_style(suggestion_style)
-    logger.info(
+    logger.debug(
         "RECIPES_DEBUG suggestions-grouped called — user=%s filter=%s per_group_limit=%s suggestion_style=%s",
         uid,
         recipe_filter,
@@ -1615,7 +1902,7 @@ async def get_recipe_suggestions_grouped(
         {"$limit": 20},
     ]
     items = await stock_col.aggregate(pipeline).to_list(length=20)
-    logger.info(
+    logger.debug(
         "RECIPES_DEBUG suggestions-grouped stock_items_raw — user=%s filter=%s count=%d sample=%s",
         uid,
         recipe_filter,
@@ -1651,7 +1938,7 @@ async def get_recipe_suggestions_grouped(
         stock_names[:5],
         {k: len(v) for k, v in grouped_matches.items()},
     )
-    logger.info(
+    logger.debug(
         "RECIPES_DEBUG suggestions-grouped response — user=%s filter=%s ready=%s almost=%s inspiration=%s",
         uid,
         recipe_filter,
@@ -1676,7 +1963,7 @@ async def get_recipe_catalog(
     tag: Optional[str] = Query(None),
     cuisine: Optional[str] = Query(None),
 ):
-    logger.info(
+    logger.debug(
         "RECIPES_DEBUG catalog called — limit=%s meal_type=%s difficulty=%s tag=%s cuisine=%s",
         limit,
         meal_type,
@@ -1691,7 +1978,7 @@ async def get_recipe_catalog(
         tag=tag,
         cuisine=cuisine,
     )
-    logger.info(
+    logger.debug(
         "RECIPES_DEBUG catalog response — count=%d ids=%s",
         len(recipes),
         [r.id for r in recipes[:20]],
@@ -1740,12 +2027,19 @@ async def ocr_receipt_route(
         event_category="ocr",
         metadata_json={},
     )
+    # Vérification d'accès SANS consommer le quota (évite de drainer le quota si l'appel OpenAI échoue)
+    await _enforce_feature_access(
+        current_user=current_user,
+        feature=FEATURE_OCR,
+        consume_quota=False,
+    )
+    result = await ocr_receipt(request, current_user)
+    # Quota consommé APRÈS l'appel externe réussi
     await _enforce_feature_access(
         current_user=current_user,
         feature=FEATURE_OCR,
         consume_quota=True,
     )
-    result = await ocr_receipt(request, current_user)
     plan_type = resolve_plan_type_at_time(current_user)
     await track_service_usage(
         service_usage_logs_col=service_usage_logs_col,
@@ -1867,18 +2161,22 @@ _LEVELS = [
 
 
 async def _compute_streak(uid: str) -> int:
-    """Nombre de jours consécutifs depuis aujourd'hui sans aucun item jeté."""
+    """Nombre de jours consécutifs depuis aujourd'hui sans aucun item jeté (1 seule requête DB)."""
     today = utc_now().date()
+    since = (today - timedelta(days=59)).strftime("%Y-%m-%d")
+    # Une seule agrégation pour récupérer toutes les dates de jets des 60 derniers jours
+    pipeline = [
+        {"$match": {"user_id": uid, "status": "thrown", "thrown_date": {"$gte": since}}},
+        {"$project": {"day": {"$substr": ["$thrown_date", 0, 10]}}},
+        {"$group": {"_id": "$day"}},
+    ]
+    thrown_days: set[str] = set()
+    async for doc in stock_col.aggregate(pipeline):
+        thrown_days.add(doc["_id"])
     streak = 0
     for i in range(60):
-        day = today - timedelta(days=i)
-        day_str = day.strftime("%Y-%m-%d")
-        thrown_today = await stock_col.count_documents({
-            "user_id": uid,
-            "status": "thrown",
-            "thrown_date": {"$regex": f"^{day_str}"},
-        })
-        if thrown_today > 0:
+        day_str = (today - timedelta(days=i)).strftime("%Y-%m-%d")
+        if day_str in thrown_days:
             break
         streak += 1
     return streak
@@ -1891,17 +2189,20 @@ async def get_gamification(
     """Retourne les données de gamification : niveau, streak, économies totales."""
     uid = current_user["id"]
 
-    total_consumed, total_thrown, consumed_docs = await asyncio.gather(
+    total_consumed, total_thrown = await asyncio.gather(
         stock_col.count_documents({"user_id": uid, "status": "consumed"}),
         stock_col.count_documents({"user_id": uid, "status": "thrown"}),
-        stock_col.find({"user_id": uid, "status": "consumed"}, {"food_category": 1}).to_list(length=10000),
     )
     streak = await _compute_streak(uid)
 
-    total_saved = sum(
-        _SAVINGS_BY_CATEGORY.get((d.get("food_category") or "").lower(), _DEFAULT_SAVINGS)
-        for d in consumed_docs
-    )
+    # Agrégation pour le calcul des économies : évite de charger N×10000 docs en mémoire
+    total_saved = 0.0
+    async for cat_doc in stock_col.aggregate([
+        {"$match": {"user_id": uid, "status": "consumed"}},
+        {"$group": {"_id": "$food_category", "count": {"$sum": 1}}},
+    ]):
+        cat = (cat_doc["_id"] or "").lower()
+        total_saved += cat_doc["count"] * _SAVINGS_BY_CATEGORY.get(cat, _DEFAULT_SAVINGS)
 
     # Niveau basé sur total_consumed
     level_index = 0
@@ -1985,8 +2286,9 @@ def _is_french_ai_recipe(recipe: dict) -> bool:
     title_lower = recipe.get("title", "").lower()
     return not any(kw in title_lower for kw in _FOREIGN_RECIPE_KEYWORDS)
 
-# Cache en mémoire (uid -> {recipes, created_at})
+# Cache en mémoire (uid -> {recipes, created_at}) — borné à 500 entrées pour éviter la fuite mémoire
 _ai_recipe_cache: dict[str, dict] = {}
+_AI_CACHE_MAX_SIZE = 500
 
 
 @api_router.get("/recipes/ai")
@@ -1997,15 +2299,16 @@ async def get_ai_recipes(
     current_user: Dict[str, Any] = Depends(_get_current_user),
 ):
     """Génère 3 recettes personnalisées via GPT-4o-mini basées sur le stock de l'utilisateur."""
+    # Vérification d'accès SANS consommer le quota (consommation après appel OpenAI réussi)
     await _enforce_feature_access(
         current_user=current_user,
         feature=FEATURE_AI,
-        consume_quota=True,
+        consume_quota=False,
     )
     uid = current_user["id"]
     resolved_suggestion_style = resolve_suggestion_style(suggestion_style)
     include_meta_enabled = include_meta is True or str(include_meta).lower() in {"1", "true", "yes"}
-    logger.info("RECIPES_DEBUG ai called — user=%s", uid)
+    logger.debug("RECIPES_DEBUG ai called — user=%s", uid)
     openai_key = os.environ.get("KEEPEAT_OPENAI_TOKEN", "")
     if not openai_key:
         raise HTTPException(status_code=503, detail="IA non configurée")
@@ -2013,7 +2316,7 @@ async def get_ai_recipes(
     # Cache 1h par utilisateur
     cached = _ai_recipe_cache.get(uid)
     if cached and (utc_now() - cached["created_at"]).total_seconds() < 3600:
-        logger.info(
+        logger.debug(
             "RECIPES_DEBUG ai cache_hit — user=%s age_s=%.2f count=%d",
             uid,
             (utc_now() - cached["created_at"]).total_seconds(),
@@ -2030,7 +2333,7 @@ async def get_ai_recipes(
     ).sort("expiry_date", 1).limit(8).to_list(length=8)
 
     if not items:
-        logger.info("RECIPES_DEBUG ai empty_stock — user=%s", uid)
+        logger.debug("RECIPES_DEBUG ai empty_stock — user=%s", uid)
         meta = _build_recipes_debug_meta(endpoint="/api/recipes/ai", suggestion_style=resolved_suggestion_style)
         _apply_recipes_debug_headers(response=response, meta=meta)
         if include_meta_enabled:
@@ -2038,7 +2341,7 @@ async def get_ai_recipes(
         return []
 
     stock_names = [i.get("name", "") for i in items if i.get("name")]
-    logger.info(
+    logger.debug(
         "RECIPES_DEBUG ai stock_items_raw — user=%s count=%d sample=%s",
         uid,
         len(items),
@@ -2136,12 +2439,22 @@ async def get_ai_recipes(
                     "is_ai": True,
                 })
                 existing_lower.add(match.recipe.title.lower())
-        logger.info(
+        logger.debug(
             "RECIPES_DEBUG ai validation — user=%s rejected=%s final_count=%d",
             uid, rejected_titles, len(valid),
         )
         recipes = valid
 
+    # Quota consommé APRÈS l'appel OpenAI réussi
+    await _enforce_feature_access(
+        current_user=current_user,
+        feature=FEATURE_AI,
+        consume_quota=True,
+    )
+    # Éviction LRU simplifiée : supprimer l'entrée la plus ancienne si cache plein
+    if len(_ai_recipe_cache) >= _AI_CACHE_MAX_SIZE:
+        oldest_uid = min(_ai_recipe_cache, key=lambda k: _ai_recipe_cache[k]["created_at"])
+        del _ai_recipe_cache[oldest_uid]
     _ai_recipe_cache[uid] = {"recipes": recipes, "created_at": utc_now()}
     plan_type = resolve_plan_type_at_time(current_user)
     await track_service_usage(
@@ -2162,7 +2475,7 @@ async def get_ai_recipes(
         metadata_json={"count": len(recipes), "source": "openai"},
     )
     logger.info("AI recipes generated — user=%s count=%d", uid, len(recipes))
-    logger.info(
+    logger.debug(
         "RECIPES_DEBUG ai response — user=%s titles=%s",
         uid,
         [r.get("title") for r in recipes],

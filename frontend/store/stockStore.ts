@@ -76,6 +76,19 @@ interface PendingMutation {
   timestamp: number;
 }
 
+// Intercepteur Axios global : déconnexion automatique sur token expiré (401)
+axios.interceptors.response.use(
+  (response) => response,
+  (error) => {
+    if (error.response?.status === 401) {
+      // Import dynamique pour éviter la dépendance circulaire au niveau module
+      const { logout } = useAuthStore.getState();
+      logout();
+    }
+    return Promise.reject(error);
+  }
+);
+
 // Cache barcode → résultat produit (session en mémoire, non persisté)
 const _barcodeCache: Record<string, any> = {};
 
@@ -331,6 +344,9 @@ export const useStockStore = create<StockStore>()(
       markConsumed: async (itemId: string) => {
         const { isOnline } = get();
 
+        // Capturer le snapshot AVANT la mise à jour optimiste pour pouvoir rollback
+        const { items, priorityItems, stats } = useStockStore.getState();
+
         // Optimistic update
         set(state => ({
           items: state.items.filter(i => i.id !== itemId),
@@ -353,7 +369,6 @@ export const useStockStore = create<StockStore>()(
           return;
         }
 
-        const { items, priorityItems, stats } = useStockStore.getState();
         try {
           await axios.post(buildApiUrl(`/api/stock/${itemId}/consume`), {}, { headers: authHeaders() });
           const s = get();
@@ -377,6 +392,9 @@ export const useStockStore = create<StockStore>()(
       markThrown: async (itemId: string) => {
         const { isOnline } = get();
 
+        // Capturer le snapshot AVANT la mise à jour optimiste pour pouvoir rollback
+        const { items, priorityItems, stats } = useStockStore.getState();
+
         // Optimistic update
         set(state => ({
           items: state.items.filter(i => i.id !== itemId),
@@ -399,7 +417,6 @@ export const useStockStore = create<StockStore>()(
           return;
         }
 
-        const { items, priorityItems, stats } = useStockStore.getState();
         try {
           await axios.post(buildApiUrl(`/api/stock/${itemId}/throw`), {}, { headers: authHeaders() });
           const s = get();
@@ -468,9 +485,32 @@ export const useStockStore = create<StockStore>()(
           return newItem;
         } catch (err: any) {
           if (isNetworkError(err)) {
-            // Fallback offline si le réseau coupe juste après le check
+            // Fallback offline si le réseau coupe juste après le check (sans récursion)
             set({ isOnline: false });
-            return get().addItem(item);
+            const tempId = `temp_${uuid()}`;
+            const tempItem: StockItem = {
+              id: tempId,
+              name: item.name || '',
+              barcode: item.barcode,
+              brand: item.brand,
+              image_url: item.image_url,
+              category: item.category,
+              quantity: item.quantity,
+              expiry_date: item.expiry_date,
+              added_date: new Date().toISOString(),
+              status: 'active',
+              notes: item.notes,
+              _pending: true,
+            };
+            set(state => ({
+              items: [tempItem, ...state.items],
+              pendingMutations: [
+                ...state.pendingMutations,
+                { id: uuid(), type: 'ADD', payload: item, tempId, timestamp: Date.now() },
+              ],
+            }));
+            scheduleExpiryNotification(tempItem);
+            return tempItem;
           }
           logger.error("[Stock] addItem failed", { message: err instanceof Error ? err.message : String(err) });
           return null;

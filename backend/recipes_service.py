@@ -536,7 +536,7 @@ def _ranked_matches_from_catalog(
     resolved_style = _normalize_suggestion_style(suggestion_style, allow_world_cuisines)
     raw_stock = normalize_stock_items(stock_items)
     normalized_stock = [_normalize_fr(item) for item in raw_stock]
-    logger.info(
+    logger.debug(
         "RECIPES_DEBUG scoring input — meal_type=%s storage_focus=%s raw_stock=%s normalized_stock=%s",
         meal_type,
         storage_focus,
@@ -556,7 +556,7 @@ def _ranked_matches_from_catalog(
         key=lambda match: _sort_matches(match, suggestion_style=resolved_style),
         reverse=True,
     )
-    logger.info(
+    logger.debug(
         "RECIPES_DEBUG scoring top10_pre_threshold=%s",
         [
             {
@@ -624,7 +624,7 @@ def _ranked_matches_from_catalog(
             if match.score < 0.35:
                 continue
             relaxed_candidates.append(match)
-            logger.info(
+            logger.debug(
                 "RECIPES_DEBUG relaxed_candidate title=%s score=%.4f missing_required=%s reasons=%s",
                 match.recipe.title,
                 match.score,
@@ -637,18 +637,18 @@ def _ranked_matches_from_catalog(
         key=lambda match: _sort_matches(match, suggestion_style=resolved_style),
         reverse=True,
     )
-    logger.info(
+    logger.debug(
         "RECIPES_DEBUG scoring summary total=%d strict_kept=%d final_kept=%d rejected=%d",
         len(scored_matches),
         len(strict_matches),
         len(matches),
         len(rejected_reasons),
     )
-    logger.info(
+    logger.debug(
         "RECIPES_DEBUG scoring rejected_top10=%s",
         rejected_reasons[:10],
     )
-    logger.info(
+    logger.debug(
         "RECIPES_DEBUG scoring top10_post_threshold=%s min_score=%.2f",
         [
             {
@@ -665,7 +665,7 @@ def _ranked_matches_from_catalog(
         ],
         _MIN_SCORE_MAIN_SUGGESTION,
     )
-    logger.info(
+    logger.debug(
         "RECIPES_DEBUG scoring top5_scores=%s",
         [{"title": m.recipe.title, "score": m.score} for m in matches[:5]],
     )
@@ -893,7 +893,15 @@ def recipe_match_to_grouped_suggestion(match: RecipeMatch) -> RecipeGroupedSugge
     )
 
 
-_FRENCH_RECIPE_DB: list[dict] = [recipe_to_legacy_candidate(recipe) for recipe in load_local_recipes()]
+try:
+    _FRENCH_RECIPE_DB: list[dict] = [recipe_to_legacy_candidate(recipe) for recipe in load_local_recipes()]
+except Exception as _catalog_load_exc:
+    import logging as _logging
+    _logging.getLogger("keepeat-backend").warning(
+        "Catalogue de recettes non chargé au démarrage : %s — les suggestions de recettes seront désactivées.",
+        _catalog_load_exc,
+    )
+    _FRENCH_RECIPE_DB = []
 
 
 def _match_recipe_to_stock(

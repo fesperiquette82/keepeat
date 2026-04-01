@@ -103,20 +103,36 @@ async def check_recalls_and_notify(deps: AlertDependencies) -> None:
     if not recall_map:
         return
 
+    recall_barcodes = list(recall_map.keys())
+    recall_alert_keys = [f"recall_{b}" for b in recall_barcodes]
+
     async for user_doc in deps.users_col.find({"push_tokens": {"$exists": True, "$ne": []}}):
         user_id = str(user_doc["_id"])
         prefs = _resolve_alert_prefs(user_doc)
         if not prefs["alertRecall"]:
             continue
         tokens: list[str] = user_doc.get("push_tokens", [])
-        cursor = deps.stock_col.find({"user_id": user_id, "status": "active", "barcode": {"$exists": True, "$ne": ""}})
+
+        # Pré-charger toutes les alertes rappel déjà envoyées pour cet utilisateur (1 requête)
+        sent_keys: set[str] = {
+            doc["key"] async for doc in deps.user_alerts_col.find(
+                {"user_id": user_id, "key": {"$in": recall_alert_keys}},
+                {"key": 1},
+            )
+        }
+
+        # Ne requêter que les items dont le barcode est dans les rappels (filtre côté DB)
+        cursor = deps.stock_col.find({
+            "user_id": user_id,
+            "status": "active",
+            "barcode": {"$in": recall_barcodes},
+        }).limit(200)
         async for item in cursor:
             barcode = str(item.get("barcode", "")).strip()
             if barcode not in recall_map:
                 continue
             alert_key = f"recall_{barcode}"
-            already_sent = await deps.user_alerts_col.find_one({"user_id": user_id, "key": alert_key})
-            if already_sent:
+            if alert_key in sent_keys:
                 continue
             recall_info = recall_map[barcode]
             brand = recall_info.get("nom_de_la_marque_du_produit", "")
@@ -129,6 +145,7 @@ async def check_recalls_and_notify(deps: AlertDependencies) -> None:
                 data={"type": "recall", "itemId": str(item["_id"]), "barcode": barcode},
             )
             await deps.user_alerts_col.insert_one({"user_id": user_id, "key": alert_key, "sent_at": utc_now()})
+            sent_keys.add(alert_key)
             logger.info("Recall alert sent — user=%s barcode=%s", user_id, barcode)
 
 
