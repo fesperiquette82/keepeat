@@ -1,4 +1,4 @@
-import React, { useEffect, useState, useRef, useCallback } from 'react';
+import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { View, Text, StyleSheet, TouchableOpacity, Alert, ActivityIndicator } from 'react-native';
 import { useRouter } from 'expo-router';
@@ -6,6 +6,8 @@ import type { PurchaseError, Subscription } from 'react-native-iap';
 import { usePremiumUiStore } from '../store/premiumUiStore';
 import { useAuthStore } from '../store/authStore';
 import { verifyPremiumPurchase } from '../utils/billingService';
+import { buildApiUrl } from '../utils/config';
+import { buildPremiumCopy } from '../utils/premiumPaywallCopy';
 import {
   initIAP,
   endIAP,
@@ -18,16 +20,40 @@ import {
   type PurchaseResult,
 } from '../utils/iapService';
 
+interface GamificationSnapshot {
+  total_saved_euros: number;
+  current_streak: number;
+}
+
+interface MonthlyStatsItem {
+  month: string;
+  saved_euros: number;
+}
+
+interface PersonalizedStats {
+  monthlySavedEuros: number | null;
+  totalSavedEuros: number | null;
+  wasteFreeDays: number | null;
+}
+
 export default function PremiumScreen() {
   const router = useRouter();
   const token = useAuthStore(state => state.token);
   const refreshEntitlements = useAuthStore(state => state.refreshEntitlements);
+  const refreshUsage = useAuthStore(state => state.refreshUsage);
+  const entitlements = useAuthStore(state => state.entitlements);
+  const usage = useAuthStore(state => state.usage);
   const context = usePremiumUiStore(state => state.context);
   const closePaywall = usePremiumUiStore(state => state.closePaywall);
 
   const [product, setProduct] = useState<Subscription | null>(null);
   const [isStoreLoading, setIsStoreLoading] = useState(true);
   const [isPurchasing, setIsPurchasing] = useState(false);
+  const [personalizedStats, setPersonalizedStats] = useState<PersonalizedStats>({
+    monthlySavedEuros: null,
+    totalSavedEuros: null,
+    wasteFreeDays: null,
+  });
   const cleanupRef = useRef<(() => void) | null>(null);
 
   const handleClose = useCallback(() => {
@@ -45,9 +71,10 @@ export default function PremiumScreen() {
         purchase_token: result.purchaseToken,
       });
       await refreshEntitlements();
+      await refreshUsage();
       Alert.alert(
         'Bienvenue dans KeepEat Premium !',
-        'Toutes les fonctionnalités sont maintenant débloquées.',
+        'Toutes les fonctionnalités premium sont maintenant activées.',
         [{ text: 'Super !', onPress: handleClose }],
       );
     } catch {
@@ -55,7 +82,7 @@ export default function PremiumScreen() {
     } finally {
       setIsPurchasing(false);
     }
-  }, [token, refreshEntitlements, handleClose]);
+  }, [token, refreshEntitlements, refreshUsage, handleClose]);
 
   useEffect(() => {
     let mounted = true;
@@ -71,7 +98,7 @@ export default function PremiumScreen() {
       cleanupRef.current = subscribeToPurchaseUpdates(
         handlePurchaseResult,
         (err: PurchaseError) => {
-          if (err.code !== 'E_USER_CANCELLED') {
+          if (String(err.code) !== 'E_USER_CANCELLED') {
             Alert.alert('Erreur', err.message || 'Achat échoué.');
           }
           setIsPurchasing(false);
@@ -87,6 +114,54 @@ export default function PremiumScreen() {
       endIAP();
     };
   }, [handlePurchaseResult]);
+
+  useEffect(() => {
+    if (!token) return;
+
+    const fetchPersonalizedStats = async () => {
+      try {
+        const [gamifRes, monthlyRes] = await Promise.all([
+          fetch(buildApiUrl('/api/gamification'), { headers: { Authorization: `Bearer ${token}` } }),
+          fetch(buildApiUrl('/api/stats/monthly?months=1'), { headers: { Authorization: `Bearer ${token}` } }),
+        ]);
+
+        const nextStats: PersonalizedStats = {
+          monthlySavedEuros: null,
+          totalSavedEuros: null,
+          wasteFreeDays: null,
+        };
+
+        if (gamifRes.ok) {
+          const gamifData = await gamifRes.json() as GamificationSnapshot;
+          if (typeof gamifData.total_saved_euros === 'number') {
+            nextStats.totalSavedEuros = gamifData.total_saved_euros;
+          }
+          if (typeof gamifData.current_streak === 'number') {
+            nextStats.wasteFreeDays = gamifData.current_streak;
+          }
+        }
+
+        if (monthlyRes.ok) {
+          const monthlyData = await monthlyRes.json() as MonthlyStatsItem[];
+          if (Array.isArray(monthlyData) && monthlyData[0] && typeof monthlyData[0].saved_euros === 'number') {
+            nextStats.monthlySavedEuros = monthlyData[0].saved_euros;
+          }
+        }
+
+        setPersonalizedStats(nextStats);
+      } catch {
+        setPersonalizedStats({ monthlySavedEuros: null, totalSavedEuros: null, wasteFreeDays: null });
+      }
+    };
+
+    fetchPersonalizedStats();
+  }, [token]);
+
+  useEffect(() => {
+    if (!token) return;
+    refreshEntitlements();
+    refreshUsage();
+  }, [refreshEntitlements, refreshUsage, token]);
 
   const handleSubscribe = async () => {
     if (isPurchasing) return;
@@ -116,6 +191,7 @@ export default function PremiumScreen() {
         });
       }
       await refreshEntitlements();
+      await refreshUsage();
       Alert.alert('Restauration terminée', 'Vos droits premium ont été synchronisés.');
       handleClose();
     } catch {
@@ -126,27 +202,65 @@ export default function PremiumScreen() {
   };
 
   const priceText = getFormattedPrice(product);
+  const copy = buildPremiumCopy({ entitlements, usage });
+
+  const personalizedLines = useMemo(() => {
+    const lines: string[] = [];
+    if (typeof personalizedStats.monthlySavedEuros === 'number' && personalizedStats.monthlySavedEuros > 0) {
+      lines.push(`Vous avez déjà économisé ~${personalizedStats.monthlySavedEuros.toFixed(1)} € ce mois-ci.`);
+    }
+    if (typeof personalizedStats.totalSavedEuros === 'number' && personalizedStats.totalSavedEuros > 0) {
+      lines.push(`Total suivi dans l’app : ~${personalizedStats.totalSavedEuros.toFixed(1)} € économisés.`);
+    }
+    if (typeof personalizedStats.wasteFreeDays === 'number' && personalizedStats.wasteFreeDays > 0) {
+      lines.push(`Votre série actuelle : ${personalizedStats.wasteFreeDays} jour(s) sans gaspillage.`);
+    }
+    return lines;
+  }, [personalizedStats.monthlySavedEuros, personalizedStats.totalSavedEuros, personalizedStats.wasteFreeDays]);
+
+  const primaryButtonText = priceText === '...'
+    ? `${copy.ctaLabel} — prix visible sur Google Play`
+    : `${copy.ctaLabel} — ${priceText}/mois`;
+
+  const contextLabel = useMemo(() => {
+    if (!context) return null;
+    if (context.code === 'QUOTA_EXCEEDED') {
+      if (typeof context.remaining === 'number') {
+        return `Quota atteint pour ${context.feature ?? 'cette fonctionnalité'} (${context.remaining} restant).`;
+      }
+      return `Quota atteint pour ${context.feature ?? 'cette fonctionnalité'}.`;
+    }
+    return `Accès Premium requis pour ${context.feature ?? 'cette fonctionnalité'}.`;
+  }, [context]);
 
   return (
     <SafeAreaView style={styles.container}>
       <View style={styles.card}>
-        <Text style={styles.title}>KeepEat Premium</Text>
-        <Text style={styles.subtitle}>Débloquez toutes les fonctionnalités sans limite.</Text>
+        <Text style={styles.title}>{copy.heroTitle}</Text>
+        <Text style={styles.subtitle}>{copy.heroSubtitle}</Text>
 
         <View style={styles.featureList}>
-          <Text style={styles.feature}>• Scan OCR ticket de caisse (200/mois)</Text>
-          <Text style={styles.feature}>• Recettes IA personnalisées (200/mois)</Text>
-          <Text style={styles.feature}>• Rappels prioritaires configurables</Text>
-          <Text style={styles.feature}>• Statistiques avancées sur 24 mois</Text>
+          {copy.benefits.map((benefit) => (
+            <Text key={benefit.id} style={styles.feature}>• {benefit.text}</Text>
+          ))}
         </View>
 
-        {context && (
-          <View style={styles.statusBox}>
-            <Text style={styles.statusText}>Raison : {context.code}</Text>
-            {!!context.feature && <Text style={styles.statusText}>Fonctionnalité : {context.feature}</Text>}
-            {typeof context.remaining === 'number' && (
-              <Text style={styles.statusText}>Utilisations restantes : {context.remaining}</Text>
-            )}
+        <View style={styles.statusBox}>
+          {personalizedLines.length > 0 ? (
+            <>
+              {personalizedLines.map((line) => (
+                <Text key={line} style={styles.statusText}>{line}</Text>
+              ))}
+              <Text style={styles.statusTextStrong}>Premium vous aide à aller plus loin.</Text>
+            </>
+          ) : (
+            <Text style={styles.statusText}>{copy.genericPersonalization}</Text>
+          )}
+        </View>
+
+        {!!contextLabel && (
+          <View style={styles.contextBox}>
+            <Text style={styles.contextText}>{contextLabel}</Text>
           </View>
         )}
 
@@ -161,7 +275,7 @@ export default function PremiumScreen() {
             {isPurchasing ? (
               <ActivityIndicator color="#fff" />
             ) : (
-              <Text style={styles.primaryLabel}>S'abonner — {priceText}/mois</Text>
+              <Text style={styles.primaryLabel}>{primaryButtonText}</Text>
             )}
           </TouchableOpacity>
         )}
@@ -184,13 +298,16 @@ export default function PremiumScreen() {
 
 const styles = StyleSheet.create({
   container: { flex: 1, backgroundColor: '#F7F8FA', justifyContent: 'center', padding: 16 },
-  card: { backgroundColor: '#fff', borderRadius: 14, padding: 16, gap: 12 },
-  title: { fontSize: 24, fontWeight: '800', color: '#111827' },
-  subtitle: { fontSize: 14, color: '#4B5563' },
-  featureList: { gap: 6 },
-  feature: { fontSize: 14, color: '#374151' },
+  card: { backgroundColor: '#fff', borderRadius: 14, padding: 16, gap: 14 },
+  title: { fontSize: 27, fontWeight: '800', color: '#111827', lineHeight: 34 },
+  subtitle: { fontSize: 15, color: '#4B5563', lineHeight: 21 },
+  featureList: { gap: 8 },
+  feature: { fontSize: 14, color: '#1F2937', lineHeight: 20 },
   statusBox: { backgroundColor: '#F3F4F6', borderRadius: 10, padding: 10, gap: 4 },
-  statusText: { color: '#374151', fontSize: 12 },
+  statusText: { color: '#374151', fontSize: 13, lineHeight: 19 },
+  statusTextStrong: { color: '#111827', fontSize: 13, fontWeight: '700', marginTop: 2 },
+  contextBox: { backgroundColor: '#EFF6FF', borderRadius: 10, padding: 10 },
+  contextText: { color: '#1D4ED8', fontSize: 12, fontWeight: '600' },
   loader: { marginVertical: 16 },
   primaryButton: { backgroundColor: '#16A34A', borderRadius: 10, paddingVertical: 14, alignItems: 'center' },
   primaryLabel: { color: '#fff', fontWeight: '700', fontSize: 15 },
