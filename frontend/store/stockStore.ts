@@ -12,11 +12,21 @@ import { buildApiUrl } from '../utils/config';
 import { logger } from '../utils/logger';
 import { extractPremiumErrorDetail } from '../utils/premiumErrors';
 import { usePremiumUiStore } from './premiumUiStore';
+import type { AxiosError, AxiosRequestConfig } from 'axios';
 
 const authHeaders = () => {
   const token = useAuthStore.getState().token;
   return token ? { Authorization: `Bearer ${token}` } : {};
 };
+
+type AuthAxiosConfig = AxiosRequestConfig & {
+  requiresAuthLogout?: boolean;
+};
+
+const authRequestConfig = (requiresAuthLogout = true): AuthAxiosConfig => ({
+  headers: authHeaders(),
+  requiresAuthLogout,
+});
 
 export interface HistoryItem {
   name: string;
@@ -79,8 +89,11 @@ interface PendingMutation {
 // Intercepteur Axios global : déconnexion automatique sur token expiré (401)
 axios.interceptors.response.use(
   (response) => response,
-  (error) => {
-    if (error.response?.status === 401) {
+  (error: AxiosError) => {
+    const status = error.response?.status;
+    const config = (error.config ?? null) as AuthAxiosConfig | null;
+    const requiresAuthLogout = config?.requiresAuthLogout === true;
+    if (status === 401 && requiresAuthLogout) {
       // Import dynamique pour éviter la dépendance circulaire au niveau module
       const { logout } = useAuthStore.getState();
       logout();
@@ -188,7 +201,7 @@ export const useStockStore = create<StockStore>()(
         for (const mutation of [...pendingMutations]) {
           try {
             if (mutation.type === 'ADD') {
-              const res = await axios.post(buildApiUrl('/api/stock'), mutation.payload, { headers: authHeaders() });
+              const res = await axios.post(buildApiUrl('/api/stock'), mutation.payload, authRequestConfig());
               const realItem: StockItem = res.data;
               // Remplacer le tempId par le vrai ID dans le state local
               set(state => ({
@@ -198,11 +211,11 @@ export const useStockStore = create<StockStore>()(
               }));
               scheduleExpiryNotification(realItem);
             } else if (mutation.type === 'CONSUME') {
-              await axios.post(buildApiUrl(`/api/stock/${mutation.payload.itemId}/consume`), {}, { headers: authHeaders() });
+              await axios.post(buildApiUrl(`/api/stock/${mutation.payload.itemId}/consume`), {}, authRequestConfig());
             } else if (mutation.type === 'THROW') {
-              await axios.post(buildApiUrl(`/api/stock/${mutation.payload.itemId}/throw`), {}, { headers: authHeaders() });
+              await axios.post(buildApiUrl(`/api/stock/${mutation.payload.itemId}/throw`), {}, authRequestConfig());
             } else if (mutation.type === 'UPDATE') {
-              await axios.put(buildApiUrl(`/api/stock/${mutation.payload.itemId}`), mutation.payload.updates, { headers: authHeaders() });
+              await axios.put(buildApiUrl(`/api/stock/${mutation.payload.itemId}`), mutation.payload.updates, authRequestConfig());
             }
             // Mutation réussie : la retirer de la queue
             remaining.splice(remaining.findIndex(m => m.id === mutation.id), 1);
@@ -228,7 +241,7 @@ export const useStockStore = create<StockStore>()(
       fetchStock: async () => {
         set(state => ({ loadingCount: state.loadingCount + 1, isLoading: true, error: null }));
         try {
-          const res = await axios.get(buildApiUrl('/api/stock?status=active'), { headers: authHeaders() });
+          const res = await axios.get(buildApiUrl('/api/stock?status=active'), authRequestConfig());
           const items: StockItem[] = res.data;
           set({ items });
           rescheduleAllNotifications(items);
@@ -251,7 +264,7 @@ export const useStockStore = create<StockStore>()(
       fetchPriorityItems: async () => {
         set(state => ({ loadingCount: state.loadingCount + 1, isLoading: true }));
         try {
-          const res = await axios.get(buildApiUrl('/api/stock/priority'), { headers: authHeaders() });
+          const res = await axios.get(buildApiUrl('/api/stock/priority'), authRequestConfig());
           set({ priorityItems: res.data, error: null });
         } catch {
           // Garder le cache en cas d'erreur réseau
@@ -283,7 +296,7 @@ export const useStockStore = create<StockStore>()(
           const res = await axios.post<PriorityRefreshResult>(
             url,
             { lead_days: leadDays, reminders_enabled: remindersEnabled },
-            { headers: authHeaders() },
+            authRequestConfig(),
           );
           set({ priorityItems: res.data.items, error: null });
           logger.info('[STOCK] priority refresh success', {
@@ -320,7 +333,7 @@ export const useStockStore = create<StockStore>()(
       fetchStats: async () => {
         set(state => ({ loadingCount: state.loadingCount + 1, isLoading: true }));
         try {
-          const res = await axios.get(buildApiUrl('/api/stats'), { headers: authHeaders() });
+          const res = await axios.get(buildApiUrl('/api/stats'), authRequestConfig());
           set({ stats: res.data });
         } catch {
           // Garder les stats cachées en cas d'erreur réseau
@@ -334,7 +347,7 @@ export const useStockStore = create<StockStore>()(
 
       fetchHistory: async () => {
         try {
-          const res = await axios.get(buildApiUrl('/api/stock/history?limit=15'), { headers: authHeaders() });
+          const res = await axios.get(buildApiUrl('/api/stock/history?limit=15'), authRequestConfig());
           set({ historyItems: res.data });
         } catch {
           // Garder le cache en cas d'erreur réseau
@@ -370,7 +383,7 @@ export const useStockStore = create<StockStore>()(
         }
 
         try {
-          await axios.post(buildApiUrl(`/api/stock/${itemId}/consume`), {}, { headers: authHeaders() });
+          await axios.post(buildApiUrl(`/api/stock/${itemId}/consume`), {}, authRequestConfig());
           const s = get();
           await Promise.all([s.fetchStock(), s.fetchPriorityItems(), s.fetchStats()]);
         } catch (err: any) {
@@ -418,7 +431,7 @@ export const useStockStore = create<StockStore>()(
         }
 
         try {
-          await axios.post(buildApiUrl(`/api/stock/${itemId}/throw`), {}, { headers: authHeaders() });
+          await axios.post(buildApiUrl(`/api/stock/${itemId}/throw`), {}, authRequestConfig());
           const s = get();
           await Promise.all([s.fetchStock(), s.fetchPriorityItems(), s.fetchStats()]);
         } catch (err: any) {
@@ -439,7 +452,7 @@ export const useStockStore = create<StockStore>()(
       lookupProduct: async (barcode: string) => {
         if (_barcodeCache[barcode]) return _barcodeCache[barcode];
         try {
-          const res = await axios.get(buildApiUrl(`/api/product/${barcode}`));
+          const res = await axios.get(buildApiUrl(`/api/product/${barcode}`), authRequestConfig(false));
           _barcodeCache[barcode] = res.data;
           return res.data;
         } catch {
@@ -478,7 +491,7 @@ export const useStockStore = create<StockStore>()(
         }
 
         try {
-          const res = await axios.post(buildApiUrl('/api/stock'), item, { headers: authHeaders() });
+          const res = await axios.post(buildApiUrl('/api/stock'), item, authRequestConfig());
           const newItem: StockItem = res.data;
           const s = get();
           await Promise.all([s.fetchStock(), s.fetchPriorityItems(), s.fetchStats()]);
@@ -537,7 +550,7 @@ export const useStockStore = create<StockStore>()(
         }
 
         try {
-          const res = await axios.put(buildApiUrl(`/api/stock/${itemId}`), updates, { headers: authHeaders() });
+          const res = await axios.put(buildApiUrl(`/api/stock/${itemId}`), updates, authRequestConfig());
           const updatedItem: StockItem = res.data;
           cancelExpiryNotification(itemId);
           scheduleExpiryNotification(updatedItem);
