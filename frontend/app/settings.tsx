@@ -11,6 +11,7 @@ import { useLanguageStore } from '../store/languageStore';
 import { restorePremiumPurchase } from '../utils/billingService';
 import { isAdminUser } from '../utils/adminAccess';
 import { logger } from '../utils/logger';
+import { resolvePremiumStatus } from '../utils/premiumStatus';
 
 function formatLastUpdate(value: string | null, language: 'fr' | 'en', fallbackText: string): string {
   if (!value) return fallbackText;
@@ -22,6 +23,16 @@ function formatLastUpdate(value: string | null, language: 'fr' | 'en', fallbackT
     year: 'numeric',
     hour: '2-digit',
     minute: '2-digit',
+  });
+}
+
+function formatPremiumDate(value: string, language: 'fr' | 'en'): string {
+  const date = new Date(value);
+  if (Number.isNaN(date.getTime())) return value;
+  return date.toLocaleDateString(language === 'en' ? 'en-US' : 'fr-FR', {
+    day: '2-digit',
+    month: '2-digit',
+    year: 'numeric',
   });
 }
 
@@ -47,7 +58,9 @@ export default function SettingsScreen() {
   const token = useAuthStore((state) => state.token);
   const user = useAuthStore((state) => state.user);
   const refreshEntitlements = useAuthStore((state) => state.refreshEntitlements);
+  const entitlements = useAuthStore((state) => state.entitlements);
   const plan = useAuthStore((state) => state.plan);
+  const authError = useAuthStore((state) => state.error);
   const canAccessAdmin = isAdminUser(user);
   const { t } = useLanguageStore();
   const onPressRefreshRecalls = useCallback(() => {
@@ -57,6 +70,20 @@ export default function SettingsScreen() {
   }, [forceRefreshReminderProducts]);
 
   const reminderOptions: ReminderLeadDays[] = useMemo(() => [1, 2, 3], []);
+  const premiumStatus = useMemo(() => resolvePremiumStatus({
+    token,
+    plan,
+    user,
+    entitlements,
+    error: authError,
+  }), [authError, entitlements, plan, token, user]);
+  const premiumDateText = useMemo(() => {
+    if (!premiumStatus.premiumDate || !premiumStatus.premiumDateKind) return null;
+    const label = premiumStatus.premiumDateKind === 'renewal'
+      ? t('premiumRenewsOn')
+      : t('premiumExpiresOn');
+    return `${label} ${formatPremiumDate(premiumStatus.premiumDate, language)}`;
+  }, [language, premiumStatus.premiumDate, premiumStatus.premiumDateKind, t]);
 
   return (
     <SafeAreaView style={styles.container}>
@@ -151,26 +178,41 @@ export default function SettingsScreen() {
 
         <View style={styles.card}>
           <Text style={styles.sectionTitle}>{t('premium')}</Text>
-          <Text style={styles.systemInfo}>{t('currentPlan', { plan })}</Text>
-          <TouchableOpacity style={styles.refreshButton} onPress={() => router.push('/premium')}>
-            <Ionicons name="diamond-outline" size={16} color="#FFFFFF" />
-            <Text style={styles.refreshButtonText}>{t('upgradePremium')}</Text>
-          </TouchableOpacity>
-          <TouchableOpacity
-            style={styles.restoreButton}
-            onPress={async () => {
-              if (!token) return;
-              try {
-                await restorePremiumPurchase(token);
-                await refreshEntitlements();
-                Alert.alert(t('restoreTitle'), t('restoreSuccess'));
-              } catch {
-                Alert.alert(t('errorTitle'), t('restoreError'));
-              }
-            }}
-          >
-            <Text style={styles.restoreButtonText}>{t('restorePurchases')}</Text>
-          </TouchableOpacity>
+          {premiumStatus.isLoading ? (
+            <View style={styles.loadingRow}>
+              <ActivityIndicator size="small" color="#16A34A" />
+              <Text style={styles.systemInfo}>{t('premiumStatusLoading')}</Text>
+            </View>
+          ) : premiumStatus.isPremiumActive ? (
+            <>
+              <Text style={styles.systemInfo}>{t('currentPlanPremium')}</Text>
+              <Text style={styles.systemInfo}>{t('premiumStatusActive')}</Text>
+              {!!premiumDateText && <Text style={styles.systemInfo}>{premiumDateText}</Text>}
+            </>
+          ) : (
+            <>
+              <Text style={styles.systemInfo}>{t('currentPlan', { plan })}</Text>
+              <TouchableOpacity style={styles.refreshButton} onPress={() => router.push('/premium')}>
+                <Ionicons name="diamond-outline" size={16} color="#FFFFFF" />
+                <Text style={styles.refreshButtonText}>{t('upgradePremium')}</Text>
+              </TouchableOpacity>
+              <TouchableOpacity
+                style={styles.restoreButton}
+                onPress={async () => {
+                  if (!token) return;
+                  try {
+                    await restorePremiumPurchase(token);
+                    await refreshEntitlements();
+                    Alert.alert(t('restoreTitle'), t('restoreSuccess'));
+                  } catch {
+                    Alert.alert(t('errorTitle'), t('restoreError'));
+                  }
+                }}
+              >
+                <Text style={styles.restoreButtonText}>{t('restorePurchases')}</Text>
+              </TouchableOpacity>
+            </>
+          )}
         </View>
 
         {canAccessAdmin && (
@@ -223,6 +265,7 @@ const styles = StyleSheet.create({
   refreshButtonDisabled: { opacity: 0.7 },
   refreshButtonText: { color: '#FFFFFF', fontWeight: '700', fontSize: 14 },
   restoreButton: { borderWidth: 1, borderColor: '#16A34A', borderRadius: 10, minHeight: 40, alignItems: 'center', justifyContent: 'center' },
+  loadingRow: { flexDirection: 'row', alignItems: 'center', gap: 8 },
   restoreButtonText: { color: '#166534', fontWeight: '700', fontSize: 14 },
   successText: { color: '#166534', fontSize: 12, fontWeight: '500' },
   errorText: { color: '#B91C1C', fontSize: 12, fontWeight: '500' },
