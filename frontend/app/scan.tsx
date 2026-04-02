@@ -13,7 +13,7 @@ import { CameraView, scanFromURLAsync, useCameraPermissions } from 'expo-camera'
 import { useRouter } from 'expo-router';
 import Ionicons from '@expo/vector-icons/Ionicons';
 import { useLanguageStore } from '../store/languageStore';
-import { pickImageFromGallery } from '../utils/galleryPicker';
+import { getGalleryErrorMessage, pickImageFromGallery } from '../utils/galleryPicker';
 
 export default function ScanScreen() {
   const router = useRouter();
@@ -37,18 +37,16 @@ export default function ScanScreen() {
   const handleImportBarcode = async () => {
     const picked = await pickImageFromGallery({ includeBase64: false, quality: 0.9 });
     if (picked.status === 'cancelled') return;
-    if (picked.status === 'permission_denied') {
-      Alert.alert(t('errorTitle'), t('galleryPermissionRequired'));
+    const galleryError = getGalleryErrorMessage(picked, {
+      permissionDenied: t('galleryPermissionRequired'),
+      unavailable: t('galleryUnavailable'),
+      invalidImage: t('invalidImage'),
+    });
+    if (galleryError) {
+      Alert.alert(t('errorTitle'), galleryError);
       return;
     }
-    if (picked.status === 'unavailable') {
-      Alert.alert(t('errorTitle'), t('galleryUnavailable'));
-      return;
-    }
-    if (picked.status !== 'success') {
-      Alert.alert(t('errorTitle'), t('invalidImage'));
-      return;
-    }
+    if (picked.status !== 'success') return;
     try {
       const results = await scanFromURLAsync(picked.asset.uri, ['ean13', 'ean8', 'upc_a', 'upc_e', 'code128', 'code39']);
       const barcode = results?.[0]?.data;

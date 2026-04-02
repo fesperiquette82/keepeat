@@ -12,6 +12,7 @@
       "supportsTablet": true,
       "infoPlist": {
         "NSCameraUsageDescription": "Scan barcodes to add products",
+        "NSPhotoLibraryUsageDescription": "Import photos from your library to scan products and receipts",
         "UIBackgroundModes": [
           "remote-notification"
         ]
@@ -28,6 +29,7 @@
       "edgeToEdgeEnabled": true,
       "permissions": [
         "android.permission.CAMERA",
+        "android.permission.READ_MEDIA_IMAGES",
         "android.permission.RECEIVE_BOOT_COMPLETED",
         "android.permission.SCHEDULE_EXACT_ALARM",
         "android.permission.USE_EXACT_ALARM",
@@ -56,6 +58,12 @@
       ],
       "expo-font",
       "expo-web-browser",
+      [
+        "expo-image-picker",
+        {
+          "photosPermission": "Allow KeepEat to access your photos to scan products and receipts."
+        }
+      ],
       [
         "expo-build-properties",
         {

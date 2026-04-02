@@ -20,7 +20,7 @@ import { useAuthStore } from '../store/authStore';
 import { C } from '../utils/theme';
 import { extractPremiumErrorDetail } from '../utils/premiumErrors';
 import { usePremiumUiStore } from '../store/premiumUiStore';
-import { pickImageFromGallery } from '../utils/galleryPicker';
+import { getGalleryErrorMessage, pickImageFromGallery } from '../utils/galleryPicker';
 
 // ─── Types ────────────────────────────────────────────────────────────────────
 
@@ -121,29 +121,23 @@ export default function ScanReceiptScreen() {
   const handleImportFromGallery = async () => {
     const picked = await pickImageFromGallery({ includeBase64: true, quality: 0.75 });
     if (picked.status === 'cancelled') return;
-    if (picked.status === 'permission_denied') {
+    const galleryError = getGalleryErrorMessage(picked, {
+      permissionDenied: isFr
+        ? "Autorisez l'accès à la galerie pour importer une photo."
+        : 'Allow photo library access to import an image.',
+      unavailable: isFr
+        ? "L'import galerie n'est pas prêt dans ce build. Recompilez l'application après installation de expo-image-picker."
+        : 'Gallery import is not available in this build. Rebuild the app after installing expo-image-picker.',
+      invalidImage: isFr ? "Impossible d'analyser cette image." : 'Unable to analyse this image.',
+    });
+    if (galleryError) {
       Alert.alert(
-        isFr ? 'Accès galerie requis' : 'Gallery permission required',
-        isFr
-          ? "Autorisez l'accès à la galerie pour importer une photo."
-          : 'Allow photo library access to import an image.',
+        isFr ? 'Erreur' : 'Error',
+        galleryError,
       );
       return;
     }
-    if (picked.status === 'unavailable') {
-      Alert.alert(
-        isFr ? 'Galerie indisponible' : 'Gallery unavailable',
-        isFr ? "Le module d'import photo est indisponible." : 'Photo import module is unavailable.',
-      );
-      return;
-    }
-    if (picked.status !== 'success' || !picked.asset.base64) {
-      Alert.alert(
-        isFr ? 'Image invalide' : 'Invalid image',
-        isFr ? "Impossible d'analyser cette image." : 'Unable to analyse this image.',
-      );
-      return;
-    }
+    if (picked.status !== 'success' || !picked.asset.base64) return;
     await processReceiptImage(picked.asset.base64);
   };
 
