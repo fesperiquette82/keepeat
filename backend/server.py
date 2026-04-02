@@ -380,51 +380,54 @@ _PRIVACY_POLICY_HTML = """<!DOCTYPE html>
 <p><em>Dernière mise à jour : avril 2026</em></p>
 
 <h2>1. Qui sommes-nous ?</h2>
-<p>KeepEat est une application mobile de gestion des stocks alimentaires développée et exploitée par Félix Esperiquette.
-Contact : <a href="mailto:fesperiquette@gmail.com">fesperiquette@gmail.com</a></p>
+<p>
+KeepEat est une application mobile de gestion des stocks alimentaires développée et exploitée par Francois Esperiquette.<br>
+Contact : <a href="mailto:fesperiquette@hotmail.com">fesperiquette@hotmail.com</a>
+</p>
 
 <h2>2. Données collectées</h2>
 <ul>
-  <li><strong>Compte</strong> : adresse e-mail, mot de passe (haché bcrypt, jamais en clair).</li>
-  <li><strong>Stock alimentaire</strong> : noms de produits, codes-barres, dates d'expiration, quantités.</li>
-  <li><strong>Photos (OCR)</strong> : les tickets de caisse envoyés sont transmis à l'API OpenAI pour extraction de texte puis supprimés immédiatement — aucune photo n'est stockée sur nos serveurs.</li>
-  <li><strong>Achats in-app</strong> : token d'achat Google Play (nécessaire pour valider l'abonnement Premium).</li>
-  <li><strong>Notifications push</strong> : token Expo Push (pour l'envoi d'alertes d'expiration).</li>
-  <li><strong>Logs techniques</strong> : requêtes API horodatées (sans données personnelles identifiantes).</li>
+  <li><strong>Compte</strong> : adresse e-mail, mot de passe sécurisé (haché).</li>
+  <li><strong>Stock alimentaire</strong> : produits, codes-barres, dates de péremption, quantités.</li>
+  <li><strong>Photos (OCR)</strong> : images envoyées temporairement à un service tiers (OpenAI) pour analyse puis supprimées — aucune photo n’est stockée.</li>
+  <li><strong>Achats in-app</strong> : données nécessaires à la gestion des abonnements via Google Play Billing.</li>
+  <li><strong>Notifications push</strong> : token technique (Expo) pour l’envoi d’alertes.</li>
+  <li><strong>Logs techniques</strong> : informations techniques (ex : adresse IP, appareil) utilisées pour la sécurité et le diagnostic.</li>
 </ul>
 
-<h2>3. Finalités du traitement</h2>
+<h2>3. Finalités</h2>
 <ul>
-  <li>Fonctionnement du service (gestion du stock, recettes, alertes).</li>
-  <li>Validation et gestion des abonnements Premium.</li>
-  <li>Amélioration du service et détection d'anomalies techniques.</li>
+  <li>Fournir les fonctionnalités de l’application (stock, alertes, recettes).</li>
+  <li>Gérer les comptes et abonnements Premium.</li>
+  <li>Envoyer des notifications.</li>
+  <li>Améliorer le service et assurer la sécurité.</li>
 </ul>
 
-<h2>4. Base légale</h2>
-<p>Le traitement est fondé sur l'exécution du contrat (CGU) lors de la création de compte, et sur votre consentement pour les notifications push.</p>
-
-<h2>5. Hébergement et sous-traitants</h2>
+<h2>4. Services tiers</h2>
 <ul>
-  <li><strong>Render</strong> (serveur backend) — États-Unis, clauses contractuelles types UE.</li>
-  <li><strong>MongoDB Atlas</strong> (base de données) — région UE (Paris).</li>
-  <li><strong>OpenAI</strong> (OCR et recettes IA) — États-Unis, clauses contractuelles types UE.</li>
-  <li><strong>Google Play Billing</strong> — pour la validation des achats in-app.</li>
-  <li><strong>Expo / EAS</strong> — pour les notifications push.</li>
+  <li><strong>Render</strong> : hébergement backend.</li>
+  <li><strong>MongoDB Atlas</strong> : base de données.</li>
+  <li><strong>OpenAI</strong> : OCR et analyse.</li>
+  <li><strong>Google Play Billing</strong> : gestion des abonnements.</li>
+  <li><strong>Expo / EAS</strong> : notifications push.</li>
 </ul>
+<p>Certains services peuvent traiter des données hors UE avec des garanties appropriées.</p>
 
-<h2>6. Conservation des données</h2>
-<p>Les données de stock sont conservées pendant la durée d'utilisation du compte, plus 30 jours après suppression.
-Les logs API sont conservés 90 jours. Vous pouvez demander la suppression complète à tout moment.</p>
+<h2>5. Conservation</h2>
+<p>Les données sont conservées pendant la durée d’utilisation du service puis supprimées dans un délai raisonnable.</p>
 
-<h2>7. Vos droits (RGPD)</h2>
-<p>Vous disposez des droits d'accès, rectification, effacement, portabilité et opposition.
-Pour exercer ces droits : <a href="mailto:fesperiquette@gmail.com">fesperiquette@gmail.com</a></p>
+<h2>6. Vos droits</h2>
+<p>
+Vous pouvez demander l’accès, la modification ou la suppression de vos données à tout moment :<br>
+<a href="mailto:fesperiquette@hotmail.com">fesperiquette@hotmail.com</a>
+</p>
 
-<h2>8. Sécurité</h2>
-<p>Les mots de passe sont hachés (bcrypt). Les jetons d'authentification sont stockés dans le trousseau sécurisé de l'appareil (iOS Keychain / Android Keystore). Les communications sont chiffrées via HTTPS/TLS.</p>
+<h2>7. Sécurité</h2>
+<p>Les données sont protégées via chiffrement (HTTPS) et accès sécurisé.</p>
 
-<h2>9. Modifications</h2>
-<p>Toute modification substantielle sera notifiée par e-mail et dans l'application.</p>
+<h2>8. Modifications</h2>
+<p>Cette politique peut être mise à jour à tout moment.</p>
+
 </body>
 </html>"""
 
