@@ -10,7 +10,7 @@ import TextRecognition from '@react-native-ml-kit/text-recognition';
 import * as ImageManipulator from 'expo-image-manipulator';
 import { parseExpiryDate, DATE_FORMAT_EXAMPLES, getBestDateFromOCR } from './dateParser';
 import { addOcrCorrection, findOcrMatch } from './ocrLearning';
-import { pickImageFromGallery } from './galleryPicker';
+import { getGalleryErrorMessage, pickImageFromGallery } from './galleryPicker';
 import type { ParsedDateInfo } from '../component/CameraDateModal';
 
 export interface UseOcrDatePickerResult {
@@ -171,31 +171,23 @@ export function useOcrDatePicker(
   const handleImportAndScan = async () => {
     const picked = await pickImageFromGallery({ includeBase64: false, quality: 0.85 });
     if (picked.status === 'cancelled') return;
-    if (picked.status === 'permission_denied') {
+    const galleryError = getGalleryErrorMessage(picked, {
+      permissionDenied: language === 'fr'
+        ? "Autorisez l'accès à la galerie pour importer une photo."
+        : 'Allow photo library access to import an image.',
+      unavailable: language === 'fr'
+        ? "L'import galerie n'est pas prêt dans ce build. Recompilez l'application après installation de expo-image-picker."
+        : 'Gallery import is not available in this build. Rebuild the app after installing expo-image-picker.',
+      invalidImage: language === 'fr' ? "Impossible d'analyser cette image." : 'Unable to analyse this image.',
+    });
+    if (galleryError) {
       Alert.alert(
-        language === 'fr' ? 'Accès galerie requis' : 'Gallery permission required',
-        language === 'fr'
-          ? "Autorisez l'accès à la galerie pour importer une photo."
-          : 'Allow photo library access to import an image.',
+        language === 'fr' ? 'Erreur' : 'Error',
+        galleryError,
       );
       return;
     }
-    if (picked.status === 'unavailable') {
-      Alert.alert(
-        language === 'fr' ? 'Galerie indisponible' : 'Gallery unavailable',
-        language === 'fr'
-          ? "Le module d'import photo n'est pas disponible."
-          : 'Photo import module is not available.',
-      );
-      return;
-    }
-    if (picked.status !== 'success') {
-      Alert.alert(
-        language === 'fr' ? 'Image invalide' : 'Invalid image',
-        language === 'fr' ? "Impossible d'analyser cette image." : 'Unable to analyse this image.',
-      );
-      return;
-    }
+    if (picked.status !== 'success') return;
     await processImageUri(picked.asset.uri, {
       width: picked.asset.width,
       height: picked.asset.height,

@@ -52,8 +52,8 @@ const translations: Translations = {
     en: 'Allow photo library access to import an image.',
   },
   galleryUnavailable: {
-    fr: "Le module d'import photo est indisponible sur cet appareil.",
-    en: 'Photo import module is unavailable on this device.',
+    fr: "L'import galerie n'est pas prêt dans ce build. Recompilez l'application après installation de expo-image-picker.",
+    en: 'Gallery import is not available in this build. Rebuild the app after installing expo-image-picker.',
   },
   invalidImage: { fr: 'Image invalide ou non exploitable.', en: 'Invalid or unusable image.' },
   barcodeNotDetected: { fr: 'Aucun code-barres détecté sur cette image.', en: 'No barcode detected in this image.' },
