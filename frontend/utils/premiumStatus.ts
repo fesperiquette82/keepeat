@@ -16,14 +16,9 @@ export interface PremiumStatusSnapshot {
   premiumDateKind: 'renewal' | 'expiration' | null;
 }
 
-function isPremiumSyncError(error: string | null): boolean {
-  if (!error) return false;
-  return error.toLowerCase().includes('premium');
-}
-
 export function resolvePremiumStatus(input: PremiumStatusInput): PremiumStatusSnapshot {
   const hasBillingSnapshot = input.entitlements !== null;
-  const hasSyncError = isPremiumSyncError(input.error);
+  const hasSyncError = Boolean(input.error);
   const isLoading = Boolean(input.token) && !hasBillingSnapshot && !hasSyncError;
 
   if (isLoading) {
