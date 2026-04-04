@@ -27,8 +27,8 @@ const TYPE_LABEL: Record<string, string> = {
 type RecipesFilter = 'expiry24h' | 'expiry7d' | 'stock';
 
 const FILTERS: { key: RecipesFilter; label: string }[] = [
-  { key: 'expiry24h', label: '24h' },
-  { key: 'expiry7d', label: '7 jours' },
+  { key: 'expiry24h', label: 'Aujourd’hui' },
+  { key: 'expiry7d', label: 'Cette semaine' },
   { key: 'stock', label: 'Stock classique' },
 ];
 
