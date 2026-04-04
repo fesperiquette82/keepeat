@@ -1,6 +1,7 @@
 import React, { useEffect, useMemo, useState } from 'react';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { View, Text, StyleSheet, TouchableOpacity, FlatList, Image, Alert } from 'react-native';
+import { useRouter } from 'expo-router';
 import Ionicons from '@expo/vector-icons/Ionicons';
 import { Swipeable } from 'react-native-gesture-handler';
 import { useStockStore } from '../../store/stockStore';
@@ -41,6 +42,7 @@ function formatExpiryLabel(expiryDate?: string): string {
 }
 
 export default function StockScreen() {
+  const router = useRouter();
   const { items: storeItems, fetchStock, markConsumed, markThrown } = useStockStore();
   const [activeFilter, setActiveFilter] = useState<StockFilter>('tous');
   const [activeSort, setActiveSort] = useState<StockSort>('expiry');
@@ -182,7 +184,11 @@ export default function StockScreen() {
                   }
                 }}
               >
-                <View style={styles.card}>
+                <TouchableOpacity
+                  style={styles.card}
+                  activeOpacity={0.8}
+                  onPress={() => router.push({ pathname: '/edit-product', params: { id: item.id } })}
+                >
                   <View style={styles.cardMain}>
                     <View style={styles.thumb}>
                       {item.image_url && !imageErrors[item.id] ? (
@@ -201,7 +207,7 @@ export default function StockScreen() {
                     </View>
                   </View>
                   <Text style={styles.expiry}>{formatExpiryLabel(item.expiry_date)}</Text>
-                </View>
+                </TouchableOpacity>
               </Swipeable>
             );
           }}
