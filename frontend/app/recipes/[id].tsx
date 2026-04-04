@@ -1,6 +1,6 @@
 import React, { useEffect, useMemo, useState } from 'react';
 import { SafeAreaView } from 'react-native-safe-area-context';
-import { View, Text, StyleSheet, TouchableOpacity, ScrollView } from 'react-native';
+import { View, Text, StyleSheet, TouchableOpacity, ScrollView, Alert } from 'react-native';
 import Ionicons from '@expo/vector-icons/Ionicons';
 import { useLocalSearchParams, useRouter } from 'expo-router';
 import { useStockStore } from '../../store/stockStore';
@@ -12,6 +12,7 @@ import {
   resolveStockItems,
   type RecipeIngredient,
 } from '../../data/mockDashboardData';
+import { matchRecipeIngredientsToStock } from '../../utils/ingredientMatching';
 
 const TYPE_LABEL: Record<string, string> = {
   apero: 'Apéro',
@@ -38,8 +39,9 @@ function scaleIngredients(ingredients: RecipeIngredient[], factor: number): Reci
 export default function RecipeDetailScreen() {
   const router = useRouter();
   const params = useLocalSearchParams<{ id?: string }>();
-  const { items: storeItems, fetchStock } = useStockStore();
+  const { items: storeItems, fetchStock, markConsumed } = useStockStore();
   const householdSize = useAppSettingsStore((state) => state.householdSize);
+  const [isValidating, setIsValidating] = useState(false);
 
   useEffect(() => {
     fetchStock();
@@ -76,6 +78,54 @@ export default function RecipeDetailScreen() {
   const factor = servings / baseRecipe.baseServings;
   const scaledIngredients = scaleIngredients(baseRecipe.ingredientsDetailed, factor);
   const availableSet = new Set(suggestion?.availableIngredients ?? []);
+
+  const handleValidateRecipe = async () => {
+    if (isValidating) return;
+    setIsValidating(true);
+    try {
+      await fetchStock();
+      const latestItems = useStockStore.getState().items;
+      const ingredientNames = scaledIngredients.map((ingredient) => ingredient.name);
+      const { matchedIds, unmatchedIngredients } = matchRecipeIngredientsToStock(latestItems, ingredientNames);
+      let removedCount = 0;
+      let failedCount = 0;
+
+      for (const itemId of matchedIds) {
+        await markConsumed(itemId);
+        const stillActive = useStockStore.getState().items.some((item) => item.id === itemId);
+        if (stillActive) {
+          failedCount += 1;
+        } else {
+          removedCount += 1;
+        }
+      }
+
+      if (removedCount === 0 && failedCount === 0) {
+        Alert.alert(
+          'Aucun ingrédient retiré',
+          `${unmatchedIngredients.length} ingrédient${unmatchedIngredients.length > 1 ? 's' : ''} non trouvé${unmatchedIngredients.length > 1 ? 's' : ''} dans le stock.`,
+        );
+        return;
+      }
+
+      if (failedCount > 0) {
+        Alert.alert(
+          'Validation partielle',
+          `${removedCount} retiré${removedCount > 1 ? 's' : ''}, ${unmatchedIngredients.length} non trouvé${unmatchedIngredients.length > 1 ? 's' : ''}, ${failedCount} échec${failedCount > 1 ? 's' : ''} de suppression.`,
+        );
+        return;
+      }
+
+      Alert.alert(
+        'Recette validée',
+        `${removedCount} ingrédient${removedCount > 1 ? 's' : ''} retiré${removedCount > 1 ? 's' : ''} du stock.${unmatchedIngredients.length > 0 ? ` ${unmatchedIngredients.length} non trouvé${unmatchedIngredients.length > 1 ? 's' : ''}.` : ''}`,
+      );
+    } catch {
+      Alert.alert('Erreur', 'Impossible de valider la recette pour le stock.');
+    } finally {
+      setIsValidating(false);
+    }
+  };
 
   return (
     <SafeAreaView style={styles.container}>
@@ -134,6 +184,10 @@ export default function RecipeDetailScreen() {
             </View>
           ))}
         </View>
+
+        <TouchableOpacity style={[styles.validateButton, isValidating && styles.validateButtonDisabled]} disabled={isValidating} onPress={handleValidateRecipe}>
+          <Text style={styles.validateButtonLabel}>{isValidating ? 'Validation…' : "J’ai réalisé cette recette"}</Text>
+        </TouchableOpacity>
       </ScrollView>
     </SafeAreaView>
   );
@@ -165,6 +219,9 @@ const styles = StyleSheet.create({
   stepRow: { flexDirection: 'row', gap: 8, alignItems: 'flex-start' },
   stepIndex: { width: 18, color: C.text, fontWeight: '700' },
   stepText: { flex: 1, color: C.textMid, fontWeight: '500' },
+  validateButton: { backgroundColor: C.primary, borderRadius: 12, paddingVertical: 14, alignItems: 'center' },
+  validateButtonDisabled: { opacity: 0.7 },
+  validateButtonLabel: { color: '#fff', fontSize: 14, fontWeight: '800' },
   errorWrap: { flex: 1, justifyContent: 'center', alignItems: 'center', gap: 12, padding: 24 },
   errorTitle: { color: C.text, fontSize: 20, fontWeight: '800' },
   backButton: { backgroundColor: C.primary, paddingHorizontal: 14, paddingVertical: 10, borderRadius: 10 },
