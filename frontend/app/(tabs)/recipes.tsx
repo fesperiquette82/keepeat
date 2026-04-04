@@ -24,24 +24,27 @@ const TYPE_LABEL: Record<string, string> = {
   rapide: 'Rapide',
 };
 
-type RecipesFilter = 'expiry24h' | 'expiry7d' | 'stock';
+type RecipesFilter = 'expiryDay' | 'expiryWeek' | 'expiryMonth' | 'expiryYear';
 
 const FILTERS: { key: RecipesFilter; label: string }[] = [
-  { key: 'expiry24h', label: 'Aujourd’hui' },
-  { key: 'expiry7d', label: 'Cette semaine' },
-  { key: 'stock', label: 'Stock classique' },
+  { key: 'expiryDay', label: 'Ce jour' },
+  { key: 'expiryWeek', label: 'Cette semaine' },
+  { key: 'expiryMonth', label: 'Ce mois' },
+  { key: 'expiryYear', label: 'Cette année' },
 ];
 
-const EMPTY_FILTER_LABELS: Record<Exclude<RecipesFilter, 'stock'>, string> = {
-  expiry24h: 'Aucun produit à consommer dans les prochaines 24h.',
-  expiry7d: 'Aucun produit à consommer dans les 7 prochains jours.',
+const EMPTY_FILTER_LABELS: Record<RecipesFilter, string> = {
+  expiryDay: 'Aucun produit à consommer aujourd’hui.',
+  expiryWeek: 'Aucun produit à consommer cette semaine.',
+  expiryMonth: 'Aucun produit à consommer ce mois.',
+  expiryYear: 'Aucun produit à consommer cette année.',
 };
 
 export default function RecipesScreen() {
   const router = useRouter();
   const { items: storeItems, fetchStock } = useStockStore();
   const [imageErrors, setImageErrors] = React.useState<Record<string, boolean>>({});
-  const [activeFilter, setActiveFilter] = React.useState<RecipesFilter>('expiry24h');
+  const [activeFilter, setActiveFilter] = React.useState<RecipesFilter>('expiryDay');
 
   useEffect(() => {
     fetchStock();
@@ -61,10 +64,7 @@ export default function RecipesScreen() {
     if (items.length === 0) {
       return 'Aucune recette disponible : ajoutez d’abord des ingrédients au stock.';
     }
-    if (activeFilter !== 'stock') {
-      return EMPTY_FILTER_LABELS[activeFilter];
-    }
-    return 'Suggestions indisponibles pour le moment.';
+    return EMPTY_FILTER_LABELS[activeFilter];
   }, [activeFilter, items.length]);
 
   return (
