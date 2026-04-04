@@ -5,7 +5,12 @@ import Ionicons from '@expo/vector-icons/Ionicons';
 import { useRouter } from 'expo-router';
 import { useStockStore } from '../../store/stockStore';
 import { C, T } from '../../utils/theme';
-import { buildRecipeSuggestionsByScope, resolveStockItems, type RecipeSuggestionScope } from '../../data/mockDashboardData';
+import {
+  buildAntiWastePlanByScope,
+  buildRecipeSuggestionsByScope,
+  resolveStockItems,
+  type RecipeSuggestionScope,
+} from '../../data/mockDashboardData';
 import { countLabelFr } from '../../utils/uiText';
 import { UI_LABELS } from '../../utils/uiLabels';
 
@@ -19,16 +24,16 @@ const TYPE_LABEL: Record<string, string> = {
   rapide: 'Rapide',
 };
 
-type RecipesFilter = 'expiry48h' | 'expiry7d' | 'stock';
+type RecipesFilter = 'expiry24h' | 'expiry7d' | 'stock';
 
 const FILTERS: { key: RecipesFilter; label: string }[] = [
-  { key: 'expiry48h', label: '48h' },
+  { key: 'expiry24h', label: '24h' },
   { key: 'expiry7d', label: '7 jours' },
   { key: 'stock', label: 'Stock classique' },
 ];
 
 const EMPTY_FILTER_LABELS: Record<Exclude<RecipesFilter, 'stock'>, string> = {
-  expiry48h: 'Aucun produit à consommer dans les prochaines 48h.',
+  expiry24h: 'Aucun produit à consommer dans les prochaines 24h.',
   expiry7d: 'Aucun produit à consommer dans les 7 prochains jours.',
 };
 
@@ -36,7 +41,7 @@ export default function RecipesScreen() {
   const router = useRouter();
   const { items: storeItems, fetchStock } = useStockStore();
   const [imageErrors, setImageErrors] = React.useState<Record<string, boolean>>({});
-  const [activeFilter, setActiveFilter] = React.useState<RecipesFilter>('expiry48h');
+  const [activeFilter, setActiveFilter] = React.useState<RecipesFilter>('expiry24h');
 
   useEffect(() => {
     fetchStock();
@@ -45,6 +50,12 @@ export default function RecipesScreen() {
   const { items } = useMemo(() => resolveStockItems(storeItems, { useMockFallback: false }), [storeItems]);
   const scope = activeFilter as RecipeSuggestionScope;
   const suggestions = useMemo(() => buildRecipeSuggestionsByScope(items, scope), [items, scope]);
+  const antiWastePlan = useMemo(() => buildAntiWastePlanByScope(items, scope), [items, scope]);
+  const classicSuggestions = useMemo(() => {
+    const planIds = new Set(antiWastePlan.recipes.map((recipe) => recipe.id));
+    return suggestions.filter((recipe) => !planIds.has(recipe.id));
+  }, [antiWastePlan.recipes, suggestions]);
+  const hasAnySuggestion = classicSuggestions.length > 0 || antiWastePlan.recipes.length > 0;
 
   const emptyMessage = useMemo(() => {
     if (items.length === 0) {
@@ -81,7 +92,7 @@ export default function RecipesScreen() {
         </View>
       </View>
 
-      {suggestions.length === 0 ? (
+      {!hasAnySuggestion ? (
         <View style={styles.emptyWrap}>
           <Text style={styles.emptyTitle}>Aucune recette disponible</Text>
           <Text style={styles.emptyText}>{emptyMessage}</Text>
@@ -91,9 +102,34 @@ export default function RecipesScreen() {
         </View>
       ) : (
         <FlatList
-          data={suggestions}
+          data={classicSuggestions}
           keyExtractor={(item) => item.id}
           contentContainerStyle={styles.listContent}
+          ListHeaderComponent={
+            <View style={styles.planCard}>
+              <Text style={styles.planTitle}>Plan anti-gaspi</Text>
+              {antiWastePlan.recipes.length === 0 ? (
+                <Text style={styles.planEmptyText}>Aucun plan utile pour ce segment.</Text>
+              ) : (
+                <>
+                  <Text style={styles.planMeta}>
+                    {antiWastePlan.recipes.length} recette{antiWastePlan.recipes.length > 1 ? 's' : ''} · {countLabelFr(antiWastePlan.coveredCount, 'produit')} couvert{antiWastePlan.coveredCount > 1 ? 's' : ''}
+                  </Text>
+                  {antiWastePlan.recipes.map((recipe, index) => (
+                    <TouchableOpacity
+                      key={`plan-${recipe.id}`}
+                      onPress={() => router.push({ pathname: '/recipes/[id]', params: { id: recipe.id } })}
+                      style={styles.planRecipeButton}
+                    >
+                      <Text style={styles.planRecipeTitle}>{index + 1}. {recipe.title}</Text>
+                      <Text style={styles.planRecipeMeta}>{recipe.timeMinutes} min · {countLabelFr(recipe.matchedCount, 'ingrédient')} disponible{recipe.matchedCount > 1 ? 's' : ''}</Text>
+                    </TouchableOpacity>
+                  ))}
+                </>
+              )}
+              <Text style={styles.planSectionHint}>Suggestions classiques</Text>
+            </View>
+          }
           renderItem={({ item }) => (
             <View style={styles.card}>
               <View style={styles.cardMain}>
@@ -148,6 +184,14 @@ const styles = StyleSheet.create({
   filterChipLabel: { color: '#166534', fontSize: 13, fontWeight: '700' },
   filterChipLabelActive: { color: '#fff' },
   listContent: { padding: 16, gap: 8, paddingBottom: 24 },
+  planCard: { backgroundColor: '#ECFDF3', borderRadius: 12, borderWidth: 1, borderColor: '#BBF7D0', padding: 12, marginBottom: 6, gap: 6 },
+  planTitle: { color: '#14532D', fontSize: 16, fontWeight: '800' },
+  planMeta: { color: '#166534', fontSize: 12, fontWeight: '700' },
+  planEmptyText: { color: '#166534', fontSize: 13, fontWeight: '600' },
+  planRecipeButton: { backgroundColor: '#fff', borderRadius: 10, paddingVertical: 8, paddingHorizontal: 10, borderWidth: 1, borderColor: '#DCFCE7' },
+  planRecipeTitle: { color: C.text, fontSize: 14, fontWeight: '700' },
+  planRecipeMeta: { color: C.textMid, fontSize: 12, fontWeight: '600' },
+  planSectionHint: { marginTop: 2, color: C.textMid, fontSize: 12, fontWeight: '700' },
   card: { backgroundColor: '#fff', borderRadius: 12, padding: 11, gap: 4 },
   cardMain: { flexDirection: 'row', gap: 10 },
   cardText: { flex: 1 },
