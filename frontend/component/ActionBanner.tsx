@@ -10,11 +10,12 @@ interface ActionBannerProps {
   onActionPress?: () => void;
   onClose?: () => void;
   variant?: ActionBannerVariant;
+  bottomOffset?: number;
 }
 
-export function ActionBanner({ message, actionLabel, onActionPress, onClose, variant = 'success' }: ActionBannerProps) {
+export function ActionBanner({ message, actionLabel, onActionPress, onClose, variant = 'success', bottomOffset = 16 }: ActionBannerProps) {
   return (
-    <View style={[styles.container, variant === 'error' && styles.containerError]}>
+    <View style={[styles.container, { bottom: bottomOffset }, variant === 'error' && styles.containerError]}>
       <Text style={styles.message}>{message}</Text>
       <View style={styles.actions}>
         {actionLabel && onActionPress && (
@@ -37,7 +38,6 @@ const styles = StyleSheet.create({
     position: 'absolute',
     left: 16,
     right: 16,
-    bottom: 16,
     backgroundColor: '#14532D',
     borderRadius: 12,
     paddingHorizontal: 12,

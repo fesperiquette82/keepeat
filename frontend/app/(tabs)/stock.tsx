@@ -1,5 +1,5 @@
 import React, { useEffect, useMemo, useState } from 'react';
-import { SafeAreaView } from 'react-native-safe-area-context';
+import { SafeAreaView, useSafeAreaInsets } from 'react-native-safe-area-context';
 import { View, Text, StyleSheet, TouchableOpacity, FlatList, Image, Alert } from 'react-native';
 import { useRouter } from 'expo-router';
 import Ionicons from '@expo/vector-icons/Ionicons';
@@ -45,6 +45,7 @@ function formatExpiryLabel(expiryDate?: string): string {
 
 export default function StockScreen() {
   const router = useRouter();
+  const insets = useSafeAreaInsets();
   const { items: storeItems, fetchStock } = useStockStore();
   const [activeFilter, setActiveFilter] = useState<StockFilter>('tous');
   const [activeSort, setActiveSort] = useState<StockSort>('expiry');
@@ -250,6 +251,7 @@ export default function StockScreen() {
           actionLabel={banner.canUndo ? 'Annuler' : undefined}
           onActionPress={banner.canUndo ? handleUndo : undefined}
           onClose={() => setBanner(null)}
+          bottomOffset={insets.bottom + 136}
         />
       )}
     </SafeAreaView>
