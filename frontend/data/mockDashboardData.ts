@@ -35,6 +35,8 @@ export interface MockRecipe extends BaseMockRecipe {
   ingredients: string[];
 }
 
+export type RecipeSuggestionScope = 'stock' | 'expiry48h' | 'expiry7d';
+
 const TODAY = new Date('2026-03-30T12:00:00Z');
 
 function isoInDays(days: number): string {
@@ -232,6 +234,14 @@ export function daysUntil(expiryDate?: string): number | null {
   return Math.round((expiry.getTime() - today.getTime()) / 86400000);
 }
 
+function isWithinNextHours(expiryDate: string | undefined, hours: number): boolean {
+  if (!expiryDate) return false;
+  const now = new Date(TODAY);
+  const expiry = new Date(expiryDate);
+  const diffMs = expiry.getTime() - now.getTime();
+  return diffMs >= 0 && diffMs <= hours * 3600000;
+}
+
 export function resolveStockItems(
   items: StockItem[],
   options?: { useMockFallback?: boolean },
@@ -263,14 +273,32 @@ export function findExpiringSoon(items: DashboardStockItem[], limit = 3): Dashbo
 }
 
 export function buildRecipeSuggestions(items: DashboardStockItem[]): MockRecipe[] {
-  if (items.length === 0) return [];
+  return buildRecipeSuggestionsByScope(items, 'stock');
+}
 
-  const normalizedNames = items.map((item) => item.name.toLowerCase());
+export function buildRecipeSuggestionsByScope(
+  items: DashboardStockItem[],
+  scope: RecipeSuggestionScope,
+): MockRecipe[] {
+  const activeItems = items.filter((item) => item.status === 'active');
+  if (activeItems.length === 0) return [];
+
+  const scopedItems = scope === 'stock'
+    ? activeItems
+    : activeItems.filter((item) => {
+      if (scope === 'expiry48h') return isWithinNextHours(item.expiry_date, 48);
+      const days = daysUntil(item.expiry_date);
+      if (days === null) return false;
+      return days >= 0 && days <= 7;
+    });
+  if (scopedItems.length === 0) return [];
+
+  const normalizedNames = scopedItems.map((item) => item.name.toLowerCase());
   const urgentNames = new Set(
-    items
+    scopedItems
       .filter((item) => {
         const days = daysUntil(item.expiry_date);
-        return days !== null && days <= 2;
+        return days !== null && days >= 0 && days <= 2;
       })
       .map((item) => item.name.toLowerCase()),
   );

@@ -5,7 +5,7 @@ import Ionicons from '@expo/vector-icons/Ionicons';
 import { useRouter } from 'expo-router';
 import { useStockStore } from '../../store/stockStore';
 import { C, T } from '../../utils/theme';
-import { buildRecipeSuggestions, resolveStockItems } from '../../data/mockDashboardData';
+import { buildRecipeSuggestionsByScope, resolveStockItems, type RecipeSuggestionScope } from '../../data/mockDashboardData';
 import { countLabelFr } from '../../utils/uiText';
 import { UI_LABELS } from '../../utils/uiLabels';
 
@@ -19,27 +19,66 @@ const TYPE_LABEL: Record<string, string> = {
   rapide: 'Rapide',
 };
 
+type RecipesFilter = 'expiry48h' | 'expiry7d' | 'stock';
+
+const FILTERS: { key: RecipesFilter; label: string }[] = [
+  { key: 'expiry48h', label: '48h' },
+  { key: 'expiry7d', label: '7 jours' },
+  { key: 'stock', label: 'Stock classique' },
+];
+
+const EMPTY_FILTER_LABELS: Record<Exclude<RecipesFilter, 'stock'>, string> = {
+  expiry48h: 'Aucun produit à consommer dans les prochaines 48h.',
+  expiry7d: 'Aucun produit à consommer dans les 7 prochains jours.',
+};
+
 export default function RecipesScreen() {
   const router = useRouter();
   const { items: storeItems, fetchStock } = useStockStore();
   const [imageErrors, setImageErrors] = React.useState<Record<string, boolean>>({});
+  const [activeFilter, setActiveFilter] = React.useState<RecipesFilter>('expiry48h');
 
   useEffect(() => {
     fetchStock();
   }, [fetchStock]);
 
   const { items } = useMemo(() => resolveStockItems(storeItems, { useMockFallback: false }), [storeItems]);
-  const suggestions = useMemo(() => buildRecipeSuggestions(items), [items]);
+  const scope = activeFilter as RecipeSuggestionScope;
+  const suggestions = useMemo(() => buildRecipeSuggestionsByScope(items, scope), [items, scope]);
 
-  const emptyMessage = items.length === 0
-    ? 'Aucune recette disponible : ajoutez d’abord des ingrédients au stock.'
-    : 'Suggestions indisponibles pour le moment.';
+  const emptyMessage = useMemo(() => {
+    if (items.length === 0) {
+      return 'Aucune recette disponible : ajoutez d’abord des ingrédients au stock.';
+    }
+    if (activeFilter !== 'stock') {
+      return EMPTY_FILTER_LABELS[activeFilter];
+    }
+    return 'Suggestions indisponibles pour le moment.';
+  }, [activeFilter, items.length]);
 
   return (
     <SafeAreaView style={styles.container}>
       <View style={styles.header}>
         <Text style={styles.title}>Recettes</Text>
         <Text style={styles.subtitle}>Suggestions simples liées à votre stock actuel.</Text>
+      </View>
+
+      <View style={styles.controlsCard}>
+        <Text style={styles.controlsSectionLabel}>Péremption ciblée</Text>
+        <View style={styles.filterRow}>
+          {FILTERS.map((filter) => {
+            const selected = filter.key === activeFilter;
+            return (
+              <TouchableOpacity
+                key={filter.key}
+                style={[styles.filterChip, selected && styles.filterChipActive]}
+                onPress={() => setActiveFilter(filter.key)}
+              >
+                <Text style={[styles.filterChipLabel, selected && styles.filterChipLabelActive]}>{filter.label}</Text>
+              </TouchableOpacity>
+            );
+          })}
+        </View>
       </View>
 
       {suggestions.length === 0 ? (
@@ -101,6 +140,13 @@ const styles = StyleSheet.create({
   header: { paddingHorizontal: 16, paddingTop: 8, paddingBottom: 8 },
   title: { fontSize: 24, fontWeight: '800', color: C.text },
   subtitle: { marginTop: 6, ...T.secondary },
+  controlsCard: { marginHorizontal: 16, marginBottom: 8, padding: 12, borderRadius: 12, backgroundColor: '#fff', borderWidth: 1, borderColor: C.border, gap: 8 },
+  controlsSectionLabel: { ...T.secondarySmall, fontWeight: '700' },
+  filterRow: { flexDirection: 'row', gap: 8, paddingBottom: 2, flexWrap: 'wrap' },
+  filterChip: { paddingVertical: 8, paddingHorizontal: 12, borderRadius: 999, backgroundColor: '#ECFDF3' },
+  filterChipActive: { backgroundColor: C.primary },
+  filterChipLabel: { color: '#166534', fontSize: 13, fontWeight: '700' },
+  filterChipLabelActive: { color: '#fff' },
   listContent: { padding: 16, gap: 8, paddingBottom: 24 },
   card: { backgroundColor: '#fff', borderRadius: 12, padding: 11, gap: 4 },
   cardMain: { flexDirection: 'row', gap: 10 },
