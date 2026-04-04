@@ -5,8 +5,10 @@ import { useRouter } from 'expo-router';
 import Ionicons from '@expo/vector-icons/Ionicons';
 import { Swipeable } from 'react-native-gesture-handler';
 import { useStockStore } from '../../store/stockStore';
+import { ActionBanner } from '../../component/ActionBanner';
 import { C, T } from '../../utils/theme';
 import { daysUntil, resolveStockItems } from '../../data/mockDashboardData';
+import { removeStockItems, undoRemovedStockItems } from '../../utils/stockRemoval';
 import { countLabelFr } from '../../utils/uiText';
 import { storageZoneLabel, UI_LABELS } from '../../utils/uiLabels';
 
@@ -43,11 +45,13 @@ function formatExpiryLabel(expiryDate?: string): string {
 
 export default function StockScreen() {
   const router = useRouter();
-  const { items: storeItems, fetchStock, markConsumed, markThrown } = useStockStore();
+  const { items: storeItems, fetchStock } = useStockStore();
   const [activeFilter, setActiveFilter] = useState<StockFilter>('tous');
   const [activeSort, setActiveSort] = useState<StockSort>('expiry');
   const [imageErrors, setImageErrors] = useState<Record<string, boolean>>({});
   const [processingIds, setProcessingIds] = useState<Record<string, boolean>>({});
+  const [undoItems, setUndoItems] = useState<typeof storeItems>([]);
+  const [banner, setBanner] = useState<{ message: string; canUndo: boolean; variant: 'success' | 'error' } | null>(null);
 
   useEffect(() => {
     fetchStock();
@@ -94,10 +98,21 @@ export default function StockScreen() {
     if (processingIds[itemId]) return;
     setProcessingIds((prev) => ({ ...prev, [itemId]: true }));
     try {
-      if (action === 'used') {
-        await markConsumed(itemId);
+      const result = await removeStockItems([itemId], action);
+      if (result.removedItems.length > 0) {
+        setUndoItems(result.removedItems);
+        setBanner({
+          message: action === 'used' ? 'Article retiré du stock (utilisé).' : 'Article retiré du stock (jeté).',
+          canUndo: true,
+          variant: 'success',
+        });
       } else {
-        await markThrown(itemId);
+        setUndoItems([]);
+        setBanner({
+          message: "Impossible de retirer l'article pour le moment.",
+          canUndo: false,
+          variant: 'error',
+        });
       }
     } catch {
       Alert.alert('Erreur', "Impossible de mettre à jour l'élément.");
@@ -108,6 +123,21 @@ export default function StockScreen() {
         return next;
       });
     }
+  };
+
+  const handleUndo = async () => {
+    if (undoItems.length === 0) return;
+    const result = await undoRemovedStockItems(undoItems);
+    if (result.restoredCount === undoItems.length) {
+      setBanner({ message: 'Annulation réussie : article restauré.', canUndo: false, variant: 'success' });
+    } else {
+      setBanner({
+        message: `Annulation partielle : ${result.restoredCount} restauré(s), ${result.failedCount} échec(s).`,
+        canUndo: false,
+        variant: 'error',
+      });
+    }
+    setUndoItems([]);
   };
 
   const renderSwipeAction = (label: string, color: string, icon: 'restaurant-outline' | 'trash-outline') => (
@@ -211,6 +241,15 @@ export default function StockScreen() {
               </Swipeable>
             );
           }}
+        />
+      )}
+      {banner && (
+        <ActionBanner
+          message={banner.message}
+          variant={banner.variant}
+          actionLabel={banner.canUndo ? 'Annuler' : undefined}
+          onActionPress={banner.canUndo ? handleUndo : undefined}
+          onClose={() => setBanner(null)}
         />
       )}
     </SafeAreaView>

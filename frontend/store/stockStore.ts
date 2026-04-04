@@ -133,6 +133,7 @@ interface StockStore {
   fetchHistory: () => Promise<void>;
   markConsumed: (itemId: string) => Promise<void>;
   markThrown: (itemId: string) => Promise<void>;
+  restoreItem: (itemId: string) => Promise<boolean>;
   lookupProduct: (barcode: string) => Promise<any>;
   addItem: (item: Partial<StockItem>) => Promise<StockItem | null>;
   updateItem: (itemId: string, updates: Partial<StockItem>) => Promise<StockItem | null>;
@@ -446,6 +447,20 @@ export const useStockStore = create<StockStore>()(
             set({ items, priorityItems, stats, error: err.message });
             scheduleExpiryNotification(items.find(i => i.id === itemId)!);
           }
+        }
+      },
+
+      restoreItem: async (itemId: string) => {
+        try {
+          await axios.post(buildApiUrl(`/api/stock/${itemId}/restore`), {}, authRequestConfig());
+          const s = get();
+          await Promise.all([s.fetchStock(), s.fetchPriorityItems(), s.fetchStats(), s.fetchHistory()]);
+          return true;
+        } catch (err: any) {
+          if (!isNetworkError(err)) {
+            set({ error: err.message });
+          }
+          return false;
         }
       },
 

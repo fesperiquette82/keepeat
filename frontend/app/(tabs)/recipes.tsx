@@ -131,7 +131,11 @@ export default function RecipesScreen() {
             </View>
           }
           renderItem={({ item }) => (
-            <View style={styles.card}>
+            <TouchableOpacity
+              style={styles.card}
+              activeOpacity={0.85}
+              onPress={() => router.push({ pathname: '/recipes/[id]', params: { id: item.id } })}
+            >
               <View style={styles.cardMain}>
                 <View style={styles.thumb}>
                   {item.image_url && !imageErrors[item.id] ? (
@@ -158,7 +162,7 @@ export default function RecipesScreen() {
                   </TouchableOpacity>
                 </View>
               </View>
-            </View>
+            </TouchableOpacity>
           )}
           ListFooterComponent={
             <TouchableOpacity style={styles.cta} onPress={() => router.push('/(tabs)/stock')}>

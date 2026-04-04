@@ -5,6 +5,7 @@ import Ionicons from '@expo/vector-icons/Ionicons';
 import { useLocalSearchParams, useRouter } from 'expo-router';
 import { useStockStore } from '../../store/stockStore';
 import { useAppSettingsStore } from '../../store/appSettingsStore';
+import { ActionBanner } from '../../component/ActionBanner';
 import { C, T } from '../../utils/theme';
 import {
   buildRecipeSuggestions,
@@ -13,6 +14,7 @@ import {
   type RecipeIngredient,
 } from '../../data/mockDashboardData';
 import { matchRecipeIngredientsToStock } from '../../utils/ingredientMatching';
+import { removeStockItems, undoRemovedStockItems } from '../../utils/stockRemoval';
 
 const TYPE_LABEL: Record<string, string> = {
   apero: 'Apéro',
@@ -39,9 +41,11 @@ function scaleIngredients(ingredients: RecipeIngredient[], factor: number): Reci
 export default function RecipeDetailScreen() {
   const router = useRouter();
   const params = useLocalSearchParams<{ id?: string }>();
-  const { items: storeItems, fetchStock, markConsumed } = useStockStore();
+  const { items: storeItems, fetchStock } = useStockStore();
   const householdSize = useAppSettingsStore((state) => state.householdSize);
   const [isValidating, setIsValidating] = useState(false);
+  const [undoItems, setUndoItems] = useState<typeof storeItems>([]);
+  const [banner, setBanner] = useState<{ message: string; canUndo: boolean; variant: 'success' | 'error' } | null>(null);
 
   useEffect(() => {
     fetchStock();
@@ -87,44 +91,56 @@ export default function RecipeDetailScreen() {
       const latestItems = useStockStore.getState().items;
       const ingredientNames = scaledIngredients.map((ingredient) => ingredient.name);
       const { matchedIds, unmatchedIngredients } = matchRecipeIngredientsToStock(latestItems, ingredientNames);
-      let removedCount = 0;
-      let failedCount = 0;
-
-      for (const itemId of matchedIds) {
-        await markConsumed(itemId);
-        const stillActive = useStockStore.getState().items.some((item) => item.id === itemId);
-        if (stillActive) {
-          failedCount += 1;
-        } else {
-          removedCount += 1;
-        }
-      }
+      const result = await removeStockItems(matchedIds, 'used');
+      const removedCount = result.removedItems.length;
+      const failedCount = result.failedCount;
 
       if (removedCount === 0 && failedCount === 0) {
-        Alert.alert(
-          'Aucun ingrédient retiré',
-          `${unmatchedIngredients.length} ingrédient${unmatchedIngredients.length > 1 ? 's' : ''} non trouvé${unmatchedIngredients.length > 1 ? 's' : ''} dans le stock.`,
-        );
+        setUndoItems([]);
+        setBanner({
+          message: `${unmatchedIngredients.length} ingrédient${unmatchedIngredients.length > 1 ? 's' : ''} non trouvé${unmatchedIngredients.length > 1 ? 's' : ''} dans le stock.`,
+          canUndo: false,
+          variant: 'error',
+        });
         return;
       }
 
       if (failedCount > 0) {
-        Alert.alert(
-          'Validation partielle',
-          `${removedCount} retiré${removedCount > 1 ? 's' : ''}, ${unmatchedIngredients.length} non trouvé${unmatchedIngredients.length > 1 ? 's' : ''}, ${failedCount} échec${failedCount > 1 ? 's' : ''} de suppression.`,
-        );
+        setUndoItems(result.removedItems);
+        setBanner({
+          message: `${removedCount} retiré${removedCount > 1 ? 's' : ''}, ${unmatchedIngredients.length} non trouvé${unmatchedIngredients.length > 1 ? 's' : ''}, ${failedCount} échec${failedCount > 1 ? 's' : ''}.`,
+          canUndo: removedCount > 0,
+          variant: 'error',
+        });
         return;
       }
 
-      Alert.alert(
-        'Recette validée',
-        `${removedCount} ingrédient${removedCount > 1 ? 's' : ''} retiré${removedCount > 1 ? 's' : ''} du stock.${unmatchedIngredients.length > 0 ? ` ${unmatchedIngredients.length} non trouvé${unmatchedIngredients.length > 1 ? 's' : ''}.` : ''}`,
-      );
+      setUndoItems(result.removedItems);
+      setBanner({
+        message: `${removedCount} ingrédient${removedCount > 1 ? 's' : ''} retiré${removedCount > 1 ? 's' : ''} du stock.${unmatchedIngredients.length > 0 ? ` ${unmatchedIngredients.length} non trouvé${unmatchedIngredients.length > 1 ? 's' : ''}.` : ''}`,
+        canUndo: removedCount > 0,
+        variant: 'success',
+      });
     } catch {
       Alert.alert('Erreur', 'Impossible de valider la recette pour le stock.');
     } finally {
       setIsValidating(false);
     }
+  };
+
+  const handleUndo = async () => {
+    if (undoItems.length === 0) return;
+    const result = await undoRemovedStockItems(undoItems);
+    setUndoItems([]);
+    if (result.failedCount === 0) {
+      setBanner({ message: 'Annulation réussie : ingrédients restaurés.', canUndo: false, variant: 'success' });
+      return;
+    }
+    setBanner({
+      message: `Annulation partielle : ${result.restoredCount} restauré(s), ${result.failedCount} échec(s).`,
+      canUndo: false,
+      variant: 'error',
+    });
   };
 
   return (
@@ -189,6 +205,15 @@ export default function RecipeDetailScreen() {
           <Text style={styles.validateButtonLabel}>{isValidating ? 'Validation…' : "J’ai réalisé cette recette"}</Text>
         </TouchableOpacity>
       </ScrollView>
+      {banner && (
+        <ActionBanner
+          message={banner.message}
+          variant={banner.variant}
+          actionLabel={banner.canUndo ? 'Annuler' : undefined}
+          onActionPress={banner.canUndo ? handleUndo : undefined}
+          onClose={() => setBanner(null)}
+        />
+      )}
     </SafeAreaView>
   );
 }
