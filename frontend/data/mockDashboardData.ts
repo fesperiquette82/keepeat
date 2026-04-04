@@ -35,9 +35,14 @@ export interface MockRecipe extends BaseMockRecipe {
   ingredients: string[];
 }
 
-export type RecipeSuggestionScope = 'stock' | 'expiry48h' | 'expiry7d';
+export type RecipeSuggestionScope = 'stock' | 'expiry24h' | 'expiry7d';
+export interface AntiWastePlan {
+  recipes: MockRecipe[];
+  coveredItemIds: string[];
+  coveredCount: number;
+}
 
-const TODAY = new Date('2026-03-30T12:00:00Z');
+const TODAY = new Date();
 
 function isoInDays(days: number): string {
   const value = new Date(TODAY);
@@ -227,7 +232,7 @@ export function findRecipeBaseById(recipeId: string): BaseMockRecipe | undefined
 
 export function daysUntil(expiryDate?: string): number | null {
   if (!expiryDate) return null;
-  const today = new Date(TODAY);
+  const today = new Date();
   today.setUTCHours(0, 0, 0, 0);
   const expiry = new Date(expiryDate);
   expiry.setUTCHours(0, 0, 0, 0);
@@ -236,7 +241,7 @@ export function daysUntil(expiryDate?: string): number | null {
 
 function isWithinNextHours(expiryDate: string | undefined, hours: number): boolean {
   if (!expiryDate) return false;
-  const now = new Date(TODAY);
+  const now = new Date();
   const expiry = new Date(expiryDate);
   const diffMs = expiry.getTime() - now.getTime();
   return diffMs >= 0 && diffMs <= hours * 3600000;
@@ -276,21 +281,30 @@ export function buildRecipeSuggestions(items: DashboardStockItem[]): MockRecipe[
   return buildRecipeSuggestionsByScope(items, 'stock');
 }
 
+function getActiveItemsByScope(items: DashboardStockItem[], scope: RecipeSuggestionScope): DashboardStockItem[] {
+  const activeItems = items.filter((item) => item.status === 'active');
+  if (scope === 'stock') return activeItems;
+  return activeItems.filter((item) => {
+    if (scope === 'expiry24h') return isWithinNextHours(item.expiry_date, 24);
+    const days = daysUntil(item.expiry_date);
+    if (days === null) return false;
+    return days >= 0 && days <= 7;
+  });
+}
+
+function isRecipeIngredientMatched(stockName: string, ingredientName: string): boolean {
+  const source = stockName.toLowerCase();
+  const target = ingredientName.toLowerCase();
+  const ingredientTokens = target.split(/[\s,&'-]+/).filter((token) => token.length >= 4);
+  if (source === target || source.includes(target) || target.includes(source)) return true;
+  return ingredientTokens.some((token) => source.includes(token));
+}
+
 export function buildRecipeSuggestionsByScope(
   items: DashboardStockItem[],
   scope: RecipeSuggestionScope,
 ): MockRecipe[] {
-  const activeItems = items.filter((item) => item.status === 'active');
-  if (activeItems.length === 0) return [];
-
-  const scopedItems = scope === 'stock'
-    ? activeItems
-    : activeItems.filter((item) => {
-      if (scope === 'expiry48h') return isWithinNextHours(item.expiry_date, 48);
-      const days = daysUntil(item.expiry_date);
-      if (days === null) return false;
-      return days >= 0 && days <= 7;
-    });
+  const scopedItems = getActiveItemsByScope(items, scope);
   if (scopedItems.length === 0) return [];
 
   const normalizedNames = scopedItems.map((item) => item.name.toLowerCase());
@@ -312,12 +326,7 @@ export function buildRecipeSuggestionsByScope(
     const ingredients = recipe.ingredientsDetailed.map((ingredient) => ingredient.name);
 
     ingredients.forEach((ingredient) => {
-      const target = ingredient.toLowerCase();
-      const ingredientTokens = target.split(/[\s,&'-]+/).filter((token) => token.length >= 4);
-      const found = normalizedNames.some((name) => {
-        if (name === target || name.includes(target) || target.includes(name)) return true;
-        return ingredientTokens.some((token) => name.includes(token));
-      });
+      const found = normalizedNames.some((name) => isRecipeIngredientMatched(name, ingredient));
 
       if (found) availableIngredients.push(ingredient);
       else missingIngredients.push(ingredient);
@@ -348,4 +357,77 @@ export function buildRecipeSuggestionsByScope(
     .sort((a, b) => b.score - a.score || b.matchedCount - a.matchedCount || a.missingCount - b.missingCount || a.timeMinutes - b.timeMinutes);
 
   return scored.slice(0, 8);
+}
+
+export function buildAntiWastePlanByScope(
+  items: DashboardStockItem[],
+  scope: RecipeSuggestionScope,
+): AntiWastePlan {
+  const activeItems = items.filter((item) => item.status === 'active');
+  const scopedItems = getActiveItemsByScope(items, scope);
+  if (activeItems.length === 0 || scopedItems.length === 0) {
+    return { recipes: [], coveredItemIds: [], coveredCount: 0 };
+  }
+
+  const stockSuggestions = buildRecipeSuggestionsByScope(activeItems, 'stock');
+  const suggestionById = new Map(stockSuggestions.map((suggestion) => [suggestion.id, suggestion]));
+  const urgencyWeightById = new Map<string, number>();
+  activeItems.forEach((item) => {
+    const days = daysUntil(item.expiry_date);
+    if (days !== null && days >= 0 && days <= 1) urgencyWeightById.set(item.id, 120);
+    else if (days !== null && days >= 0 && days <= 7) urgencyWeightById.set(item.id, 65);
+    else urgencyWeightById.set(item.id, 25);
+  });
+
+  const buildCandidate = (recipe: BaseMockRecipe, blockedIds: Set<string>) => {
+    const coveredItems = scopedItems.filter((item) => {
+      if (blockedIds.has(item.id)) return false;
+      return recipe.ingredientsDetailed.some((ingredient) => isRecipeIngredientMatched(item.name, ingredient.name));
+    });
+    const coveredIds = coveredItems.map((item) => item.id);
+    const relevantIngredients = recipe.ingredientsDetailed.filter((ingredient) =>
+      scopedItems.some((item) => isRecipeIngredientMatched(item.name, ingredient.name)),
+    );
+    const missingCount = recipe.ingredientsDetailed.length - relevantIngredients.length;
+    const urgencyScore = coveredItems.reduce((sum, item) => sum + (urgencyWeightById.get(item.id) ?? 0), 0);
+    const urgencySpreadBonus = Math.min(coveredItems.length, 3) * 12;
+    const durationPenalty = recipe.timeMinutes > 25 ? Math.round((recipe.timeMinutes - 25) * 0.6) : 0;
+    const score = urgencyScore + urgencySpreadBonus - missingCount * 18 - durationPenalty;
+    const suggestion = suggestionById.get(recipe.id);
+
+    return {
+      recipeId: recipe.id,
+      score,
+      coveredIds,
+      missingCount,
+      suggestion,
+    };
+  };
+
+  const selected: MockRecipe[] = [];
+  const coveredIds = new Set<string>();
+  const first = MOCK_RECIPES_BASE
+    .map((recipe) => buildCandidate(recipe, coveredIds))
+    .filter((candidate) => candidate.coveredIds.length > 0 && candidate.suggestion)
+    .sort((a, b) => b.score - a.score || a.missingCount - b.missingCount)[0];
+
+  if (!first || !first.suggestion) {
+    return { recipes: [], coveredItemIds: [], coveredCount: 0 };
+  }
+
+  selected.push(first.suggestion);
+  first.coveredIds.forEach((itemId) => coveredIds.add(itemId));
+
+  const second = MOCK_RECIPES_BASE
+    .filter((recipe) => recipe.id !== first.recipeId)
+    .map((recipe) => buildCandidate(recipe, coveredIds))
+    .filter((candidate) => candidate.coveredIds.length > 0 && candidate.suggestion)
+    .sort((a, b) => b.score - a.score || a.missingCount - b.missingCount)[0];
+
+  if (second && second.suggestion && second.coveredIds.length > 0) {
+    selected.push(second.suggestion);
+    second.coveredIds.forEach((itemId) => coveredIds.add(itemId));
+  }
+
+  return { recipes: selected.slice(0, 2), coveredItemIds: [...coveredIds], coveredCount: coveredIds.size };
 }
