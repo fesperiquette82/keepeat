@@ -35,7 +35,7 @@ export interface MockRecipe extends BaseMockRecipe {
   ingredients: string[];
 }
 
-export type RecipeSuggestionScope = 'stock' | 'expiry24h' | 'expiry7d';
+export type RecipeSuggestionScope = 'stock' | 'expiryDay' | 'expiryWeek' | 'expiryMonth' | 'expiryYear';
 export interface AntiWastePlan {
   recipes: MockRecipe[];
   coveredItemIds: string[];
@@ -239,14 +239,6 @@ export function daysUntil(expiryDate?: string): number | null {
   return Math.round((expiry.getTime() - today.getTime()) / 86400000);
 }
 
-function isWithinNextHours(expiryDate: string | undefined, hours: number): boolean {
-  if (!expiryDate) return false;
-  const now = new Date();
-  const expiry = new Date(expiryDate);
-  const diffMs = expiry.getTime() - now.getTime();
-  return diffMs >= 0 && diffMs <= hours * 3600000;
-}
-
 export function resolveStockItems(
   items: StockItem[],
   options?: { useMockFallback?: boolean },
@@ -284,11 +276,18 @@ export function buildRecipeSuggestions(items: DashboardStockItem[]): MockRecipe[
 function getActiveItemsByScope(items: DashboardStockItem[], scope: RecipeSuggestionScope): DashboardStockItem[] {
   const activeItems = items.filter((item) => item.status === 'active');
   if (scope === 'stock') return activeItems;
+
+  const maxDaysByScope: Record<Exclude<RecipeSuggestionScope, 'stock'>, number> = {
+    expiryDay: 0,
+    expiryWeek: 7,
+    expiryMonth: 31,
+    expiryYear: 366,
+  };
+
   return activeItems.filter((item) => {
-    if (scope === 'expiry24h') return isWithinNextHours(item.expiry_date, 24);
     const days = daysUntil(item.expiry_date);
     if (days === null) return false;
-    return days >= 0 && days <= 7;
+    return days >= 0 && days <= maxDaysByScope[scope];
   });
 }
 
