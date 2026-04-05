@@ -3,18 +3,20 @@ import { SafeAreaView } from 'react-native-safe-area-context';
 import { View, Text, StyleSheet, TouchableOpacity, ScrollView, Alert } from 'react-native';
 import Ionicons from '@expo/vector-icons/Ionicons';
 import { useLocalSearchParams, useRouter } from 'expo-router';
+import { useFocusEffect } from '@react-navigation/native';
 import { useStockStore } from '../../store/stockStore';
 import { useAppSettingsStore } from '../../store/appSettingsStore';
 import { ActionBanner } from '../../component/ActionBanner';
 import { C, T } from '../../utils/theme';
 import {
-  buildRecipeSuggestions,
+  computeRecipeAvailabilityFromStock,
   findRecipeBaseById,
   resolveStockItems,
   type RecipeIngredient,
 } from '../../data/mockDashboardData';
 import { matchRecipeIngredientsToStock } from '../../utils/ingredientMatching';
 import { removeStockItems, undoRemovedStockItems } from '../../utils/stockRemoval';
+import { logger } from '../../utils/logger';
 
 const TYPE_LABEL: Record<string, string> = {
   apero: 'Apéro',
@@ -47,17 +49,16 @@ export default function RecipeDetailScreen() {
   const [undoItems, setUndoItems] = useState<typeof storeItems>([]);
   const [banner, setBanner] = useState<{ message: string; canUndo: boolean; variant: 'success' | 'error' } | null>(null);
 
-  useEffect(() => {
-    fetchStock();
-  }, [fetchStock]);
+  useFocusEffect(
+    React.useCallback(() => {
+      logger.debug('[RECIPES_MATCH] detail screen focused - refreshing stock', { recipeId: params.id ?? null });
+      fetchStock();
+    }, [fetchStock, params.id]),
+  );
 
   const recipeId = typeof params.id === 'string' ? params.id : '';
   const baseRecipe = useMemo(() => findRecipeBaseById(recipeId), [recipeId]);
   const { items } = useMemo(() => resolveStockItems(storeItems, { useMockFallback: false }), [storeItems]);
-  const suggestion = useMemo(
-    () => buildRecipeSuggestions(items).find((recipe) => recipe.id === recipeId),
-    [items, recipeId],
-  );
 
   const initialServings = householdSize;
   const [servings, setServings] = useState(initialServings);
@@ -65,6 +66,27 @@ export default function RecipeDetailScreen() {
   useEffect(() => {
     setServings(initialServings);
   }, [initialServings]);
+
+  const factor = baseRecipe ? servings / baseRecipe.baseServings : 1;
+  const scaledIngredients = useMemo(
+    () => (baseRecipe ? scaleIngredients(baseRecipe.ingredientsDetailed, factor) : []),
+    [baseRecipe, factor],
+  );
+  const ingredientAvailability = useMemo(
+    () => computeRecipeAvailabilityFromStock(items, scaledIngredients),
+    [items, scaledIngredients],
+  );
+  const availableSet = new Set(ingredientAvailability.availableIngredients);
+
+  useEffect(() => {
+    logger.debug('[RECIPES_MATCH] detail availability recomputed', {
+      recipeId,
+      recipeTitle: baseRecipe?.title ?? null,
+      stockItemsCount: items.length,
+      availableCount: ingredientAvailability.matchedCount,
+      missingCount: ingredientAvailability.missingCount,
+    });
+  }, [baseRecipe?.title, ingredientAvailability.matchedCount, ingredientAvailability.missingCount, items.length, recipeId]);
 
   if (!baseRecipe) {
     return (
@@ -78,10 +100,6 @@ export default function RecipeDetailScreen() {
       </SafeAreaView>
     );
   }
-
-  const factor = servings / baseRecipe.baseServings;
-  const scaledIngredients = scaleIngredients(baseRecipe.ingredientsDetailed, factor);
-  const availableSet = new Set(suggestion?.availableIngredients ?? []);
 
   const handleValidateRecipe = async () => {
     if (isValidating) return;

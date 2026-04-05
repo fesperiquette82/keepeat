@@ -1,4 +1,5 @@
 import type { StockItem } from '../store/stockStore';
+import { computeRecipeIngredientAvailability, isClearIngredientMatch, normalizeIngredientName } from '../utils/ingredientMatching';
 
 export type StorageZone = 'frigo' | 'placard';
 
@@ -312,14 +313,6 @@ function getActiveItemsByScope(items: DashboardStockItem[], scope: RecipeSuggest
   });
 }
 
-function isRecipeIngredientMatched(stockName: string, ingredientName: string): boolean {
-  const source = stockName.toLowerCase();
-  const target = ingredientName.toLowerCase();
-  const ingredientTokens = target.split(/[\s,&'-]+/).filter((token) => token.length >= 4);
-  if (source === target || source.includes(target) || target.includes(source)) return true;
-  return ingredientTokens.some((token) => source.includes(token));
-}
-
 export function buildRecipeSuggestionsByScope(
   items: DashboardStockItem[],
   scope: RecipeSuggestionScope,
@@ -327,36 +320,30 @@ export function buildRecipeSuggestionsByScope(
   const scopedItems = getActiveItemsByScope(items, scope);
   if (scopedItems.length === 0) return [];
 
-  const normalizedNames = scopedItems.map((item) => item.name.toLowerCase());
   const urgentNames = new Set(
     scopedItems
       .filter((item) => {
         const days = daysUntil(item.expiry_date);
         return days !== null && days >= 0 && days <= 2;
       })
-      .map((item) => item.name.toLowerCase()),
+      .map((item) => normalizeIngredientName(item.name)),
   );
 
   const easyTypes = new Set<MockRecipe['type']>(['apero', 'toast', 'tartine', 'poelee', 'salade', 'bol']);
   const isFastRecipe = (minutes: number) => minutes <= 15;
 
   const scored = MOCK_RECIPES_BASE.map((recipe) => {
-    const availableIngredients: string[] = [];
-    const missingIngredients: string[] = [];
     const ingredients = recipe.ingredientsDetailed.map((ingredient) => ingredient.name);
-
-    ingredients.forEach((ingredient) => {
-      const found = normalizedNames.some((name) => isRecipeIngredientMatched(name, ingredient));
-
-      if (found) availableIngredients.push(ingredient);
-      else missingIngredients.push(ingredient);
-    });
+    const { availableIngredients, missingIngredients } = computeRecipeIngredientAvailability(
+      scopedItems,
+      recipe.ingredientsDetailed,
+    );
 
     const matchedCount = availableIngredients.length;
     const missingCount = missingIngredients.length;
     const matchRate = Math.round((matchedCount / ingredients.length) * 100);
 
-    const urgencyBonus = availableIngredients.some((ingredient) => urgentNames.has(ingredient.toLowerCase())) ? 10 : 0;
+    const urgencyBonus = availableIngredients.some((ingredient) => urgentNames.has(normalizeIngredientName(ingredient))) ? 10 : 0;
     const quickBonus = isFastRecipe(recipe.timeMinutes) ? 12 : recipe.timeMinutes <= 25 ? 6 : 0;
     const typeBonus = easyTypes.has(recipe.type) ? 8 : 0;
     const nearPossibleBonus = missingCount <= 2 ? 12 : missingCount === 3 ? 6 : 0;
@@ -415,11 +402,11 @@ export function buildAntiWastePlanByScope(
   const buildCandidate = (recipe: BaseMockRecipe, blockedIds: Set<string>) => {
     const coveredItems = scopedItems.filter((item) => {
       if (blockedIds.has(item.id)) return false;
-      return recipe.ingredientsDetailed.some((ingredient) => isRecipeIngredientMatched(item.name, ingredient.name));
+      return recipe.ingredientsDetailed.some((ingredient) => isClearIngredientMatch(item.name, ingredient.name));
     });
     const coveredIds = coveredItems.map((item) => item.id);
     const relevantIngredients = recipe.ingredientsDetailed.filter((ingredient) =>
-      scopedItems.some((item) => isRecipeIngredientMatched(item.name, ingredient.name)),
+      scopedItems.some((item) => isClearIngredientMatch(item.name, ingredient.name)),
     );
     const missingCount = recipe.ingredientsDetailed.length - relevantIngredients.length;
     const urgencyScore = coveredItems.reduce((sum, item) => sum + (urgencyWeightById.get(item.id) ?? 0), 0);
@@ -463,4 +450,24 @@ export function buildAntiWastePlanByScope(
   }
 
   return { recipes: selected.slice(0, 2), coveredItemIds: [...coveredIds], coveredCount: coveredIds.size };
+}
+
+export interface RecipeIngredientAvailabilitySnapshot {
+  availableIngredients: string[];
+  missingIngredients: string[];
+  matchedCount: number;
+  missingCount: number;
+}
+
+export function computeRecipeAvailabilityFromStock(
+  items: DashboardStockItem[],
+  recipeIngredients: RecipeIngredient[],
+): RecipeIngredientAvailabilitySnapshot {
+  const { availableIngredients, missingIngredients } = computeRecipeIngredientAvailability(items, recipeIngredients);
+  return {
+    availableIngredients,
+    missingIngredients,
+    matchedCount: availableIngredients.length,
+    missingCount: missingIngredients.length,
+  };
 }

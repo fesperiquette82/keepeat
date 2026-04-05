@@ -3,6 +3,7 @@ import { SafeAreaView } from 'react-native-safe-area-context';
 import { View, Text, StyleSheet, FlatList, TouchableOpacity, Image } from 'react-native';
 import Ionicons from '@expo/vector-icons/Ionicons';
 import { useRouter } from 'expo-router';
+import { useFocusEffect } from '@react-navigation/native';
 import { useStockStore } from '../../store/stockStore';
 import { C, T } from '../../utils/theme';
 import {
@@ -14,6 +15,7 @@ import {
 import { countLabelFr } from '../../utils/uiText';
 import { UI_LABELS } from '../../utils/uiLabels';
 import { useLanguageStore } from '../../store/languageStore';
+import { logger } from '../../utils/logger';
 
 const TYPE_LABEL: Record<string, string> = {
   apero: 'Apéro',
@@ -48,9 +50,12 @@ export default function RecipesScreen() {
   const [imageErrors, setImageErrors] = React.useState<Record<string, boolean>>({});
   const [activeFilter, setActiveFilter] = React.useState<RecipesFilter>('expiryDay');
 
-  useEffect(() => {
-    fetchStock();
-  }, [fetchStock]);
+  useFocusEffect(
+    React.useCallback(() => {
+      logger.debug('[RECIPES_MATCH] recipes list focused - refreshing stock');
+      fetchStock();
+    }, [fetchStock]),
+  );
 
   const { items } = useMemo(() => resolveStockItems(storeItems, { useMockFallback: false }), [storeItems]);
   const scope = activeFilter as RecipeSuggestionScope;
@@ -61,6 +66,15 @@ export default function RecipesScreen() {
     return suggestions.filter((recipe) => !planIds.has(recipe.id));
   }, [antiWastePlan.recipes, suggestions]);
   const hasAnySuggestion = classicSuggestions.length > 0 || antiWastePlan.recipes.length > 0;
+
+  useEffect(() => {
+    logger.debug('[RECIPES_MATCH] list availability recomputed', {
+      scope,
+      stockItemsCount: items.length,
+      suggestionsCount: suggestions.length,
+      antiWasteCount: antiWastePlan.recipes.length,
+    });
+  }, [antiWastePlan.recipes.length, items.length, scope, suggestions.length]);
 
   const filters = useMemo(
     () =>
