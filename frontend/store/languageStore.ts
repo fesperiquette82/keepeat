@@ -116,6 +116,14 @@ const translations: Translations = {
   suggestionRefrigerator: { fr: 'Réfrigérateur ({days}j)', en: 'Refrigerator ({days}d)' },
   suggestionPantry: { fr: 'Placard ({days}j)', en: 'Pantry ({days}d)' },
   suggestionFreezer: { fr: 'Congélateur ({days}j)', en: 'Freezer ({days}d)' },
+  recipesFilterExpiryDay: { fr: 'Ce jour', en: 'Today' },
+  recipesFilterExpiryWeek: { fr: 'Cette semaine', en: 'This week' },
+  recipesFilterExpiryMonth: { fr: 'Ce mois', en: 'This month' },
+  recipesFilterComingMonths: { fr: 'Prochains mois', en: 'Coming months' },
+  recipesEmptyExpiryDay: { fr: 'Aucun produit à consommer aujourd’hui.', en: 'No products to consume today.' },
+  recipesEmptyExpiryWeek: { fr: 'Aucun produit à consommer cette semaine.', en: 'No products to consume this week.' },
+  recipesEmptyExpiryMonth: { fr: 'Aucun produit à consommer ce mois.', en: 'No products to consume this month.' },
+  recipesEmptyComingMonths: { fr: 'Aucun produit à consommer dans les prochains mois.', en: 'No products to consume in coming months.' },
 
   // Mentionnée dans index.tsx
   addManually: { fr: 'Ajouter', en: 'Add' },

@@ -1,10 +1,14 @@
 import React, { useEffect, useMemo, useState } from 'react';
-import { SafeAreaView } from 'react-native-safe-area-context';
-import { View, Text, StyleSheet, TouchableOpacity, FlatList, Image } from 'react-native';
+import { SafeAreaView, useSafeAreaInsets } from 'react-native-safe-area-context';
+import { View, Text, StyleSheet, TouchableOpacity, FlatList, Image, Alert } from 'react-native';
+import { useRouter } from 'expo-router';
 import Ionicons from '@expo/vector-icons/Ionicons';
+import { Swipeable } from 'react-native-gesture-handler';
 import { useStockStore } from '../../store/stockStore';
+import { ActionBanner } from '../../component/ActionBanner';
 import { C, T } from '../../utils/theme';
 import { daysUntil, resolveStockItems } from '../../data/mockDashboardData';
+import { removeStockItems, undoRemovedStockItems } from '../../utils/stockRemoval';
 import { countLabelFr } from '../../utils/uiText';
 import { storageZoneLabel, UI_LABELS } from '../../utils/uiLabels';
 
@@ -40,10 +44,15 @@ function formatExpiryLabel(expiryDate?: string): string {
 }
 
 export default function StockScreen() {
+  const router = useRouter();
+  const insets = useSafeAreaInsets();
   const { items: storeItems, fetchStock } = useStockStore();
   const [activeFilter, setActiveFilter] = useState<StockFilter>('tous');
   const [activeSort, setActiveSort] = useState<StockSort>('expiry');
   const [imageErrors, setImageErrors] = useState<Record<string, boolean>>({});
+  const [processingIds, setProcessingIds] = useState<Record<string, boolean>>({});
+  const [undoItems, setUndoItems] = useState<typeof storeItems>([]);
+  const [banner, setBanner] = useState<{ message: string; canUndo: boolean; variant: 'success' | 'error' } | null>(null);
 
   useEffect(() => {
     fetchStock();
@@ -86,11 +95,65 @@ export default function StockScreen() {
     return 'Aucun résultat pour ce filtre.';
   }, [activeFilter, items.length]);
 
+  const handleSwipeAction = async (itemId: string, action: 'used' | 'thrown') => {
+    if (processingIds[itemId]) return;
+    setProcessingIds((prev) => ({ ...prev, [itemId]: true }));
+    try {
+      const result = await removeStockItems([itemId], action);
+      if (result.removedItems.length > 0) {
+        setUndoItems(result.removedItems);
+        setBanner({
+          message: action === 'used' ? 'Article retiré du stock (utilisé).' : 'Article retiré du stock (jeté).',
+          canUndo: true,
+          variant: 'success',
+        });
+      } else {
+        setUndoItems([]);
+        setBanner({
+          message: "Impossible de retirer l'article pour le moment.",
+          canUndo: false,
+          variant: 'error',
+        });
+      }
+    } catch {
+      Alert.alert('Erreur', "Impossible de mettre à jour l'élément.");
+    } finally {
+      setProcessingIds((prev) => {
+        const next = { ...prev };
+        delete next[itemId];
+        return next;
+      });
+    }
+  };
+
+  const handleUndo = async () => {
+    if (undoItems.length === 0) return;
+    const result = await undoRemovedStockItems(undoItems);
+    if (result.restoredCount === undoItems.length) {
+      setBanner({ message: 'Annulation réussie : article restauré.', canUndo: false, variant: 'success' });
+    } else {
+      setBanner({
+        message: `Annulation partielle : ${result.restoredCount} restauré(s), ${result.failedCount} échec(s).`,
+        canUndo: false,
+        variant: 'error',
+      });
+    }
+    setUndoItems([]);
+  };
+
+  const renderSwipeAction = (label: string, color: string, icon: 'restaurant-outline' | 'trash-outline') => (
+    <View style={[styles.swipeAction, { backgroundColor: color }]}>
+      <Ionicons name={icon} size={18} color="#fff" />
+      <Text style={styles.swipeActionText}>{label}</Text>
+    </View>
+  );
+
   return (
     <SafeAreaView style={styles.container}>
       <View style={styles.header}>
         <Text style={styles.title}>Stock complet</Text>
         <Text style={styles.subtitle}>{countLabelFr(sortedItems.length, 'ingrédient')} affiché{sortedItems.length > 1 ? 's' : ''}</Text>
+        <Text style={styles.swipeHint}>Glisser à droite = utilisé · à gauche = jeté</Text>
         {isMock && <Text style={styles.mockInfo}>Données de démonstration</Text>}
       </View>
 
@@ -139,28 +202,56 @@ export default function StockScreen() {
           contentContainerStyle={styles.listContent}
           renderItem={({ item }) => {
             return (
-              <View style={styles.card}>
-                <View style={styles.cardMain}>
-                  <View style={styles.thumb}>
-                    {item.image_url && !imageErrors[item.id] ? (
-                      <Image
-                        source={{ uri: item.image_url }}
-                        style={styles.thumbImage}
-                        onError={() => setImageErrors((prev) => ({ ...prev, [item.id]: true }))}
-                      />
-                    ) : (
-                      <Ionicons name="nutrition-outline" size={17} color={C.textMid} />
-                    )}
+              <Swipeable
+                overshootLeft={false}
+                overshootRight={false}
+                renderLeftActions={() => renderSwipeAction('Utilisé', '#16A34A', 'restaurant-outline')}
+                renderRightActions={() => renderSwipeAction('Jeté', '#DC2626', 'trash-outline')}
+                onSwipeableOpen={(direction) => {
+                  if (direction === 'left') {
+                    handleSwipeAction(item.id, 'thrown');
+                  } else {
+                    handleSwipeAction(item.id, 'used');
+                  }
+                }}
+              >
+                <TouchableOpacity
+                  style={styles.card}
+                  activeOpacity={0.8}
+                  onPress={() => router.push({ pathname: '/edit-product', params: { id: item.id } })}
+                >
+                  <View style={styles.cardMain}>
+                    <View style={styles.thumb}>
+                      {item.image_url && !imageErrors[item.id] ? (
+                        <Image
+                          source={{ uri: item.image_url }}
+                          style={styles.thumbImage}
+                          onError={() => setImageErrors((prev) => ({ ...prev, [item.id]: true }))}
+                        />
+                      ) : (
+                        <Ionicons name="nutrition-outline" size={17} color={C.textMid} />
+                      )}
+                    </View>
+                    <View style={styles.cardText}>
+                      <Text style={styles.name}>{item.name}</Text>
+                      <Text style={styles.meta}>{storageZoneLabel(item.storageZone)} · {item.quantity ?? UI_LABELS.fr.unknownQuantity}</Text>
+                    </View>
                   </View>
-                  <View style={styles.cardText}>
-                    <Text style={styles.name}>{item.name}</Text>
-                    <Text style={styles.meta}>{storageZoneLabel(item.storageZone)} · {item.quantity ?? UI_LABELS.fr.unknownQuantity}</Text>
-                  </View>
-                </View>
-                <Text style={styles.expiry}>{formatExpiryLabel(item.expiry_date)}</Text>
-              </View>
+                  <Text style={styles.expiry}>{formatExpiryLabel(item.expiry_date)}</Text>
+                </TouchableOpacity>
+              </Swipeable>
             );
           }}
+        />
+      )}
+      {banner && (
+        <ActionBanner
+          message={banner.message}
+          variant={banner.variant}
+          actionLabel={banner.canUndo ? 'Annuler' : undefined}
+          onActionPress={banner.canUndo ? handleUndo : undefined}
+          onClose={() => setBanner(null)}
+          bottomOffset={insets.bottom + 136}
         />
       )}
     </SafeAreaView>
@@ -172,6 +263,7 @@ const styles = StyleSheet.create({
   header: { paddingHorizontal: 16, paddingTop: 8, paddingBottom: 10 },
   title: { fontSize: 26, fontWeight: '800', color: C.text },
   subtitle: { marginTop: 4, ...T.secondary },
+  swipeHint: { marginTop: 4, color: C.textLight, fontSize: 12, fontWeight: '600' },
   mockInfo: { marginTop: 4, ...T.tertiary },
   controlsCard: { marginHorizontal: 16, marginBottom: 8, padding: 12, borderRadius: 12, backgroundColor: '#fff', borderWidth: 1, borderColor: C.border, gap: 8 },
   controlsSectionLabel: { ...T.secondarySmall, fontWeight: '700' },
@@ -194,6 +286,8 @@ const styles = StyleSheet.create({
   name: { color: C.text, fontSize: 15, fontWeight: '700' },
   meta: { ...T.secondarySmall, marginTop: 2 },
   expiry: { color: '#15803d', fontSize: 12, fontWeight: '700' },
+  swipeAction: { justifyContent: 'center', alignItems: 'center', width: 92, borderRadius: 12, marginVertical: 2, gap: 4 },
+  swipeActionText: { color: '#fff', fontSize: 11, fontWeight: '700' },
   emptyWrap: { flex: 1, justifyContent: 'center', alignItems: 'center', paddingHorizontal: 28 },
   emptyTitle: { fontSize: 20, fontWeight: '800', color: C.text },
   emptyText: { ...T.secondary, marginTop: 8, textAlign: 'center' },

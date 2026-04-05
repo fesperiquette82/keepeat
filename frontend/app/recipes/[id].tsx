@@ -1,17 +1,22 @@
 import React, { useEffect, useMemo, useState } from 'react';
 import { SafeAreaView } from 'react-native-safe-area-context';
-import { View, Text, StyleSheet, TouchableOpacity, ScrollView } from 'react-native';
+import { View, Text, StyleSheet, TouchableOpacity, ScrollView, Alert } from 'react-native';
 import Ionicons from '@expo/vector-icons/Ionicons';
 import { useLocalSearchParams, useRouter } from 'expo-router';
+import { useFocusEffect } from '@react-navigation/native';
 import { useStockStore } from '../../store/stockStore';
 import { useAppSettingsStore } from '../../store/appSettingsStore';
+import { ActionBanner } from '../../component/ActionBanner';
 import { C, T } from '../../utils/theme';
 import {
-  buildRecipeSuggestions,
+  computeRecipeAvailabilityFromStock,
   findRecipeBaseById,
   resolveStockItems,
   type RecipeIngredient,
 } from '../../data/mockDashboardData';
+import { matchRecipeIngredientsToStock } from '../../utils/ingredientMatching';
+import { removeStockItems, undoRemovedStockItems } from '../../utils/stockRemoval';
+import { logger } from '../../utils/logger';
 
 const TYPE_LABEL: Record<string, string> = {
   apero: 'Apéro',
@@ -40,18 +45,20 @@ export default function RecipeDetailScreen() {
   const params = useLocalSearchParams<{ id?: string }>();
   const { items: storeItems, fetchStock } = useStockStore();
   const householdSize = useAppSettingsStore((state) => state.householdSize);
+  const [isValidating, setIsValidating] = useState(false);
+  const [undoItems, setUndoItems] = useState<typeof storeItems>([]);
+  const [banner, setBanner] = useState<{ message: string; canUndo: boolean; variant: 'success' | 'error' } | null>(null);
 
-  useEffect(() => {
-    fetchStock();
-  }, [fetchStock]);
+  useFocusEffect(
+    React.useCallback(() => {
+      logger.debug('[RECIPES_MATCH] detail screen focused - refreshing stock', { recipeId: params.id ?? null });
+      fetchStock();
+    }, [fetchStock, params.id]),
+  );
 
   const recipeId = typeof params.id === 'string' ? params.id : '';
   const baseRecipe = useMemo(() => findRecipeBaseById(recipeId), [recipeId]);
   const { items } = useMemo(() => resolveStockItems(storeItems, { useMockFallback: false }), [storeItems]);
-  const suggestion = useMemo(
-    () => buildRecipeSuggestions(items).find((recipe) => recipe.id === recipeId),
-    [items, recipeId],
-  );
 
   const initialServings = householdSize;
   const [servings, setServings] = useState(initialServings);
@@ -59,6 +66,27 @@ export default function RecipeDetailScreen() {
   useEffect(() => {
     setServings(initialServings);
   }, [initialServings]);
+
+  const factor = baseRecipe ? servings / baseRecipe.baseServings : 1;
+  const scaledIngredients = useMemo(
+    () => (baseRecipe ? scaleIngredients(baseRecipe.ingredientsDetailed, factor) : []),
+    [baseRecipe, factor],
+  );
+  const ingredientAvailability = useMemo(
+    () => computeRecipeAvailabilityFromStock(items, scaledIngredients),
+    [items, scaledIngredients],
+  );
+  const availableSet = new Set(ingredientAvailability.availableIngredients);
+
+  useEffect(() => {
+    logger.debug('[RECIPES_MATCH] detail availability recomputed', {
+      recipeId,
+      recipeTitle: baseRecipe?.title ?? null,
+      stockItemsCount: items.length,
+      availableCount: ingredientAvailability.matchedCount,
+      missingCount: ingredientAvailability.missingCount,
+    });
+  }, [baseRecipe?.title, ingredientAvailability.matchedCount, ingredientAvailability.missingCount, items.length, recipeId]);
 
   if (!baseRecipe) {
     return (
@@ -73,9 +101,65 @@ export default function RecipeDetailScreen() {
     );
   }
 
-  const factor = servings / baseRecipe.baseServings;
-  const scaledIngredients = scaleIngredients(baseRecipe.ingredientsDetailed, factor);
-  const availableSet = new Set(suggestion?.availableIngredients ?? []);
+  const handleValidateRecipe = async () => {
+    if (isValidating) return;
+    setIsValidating(true);
+    try {
+      await fetchStock();
+      const latestItems = useStockStore.getState().items;
+      const ingredientNames = scaledIngredients.map((ingredient) => ingredient.name);
+      const { matchedIds, unmatchedIngredients } = matchRecipeIngredientsToStock(latestItems, ingredientNames);
+      const result = await removeStockItems(matchedIds, 'used');
+      const removedCount = result.removedItems.length;
+      const failedCount = result.failedCount;
+
+      if (removedCount === 0 && failedCount === 0) {
+        setUndoItems([]);
+        setBanner({
+          message: `${unmatchedIngredients.length} ingrédient${unmatchedIngredients.length > 1 ? 's' : ''} non trouvé${unmatchedIngredients.length > 1 ? 's' : ''} dans le stock.`,
+          canUndo: false,
+          variant: 'error',
+        });
+        return;
+      }
+
+      if (failedCount > 0) {
+        setUndoItems(result.removedItems);
+        setBanner({
+          message: `${removedCount} retiré${removedCount > 1 ? 's' : ''}, ${unmatchedIngredients.length} non trouvé${unmatchedIngredients.length > 1 ? 's' : ''}, ${failedCount} échec${failedCount > 1 ? 's' : ''}.`,
+          canUndo: removedCount > 0,
+          variant: 'error',
+        });
+        return;
+      }
+
+      setUndoItems(result.removedItems);
+      setBanner({
+        message: `${removedCount} ingrédient${removedCount > 1 ? 's' : ''} retiré${removedCount > 1 ? 's' : ''} du stock.${unmatchedIngredients.length > 0 ? ` ${unmatchedIngredients.length} non trouvé${unmatchedIngredients.length > 1 ? 's' : ''}.` : ''}`,
+        canUndo: removedCount > 0,
+        variant: 'success',
+      });
+    } catch {
+      Alert.alert('Erreur', 'Impossible de valider la recette pour le stock.');
+    } finally {
+      setIsValidating(false);
+    }
+  };
+
+  const handleUndo = async () => {
+    if (undoItems.length === 0) return;
+    const result = await undoRemovedStockItems(undoItems);
+    setUndoItems([]);
+    if (result.failedCount === 0) {
+      setBanner({ message: 'Annulation réussie : ingrédients restaurés.', canUndo: false, variant: 'success' });
+      return;
+    }
+    setBanner({
+      message: `Annulation partielle : ${result.restoredCount} restauré(s), ${result.failedCount} échec(s).`,
+      canUndo: false,
+      variant: 'error',
+    });
+  };
 
   return (
     <SafeAreaView style={styles.container}>
@@ -134,7 +218,20 @@ export default function RecipeDetailScreen() {
             </View>
           ))}
         </View>
+
+        <TouchableOpacity style={[styles.validateButton, isValidating && styles.validateButtonDisabled]} disabled={isValidating} onPress={handleValidateRecipe}>
+          <Text style={styles.validateButtonLabel}>{isValidating ? 'Validation…' : "J’ai réalisé cette recette"}</Text>
+        </TouchableOpacity>
       </ScrollView>
+      {banner && (
+        <ActionBanner
+          message={banner.message}
+          variant={banner.variant}
+          actionLabel={banner.canUndo ? 'Annuler' : undefined}
+          onActionPress={banner.canUndo ? handleUndo : undefined}
+          onClose={() => setBanner(null)}
+        />
+      )}
     </SafeAreaView>
   );
 }
@@ -165,6 +262,9 @@ const styles = StyleSheet.create({
   stepRow: { flexDirection: 'row', gap: 8, alignItems: 'flex-start' },
   stepIndex: { width: 18, color: C.text, fontWeight: '700' },
   stepText: { flex: 1, color: C.textMid, fontWeight: '500' },
+  validateButton: { backgroundColor: C.primary, borderRadius: 12, paddingVertical: 14, alignItems: 'center' },
+  validateButtonDisabled: { opacity: 0.7 },
+  validateButtonLabel: { color: '#fff', fontSize: 14, fontWeight: '800' },
   errorWrap: { flex: 1, justifyContent: 'center', alignItems: 'center', gap: 12, padding: 24 },
   errorTitle: { color: C.text, fontSize: 20, fontWeight: '800' },
   backButton: { backgroundColor: C.primary, paddingHorizontal: 14, paddingVertical: 10, borderRadius: 10 },

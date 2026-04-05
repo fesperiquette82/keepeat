@@ -1,4 +1,5 @@
 import type { StockItem } from '../store/stockStore';
+import { computeRecipeIngredientAvailability, isClearIngredientMatch, normalizeIngredientName } from '../utils/ingredientMatching';
 
 export type StorageZone = 'frigo' | 'placard';
 
@@ -35,7 +36,14 @@ export interface MockRecipe extends BaseMockRecipe {
   ingredients: string[];
 }
 
-const TODAY = new Date('2026-03-30T12:00:00Z');
+export type RecipeSuggestionScope = 'stock' | 'expiryDay' | 'expiryWeek' | 'expiryMonth' | 'expiryComingMonths';
+export interface AntiWastePlan {
+  recipes: MockRecipe[];
+  coveredItemIds: string[];
+  coveredCount: number;
+}
+
+const TODAY = new Date();
 
 function isoInDays(days: number): string {
   const value = new Date(TODAY);
@@ -225,7 +233,7 @@ export function findRecipeBaseById(recipeId: string): BaseMockRecipe | undefined
 
 export function daysUntil(expiryDate?: string): number | null {
   if (!expiryDate) return null;
-  const today = new Date(TODAY);
+  const today = new Date();
   today.setUTCHours(0, 0, 0, 0);
   const expiry = new Date(expiryDate);
   expiry.setUTCHours(0, 0, 0, 0);
@@ -263,43 +271,79 @@ export function findExpiringSoon(items: DashboardStockItem[], limit = 3): Dashbo
 }
 
 export function buildRecipeSuggestions(items: DashboardStockItem[]): MockRecipe[] {
-  if (items.length === 0) return [];
+  return buildRecipeSuggestionsByScope(items, 'stock');
+}
 
-  const normalizedNames = items.map((item) => item.name.toLowerCase());
+export function getStartOfNextMonthUTC(referenceDate: Date = new Date()): Date {
+  return new Date(Date.UTC(referenceDate.getUTCFullYear(), referenceDate.getUTCMonth() + 1, 1, 0, 0, 0, 0));
+}
+
+export function isInComingMonths(expiryDate?: string, referenceDate: Date = new Date()): boolean {
+  if (!expiryDate) return false;
+  const expiry = new Date(expiryDate);
+  if (Number.isNaN(expiry.getTime())) return false;
+  return expiry.getTime() >= getStartOfNextMonthUTC(referenceDate).getTime();
+}
+
+function getComingMonthsDistance(expiryDate?: string, referenceDate: Date = new Date()): number | null {
+  if (!isInComingMonths(expiryDate, referenceDate) || !expiryDate) return null;
+  const expiry = new Date(expiryDate);
+  return (expiry.getUTCFullYear() - referenceDate.getUTCFullYear()) * 12 + (expiry.getUTCMonth() - referenceDate.getUTCMonth());
+}
+
+function getActiveItemsByScope(items: DashboardStockItem[], scope: RecipeSuggestionScope): DashboardStockItem[] {
+  const activeItems = items.filter((item) => item.status === 'active');
+  if (scope === 'stock') return activeItems;
+
+  const maxDaysByScope: Record<Exclude<RecipeSuggestionScope, 'stock'>, number> = {
+    expiryDay: 0,
+    expiryWeek: 7,
+    expiryMonth: 31,
+    expiryComingMonths: Number.POSITIVE_INFINITY,
+  };
+
+  if (scope === 'expiryComingMonths') {
+    return activeItems.filter((item) => isInComingMonths(item.expiry_date));
+  }
+
+  return activeItems.filter((item) => {
+    const days = daysUntil(item.expiry_date);
+    if (days === null) return false;
+    return days >= 0 && days <= maxDaysByScope[scope];
+  });
+}
+
+export function buildRecipeSuggestionsByScope(
+  items: DashboardStockItem[],
+  scope: RecipeSuggestionScope,
+): MockRecipe[] {
+  const scopedItems = getActiveItemsByScope(items, scope);
+  if (scopedItems.length === 0) return [];
+
   const urgentNames = new Set(
-    items
+    scopedItems
       .filter((item) => {
         const days = daysUntil(item.expiry_date);
-        return days !== null && days <= 2;
+        return days !== null && days >= 0 && days <= 2;
       })
-      .map((item) => item.name.toLowerCase()),
+      .map((item) => normalizeIngredientName(item.name)),
   );
 
   const easyTypes = new Set<MockRecipe['type']>(['apero', 'toast', 'tartine', 'poelee', 'salade', 'bol']);
   const isFastRecipe = (minutes: number) => minutes <= 15;
 
   const scored = MOCK_RECIPES_BASE.map((recipe) => {
-    const availableIngredients: string[] = [];
-    const missingIngredients: string[] = [];
     const ingredients = recipe.ingredientsDetailed.map((ingredient) => ingredient.name);
-
-    ingredients.forEach((ingredient) => {
-      const target = ingredient.toLowerCase();
-      const ingredientTokens = target.split(/[\s,&'-]+/).filter((token) => token.length >= 4);
-      const found = normalizedNames.some((name) => {
-        if (name === target || name.includes(target) || target.includes(name)) return true;
-        return ingredientTokens.some((token) => name.includes(token));
-      });
-
-      if (found) availableIngredients.push(ingredient);
-      else missingIngredients.push(ingredient);
-    });
+    const { availableIngredients, missingIngredients } = computeRecipeIngredientAvailability(
+      scopedItems,
+      recipe.ingredientsDetailed,
+    );
 
     const matchedCount = availableIngredients.length;
     const missingCount = missingIngredients.length;
     const matchRate = Math.round((matchedCount / ingredients.length) * 100);
 
-    const urgencyBonus = availableIngredients.some((ingredient) => urgentNames.has(ingredient.toLowerCase())) ? 10 : 0;
+    const urgencyBonus = availableIngredients.some((ingredient) => urgentNames.has(normalizeIngredientName(ingredient))) ? 10 : 0;
     const quickBonus = isFastRecipe(recipe.timeMinutes) ? 12 : recipe.timeMinutes <= 25 ? 6 : 0;
     const typeBonus = easyTypes.has(recipe.type) ? 8 : 0;
     const nearPossibleBonus = missingCount <= 2 ? 12 : missingCount === 3 ? 6 : 0;
@@ -320,4 +364,110 @@ export function buildRecipeSuggestions(items: DashboardStockItem[]): MockRecipe[
     .sort((a, b) => b.score - a.score || b.matchedCount - a.matchedCount || a.missingCount - b.missingCount || a.timeMinutes - b.timeMinutes);
 
   return scored.slice(0, 8);
+}
+
+export function buildAntiWastePlanByScope(
+  items: DashboardStockItem[],
+  scope: RecipeSuggestionScope,
+): AntiWastePlan {
+  const activeItems = items.filter((item) => item.status === 'active');
+  const scopedItems = getActiveItemsByScope(items, scope);
+  if (activeItems.length === 0 || scopedItems.length === 0) {
+    return { recipes: [], coveredItemIds: [], coveredCount: 0 };
+  }
+
+  const stockSuggestions = buildRecipeSuggestionsByScope(activeItems, 'stock');
+  const suggestionById = new Map(stockSuggestions.map((suggestion) => [suggestion.id, suggestion]));
+  const urgencyWeightById = new Map<string, number>();
+  activeItems.forEach((item) => {
+    if (scope === 'expiryComingMonths') {
+      const comingMonthsDistance = getComingMonthsDistance(item.expiry_date);
+      if (comingMonthsDistance === null) {
+        urgencyWeightById.set(item.id, 0);
+      } else if (comingMonthsDistance === 1) {
+        urgencyWeightById.set(item.id, 95);
+      } else if (comingMonthsDistance <= 3) {
+        urgencyWeightById.set(item.id, 65);
+      } else {
+        urgencyWeightById.set(item.id, 35);
+      }
+      return;
+    }
+    const days = daysUntil(item.expiry_date);
+    if (days !== null && days >= 0 && days <= 1) urgencyWeightById.set(item.id, 120);
+    else if (days !== null && days >= 0 && days <= 7) urgencyWeightById.set(item.id, 65);
+    else urgencyWeightById.set(item.id, 25);
+  });
+
+  const buildCandidate = (recipe: BaseMockRecipe, blockedIds: Set<string>) => {
+    const coveredItems = scopedItems.filter((item) => {
+      if (blockedIds.has(item.id)) return false;
+      return recipe.ingredientsDetailed.some((ingredient) => isClearIngredientMatch(item.name, ingredient.name));
+    });
+    const coveredIds = coveredItems.map((item) => item.id);
+    const relevantIngredients = recipe.ingredientsDetailed.filter((ingredient) =>
+      scopedItems.some((item) => isClearIngredientMatch(item.name, ingredient.name)),
+    );
+    const missingCount = recipe.ingredientsDetailed.length - relevantIngredients.length;
+    const urgencyScore = coveredItems.reduce((sum, item) => sum + (urgencyWeightById.get(item.id) ?? 0), 0);
+    const urgencySpreadBonus = Math.min(coveredItems.length, 3) * 12;
+    const durationPenalty = recipe.timeMinutes > 25 ? Math.round((recipe.timeMinutes - 25) * 0.6) : 0;
+    const score = urgencyScore + urgencySpreadBonus - missingCount * 18 - durationPenalty;
+    const suggestion = suggestionById.get(recipe.id);
+
+    return {
+      recipeId: recipe.id,
+      score,
+      coveredIds,
+      missingCount,
+      suggestion,
+    };
+  };
+
+  const selected: MockRecipe[] = [];
+  const coveredIds = new Set<string>();
+  const first = MOCK_RECIPES_BASE
+    .map((recipe) => buildCandidate(recipe, coveredIds))
+    .filter((candidate) => candidate.coveredIds.length > 0 && candidate.suggestion)
+    .sort((a, b) => b.score - a.score || a.missingCount - b.missingCount)[0];
+
+  if (!first || !first.suggestion) {
+    return { recipes: [], coveredItemIds: [], coveredCount: 0 };
+  }
+
+  selected.push(first.suggestion);
+  first.coveredIds.forEach((itemId) => coveredIds.add(itemId));
+
+  const second = MOCK_RECIPES_BASE
+    .filter((recipe) => recipe.id !== first.recipeId)
+    .map((recipe) => buildCandidate(recipe, coveredIds))
+    .filter((candidate) => candidate.coveredIds.length > 0 && candidate.suggestion)
+    .sort((a, b) => b.score - a.score || a.missingCount - b.missingCount)[0];
+
+  if (second && second.suggestion && second.coveredIds.length > 0) {
+    selected.push(second.suggestion);
+    second.coveredIds.forEach((itemId) => coveredIds.add(itemId));
+  }
+
+  return { recipes: selected.slice(0, 2), coveredItemIds: [...coveredIds], coveredCount: coveredIds.size };
+}
+
+export interface RecipeIngredientAvailabilitySnapshot {
+  availableIngredients: string[];
+  missingIngredients: string[];
+  matchedCount: number;
+  missingCount: number;
+}
+
+export function computeRecipeAvailabilityFromStock(
+  items: DashboardStockItem[],
+  recipeIngredients: RecipeIngredient[],
+): RecipeIngredientAvailabilitySnapshot {
+  const { availableIngredients, missingIngredients } = computeRecipeIngredientAvailability(items, recipeIngredients);
+  return {
+    availableIngredients,
+    missingIngredients,
+    matchedCount: availableIngredients.length,
+    missingCount: missingIngredients.length,
+  };
 }

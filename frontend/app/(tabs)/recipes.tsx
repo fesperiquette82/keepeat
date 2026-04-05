@@ -3,11 +3,19 @@ import { SafeAreaView } from 'react-native-safe-area-context';
 import { View, Text, StyleSheet, FlatList, TouchableOpacity, Image } from 'react-native';
 import Ionicons from '@expo/vector-icons/Ionicons';
 import { useRouter } from 'expo-router';
+import { useFocusEffect } from '@react-navigation/native';
 import { useStockStore } from '../../store/stockStore';
 import { C, T } from '../../utils/theme';
-import { buildRecipeSuggestions, resolveStockItems } from '../../data/mockDashboardData';
+import {
+  buildAntiWastePlanByScope,
+  buildRecipeSuggestionsByScope,
+  resolveStockItems,
+  type RecipeSuggestionScope,
+} from '../../data/mockDashboardData';
 import { countLabelFr } from '../../utils/uiText';
 import { UI_LABELS } from '../../utils/uiLabels';
+import { useLanguageStore } from '../../store/languageStore';
+import { logger } from '../../utils/logger';
 
 const TYPE_LABEL: Record<string, string> = {
   apero: 'Apéro',
@@ -19,21 +27,70 @@ const TYPE_LABEL: Record<string, string> = {
   rapide: 'Rapide',
 };
 
+type RecipesFilter = 'expiryDay' | 'expiryWeek' | 'expiryMonth' | 'expiryComingMonths';
+
+const FILTER_LABEL_KEYS: Record<RecipesFilter, string> = {
+  expiryDay: 'recipesFilterExpiryDay',
+  expiryWeek: 'recipesFilterExpiryWeek',
+  expiryMonth: 'recipesFilterExpiryMonth',
+  expiryComingMonths: 'recipesFilterComingMonths',
+};
+
+const EMPTY_FILTER_LABEL_KEYS: Record<RecipesFilter, string> = {
+  expiryDay: 'recipesEmptyExpiryDay',
+  expiryWeek: 'recipesEmptyExpiryWeek',
+  expiryMonth: 'recipesEmptyExpiryMonth',
+  expiryComingMonths: 'recipesEmptyComingMonths',
+};
+
 export default function RecipesScreen() {
   const router = useRouter();
+  const { t } = useLanguageStore();
   const { items: storeItems, fetchStock } = useStockStore();
   const [imageErrors, setImageErrors] = React.useState<Record<string, boolean>>({});
+  const [activeFilter, setActiveFilter] = React.useState<RecipesFilter>('expiryDay');
 
-  useEffect(() => {
-    fetchStock();
-  }, [fetchStock]);
+  useFocusEffect(
+    React.useCallback(() => {
+      logger.debug('[RECIPES_MATCH] recipes list focused - refreshing stock');
+      fetchStock();
+    }, [fetchStock]),
+  );
 
   const { items } = useMemo(() => resolveStockItems(storeItems, { useMockFallback: false }), [storeItems]);
-  const suggestions = useMemo(() => buildRecipeSuggestions(items), [items]);
+  const scope = activeFilter as RecipeSuggestionScope;
+  const suggestions = useMemo(() => buildRecipeSuggestionsByScope(items, scope), [items, scope]);
+  const antiWastePlan = useMemo(() => buildAntiWastePlanByScope(items, scope), [items, scope]);
+  const classicSuggestions = useMemo(() => {
+    const planIds = new Set(antiWastePlan.recipes.map((recipe) => recipe.id));
+    return suggestions.filter((recipe) => !planIds.has(recipe.id));
+  }, [antiWastePlan.recipes, suggestions]);
+  const hasAnySuggestion = classicSuggestions.length > 0 || antiWastePlan.recipes.length > 0;
 
-  const emptyMessage = items.length === 0
-    ? 'Aucune recette disponible : ajoutez d’abord des ingrédients au stock.'
-    : 'Suggestions indisponibles pour le moment.';
+  useEffect(() => {
+    logger.debug('[RECIPES_MATCH] list availability recomputed', {
+      scope,
+      stockItemsCount: items.length,
+      suggestionsCount: suggestions.length,
+      antiWasteCount: antiWastePlan.recipes.length,
+    });
+  }, [antiWastePlan.recipes.length, items.length, scope, suggestions.length]);
+
+  const filters = useMemo(
+    () =>
+      (Object.keys(FILTER_LABEL_KEYS) as RecipesFilter[]).map((key) => ({
+        key,
+        label: t(FILTER_LABEL_KEYS[key]),
+      })),
+    [t],
+  );
+
+  const emptyMessage = useMemo(() => {
+    if (items.length === 0) {
+      return 'Aucune recette disponible : ajoutez d’abord des ingrédients au stock.';
+    }
+    return t(EMPTY_FILTER_LABEL_KEYS[activeFilter]);
+  }, [activeFilter, items.length, t]);
 
   return (
     <SafeAreaView style={styles.container}>
@@ -42,7 +99,25 @@ export default function RecipesScreen() {
         <Text style={styles.subtitle}>Suggestions simples liées à votre stock actuel.</Text>
       </View>
 
-      {suggestions.length === 0 ? (
+      <View style={styles.controlsCard}>
+        <Text style={styles.controlsSectionLabel}>Péremption ciblée</Text>
+        <View style={styles.filterRow}>
+          {filters.map((filter) => {
+            const selected = filter.key === activeFilter;
+            return (
+              <TouchableOpacity
+                key={filter.key}
+                style={[styles.filterChip, selected && styles.filterChipActive]}
+                onPress={() => setActiveFilter(filter.key)}
+              >
+                <Text style={[styles.filterChipLabel, selected && styles.filterChipLabelActive]}>{filter.label}</Text>
+              </TouchableOpacity>
+            );
+          })}
+        </View>
+      </View>
+
+      {!hasAnySuggestion ? (
         <View style={styles.emptyWrap}>
           <Text style={styles.emptyTitle}>Aucune recette disponible</Text>
           <Text style={styles.emptyText}>{emptyMessage}</Text>
@@ -52,11 +127,40 @@ export default function RecipesScreen() {
         </View>
       ) : (
         <FlatList
-          data={suggestions}
+          data={classicSuggestions}
           keyExtractor={(item) => item.id}
           contentContainerStyle={styles.listContent}
+          ListHeaderComponent={
+            <View style={styles.planCard}>
+              <Text style={styles.planTitle}>Plan anti-gaspi</Text>
+              {antiWastePlan.recipes.length === 0 ? (
+                <Text style={styles.planEmptyText}>Aucun plan utile pour ce segment.</Text>
+              ) : (
+                <>
+                  <Text style={styles.planMeta}>
+                    {antiWastePlan.recipes.length} recette{antiWastePlan.recipes.length > 1 ? 's' : ''} · {countLabelFr(antiWastePlan.coveredCount, 'produit')} couvert{antiWastePlan.coveredCount > 1 ? 's' : ''}
+                  </Text>
+                  {antiWastePlan.recipes.map((recipe, index) => (
+                    <TouchableOpacity
+                      key={`plan-${recipe.id}`}
+                      onPress={() => router.push({ pathname: '/recipes/[id]', params: { id: recipe.id } })}
+                      style={styles.planRecipeButton}
+                    >
+                      <Text style={styles.planRecipeTitle}>{index + 1}. {recipe.title}</Text>
+                      <Text style={styles.planRecipeMeta}>{recipe.timeMinutes} min · {countLabelFr(recipe.matchedCount, 'ingrédient')} disponible{recipe.matchedCount > 1 ? 's' : ''}</Text>
+                    </TouchableOpacity>
+                  ))}
+                </>
+              )}
+              <Text style={styles.planSectionHint}>Suggestions classiques</Text>
+            </View>
+          }
           renderItem={({ item }) => (
-            <View style={styles.card}>
+            <TouchableOpacity
+              style={styles.card}
+              activeOpacity={0.85}
+              onPress={() => router.push({ pathname: '/recipes/[id]', params: { id: item.id } })}
+            >
               <View style={styles.cardMain}>
                 <View style={styles.thumb}>
                   {item.image_url && !imageErrors[item.id] ? (
@@ -83,7 +187,7 @@ export default function RecipesScreen() {
                   </TouchableOpacity>
                 </View>
               </View>
-            </View>
+            </TouchableOpacity>
           )}
           ListFooterComponent={
             <TouchableOpacity style={styles.cta} onPress={() => router.push('/(tabs)/stock')}>
@@ -101,7 +205,22 @@ const styles = StyleSheet.create({
   header: { paddingHorizontal: 16, paddingTop: 8, paddingBottom: 8 },
   title: { fontSize: 24, fontWeight: '800', color: C.text },
   subtitle: { marginTop: 6, ...T.secondary },
+  controlsCard: { marginHorizontal: 16, marginBottom: 8, padding: 12, borderRadius: 12, backgroundColor: '#fff', borderWidth: 1, borderColor: C.border, gap: 8 },
+  controlsSectionLabel: { ...T.secondarySmall, fontWeight: '700' },
+  filterRow: { flexDirection: 'row', gap: 8, paddingBottom: 2, flexWrap: 'wrap' },
+  filterChip: { paddingVertical: 8, paddingHorizontal: 12, borderRadius: 999, backgroundColor: '#ECFDF3' },
+  filterChipActive: { backgroundColor: C.primary },
+  filterChipLabel: { color: '#166534', fontSize: 13, fontWeight: '700' },
+  filterChipLabelActive: { color: '#fff' },
   listContent: { padding: 16, gap: 8, paddingBottom: 24 },
+  planCard: { backgroundColor: '#ECFDF3', borderRadius: 12, borderWidth: 1, borderColor: '#BBF7D0', padding: 12, marginBottom: 6, gap: 6 },
+  planTitle: { color: '#14532D', fontSize: 16, fontWeight: '800' },
+  planMeta: { color: '#166534', fontSize: 12, fontWeight: '700' },
+  planEmptyText: { color: '#166534', fontSize: 13, fontWeight: '600' },
+  planRecipeButton: { backgroundColor: '#fff', borderRadius: 10, paddingVertical: 8, paddingHorizontal: 10, borderWidth: 1, borderColor: '#DCFCE7' },
+  planRecipeTitle: { color: C.text, fontSize: 14, fontWeight: '700' },
+  planRecipeMeta: { color: C.textMid, fontSize: 12, fontWeight: '600' },
+  planSectionHint: { marginTop: 2, color: C.textMid, fontSize: 12, fontWeight: '700' },
   card: { backgroundColor: '#fff', borderRadius: 12, padding: 11, gap: 4 },
   cardMain: { flexDirection: 'row', gap: 10 },
   cardText: { flex: 1 },

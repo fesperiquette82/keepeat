@@ -1331,6 +1331,30 @@ async def throw_item(
     return {"ok": True}
 
 
+@api_router.post("/stock/{item_id}/restore")
+async def restore_item(
+    item_id: str,
+    current_user: Dict[str, Any] = Depends(_get_current_user),
+):
+    try:
+        oid = ObjectId(item_id)
+    except Exception:
+        raise HTTPException(status_code=400, detail="Invalid item id")
+
+    res = await stock_col.update_one(
+        {"_id": oid, "user_id": current_user["id"]},
+        {"$set": {"status": "active", "consumed_date": None, "thrown_date": None}},
+    )
+    if res.matched_count == 0:
+        raise HTTPException(status_code=404, detail="Item not found")
+
+    await users_col.update_one(
+        {"_id": ObjectId(current_user["id"])},
+        {"$set": {"last_stock_action": utc_now().isoformat()}},
+    )
+    return {"ok": True}
+
+
 @api_router.get("/stock/priority", response_model=List[StockItem])
 async def get_priority_items(current_user: Dict[str, Any] = Depends(_get_current_user)):
     docs = await _compute_priority_items(
