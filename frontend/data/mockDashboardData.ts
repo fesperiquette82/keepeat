@@ -36,7 +36,7 @@ export interface MockRecipe extends BaseMockRecipe {
   ingredients: string[];
 }
 
-export type RecipeSuggestionScope = 'stock' | 'expiryDay' | 'expiryWeek' | 'expiryMonth' | 'expiryComingMonths';
+export type RecipeSuggestionScope = 'stock' | 'expiryDay' | 'expiryWeek' | 'expiryMonth';
 export interface AntiWastePlan {
   recipes: MockRecipe[];
   coveredItemIds: string[];
@@ -274,23 +274,6 @@ export function buildRecipeSuggestions(items: DashboardStockItem[]): MockRecipe[
   return buildRecipeSuggestionsByScope(items, 'stock');
 }
 
-export function getStartOfNextMonthUTC(referenceDate: Date = new Date()): Date {
-  return new Date(Date.UTC(referenceDate.getUTCFullYear(), referenceDate.getUTCMonth() + 1, 1, 0, 0, 0, 0));
-}
-
-export function isInComingMonths(expiryDate?: string, referenceDate: Date = new Date()): boolean {
-  if (!expiryDate) return false;
-  const expiry = new Date(expiryDate);
-  if (Number.isNaN(expiry.getTime())) return false;
-  return expiry.getTime() >= getStartOfNextMonthUTC(referenceDate).getTime();
-}
-
-function getComingMonthsDistance(expiryDate?: string, referenceDate: Date = new Date()): number | null {
-  if (!isInComingMonths(expiryDate, referenceDate) || !expiryDate) return null;
-  const expiry = new Date(expiryDate);
-  return (expiry.getUTCFullYear() - referenceDate.getUTCFullYear()) * 12 + (expiry.getUTCMonth() - referenceDate.getUTCMonth());
-}
-
 function getActiveItemsByScope(items: DashboardStockItem[], scope: RecipeSuggestionScope): DashboardStockItem[] {
   const activeItems = items.filter((item) => item.status === 'active');
   if (scope === 'stock') return activeItems;
@@ -299,12 +282,7 @@ function getActiveItemsByScope(items: DashboardStockItem[], scope: RecipeSuggest
     expiryDay: 0,
     expiryWeek: 7,
     expiryMonth: 31,
-    expiryComingMonths: Number.POSITIVE_INFINITY,
   };
-
-  if (scope === 'expiryComingMonths') {
-    return activeItems.filter((item) => isInComingMonths(item.expiry_date));
-  }
 
   return activeItems.filter((item) => {
     const days = daysUntil(item.expiry_date);
@@ -380,19 +358,6 @@ export function buildAntiWastePlanByScope(
   const suggestionById = new Map(stockSuggestions.map((suggestion) => [suggestion.id, suggestion]));
   const urgencyWeightById = new Map<string, number>();
   activeItems.forEach((item) => {
-    if (scope === 'expiryComingMonths') {
-      const comingMonthsDistance = getComingMonthsDistance(item.expiry_date);
-      if (comingMonthsDistance === null) {
-        urgencyWeightById.set(item.id, 0);
-      } else if (comingMonthsDistance === 1) {
-        urgencyWeightById.set(item.id, 95);
-      } else if (comingMonthsDistance <= 3) {
-        urgencyWeightById.set(item.id, 65);
-      } else {
-        urgencyWeightById.set(item.id, 35);
-      }
-      return;
-    }
     const days = daysUntil(item.expiry_date);
     if (days !== null && days >= 0 && days <= 1) urgencyWeightById.set(item.id, 120);
     else if (days !== null && days >= 0 && days <= 7) urgencyWeightById.set(item.id, 65);
