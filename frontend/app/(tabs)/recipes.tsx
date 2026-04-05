@@ -27,13 +27,14 @@ const TYPE_LABEL: Record<string, string> = {
   rapide: 'Rapide',
 };
 
-type RecipesFilter = 'stock' | 'expiryDay' | 'expiryWeek' | 'expiryMonth' | 'expiryComingMonths';
+type RecipesFilter = 'stock' | 'expiryDay' | 'expiryWeek' | 'expiryMonth';
+
+const FILTER_ORDER: RecipesFilter[] = ['expiryDay', 'expiryWeek', 'expiryMonth', 'stock'];
 
 const FILTER_LABEL_KEYS: Record<RecipesFilter, string> = {
   expiryDay: 'recipesFilterExpiryDay',
   expiryWeek: 'recipesFilterExpiryWeek',
   expiryMonth: 'recipesFilterExpiryMonth',
-  expiryComingMonths: 'recipesFilterComingMonths',
   stock: 'recipesFilterAll',
 };
 
@@ -42,7 +43,6 @@ const EMPTY_FILTER_LABEL_KEYS: Record<RecipesFilter, string> = {
   expiryDay: 'recipesEmptyExpiryDay',
   expiryWeek: 'recipesEmptyExpiryWeek',
   expiryMonth: 'recipesEmptyExpiryMonth',
-  expiryComingMonths: 'recipesEmptyComingMonths',
 };
 
 export default function RecipesScreen() {
@@ -60,7 +60,7 @@ export default function RecipesScreen() {
   );
 
   const { items } = useMemo(() => resolveStockItems(storeItems, { useMockFallback: false }), [storeItems]);
-  const scope = activeFilter as RecipeSuggestionScope;
+  const scope: RecipeSuggestionScope = activeFilter;
   const suggestions = useMemo(() => buildRecipeSuggestionsByScope(items, scope), [items, scope]);
   const antiWastePlan = useMemo(() => buildAntiWastePlanByScope(items, scope), [items, scope]);
   const classicSuggestions = useMemo(() => {
@@ -80,7 +80,7 @@ export default function RecipesScreen() {
 
   const filters = useMemo(
     () =>
-      (Object.keys(FILTER_LABEL_KEYS) as RecipesFilter[]).map((key) => ({
+      FILTER_ORDER.map((key) => ({
         key,
         label: t(FILTER_LABEL_KEYS[key]),
       })),

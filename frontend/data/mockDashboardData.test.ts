@@ -4,7 +4,6 @@ import test from 'node:test';
 import {
   buildAntiWastePlanByScope,
   buildRecipeSuggestionsByScope,
-  isInComingMonths,
   type DashboardStockItem,
 } from './mockDashboardData';
 
@@ -23,61 +22,6 @@ function buildItem(id: string, name: string, expiryDate: string): DashboardStock
     status: ACTIVE_STATUS,
   };
 }
-
-function isoUTC(year: number, month: number, day: number, hour = 0): string {
-  return new Date(Date.UTC(year, month, day, hour, 0, 0, 0)).toISOString();
-}
-
-function buildRelativeDates(referenceDate: Date) {
-  const year = referenceDate.getUTCFullYear();
-  const month = referenceDate.getUTCMonth();
-  return {
-    currentMonthEnd: isoUTC(year, month + 1, 0, 23),
-    nextMonthStart: isoUTC(year, month + 1, 1, 0),
-    nextMonthMid: isoUTC(year, month + 1, 15, 0),
-    monthAfterNextMid: isoUTC(year, month + 2, 15, 0),
-    currentMonthMid: isoUTC(year, month, 15, 0),
-  };
-}
-
-test('isInComingMonths exclut les produits du mois courant et inclut le mois suivant', () => {
-  const reference = new Date('2026-04-10T12:00:00.000Z');
-  const dates = buildRelativeDates(reference);
-
-  assert.equal(isInComingMonths(dates.currentMonthEnd, reference), false);
-  assert.equal(isInComingMonths(dates.nextMonthStart, reference), true);
-  assert.equal(isInComingMonths(dates.monthAfterNextMid, reference), true);
-});
-
-test('le scope expiryComingMonths ne retient que les produits après la fin du mois courant', () => {
-  const now = new Date();
-  const dates = buildRelativeDates(now);
-  const items: DashboardStockItem[] = [
-    buildItem('a', 'Courgettes', dates.currentMonthMid),
-    buildItem('b', 'Poulet émincé', dates.nextMonthMid),
-    buildItem('c', 'Œufs', dates.monthAfterNextMid),
-  ];
-
-  const suggestions = buildRecipeSuggestionsByScope(items, 'expiryComingMonths');
-  const ids = new Set(suggestions.map((recipe) => recipe.id));
-
-  assert.equal(ids.has('r1'), true);
-  assert.equal(ids.has('r7'), true);
-});
-
-test('le plan anti-gaspi du scope expiryComingMonths couvre uniquement des produits hors mois courant', () => {
-  const now = new Date();
-  const dates = buildRelativeDates(now);
-  const items: DashboardStockItem[] = [
-    buildItem('a', 'Courgettes', dates.currentMonthMid),
-    buildItem('b', 'Poulet émincé', dates.nextMonthMid),
-    buildItem('c', 'Œufs', dates.monthAfterNextMid),
-  ];
-
-  const plan = buildAntiWastePlanByScope(items, 'expiryComingMonths');
-
-  assert.deepEqual(plan.coveredItemIds.sort(), ['b', 'c']);
-});
 
 test('le scope stock ne propose que des recettes avec au moins un ingrédient disponible et un plan anti-gaspi global unique', () => {
   const items: DashboardStockItem[] = [
