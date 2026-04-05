@@ -11,17 +11,21 @@ const PUSH_TOKEN_KEY = 'keepeat_push_token';
 const NOTIF_IDS_KEY = 'keepeat_notification_ids';
 
 // Configure le handler global (doit être appelé avant tout scheduling)
-Notifications.setNotificationHandler({
-  handleNotification: async () => ({
-    shouldShowAlert: true,
-    shouldPlaySound: true,
-    shouldSetBadge: false,
-    shouldShowBanner: true,
-    shouldShowList: true,
-  }),
-});
+if (Platform.OS !== 'web') {
+  Notifications.setNotificationHandler({
+    handleNotification: async () => ({
+      shouldShowAlert: true,
+      shouldPlaySound: true,
+      shouldSetBadge: false,
+      shouldShowBanner: true,
+      shouldShowList: true,
+    }),
+  });
+}
 
 export async function requestNotificationPermissions(): Promise<boolean> {
+  if (Platform.OS === 'web') return false;
+
   if (Platform.OS === 'android') {
     await Notifications.setNotificationChannelAsync('expiry-alerts', {
       name: 'Alertes péremption',
