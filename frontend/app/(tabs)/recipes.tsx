@@ -13,6 +13,7 @@ import {
 } from '../../data/mockDashboardData';
 import { countLabelFr } from '../../utils/uiText';
 import { UI_LABELS } from '../../utils/uiLabels';
+import { useLanguageStore } from '../../store/languageStore';
 
 const TYPE_LABEL: Record<string, string> = {
   apero: 'Apéro',
@@ -24,24 +25,25 @@ const TYPE_LABEL: Record<string, string> = {
   rapide: 'Rapide',
 };
 
-type RecipesFilter = 'expiryDay' | 'expiryWeek' | 'expiryMonth' | 'expiryYear';
+type RecipesFilter = 'expiryDay' | 'expiryWeek' | 'expiryMonth' | 'expiryComingMonths';
 
-const FILTERS: { key: RecipesFilter; label: string }[] = [
-  { key: 'expiryDay', label: 'Ce jour' },
-  { key: 'expiryWeek', label: 'Cette semaine' },
-  { key: 'expiryMonth', label: 'Ce mois' },
-  { key: 'expiryYear', label: 'Cette année' },
-];
+const FILTER_LABEL_KEYS: Record<RecipesFilter, string> = {
+  expiryDay: 'recipesFilterExpiryDay',
+  expiryWeek: 'recipesFilterExpiryWeek',
+  expiryMonth: 'recipesFilterExpiryMonth',
+  expiryComingMonths: 'recipesFilterComingMonths',
+};
 
-const EMPTY_FILTER_LABELS: Record<RecipesFilter, string> = {
-  expiryDay: 'Aucun produit à consommer aujourd’hui.',
-  expiryWeek: 'Aucun produit à consommer cette semaine.',
-  expiryMonth: 'Aucun produit à consommer ce mois.',
-  expiryYear: 'Aucun produit à consommer cette année.',
+const EMPTY_FILTER_LABEL_KEYS: Record<RecipesFilter, string> = {
+  expiryDay: 'recipesEmptyExpiryDay',
+  expiryWeek: 'recipesEmptyExpiryWeek',
+  expiryMonth: 'recipesEmptyExpiryMonth',
+  expiryComingMonths: 'recipesEmptyComingMonths',
 };
 
 export default function RecipesScreen() {
   const router = useRouter();
+  const { t } = useLanguageStore();
   const { items: storeItems, fetchStock } = useStockStore();
   const [imageErrors, setImageErrors] = React.useState<Record<string, boolean>>({});
   const [activeFilter, setActiveFilter] = React.useState<RecipesFilter>('expiryDay');
@@ -60,12 +62,21 @@ export default function RecipesScreen() {
   }, [antiWastePlan.recipes, suggestions]);
   const hasAnySuggestion = classicSuggestions.length > 0 || antiWastePlan.recipes.length > 0;
 
+  const filters = useMemo(
+    () =>
+      (Object.keys(FILTER_LABEL_KEYS) as RecipesFilter[]).map((key) => ({
+        key,
+        label: t(FILTER_LABEL_KEYS[key]),
+      })),
+    [t],
+  );
+
   const emptyMessage = useMemo(() => {
     if (items.length === 0) {
       return 'Aucune recette disponible : ajoutez d’abord des ingrédients au stock.';
     }
-    return EMPTY_FILTER_LABELS[activeFilter];
-  }, [activeFilter, items.length]);
+    return t(EMPTY_FILTER_LABEL_KEYS[activeFilter]);
+  }, [activeFilter, items.length, t]);
 
   return (
     <SafeAreaView style={styles.container}>
@@ -77,7 +88,7 @@ export default function RecipesScreen() {
       <View style={styles.controlsCard}>
         <Text style={styles.controlsSectionLabel}>Péremption ciblée</Text>
         <View style={styles.filterRow}>
-          {FILTERS.map((filter) => {
+          {filters.map((filter) => {
             const selected = filter.key === activeFilter;
             return (
               <TouchableOpacity
