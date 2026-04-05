@@ -360,7 +360,7 @@ export function buildRecipeSuggestionsByScope(
       missingIngredients,
     };
   })
-    .filter((recipe) => recipe.matchedCount >= 1 || recipe.missingCount <= 2)
+    .filter((recipe) => recipe.matchedCount >= 1)
     .sort((a, b) => b.score - a.score || b.matchedCount - a.matchedCount || a.missingCount - b.missingCount || a.timeMinutes - b.timeMinutes);
 
   return scored.slice(0, 8);
@@ -444,7 +444,7 @@ export function buildAntiWastePlanByScope(
     .filter((candidate) => candidate.coveredIds.length > 0 && candidate.suggestion)
     .sort((a, b) => b.score - a.score || a.missingCount - b.missingCount)[0];
 
-  if (second && second.suggestion && second.coveredIds.length > 0) {
+  if (scope !== 'stock' && second && second.suggestion && second.coveredIds.length > 0) {
     selected.push(second.suggestion);
     second.coveredIds.forEach((itemId) => coveredIds.add(itemId));
   }
