@@ -27,16 +27,18 @@ const TYPE_LABEL: Record<string, string> = {
   rapide: 'Rapide',
 };
 
-type RecipesFilter = 'expiryDay' | 'expiryWeek' | 'expiryMonth' | 'expiryComingMonths';
+type RecipesFilter = 'stock' | 'expiryDay' | 'expiryWeek' | 'expiryMonth' | 'expiryComingMonths';
 
 const FILTER_LABEL_KEYS: Record<RecipesFilter, string> = {
   expiryDay: 'recipesFilterExpiryDay',
   expiryWeek: 'recipesFilterExpiryWeek',
   expiryMonth: 'recipesFilterExpiryMonth',
   expiryComingMonths: 'recipesFilterComingMonths',
+  stock: 'recipesFilterAll',
 };
 
 const EMPTY_FILTER_LABEL_KEYS: Record<RecipesFilter, string> = {
+  stock: 'recipesEmptyAll',
   expiryDay: 'recipesEmptyExpiryDay',
   expiryWeek: 'recipesEmptyExpiryWeek',
   expiryMonth: 'recipesEmptyExpiryMonth',
