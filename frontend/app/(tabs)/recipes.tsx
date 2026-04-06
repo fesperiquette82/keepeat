@@ -1,4 +1,4 @@
-import React, { useEffect, useMemo } from 'react';
+import React, { useEffect, useMemo, useState } from 'react';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { View, Text, StyleSheet, FlatList, TouchableOpacity, Image } from 'react-native';
 import Ionicons from '@expo/vector-icons/Ionicons';
@@ -6,16 +6,11 @@ import { useRouter } from 'expo-router';
 import { useFocusEffect } from '@react-navigation/native';
 import { useStockStore } from '../../store/stockStore';
 import { C, T } from '../../utils/theme';
-import {
-  buildAntiWastePlanByScope,
-  buildRecipeSuggestionsByScope,
-  resolveStockItems,
-  type RecipeSuggestionScope,
-} from '../../data/mockDashboardData';
 import { countLabelFr } from '../../utils/uiText';
 import { UI_LABELS } from '../../utils/uiLabels';
 import { useLanguageStore } from '../../store/languageStore';
 import { logger } from '../../utils/logger';
+import { useRecipesStore, type BackendRecipeSuggestion, type RecipesFilter } from '../../store/recipesStore';
 
 const TYPE_LABEL: Record<string, string> = {
   apero: 'Apéro',
@@ -26,8 +21,6 @@ const TYPE_LABEL: Record<string, string> = {
   bol: 'Bol',
   rapide: 'Rapide',
 };
-
-type RecipesFilter = 'stock' | 'expiryDay' | 'expiryWeek' | 'expiryMonth';
 
 const FILTER_ORDER: RecipesFilter[] = ['expiryDay', 'expiryWeek', 'expiryMonth', 'stock'];
 
@@ -45,38 +38,68 @@ const EMPTY_FILTER_LABEL_KEYS: Record<RecipesFilter, string> = {
   expiryMonth: 'recipesEmptyExpiryMonth',
 };
 
+interface RecipeCard {
+  id: string;
+  title: string;
+  timeMinutes: number;
+  type: string;
+  matchedCount: number;
+  missingCount: number;
+  imageUrl: string;
+}
+
+function toRecipeCard(recipe: BackendRecipeSuggestion): RecipeCard {
+  const prep = typeof recipe.prep_time_min === 'number' ? recipe.prep_time_min : 0;
+  const cook = typeof recipe.cook_time_min === 'number' ? recipe.cook_time_min : 0;
+  return {
+    id: recipe.id,
+    title: recipe.title,
+    timeMinutes: prep + cook > 0 ? prep + cook : 15,
+    type: 'rapide',
+    matchedCount: Array.isArray(recipe.usedIngredients) ? recipe.usedIngredients.length : 0,
+    missingCount: Array.isArray(recipe.missedIngredients) ? recipe.missedIngredients.length : 0,
+    imageUrl: typeof recipe.image === 'string' ? recipe.image : '',
+  };
+}
+
 export default function RecipesScreen() {
   const router = useRouter();
   const { t } = useLanguageStore();
   const { items: storeItems, fetchStock } = useStockStore();
-  const [imageErrors, setImageErrors] = React.useState<Record<string, boolean>>({});
-  const [activeFilter, setActiveFilter] = React.useState<RecipesFilter>('expiryDay');
+  const [activeFilter, setActiveFilter] = useState<RecipesFilter>('expiryDay');
+  const [imageErrors, setImageErrors] = useState<Record<string, boolean>>({});
+
+  const recipesByFilter = useRecipesStore((state) => state.suggestionsByFilter);
+  const isLoading = useRecipesStore((state) => state.isLoading);
+  const fetchRecipesSuggestions = useRecipesStore((state) => state.fetchSuggestions);
 
   useFocusEffect(
     React.useCallback(() => {
-      logger.debug('[RECIPES_MATCH] recipes list focused - refreshing stock');
       fetchStock();
-    }, [fetchStock]),
+      fetchRecipesSuggestions(activeFilter);
+    }, [activeFilter, fetchRecipesSuggestions, fetchStock]),
   );
 
-  const { items } = useMemo(() => resolveStockItems(storeItems, { useMockFallback: false }), [storeItems]);
-  const scope: RecipeSuggestionScope = activeFilter;
-  const suggestions = useMemo(() => buildRecipeSuggestionsByScope(items, scope), [items, scope]);
-  const antiWastePlan = useMemo(() => buildAntiWastePlanByScope(items, scope), [items, scope]);
-  const classicSuggestions = useMemo(() => {
-    const planIds = new Set(antiWastePlan.recipes.map((recipe) => recipe.id));
-    return suggestions.filter((recipe) => !planIds.has(recipe.id));
-  }, [antiWastePlan.recipes, suggestions]);
-  const hasAnySuggestion = classicSuggestions.length > 0 || antiWastePlan.recipes.length > 0;
+  useEffect(() => {
+    fetchRecipesSuggestions(activeFilter);
+  }, [activeFilter, fetchRecipesSuggestions]);
+
+  const recipes = useMemo(() => {
+    const raw = recipesByFilter[activeFilter] ?? [];
+    return raw.map(toRecipeCard);
+  }, [activeFilter, recipesByFilter]);
+
+  const classicSuggestions = useMemo(() => recipes, [recipes]);
+  const hasAnySuggestion = classicSuggestions.length > 0;
 
   useEffect(() => {
-    logger.debug('[RECIPES_MATCH] list availability recomputed', {
-      scope,
-      stockItemsCount: items.length,
-      suggestionsCount: suggestions.length,
-      antiWasteCount: antiWastePlan.recipes.length,
+    logger.debug('[RECIPES] backend recipes state updated', {
+      activeFilter,
+      stockCount: storeItems.length,
+      recipesCount: recipes.length,
+      isLoading,
     });
-  }, [antiWastePlan.recipes.length, items.length, scope, suggestions.length]);
+  }, [activeFilter, isLoading, recipes.length, storeItems.length]);
 
   const filters = useMemo(
     () =>
@@ -88,11 +111,44 @@ export default function RecipesScreen() {
   );
 
   const emptyMessage = useMemo(() => {
-    if (items.length === 0) {
+    const activeStockCount = storeItems.filter((item) => item.status === 'active').length;
+    if (activeStockCount === 0) {
       return 'Aucune recette disponible : ajoutez d’abord des ingrédients au stock.';
     }
+    if (isLoading) {
+      return 'Chargement des suggestions…';
+    }
     return t(EMPTY_FILTER_LABEL_KEYS[activeFilter]);
-  }, [activeFilter, items.length, t]);
+  }, [activeFilter, isLoading, storeItems, t]);
+
+  const listHeader = useMemo(() => {
+    const topRecipes = classicSuggestions.slice(0, 3);
+    return (
+      <View style={styles.planCard}>
+        <Text style={styles.planTitle}>Plan anti-gaspi</Text>
+        {topRecipes.length === 0 ? (
+          <Text style={styles.planEmptyText}>Aucun plan utile pour ce segment.</Text>
+        ) : (
+          <>
+            <Text style={styles.planMeta}>
+              {topRecipes.length} recette{topRecipes.length > 1 ? 's' : ''} · {countLabelFr(topRecipes.reduce((sum, recipe) => sum + recipe.matchedCount, 0), 'ingrédient')} disponible{topRecipes.reduce((sum, recipe) => sum + recipe.matchedCount, 0) > 1 ? 's' : ''}
+            </Text>
+            {topRecipes.map((recipe, index) => (
+              <TouchableOpacity
+                key={`plan-${recipe.id}`}
+                onPress={() => router.push({ pathname: '/recipes/[id]', params: { id: recipe.id } })}
+                style={styles.planRecipeButton}
+              >
+                <Text style={styles.planRecipeTitle}>{index + 1}. {recipe.title}</Text>
+                <Text style={styles.planRecipeMeta}>{recipe.timeMinutes} min · {countLabelFr(recipe.matchedCount, 'ingrédient')} disponible{recipe.matchedCount > 1 ? 's' : ''}</Text>
+              </TouchableOpacity>
+            ))}
+          </>
+        )}
+        <Text style={styles.planSectionHint}>Suggestions classiques</Text>
+      </View>
+    );
+  }, [classicSuggestions, router]);
 
   return (
     <SafeAreaView style={styles.container}>
@@ -132,31 +188,7 @@ export default function RecipesScreen() {
           data={classicSuggestions}
           keyExtractor={(item) => item.id}
           contentContainerStyle={styles.listContent}
-          ListHeaderComponent={
-            <View style={styles.planCard}>
-              <Text style={styles.planTitle}>Plan anti-gaspi</Text>
-              {antiWastePlan.recipes.length === 0 ? (
-                <Text style={styles.planEmptyText}>Aucun plan utile pour ce segment.</Text>
-              ) : (
-                <>
-                  <Text style={styles.planMeta}>
-                    {antiWastePlan.recipes.length} recette{antiWastePlan.recipes.length > 1 ? 's' : ''} · {countLabelFr(antiWastePlan.coveredCount, 'produit')} couvert{antiWastePlan.coveredCount > 1 ? 's' : ''}
-                  </Text>
-                  {antiWastePlan.recipes.map((recipe, index) => (
-                    <TouchableOpacity
-                      key={`plan-${recipe.id}`}
-                      onPress={() => router.push({ pathname: '/recipes/[id]', params: { id: recipe.id } })}
-                      style={styles.planRecipeButton}
-                    >
-                      <Text style={styles.planRecipeTitle}>{index + 1}. {recipe.title}</Text>
-                      <Text style={styles.planRecipeMeta}>{recipe.timeMinutes} min · {countLabelFr(recipe.matchedCount, 'ingrédient')} disponible{recipe.matchedCount > 1 ? 's' : ''}</Text>
-                    </TouchableOpacity>
-                  ))}
-                </>
-              )}
-              <Text style={styles.planSectionHint}>Suggestions classiques</Text>
-            </View>
-          }
+          ListHeaderComponent={listHeader}
           renderItem={({ item }) => (
             <TouchableOpacity
               style={styles.card}
@@ -165,9 +197,9 @@ export default function RecipesScreen() {
             >
               <View style={styles.cardMain}>
                 <View style={styles.thumb}>
-                  {item.image_url && !imageErrors[item.id] ? (
+                  {item.imageUrl && !imageErrors[item.id] ? (
                     <Image
-                      source={{ uri: item.image_url }}
+                      source={{ uri: item.imageUrl }}
                       style={styles.thumbImage}
                       onError={() => setImageErrors((prev) => ({ ...prev, [item.id]: true }))}
                     />
