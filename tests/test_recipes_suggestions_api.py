@@ -12,6 +12,7 @@ sys.path.insert(0, str(Path(__file__).resolve().parents[1] / "backend"))
 
 from models import Recipe
 from recipes_service import score_recipe_against_stock
+import server
 from server import get_recipe_suggestions
 from starlette.responses import Response
 
@@ -196,6 +197,72 @@ class RecipeSuggestionsEndpointTests(unittest.TestCase):
         self.assertEqual(payload["meta"]["suggestion_style"], "ouvert")
         self.assertEqual(response.headers.get("X-Recipes-Suggestion-Style"), "ouvert")
         self.assertEqual(mocked.call_args.kwargs.get("suggestion_style"), "ouvert")
+
+    def test_non_premium_keeps_existing_flow_without_gpt_call(self):
+        fake_stock = _FakeStockCol(
+            aggregate_items=[{"name": "oeufs"}, {"name": "gruyere"}],
+            find_items=[{"name": "oeufs"}, {"name": "gruyere"}],
+        )
+        matches = [score_recipe_against_stock(self._recipe(id="np_1", title="Sans GPT"), ["oeufs", "gruyere"])]
+
+        async def _run():
+            with patch("server.stock_col", fake_stock):
+                with patch("server.suggest_recipes_from_catalog", return_value=matches):
+                    with patch("server._fetch_gpt_recipes") as gpt_mock:
+                        response = Response()
+                        payload = await get_recipe_suggestions(
+                            response=response,
+                            recipe_filter="all",
+                            include_meta=True,
+                            current_user={"id": "u1", "is_premium": False},
+                        )
+                        return payload, gpt_mock
+
+        payload, gpt_mock = asyncio.run(_run())
+        self.assertFalse(gpt_mock.called)
+        self.assertEqual(len(payload["recipes"]), 1)
+        self.assertFalse(payload["meta"]["premium_ai_enabled"])
+        self.assertFalse(payload["meta"]["ai_used"])
+        self.assertEqual(payload["meta"]["ai_recipe_count"], 0)
+
+    def test_premium_enriches_suggestions_with_gpt_recipes(self):
+        fake_stock = _FakeStockCol(
+            aggregate_items=[{"name": "oeufs", "expiry_date": "2030-01-01", "food_category": "proteines"}],
+            find_items=[{"name": "oeufs"}],
+        )
+        matches = [score_recipe_against_stock(self._recipe(id="pm_1", title="Base"), ["oeufs", "gruyere"])]
+        gpt_payload = [
+            server._GptRecipePayload(
+                title="Poêlée anti-gaspi aux œufs",
+                description="Rapide et simple.",
+                duration_min=12,
+                dish_type="Poêlée",
+                available_ingredients=["œufs"],
+                missing_ingredients=["oignon"],
+                steps=["Battre les œufs.", "Cuire rapidement."],
+                anti_waste_reason="Utilise les œufs proches de la date.",
+            )
+        ]
+
+        async def _run():
+            with patch("server.stock_col", fake_stock):
+                with patch("server.suggest_recipes_from_catalog", return_value=matches):
+                    with patch("server._fetch_gpt_recipes", return_value=gpt_payload):
+                        with patch.dict("os.environ", {"OPENAI_API_KEY": "sk-test", "OPENAI_MODEL": "gpt-4o-mini"}, clear=False):
+                            response = Response()
+                            return await get_recipe_suggestions(
+                                response=response,
+                                recipe_filter="expiryWeek",
+                                include_meta=True,
+                                current_user={"id": "u1", "is_premium": True, "subscription_status": "active"},
+                            )
+
+        payload = asyncio.run(_run())
+        titles = [recipe["title"] for recipe in payload["recipes"]]
+        self.assertIn("Poêlée anti-gaspi aux œufs", titles)
+        self.assertTrue(payload["meta"]["premium_ai_enabled"])
+        self.assertTrue(payload["meta"]["ai_used"])
+        self.assertEqual(payload["meta"]["ai_recipe_count"], 1)
 
 
 if __name__ == "__main__":

@@ -3,8 +3,10 @@ from __future__ import annotations
 
 import asyncio
 import base64
+import difflib
 import json
 import os
+import re
 import secrets
 import subprocess
 import time
@@ -23,6 +25,7 @@ from fastapi import APIRouter, Depends, FastAPI, Header, HTTPException, Query, R
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import HTMLResponse
 from motor.motor_asyncio import AsyncIOMotorClient
+from pydantic import BaseModel, Field, ValidationError
 from slowapi import Limiter, _rate_limit_exceeded_handler
 from slowapi.errors import RateLimitExceeded
 from slowapi.util import get_remote_address
@@ -251,6 +254,169 @@ def _apply_recipes_debug_headers(response: Response | None, meta: dict[str, Any]
     response.headers["X-Recipes-Suggestion-Style"] = str(meta.get("suggestion_style", "classique"))
     response.headers["X-Requested-Locale"] = str(meta.get("requested_locale", "fr-FR"))
     response.headers["X-Effective-Locale"] = str(meta.get("effective_locale", "fr-FR"))
+
+
+class _GptRecipePayload(BaseModel):
+    title: str = Field(min_length=3, max_length=120)
+    description: str = Field(default="", max_length=240)
+    duration_min: int = Field(default=20, ge=5, le=90)
+    dish_type: str = Field(default="Recette simple", max_length=60)
+    available_ingredients: list[str] = Field(default_factory=list)
+    missing_ingredients: list[str] = Field(default_factory=list)
+    steps: list[str] = Field(default_factory=list, min_length=1, max_length=8)
+    anti_waste_reason: str = Field(default="", max_length=200)
+
+
+class _GptRecipesEnvelope(BaseModel):
+    recipes: list[_GptRecipePayload] = Field(default_factory=list, max_length=3)
+
+
+_FILTER_ALIAS_TO_WINDOW_DAYS: dict[str, int | None] = {
+    "expiryday": 0,
+    "cejour": 0,
+    "today": 0,
+    "expiryweek": 7,
+    "urgent": 7,
+    "cettesemaine": 7,
+    "expirymonth": 31,
+    "cemois": 31,
+    "stock": None,
+    "all": None,
+    "toutes": None,
+    "personalized": None,
+}
+
+
+def _normalize_recipe_filter_token(raw_filter: str | None) -> str:
+    token = (raw_filter or "all").strip().lower()
+    token = re.sub(r"[^a-z0-9]+", "", token)
+    return token or "all"
+
+
+def _resolve_temporal_filter_window_days(recipe_filter: str | None) -> int | None:
+    token = _normalize_recipe_filter_token(recipe_filter)
+    return _FILTER_ALIAS_TO_WINDOW_DAYS.get(token)
+
+
+def _is_filter_with_temporal_window(recipe_filter: str | None) -> bool:
+    return _resolve_temporal_filter_window_days(recipe_filter) is not None
+
+
+def _normalize_text_for_dedup(value: str) -> str:
+    lowered = value.strip().lower()
+    simplified = re.sub(r"[^a-z0-9]+", " ", lowered)
+    return re.sub(r"\s+", " ", simplified).strip()
+
+
+def _title_similarity(left: str, right: str) -> float:
+    return difflib.SequenceMatcher(a=_normalize_text_for_dedup(left), b=_normalize_text_for_dedup(right)).ratio()
+
+
+def _ingredients_overlap_ratio(left: list[str], right: list[str]) -> float:
+    left_set = {_normalize_text_for_dedup(item) for item in left if item}
+    right_set = {_normalize_text_for_dedup(item) for item in right if item}
+    if not left_set or not right_set:
+        return 0.0
+    return len(left_set & right_set) / len(left_set | right_set)
+
+
+def _compute_anti_waste_priority(expiry_date: str | None, today: datetime) -> int:
+    if not expiry_date:
+        return 5
+    try:
+        days_left = (datetime.fromisoformat(expiry_date).date() - today.date()).days
+    except Exception:
+        return 5
+    if days_left <= 0:
+        return 100
+    if days_left <= 2:
+        return 95
+    if days_left <= 7:
+        return 80
+    if days_left <= 31:
+        return 65
+    return 40
+
+
+def _build_openai_recipes_prompt(*, stock_snapshot: list[dict[str, Any]], active_filter: str) -> str:
+    serialized_items = json.dumps(stock_snapshot[:24], ensure_ascii=False)
+    return (
+        "Tu es un assistant culinaire anti-gaspi pour un utilisateur français.\n"
+        "Règles impératives:\n"
+        "- Réponds uniquement en français.\n"
+        "- Retourne uniquement du JSON valide, sans markdown ni texte hors JSON.\n"
+        "- Format STRICT attendu: {\"recipes\": [...]}.\n"
+        "- Maximum 3 recettes.\n"
+        "- Recettes simples, réalistes, crédibles, non fantaisistes.\n"
+        "- Priorise les produits qui expirent le plus vite.\n"
+        "- Exclure totalement les produits expirés.\n"
+        "- Au moins 1 ingrédient disponible en stock par recette.\n"
+        "- Limiter les ingrédients manquants (idéalement 0 à 3).\n"
+        "- Profil anti-gaspi, cuisine du quotidien en France.\n"
+        "- Évite recettes sophistiquées/exotiques.\n\n"
+        f"Filtre actif côté application: {active_filter}\n"
+        "Stock disponible (déjà nettoyé côté backend):\n"
+        f"{serialized_items}\n\n"
+        "Retourne exactement:\n"
+        "{\n"
+        "  \"recipes\": [\n"
+        "    {\n"
+        "      \"title\": \"...\",\n"
+        "      \"description\": \"...\",\n"
+        "      \"duration_min\": 12,\n"
+        "      \"dish_type\": \"Poêlée\",\n"
+        "      \"available_ingredients\": [\"...\"],\n"
+        "      \"missing_ingredients\": [\"...\"],\n"
+        "      \"steps\": [\"...\"],\n"
+        "      \"anti_waste_reason\": \"...\"\n"
+        "    }\n"
+        "  ]\n"
+        "}\n"
+    )
+
+
+async def _fetch_gpt_recipes(
+    *,
+    openai_key: str,
+    openai_model: str,
+    stock_snapshot: list[dict[str, Any]],
+    active_filter: str,
+) -> list[_GptRecipePayload]:
+    prompt = _build_openai_recipes_prompt(stock_snapshot=stock_snapshot, active_filter=active_filter)
+    try:
+        async with httpx.AsyncClient(timeout=12.0) as http:
+            response = await http.post(
+                "https://api.openai.com/v1/chat/completions",
+                headers={
+                    "Authorization": f"Bearer {openai_key}",
+                    "Content-Type": "application/json",
+                },
+                json={
+                    "model": openai_model,
+                    "temperature": 0.2,
+                    "max_tokens": 1200,
+                    "response_format": {"type": "json_object"},
+                    "messages": [
+                        {"role": "system", "content": "Tu es un assistant culinaire anti-gaspi strict."},
+                        {"role": "user", "content": prompt},
+                    ],
+                },
+            )
+    except Exception as exc:
+        logger.warning("RECIPES_GPT request failed: %s", exc)
+        return []
+
+    if response.status_code != 200:
+        logger.warning("RECIPES_GPT request error status=%s body=%s", response.status_code, response.text[:200])
+        return []
+
+    try:
+        raw_content = response.json()["choices"][0]["message"]["content"].strip()
+        parsed = _GptRecipesEnvelope.model_validate_json(raw_content)
+        return parsed.recipes[:3]
+    except (KeyError, ValidationError, json.JSONDecodeError, ValueError) as exc:
+        logger.warning("RECIPES_GPT invalid payload: %s", exc)
+        return []
 
 
 async def _run_backend_warmup() -> None:
@@ -1776,7 +1942,14 @@ async def get_recipe_suggestions(
     include_meta_enabled = include_meta is True or str(include_meta).lower() in {"1", "true", "yes"}
     requested_locale, effective_locale = _resolve_recipes_locale(locale, accept_language)
     resolved_suggestion_style = resolve_suggestion_style(suggestion_style)
-    effective_filter = "all" if recipe_filter in {"all", "personalized"} else recipe_filter
+    effective_filter = "all" if recipe_filter in {"all", "personalized", "stock"} else recipe_filter
+    temporal_window_days = _resolve_temporal_filter_window_days(recipe_filter)
+    if temporal_window_days is not None:
+        effective_filter = recipe_filter
+    plan = resolve_plan(current_user)
+    premium_ai_enabled = plan == PREMIUM_PLAN
+    openai_key = (os.getenv("OPENAI_API_KEY") or "").strip()
+    openai_model = (os.getenv("OPENAI_MODEL") or "gpt-4o-mini").strip() or "gpt-4o-mini"
     logger.debug(
         "RECIPES_DEBUG suggestions called — user=%s filter=%s suggestion_style=%s",
         uid,
@@ -1785,15 +1958,24 @@ async def get_recipe_suggestions(
     )
     today_str = utc_now().strftime("%Y-%m-%d")
 
-    # Récupérer les items actifs selon le filtre
+    # Récupérer les items actifs non expirés selon le filtre
     match: dict = {"user_id": uid, "status": "active"}
-    if effective_filter == "urgent":
-        in_7_days = (utc_now().date() + timedelta(days=7)).strftime("%Y-%m-%d")
-        match["expiry_date"] = {"$nin": [None, ""], "$gte": today_str, "$lte": in_7_days}
-    elif effective_filter == "frigo":
+    if temporal_window_days is not None:
+        target_day = (utc_now().date() + timedelta(days=temporal_window_days)).strftime("%Y-%m-%d")
+        match["expiry_date"] = {"$nin": [None, ""], "$gte": today_str, "$lte": target_day}
+    else:
+        match["$or"] = [
+            {"expiry_date": {"$in": [None, ""]}},
+            {"expiry_date": {"$gte": today_str}},
+        ]
+
+    if effective_filter == "frigo":
         match["food_category"] = {"$in": _FRIGO_CATS}
     elif effective_filter == "placard":
         match["food_category"] = {"$in": _PLACARD_CATS}
+    elif effective_filter == "urgent" and temporal_window_days is None:
+        in_7_days = (utc_now().date() + timedelta(days=7)).strftime("%Y-%m-%d")
+        match["expiry_date"] = {"$nin": [None, ""], "$gte": today_str, "$lte": in_7_days}
 
     max_stock_items = 1000
     pipeline = [
@@ -1835,10 +2017,17 @@ async def get_recipe_suggestions(
 
     # Fallback contrôlé: si un filtre contraint retourne trop peu de recettes,
     # compléter avec des suggestions "all" pour éviter un écran trop vide.
-    if effective_filter in {"urgent", "frigo", "placard"} and len(matches) < 3:
+    if (effective_filter in {"urgent", "frigo", "placard"} or _is_filter_with_temporal_window(recipe_filter)) and len(matches) < 3:
         initial_count = len(matches)
         all_items = await stock_col.find(
-            {"user_id": uid, "status": "active"},
+            {
+                "user_id": uid,
+                "status": "active",
+                "$or": [
+                    {"expiry_date": {"$in": [None, ""]}},
+                    {"expiry_date": {"$gte": today_str}},
+                ],
+            },
             {"name": 1},
         ).sort("expiry_date", 1).limit(max_stock_items).to_list(length=max_stock_items)
         all_stock_names = [i.get("name", "") for i in all_items if i.get("name")]
@@ -1864,11 +2053,113 @@ async def get_recipe_suggestions(
             len(matches),
         )
 
+    recipes_payload = [recipe_match_to_suggestion(match).model_dump(mode="json") for match in matches]
+
+    ai_used = False
+    ai_recipes_payload: list[dict[str, Any]] = []
+    if premium_ai_enabled and openai_key and stock_names:
+        stock_snapshot: list[dict[str, Any]] = []
+        now_utc = utc_now()
+        for item in items:
+            name = (item.get("name") or "").strip()
+            if not name:
+                continue
+            stock_snapshot.append(
+                {
+                    "name": name,
+                    "category": item.get("food_category") or item.get("category") or "autres",
+                    "quantity": item.get("quantity") or "",
+                    "expiry_date": item.get("expiry_date"),
+                    "anti_waste_priority": _compute_anti_waste_priority(item.get("expiry_date"), now_utc),
+                }
+            )
+        gpt_recipes = await _fetch_gpt_recipes(
+            openai_key=openai_key,
+            openai_model=openai_model,
+            stock_snapshot=stock_snapshot,
+            active_filter=recipe_filter,
+        )
+        existing_titles = [payload.get("title", "") for payload in recipes_payload]
+        existing_ingredients = [
+            [*payload.get("usedIngredients", []), *payload.get("missedIngredients", [])]
+            for payload in recipes_payload
+        ]
+        for idx, gpt_recipe in enumerate(gpt_recipes):
+            available = [ingredient.strip() for ingredient in gpt_recipe.available_ingredients if ingredient.strip()]
+            missing = [ingredient.strip() for ingredient in gpt_recipe.missing_ingredients if ingredient.strip()]
+            if not available:
+                continue
+            title = gpt_recipe.title.strip()
+            if not title:
+                continue
+            has_close_title = any(_title_similarity(title, existing_title) >= 0.86 for existing_title in existing_titles)
+            if has_close_title:
+                continue
+            all_ingredients = [*available, *missing]
+            has_high_overlap = any(_ingredients_overlap_ratio(all_ingredients, existing) >= 0.75 for existing in existing_ingredients)
+            if has_high_overlap:
+                continue
+            suggestion_payload = {
+                "id": f"gpt-{uid[:8]}-{idx}-{abs(hash(title)) % 100000}",
+                "title": title,
+                "image": "",
+                "usedIngredients": available,
+                "missedIngredients": missing,
+                "optionalIngredientsUsed": [],
+                "sourceUrl": "",
+                "is_fallback": False,
+                "instructions_summary": gpt_recipe.description.strip(),
+                "prep_time_min": int(gpt_recipe.duration_min),
+                "cook_time_min": 0,
+                "difficulty": "easy",
+                "tags": ["anti-gaspi", "gpt"],
+                "meal_type": ["dinner"],
+                "cuisine": "française",
+                "servings": 2,
+                "score": 0.0,
+                "suggestion_type": "idea",
+                "used_ingredients_count": len(available),
+                "missing_ingredients_count": len(missing),
+                "debug": {
+                    "source": "gpt",
+                    "dish_type": gpt_recipe.dish_type,
+                    "steps": gpt_recipe.steps[:8],
+                    "anti_waste_reason": gpt_recipe.anti_waste_reason,
+                    "final_score": 0.0,
+                },
+            }
+            ai_recipes_payload.append(suggestion_payload)
+            existing_titles.append(title)
+            existing_ingredients.append(all_ingredients)
+
+    combined_payload = recipes_payload + ai_recipes_payload
+    for payload in combined_payload:
+        used_count = len(payload.get("usedIngredients", []))
+        missing_count = len(payload.get("missedIngredients", []))
+        temporal_bonus = 0.0
+        if _is_filter_with_temporal_window(recipe_filter):
+            temporal_bonus = 0.25
+        payload["score"] = round((used_count * 1.4) - (missing_count * 0.9) + temporal_bonus, 4)
+        payload["used_ingredients_count"] = used_count
+        payload["missing_ingredients_count"] = missing_count
+        if isinstance(payload.get("debug"), dict):
+            payload["debug"]["final_score"] = payload["score"]
+    combined_payload.sort(
+        key=lambda recipe: (
+            recipe.get("score", 0),
+            recipe.get("used_ingredients_count", 0),
+            -recipe.get("missing_ingredients_count", 0),
+            -(recipe.get("prep_time_min") or 999),
+        ),
+        reverse=True,
+    )
+    recipes_payload = combined_payload[:8]
+    ai_used = len(ai_recipes_payload) > 0
+
     logger.info(
         "Recipes suggestions: filter=%s stock=%s top5=%s",
         recipe_filter, stock_names[:5], [match.recipe.title for match in matches],
     )
-    recipes_payload = [recipe_match_to_suggestion(match).model_dump(mode="json") for match in matches]
     logger.debug(
         "RECIPES_DEBUG suggestions response — user=%s filter=%s count=%d ids=%s titles=%s",
         uid,
@@ -1885,6 +2176,9 @@ async def get_recipe_suggestions(
         effective_locale=effective_locale,
         suggestion_style=resolved_suggestion_style,
     )
+    meta["premium_ai_enabled"] = premium_ai_enabled
+    meta["ai_used"] = ai_used
+    meta["ai_recipe_count"] = len(ai_recipes_payload)
     _apply_recipes_debug_headers(response=response, meta=meta)
     if include_meta_enabled:
         return {"recipes": recipes_payload, "meta": meta}

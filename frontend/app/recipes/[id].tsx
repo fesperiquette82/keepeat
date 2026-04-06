@@ -8,25 +8,17 @@ import { useStockStore } from '../../store/stockStore';
 import { useAppSettingsStore } from '../../store/appSettingsStore';
 import { ActionBanner } from '../../component/ActionBanner';
 import { C, T } from '../../utils/theme';
-import {
-  computeRecipeAvailabilityFromStock,
-  findRecipeBaseById,
-  resolveStockItems,
-  type RecipeIngredient,
-} from '../../data/mockDashboardData';
 import { matchRecipeIngredientsToStock } from '../../utils/ingredientMatching';
 import { removeStockItems, undoRemovedStockItems } from '../../utils/stockRemoval';
 import { logger } from '../../utils/logger';
+import { useRecipesStore, type BackendRecipeSuggestion } from '../../store/recipesStore';
 
-const TYPE_LABEL: Record<string, string> = {
-  apero: 'Apéro',
-  toast: 'Toast',
-  tartine: 'Tartine',
-  poelee: 'Poêlée',
-  salade: 'Salade',
-  bol: 'Bol',
-  rapide: 'Rapide',
-};
+interface RecipeIngredient {
+  name: string;
+  quantity: number;
+  unit: string;
+  scalable?: boolean;
+}
 
 function formatQuantity(value: number): string {
   if (Number.isInteger(value)) return String(value);
@@ -40,69 +32,143 @@ function scaleIngredients(ingredients: RecipeIngredient[], factor: number): Reci
   }));
 }
 
+function normalizeName(value: string): string {
+  return value
+    .normalize('NFD')
+    .replace(/[\u0300-\u036f]/g, '')
+    .toLowerCase()
+    .trim();
+}
+
+function toIngredientList(recipe: BackendRecipeSuggestion | null): RecipeIngredient[] {
+  if (!recipe) return [];
+  const used = Array.isArray(recipe.usedIngredients) ? recipe.usedIngredients : [];
+  const missed = Array.isArray(recipe.missedIngredients) ? recipe.missedIngredients : [];
+  const unique = Array.from(new Set([...used, ...missed].map((item) => item.trim()).filter(Boolean)));
+  return unique.map((name) => ({ name, quantity: 1, unit: 'portion' }));
+}
+
+function resolveSteps(recipe: BackendRecipeSuggestion | null): string[] {
+  if (!recipe) return [];
+  const steps = (recipe.debug as { steps?: unknown } | undefined)?.steps;
+  if (Array.isArray(steps)) {
+    const safeSteps = steps.filter((step): step is string => typeof step === 'string' && step.trim().length > 0);
+    if (safeSteps.length > 0) return safeSteps;
+  }
+  if (recipe.instructions_summary) {
+    const fallback = recipe.instructions_summary
+      .split('.')
+      .map((part) => part.trim())
+      .filter(Boolean);
+    if (fallback.length > 0) return fallback;
+  }
+  return ['Préparez les ingrédients.', 'Cuisinez la recette simplement.', 'Servez aussitôt.'];
+}
+
 export default function RecipeDetailScreen() {
   const router = useRouter();
   const params = useLocalSearchParams<{ id?: string }>();
+  const recipeId = typeof params.id === 'string' ? params.id : '';
+
   const { items: storeItems, fetchStock } = useStockStore();
   const householdSize = useAppSettingsStore((state) => state.householdSize);
+  const fetchRecipeById = useRecipesStore((state) => state.fetchRecipeById);
+
+  const [isScreenLoading, setIsScreenLoading] = useState(true);
+  const [screenError, setScreenError] = useState<string | null>(null);
+  const [baseRecipe, setBaseRecipe] = useState<BackendRecipeSuggestion | null>(null);
+
   const [isValidating, setIsValidating] = useState(false);
   const [undoItems, setUndoItems] = useState<typeof storeItems>([]);
   const [banner, setBanner] = useState<{ message: string; canUndo: boolean; variant: 'success' | 'error' } | null>(null);
 
-  useFocusEffect(
-    React.useCallback(() => {
-      logger.debug('[RECIPES_MATCH] detail screen focused - refreshing stock', { recipeId: params.id ?? null });
-      fetchStock();
-    }, [fetchStock, params.id]),
-  );
-
-  const recipeId = typeof params.id === 'string' ? params.id : '';
-  const baseRecipe = useMemo(() => findRecipeBaseById(recipeId), [recipeId]);
-  const { items } = useMemo(() => resolveStockItems(storeItems, { useMockFallback: false }), [storeItems]);
-
   const initialServings = householdSize;
   const [servings, setServings] = useState(initialServings);
+
+  const items = useMemo(() => storeItems.filter((item) => item.status === 'active'), [storeItems]);
 
   useEffect(() => {
     setServings(initialServings);
   }, [initialServings]);
 
-  const factor = baseRecipe ? servings / baseRecipe.baseServings : 1;
-  const scaledIngredients = useMemo(
-    () => (baseRecipe ? scaleIngredients(baseRecipe.ingredientsDetailed, factor) : []),
-    [baseRecipe, factor],
+  const loadRecipe = React.useCallback(async () => {
+    if (!recipeId) {
+      setBaseRecipe(null);
+      setScreenError('Recette introuvable.');
+      setIsScreenLoading(false);
+      return;
+    }
+
+    setIsScreenLoading(true);
+    setScreenError(null);
+    try {
+      await fetchStock();
+      const recipe = await fetchRecipeById(recipeId);
+      if (!recipe) {
+        setBaseRecipe(null);
+        setScreenError('Recette introuvable.');
+      } else {
+        setBaseRecipe(recipe);
+      }
+    } catch (error: any) {
+      logger.warn('[RECIPES] failed to load recipe detail', { recipeId, message: error?.message ?? 'unknown' });
+      setBaseRecipe(null);
+      setScreenError('Impossible de charger cette recette.');
+    } finally {
+      setIsScreenLoading(false);
+    }
+  }, [fetchRecipeById, fetchStock, recipeId]);
+
+  useFocusEffect(
+    React.useCallback(() => {
+      loadRecipe();
+    }, [loadRecipe]),
   );
-  const ingredientAvailability = useMemo(
-    () => computeRecipeAvailabilityFromStock(items, scaledIngredients),
-    [items, scaledIngredients],
-  );
-  const availableSet = new Set(ingredientAvailability.availableIngredients);
+
+  const recipeIngredients = useMemo(() => toIngredientList(baseRecipe), [baseRecipe]);
+  const factor = useMemo(() => servings / Math.max(1, householdSize), [householdSize, servings]);
+  const scaledIngredients = useMemo(() => scaleIngredients(recipeIngredients, factor), [factor, recipeIngredients]);
+
+  const availableNames = useMemo(() => {
+    const stockNames = items.map((item) => normalizeName(item.name));
+    const names: string[] = [];
+    for (const ingredient of scaledIngredients) {
+      const ingredientName = normalizeName(ingredient.name);
+      const matched = stockNames.some((stockName) => stockName.includes(ingredientName) || ingredientName.includes(stockName));
+      if (matched) names.push(ingredient.name);
+    }
+    return names;
+  }, [items, scaledIngredients]);
+
+  const ingredientAvailability = useMemo(() => {
+    const availableSet = new Set(availableNames.map((value) => normalizeName(value)));
+    const matchedCount = scaledIngredients.filter((ingredient) => availableSet.has(normalizeName(ingredient.name))).length;
+    const missingCount = Math.max(0, scaledIngredients.length - matchedCount);
+    return { matchedCount, missingCount };
+  }, [availableNames, scaledIngredients]);
+
+  const availableSet = useMemo(() => new Set(availableNames.map((value) => normalizeName(value))), [availableNames]);
+  const recipeSteps = useMemo(() => resolveSteps(baseRecipe), [baseRecipe]);
+  const totalTime = useMemo(() => {
+    if (!baseRecipe) return 15;
+    const prep = typeof baseRecipe.prep_time_min === 'number' ? baseRecipe.prep_time_min : 0;
+    const cook = typeof baseRecipe.cook_time_min === 'number' ? baseRecipe.cook_time_min : 0;
+    return prep + cook > 0 ? prep + cook : 15;
+  }, [baseRecipe]);
 
   useEffect(() => {
-    logger.debug('[RECIPES_MATCH] detail availability recomputed', {
+    logger.debug('[RECIPES] detail state updated', {
       recipeId,
-      recipeTitle: baseRecipe?.title ?? null,
+      hasRecipe: !!baseRecipe,
       stockItemsCount: items.length,
-      availableCount: ingredientAvailability.matchedCount,
+      matchedCount: ingredientAvailability.matchedCount,
       missingCount: ingredientAvailability.missingCount,
+      isScreenLoading,
     });
-  }, [baseRecipe?.title, ingredientAvailability.matchedCount, ingredientAvailability.missingCount, items.length, recipeId]);
-
-  if (!baseRecipe) {
-    return (
-      <SafeAreaView style={styles.container}>
-        <View style={styles.errorWrap}>
-          <Text style={styles.errorTitle}>Recette introuvable</Text>
-          <TouchableOpacity style={styles.backButton} onPress={() => router.back()}>
-            <Text style={styles.backButtonLabel}>Retour</Text>
-          </TouchableOpacity>
-        </View>
-      </SafeAreaView>
-    );
-  }
+  }, [baseRecipe, ingredientAvailability.matchedCount, ingredientAvailability.missingCount, isScreenLoading, items.length, recipeId]);
 
   const handleValidateRecipe = async () => {
-    if (isValidating) return;
+    if (isValidating || !baseRecipe) return;
     setIsValidating(true);
     try {
       await fetchStock();
@@ -161,6 +227,29 @@ export default function RecipeDetailScreen() {
     });
   };
 
+  if (isScreenLoading) {
+    return (
+      <SafeAreaView style={styles.container}>
+        <View style={styles.errorWrap}>
+          <Text style={styles.errorTitle}>Chargement de la recette…</Text>
+        </View>
+      </SafeAreaView>
+    );
+  }
+
+  if (screenError || !baseRecipe) {
+    return (
+      <SafeAreaView style={styles.container}>
+        <View style={styles.errorWrap}>
+          <Text style={styles.errorTitle}>{screenError ?? 'Recette introuvable'}</Text>
+          <TouchableOpacity style={styles.backButton} onPress={() => router.back()}>
+            <Text style={styles.backButtonLabel}>Retour</Text>
+          </TouchableOpacity>
+        </View>
+      </SafeAreaView>
+    );
+  }
+
   return (
     <SafeAreaView style={styles.container}>
       <View style={styles.headerRow}>
@@ -172,7 +261,7 @@ export default function RecipeDetailScreen() {
 
       <ScrollView contentContainerStyle={styles.content}>
         <Text style={styles.title}>{baseRecipe.title}</Text>
-        <Text style={styles.meta}>{baseRecipe.timeMinutes} min · {TYPE_LABEL[baseRecipe.type] ?? 'Idée simple'}</Text>
+        <Text style={styles.meta}>{totalTime} min · Idée simple</Text>
 
         <View style={styles.servingsCard}>
           <Text style={styles.sectionTitle}>Portions</Text>
@@ -185,13 +274,13 @@ export default function RecipeDetailScreen() {
               <Ionicons name="add" size={18} color={C.text} />
             </TouchableOpacity>
           </View>
-          <Text style={styles.servingsHint}>Par défaut foyer : {householdSize} personnes</Text>
+          <Text style={styles.servingsHint}>Par défaut foyer : {householdSize} personnes</Text>
         </View>
 
         <View style={styles.card}>
           <Text style={styles.sectionTitle}>Ingrédients</Text>
           {scaledIngredients.map((ingredient) => {
-            const isAvailable = availableSet.has(ingredient.name);
+            const isAvailable = availableSet.has(normalizeName(ingredient.name));
             return (
               <View key={ingredient.name} style={styles.ingredientRow}>
                 <View style={styles.ingredientTextWrap}>
@@ -204,15 +293,12 @@ export default function RecipeDetailScreen() {
               </View>
             );
           })}
-          {baseRecipe.optionalBasics && baseRecipe.optionalBasics.length > 0 && (
-            <Text style={styles.optionalText}>Option du quotidien : {baseRecipe.optionalBasics.join(', ')}</Text>
-          )}
         </View>
 
         <View style={styles.card}>
           <Text style={styles.sectionTitle}>Préparation</Text>
-          {baseRecipe.steps.map((step, index) => (
-            <View key={`${baseRecipe.id}-${index + 1}`} style={styles.stepRow}>
+          {recipeSteps.map((step, index) => (
+            <View key={`${baseRecipe.id}-step-${index + 1}`} style={styles.stepRow}>
               <Text style={styles.stepIndex}>{index + 1}.</Text>
               <Text style={styles.stepText}>{step}</Text>
             </View>
@@ -223,6 +309,7 @@ export default function RecipeDetailScreen() {
           <Text style={styles.validateButtonLabel}>{isValidating ? 'Validation…' : "J’ai réalisé cette recette"}</Text>
         </TouchableOpacity>
       </ScrollView>
+
       {banner && (
         <ActionBanner
           message={banner.message}
@@ -258,7 +345,6 @@ const styles = StyleSheet.create({
   stockBadge: { fontSize: 11, fontWeight: '700', paddingHorizontal: 8, paddingVertical: 4, borderRadius: 999, overflow: 'hidden' },
   badgeOk: { backgroundColor: '#DCFCE7', color: '#166534' },
   badgeMissing: { backgroundColor: '#FEE2E2', color: '#991B1B' },
-  optionalText: { color: C.textLight, fontSize: 12, fontWeight: '500' },
   stepRow: { flexDirection: 'row', gap: 8, alignItems: 'flex-start' },
   stepIndex: { width: 18, color: C.text, fontWeight: '700' },
   stepText: { flex: 1, color: C.textMid, fontWeight: '500' },
@@ -266,7 +352,7 @@ const styles = StyleSheet.create({
   validateButtonDisabled: { opacity: 0.7 },
   validateButtonLabel: { color: '#fff', fontSize: 14, fontWeight: '800' },
   errorWrap: { flex: 1, justifyContent: 'center', alignItems: 'center', gap: 12, padding: 24 },
-  errorTitle: { color: C.text, fontSize: 20, fontWeight: '800' },
+  errorTitle: { color: C.text, fontSize: 20, fontWeight: '800', textAlign: 'center' },
   backButton: { backgroundColor: C.primary, paddingHorizontal: 14, paddingVertical: 10, borderRadius: 10 },
   backButtonLabel: { color: '#fff', fontWeight: '700' },
 });
