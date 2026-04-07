@@ -1,4 +1,4 @@
-import React, { useEffect, useMemo } from 'react';
+import React, { useEffect, useMemo, useState } from 'react';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { View, Text, StyleSheet, FlatList, TouchableOpacity, Image } from 'react-native';
 import Ionicons from '@expo/vector-icons/Ionicons';
@@ -22,8 +22,6 @@ const TYPE_LABEL: Record<string, string> = {
   rapide: 'Rapide',
 };
 
-type RecipesFilter = 'stock' | 'expiryDay' | 'expiryWeek' | 'expiryMonth';
-
 const FILTER_ORDER: RecipesFilter[] = ['expiryDay', 'expiryWeek', 'expiryMonth', 'stock'];
 
 const FILTER_LABEL_KEYS: Record<RecipesFilter, string> = {
@@ -40,6 +38,30 @@ const EMPTY_FILTER_LABEL_KEYS: Record<RecipesFilter, string> = {
   expiryMonth: 'recipesEmptyExpiryMonth',
 };
 
+interface RecipeCard {
+  id: string;
+  title: string;
+  timeMinutes: number;
+  type: string;
+  matchedCount: number;
+  missingCount: number;
+  imageUrl: string;
+}
+
+function toRecipeCard(recipe: BackendRecipeSuggestion): RecipeCard {
+  const prep = typeof recipe.prep_time_min === 'number' ? recipe.prep_time_min : 0;
+  const cook = typeof recipe.cook_time_min === 'number' ? recipe.cook_time_min : 0;
+  return {
+    id: recipe.id,
+    title: recipe.title,
+    timeMinutes: prep + cook > 0 ? prep + cook : 15,
+    type: 'rapide',
+    matchedCount: Array.isArray(recipe.usedIngredients) ? recipe.usedIngredients.length : 0,
+    missingCount: Array.isArray(recipe.missedIngredients) ? recipe.missedIngredients.length : 0,
+    imageUrl: typeof recipe.image === 'string' ? recipe.image : '',
+  };
+}
+
 export default function RecipesScreen() {
   const router = useRouter();
   const { t } = useLanguageStore();
@@ -51,9 +73,9 @@ export default function RecipesScreen() {
 
   useFocusEffect(
     React.useCallback(() => {
-      logger.debug('[RECIPES_MATCH] recipes list focused - refreshing stock');
       fetchStock();
-    }, [fetchStock]),
+      fetchRecipesSuggestions(activeFilter);
+    }, [activeFilter, fetchRecipesSuggestions, fetchStock]),
   );
 
   const activeStockCount = useMemo(() => storeItems.filter((item) => item.status === 'active').length, [storeItems]);
@@ -114,6 +136,9 @@ export default function RecipesScreen() {
     }
     if (activeStockCount === 0) {
       return 'Aucune recette disponible : ajoutez d’abord des ingrédients au stock.';
+    }
+    if (isLoading) {
+      return 'Chargement des suggestions…';
     }
     return t(EMPTY_FILTER_LABEL_KEYS[activeFilter]);
   }, [activeFilter, activeStockCount, isLoading, t]);
@@ -189,9 +214,9 @@ export default function RecipesScreen() {
             >
               <View style={styles.cardMain}>
                 <View style={styles.thumb}>
-                  {item.image_url && !imageErrors[item.id] ? (
+                  {item.imageUrl && !imageErrors[item.id] ? (
                     <Image
-                      source={{ uri: item.image_url }}
+                      source={{ uri: item.imageUrl }}
                       style={styles.thumbImage}
                       onError={() => setImageErrors((prev) => ({ ...prev, [item.id]: true }))}
                     />
