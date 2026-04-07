@@ -1,0 +1,26 @@
+import { normalizeIngredientName } from './ingredientMatching';
+
+export function getRecipeAvailableIngredients(recipe: any): string[] {
+  if (Array.isArray(recipe?.available_ingredients)) return recipe.available_ingredients;
+  if (Array.isArray(recipe?.availableIngredients)) return recipe.availableIngredients;
+  if (Array.isArray(recipe?.usedIngredients)) return recipe.usedIngredients;
+  if (Array.isArray(recipe?.used_ingredients)) return recipe.used_ingredients;
+  return [];
+}
+
+export function buildTargetIngredientNames(targetItems: Array<{ name?: string | null }>): Set<string> {
+  return new Set(targetItems.map((item) => normalizeIngredientName(item.name ?? '')).filter(Boolean));
+}
+
+export function filterRecipesByTargetIngredients(
+  backendRecipes: any[],
+  targetIngredientNames: Set<string>,
+): any[] {
+  if (targetIngredientNames.size === 0) return [];
+  return backendRecipes.filter((recipe) => {
+    const recipeAvailableIngredients = getRecipeAvailableIngredients(recipe);
+    return recipeAvailableIngredients.some((ingredient) =>
+      targetIngredientNames.has(normalizeIngredientName(String(ingredient ?? ''))),
+    );
+  });
+}
