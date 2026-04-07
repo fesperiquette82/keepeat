@@ -6,18 +6,17 @@ import { useLocalSearchParams, useRouter } from 'expo-router';
 import { useFocusEffect } from '@react-navigation/native';
 import { useStockStore } from '../../store/stockStore';
 import { useAppSettingsStore } from '../../store/appSettingsStore';
+import { BackendRecipeSuggestion, useRecipesStore } from '../../store/recipesStore';
 import { ActionBanner } from '../../component/ActionBanner';
 import { C, T } from '../../utils/theme';
 import { matchRecipeIngredientsToStock } from '../../utils/ingredientMatching';
 import { removeStockItems, undoRemovedStockItems } from '../../utils/stockRemoval';
 import { logger } from '../../utils/logger';
-import { fetchRecipeById } from '../../utils/recipesApi';
 
 interface RecipeIngredient {
   name: string;
   quantity: number;
   unit: string;
-  scalable?: boolean;
 }
 
 function formatQuantity(value: number | string | null | undefined): string {
@@ -31,10 +30,10 @@ function formatQuantity(value: number | string | null | undefined): string {
   return '';
 }
 
-function scaleIngredients(ingredients: any[], factor: number): any[] {
+function scaleIngredients(ingredients: RecipeIngredient[], factor: number): RecipeIngredient[] {
   return ingredients.map((ingredient) => ({
     ...ingredient,
-    quantity: typeof ingredient.quantity === 'number' ? ingredient.quantity * factor : ingredient.quantity,
+    quantity: ingredient.quantity * factor,
   }));
 }
 
@@ -87,8 +86,6 @@ export default function RecipeDetailScreen() {
   const [isValidating, setIsValidating] = useState(false);
   const [undoItems, setUndoItems] = useState<typeof storeItems>([]);
   const [banner, setBanner] = useState<{ message: string; canUndo: boolean; variant: 'success' | 'error' } | null>(null);
-  const [remoteRecipe, setRemoteRecipe] = useState<any | null>(null);
-  const [isLoadingRecipe, setIsLoadingRecipe] = useState(false);
 
   useFocusEffect(
     React.useCallback(() => {
@@ -97,54 +94,13 @@ export default function RecipeDetailScreen() {
     }, [fetchStock, params.id]),
   );
 
-  const recipeId = typeof params.id === 'string' ? params.id : '';
   const items = useMemo(() => storeItems.filter((item) => item.status === 'active'), [storeItems]);
-  const baseRecipe = useMemo(() => {
-    if (!remoteRecipe) return null;
-    return {
-      id: remoteRecipe.id,
-      title: remoteRecipe.title,
-      timeMinutes: remoteRecipe.duration_min ?? 0,
-      type: String(remoteRecipe.dish_type || 'rapide').toLowerCase(),
-      baseServings: 1,
-      ingredientsDetailed: (remoteRecipe.ingredients ?? []).map((ingredient: any) => ({
-        name: ingredient.name,
-        quantity: ingredient.quantity,
-        unit: typeof ingredient.quantity === 'string' && ingredient.quantity.trim().length > 0 ? ingredient.quantity : 'portion',
-      })),
-      optionalBasics: [],
-      steps: Array.isArray(remoteRecipe.steps) ? remoteRecipe.steps : [],
-    };
-  }, [remoteRecipe]);
-
   const initialServings = householdSize;
   const [servings, setServings] = useState(initialServings);
-
-  const items = useMemo(() => storeItems.filter((item) => item.status === 'active'), [storeItems]);
 
   useEffect(() => {
     setServings(initialServings);
   }, [initialServings]);
-
-  const factor = baseRecipe ? servings / baseRecipe.baseServings : 1;
-  const scaledIngredients = useMemo(
-    () => (baseRecipe ? scaleIngredients(baseRecipe.ingredientsDetailed, factor) : []),
-    [baseRecipe, factor],
-  );
-  const ingredientAvailability = useMemo(
-    () => {
-      const stockSet = new Set(items.map((item) => String(item.name || '').trim().toLowerCase()));
-      const availableIngredients = scaledIngredients
-        .map((ingredient) => ingredient.name)
-        .filter((name) => stockSet.has(String(name || '').trim().toLowerCase()));
-      return {
-        availableIngredients,
-        matchedCount: availableIngredients.length,
-        missingCount: Math.max(0, scaledIngredients.length - availableIngredients.length),
-      };
-    },
-    [items, scaledIngredients],
-  );
 
   const recipeIngredients = useMemo(() => toIngredientList(baseRecipe), [baseRecipe]);
   const factor = useMemo(() => servings / Math.max(1, householdSize), [householdSize, servings]);
@@ -186,41 +142,41 @@ export default function RecipeDetailScreen() {
       missingCount: ingredientAvailability.missingCount,
       isScreenLoading,
     });
-  }, [baseRecipe?.title, ingredientAvailability.matchedCount, ingredientAvailability.missingCount, items.length, recipeId]);
+  }, [baseRecipe, ingredientAvailability.matchedCount, ingredientAvailability.missingCount, isScreenLoading, items.length, recipeId]);
 
   useEffect(() => {
     let cancelled = false;
     const load = async () => {
-      if (!recipeId) return;
-      setIsLoadingRecipe(true);
+      if (!recipeId) {
+        setScreenError('Recette introuvable');
+        setIsScreenLoading(false);
+        return;
+      }
+      setIsScreenLoading(true);
+      setScreenError(null);
       try {
         const recipe = await fetchRecipeById(recipeId);
-        if (!cancelled) setRemoteRecipe(recipe);
+        if (cancelled) return;
+        if (!recipe) {
+          setBaseRecipe(null);
+          setScreenError('Recette introuvable');
+          return;
+        }
+        setBaseRecipe(recipe);
       } catch (error) {
+        if (cancelled) return;
         logger.warn('[RECIPES_MATCH] fetch recipe detail failed', { recipeId, error: String(error) });
-        if (!cancelled) setRemoteRecipe(null);
+        setBaseRecipe(null);
+        setScreenError('Impossible de charger la recette.');
       } finally {
-        if (!cancelled) setIsLoadingRecipe(false);
+        if (!cancelled) setIsScreenLoading(false);
       }
     };
     load();
     return () => {
       cancelled = true;
     };
-  }, [recipeId]);
-
-  if (!baseRecipe) {
-    return (
-      <SafeAreaView style={styles.container}>
-        <View style={styles.errorWrap}>
-          <Text style={styles.errorTitle}>{isLoadingRecipe ? 'Chargement de la recette…' : 'Recette introuvable'}</Text>
-          <TouchableOpacity style={styles.backButton} onPress={() => router.back()}>
-            <Text style={styles.backButtonLabel}>Retour</Text>
-          </TouchableOpacity>
-        </View>
-      </SafeAreaView>
-    );
-  }
+  }, [fetchRecipeById, recipeId]);
 
   const handleValidateRecipe = async () => {
     if (isValidating || !baseRecipe) return;
@@ -335,14 +291,16 @@ export default function RecipeDetailScreen() {
         <View style={styles.card}>
           <Text style={styles.sectionTitle}>Ingrédients</Text>
           {scaledIngredients.map((ingredient) => {
-            const isAvailable = availableSet.has(ingredient.name);
+            const isAvailable = availableSet.has(normalizeName(ingredient.name));
             const formattedQuantity = formatQuantity(ingredient.quantity);
             return (
               <View key={ingredient.name} style={styles.ingredientRow}>
                 <View style={styles.ingredientTextWrap}>
                   <Text style={styles.ingredientName}>{ingredient.name}</Text>
                   <Text style={styles.ingredientQuantity}>
-                    {formattedQuantity}{formattedQuantity ? ' ' : ''}{ingredient.unit}
+                    {formattedQuantity}
+                    {formattedQuantity ? ' ' : ''}
+                    {ingredient.unit}
                   </Text>
                 </View>
                 <Text style={[styles.stockBadge, isAvailable ? styles.badgeOk : styles.badgeMissing]}>
@@ -355,7 +313,7 @@ export default function RecipeDetailScreen() {
 
         <View style={styles.card}>
           <Text style={styles.sectionTitle}>Préparation</Text>
-          {baseRecipe.steps.map((step: string, index: number) => (
+          {recipeSteps.map((step: string, index: number) => (
             <View key={`${baseRecipe.id}-${index + 1}`} style={styles.stepRow}>
               <Text style={styles.stepIndex}>{index + 1}.</Text>
               <Text style={styles.stepText}>{step}</Text>
