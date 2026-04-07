@@ -1,0 +1,53 @@
+import { execSync } from 'node:child_process';
+
+const baseRef = process.argv[2];
+if (!baseRef) {
+  console.error('Usage: node scripts/verify-tests-added.mjs <base-ref>');
+  process.exit(1);
+}
+
+const output = execSync(`git diff --name-only ${baseRef}...HEAD`, { encoding: 'utf8' });
+const files = output.split('\n').map(s => s.trim()).filter(Boolean);
+
+const codeMatchers = [
+  /^frontend\/app\/.*\.(ts|tsx)$/,
+  /^frontend\/utils\/.*\.(ts|tsx)$/,
+  /^frontend\/store\/.*\.(ts|tsx)$/,
+  /^frontend\/data\/.*\.(ts|tsx)$/,
+  /^backend\/.*\.py$/,
+];
+
+const testMatchers = [
+  /\.test\.(ts|tsx|js|jsx|py)$/,
+  /\.spec\.(ts|tsx|js|jsx|py)$/,
+  /__tests__\//,
+];
+
+const isCodeFile = (f) => codeMatchers.some((r) => r.test(f));
+const isTestFile = (f) => testMatchers.some((r) => r.test(f));
+
+const changedCodeFiles = files.filter(isCodeFile);
+const changedTestFiles = files.filter(isTestFile);
+
+const ignoredCodePatterns = [
+  /\.d\.ts$/,
+  /types?\//,
+];
+
+const meaningfulCodeFiles = changedCodeFiles.filter(
+  (f) => !ignoredCodePatterns.some((r) => r.test(f))
+);
+
+if (meaningfulCodeFiles.length === 0) {
+  console.log('No relevant code changes detected.');
+  process.exit(0);
+}
+
+if (changedTestFiles.length === 0) {
+  console.error('Code changed but no test file was added or modified.');
+  console.error('Changed code files:');
+  for (const f of meaningfulCodeFiles) console.error(`- ${f}`);
+  process.exit(1);
+}
+
+console.log('Test change detected alongside code change.');

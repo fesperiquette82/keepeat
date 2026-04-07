@@ -1,0 +1,67 @@
+name: Codex Auto-fix CI failures
+
+on:
+  workflow_run:
+    workflows: ["CI"]
+    types: [completed]
+
+jobs:
+  autofix:
+    if: >
+      github.event.workflow_run.conclusion == 'failure' &&
+      github.event.workflow_run.event == 'pull_request'
+    runs-on: ubuntu-latest
+
+    permissions:
+      contents: write
+      pull-requests: write
+
+    steps:
+      - name: Checkout failing commit
+        uses: actions/checkout@v5
+        with:
+          ref: ${{ github.event.workflow_run.head_sha }}
+
+      - name: Setup Node
+        uses: actions/setup-node@v5
+        with:
+          node-version: 22
+          cache: npm
+          cache-dependency-path: frontend/package-lock.json
+
+      - name: Install frontend dependencies
+        working-directory: frontend
+        run: npm ci
+
+      - name: Install Codex CLI
+        run: npm install -g @openai/codex
+
+      - name: Run Codex to fix CI
+        env:
+          OPENAI_API_KEY: ${{ secrets.OPENAI_API_KEY }}
+        run: |
+          codex exec "
+          The CI workflow failed.
+          Make the smallest safe fix.
+          Follow AGENTS.md.
+          If code is changed, add or update regression tests.
+          Run frontend lint and tests.
+          Stop only when the relevant checks pass.
+          "
+
+      - name: Re-run frontend checks
+        working-directory: frontend
+        run: |
+          npm run lint
+          npm run test:ci
+
+      - name: Create pull request
+        uses: peter-evans/create-pull-request@v7
+        with:
+          token: ${{ secrets.GH_PAT }}
+          commit-message: "chore: codex autofix CI failure"
+          branch: "codex/autofix-${{ github.event.workflow_run.head_sha }}"
+          title: "Codex autofix for failed CI"
+          body: |
+            Automatic fix proposed after CI failure.
+            Includes any required regression test updates.
