@@ -5,9 +5,11 @@ import { useRouter } from 'expo-router';
 import Ionicons from '@expo/vector-icons/Ionicons';
 import { useStockStore } from '../../store/stockStore';
 import { C, shadowSm, T } from '../../utils/theme';
-import { buildRecipeSuggestions, daysUntil, findExpiringSoon, resolveStockItems } from '../../data/mockDashboardData';
+import { daysUntil, findExpiringSoon, resolveStockItems } from '../../data/mockDashboardData';
 import { countLabelFr } from '../../utils/uiText';
 import { storageZoneLabel, UI_LABELS } from '../../utils/uiLabels';
+import { fetchRecipesSuggestions } from '../../utils/recipesApi';
+import { logger } from '../../utils/logger';
 
 function expiryText(days: number | null): string {
   if (days === null) return 'Date non renseignée';
@@ -20,6 +22,7 @@ function expiryText(days: number | null): string {
 export default function HomeDashboardScreen() {
   const router = useRouter();
   const { items: storeItems, fetchStock } = useStockStore();
+  const [recipesOnHome, setRecipesOnHome] = React.useState<any[]>([]);
 
   useEffect(() => {
     fetchStock();
@@ -38,12 +41,45 @@ export default function HomeDashboardScreen() {
   }, [items]);
 
   const expiringSoon = useMemo(() => findExpiringSoon(items), [items]);
-  const recipes = useMemo(() => buildRecipeSuggestions(items).slice(0, 2), [items]);
+  const recipes = useMemo(
+    () =>
+      recipesOnHome.map((recipe) => ({
+        ...recipe,
+        timeMinutes: recipe.duration_min ?? recipe.timeMinutes ?? 0,
+        matchedCount: recipe.available_count ?? recipe.availableCount ?? 0,
+        missingCount: recipe.missing_count ?? recipe.missingCount ?? 0,
+      })),
+    [recipesOnHome],
+  );
   const summaryCards = useMemo(() => ([
     { key: 'placard', label: 'Placard', value: summary.placard, icon: 'file-tray-stacked-outline' as const },
     { key: 'frigo', label: 'Frigo', value: summary.frigo, icon: 'snow-outline' as const },
     { key: 'urgents', label: 'Urgents', value: summary.urgents, icon: 'alarm-outline' as const, urgent: true },
   ]), [summary.frigo, summary.placard, summary.urgents]);
+
+  useEffect(() => {
+    let cancelled = false;
+    const loadHomeRecipes = async () => {
+      try {
+        const payload = await fetchRecipesSuggestions('stock');
+        if (cancelled) return;
+        const backendRecipesOnHome = payload.recipes ?? [];
+        setRecipesOnHome(backendRecipesOnHome.slice(0, 2));
+        logger.debug('[RECIPES_MATCH] home suggestions diagnostics', {
+          recipesOnHomeCount: backendRecipesOnHome.length,
+          recipesOnHomeIds: backendRecipesOnHome.map((recipe) => recipe.id).slice(0, 10),
+          recipesOnHomeTitles: backendRecipesOnHome.map((recipe) => recipe.title).slice(0, 10),
+        });
+      } catch (error) {
+        logger.warn('[RECIPES_MATCH] home suggestions failed', { error: String(error) });
+        if (!cancelled) setRecipesOnHome([]);
+      }
+    };
+    loadHomeRecipes();
+    return () => {
+      cancelled = true;
+    };
+  }, []);
 
   return (
     <SafeAreaView style={styles.container}>
