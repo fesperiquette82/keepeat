@@ -3,199 +3,117 @@ import os
 import sys
 import unittest
 from pathlib import Path
-from unittest.mock import patch
+from unittest.mock import AsyncMock, patch
 
 os.environ.setdefault("MONGO_URL", "mongodb://localhost:27017")
 os.environ.setdefault("JWT_SECRET_KEY", "test-secret")
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[1] / "backend"))
 
-from models import Recipe
-from recipes_service import score_recipe_against_stock
 from server import get_recipe_suggestions
 from starlette.responses import Response
-
-
-class _FakeAgg:
-    def __init__(self, items):
-        self._items = items
-
-    async def to_list(self, length=1000):
-        return self._items[:length]
 
 
 class _FakeCursor:
     def __init__(self, items):
         self._items = items
 
-    def sort(self, *_args, **_kwargs):
-        return self
-
-    def limit(self, length):
-        self._items = self._items[:length]
-        return self
-
     async def to_list(self, length=1000):
         return self._items[:length]
 
 
-class _FakeStockCol:
-    def __init__(self, aggregate_items, find_items):
-        self._aggregate_items = aggregate_items
-        self._find_items = find_items
-
-    def aggregate(self, _pipeline):
-        return _FakeAgg(self._aggregate_items)
+class _FakeCollection:
+    def __init__(self, items):
+        self._items = items
 
     def find(self, *_args, **_kwargs):
-        return _FakeCursor(self._find_items)
+        return _FakeCursor(self._items)
 
 
 class RecipeSuggestionsEndpointTests(unittest.TestCase):
-    def _recipe(self, **overrides):
-        payload = {
-            "id": "fr_api_recipe",
-            "title": "Recette API",
-            "summary": "Résumé",
-            "ingredients_required": ["oeuf", "fromage"],
-            "ingredients_optional": [],
-            "steps": ["Assembler.", "Servir."],
-            "prep_time_min": 10,
-            "cook_time_min": 5,
-            "difficulty": "easy",
-            "tags": ["rapide"],
-            "meal_type": ["dinner"],
-            "cuisine": "française",
-            "servings": 2,
-        }
-        payload.update(overrides)
-        return Recipe.model_validate(payload)
-
-    def test_constrained_filter_is_completed_with_all_stock_fallback(self):
-        urgent_only = [
-            score_recipe_against_stock(self._recipe(id="urgent_1", title="Urgent 1"), ["oeufs", "gruyere"]),
-        ]
-        all_stock_pool = [
-            score_recipe_against_stock(self._recipe(id="all_1", title="All 1"), ["oeufs", "gruyere"]),
-            score_recipe_against_stock(self._recipe(id="all_2", title="All 2"), ["oeufs", "gruyere"]),
-            score_recipe_against_stock(self._recipe(id="all_3", title="All 3"), ["oeufs", "gruyere"]),
-        ]
-
-        fake_stock = _FakeStockCol(
-            aggregate_items=[{"name": "oeufs"}],
-            find_items=[{"name": "oeufs"}, {"name": "gruyere"}],
+    def test_returns_ranked_recipes_and_meta_payload(self):
+        fake_recipes = _FakeCollection(
+            [
+                {
+                    "id": "recipe_urgent",
+                    "title": "Poêlée courgette oeuf",
+                    "description": "Simple",
+                    "dish_type": "Poêlée",
+                    "duration_min": 12,
+                    "ingredients": [{"name": "courgette", "optional": False}, {"name": "oeuf", "optional": False}],
+                    "steps": ["Cuire"],
+                    "is_active": True,
+                }
+            ]
         )
+        fake_stock = [
+            {"name": "courgette"},
+            {"name": "oeufs"},
+        ]
 
         async def _run():
-            with patch("server.stock_col", fake_stock):
-                with patch("server.suggest_recipes_from_catalog", side_effect=[urgent_only, all_stock_pool]):
+            with patch("server.recipes_col", fake_recipes):
+                with patch("server._fetch_stock_candidates", AsyncMock(return_value=fake_stock)):
                     return await get_recipe_suggestions(
-                        recipe_filter="urgent",
-                        current_user={"id": "u1"},
-                    )
-
-        response = asyncio.run(_run())
-        ids = [r["id"] for r in response]
-
-        self.assertIn("urgent_1", ids)
-        self.assertIn("all_1", ids)
-        self.assertIn("all_2", ids)
-
-    def test_include_meta_exposes_requested_and_effective_locale(self):
-        fake_stock = _FakeStockCol(
-            aggregate_items=[{"name": "oeufs"}, {"name": "gruyere"}],
-            find_items=[{"name": "oeufs"}, {"name": "gruyere"}],
-        )
-        matches = [
-            score_recipe_against_stock(self._recipe(id="locale_1", title="Locale 1"), ["oeufs", "gruyere"]),
-        ]
-
-        async def _run():
-            with patch("server.stock_col", fake_stock):
-                with patch("server.suggest_recipes_from_catalog", return_value=matches):
-                    response = Response()
-                    payload = await get_recipe_suggestions(
-                        response=response,
-                        recipe_filter="all",
-                        include_meta=True,
-                        locale=None,
-                        accept_language="en-US,en;q=0.9",
-                        current_user={"id": "u1"},
-                    )
-                    return payload, response
-
-        payload, response = asyncio.run(_run())
-        meta = payload["meta"]
-        self.assertEqual(meta["requested_locale"], "en-US")
-        self.assertEqual(meta["effective_locale"], "fr-FR")
-        self.assertEqual(response.headers.get("X-Requested-Locale"), "en-US")
-        self.assertEqual(response.headers.get("X-Effective-Locale"), "fr-FR")
-
-    def test_personalized_filter_is_mapped_and_prunes_low_accessible_matches(self):
-        fake_stock = _FakeStockCol(
-            aggregate_items=[{"name": "oeufs"}, {"name": "gruyere"}],
-            find_items=[{"name": "oeufs"}, {"name": "gruyere"}],
-        )
-        perfect = score_recipe_against_stock(self._recipe(id="pf1", title="Perfect"), ["oeufs", "gruyere"])
-        perfect.suggestion_type = "perfect"
-        near = score_recipe_against_stock(
-            self._recipe(id="nr1", title="Near", ingredients_required=["oeuf", "fromage", "pain"]),
-            ["oeufs", "gruyere"],
-        )
-        near.suggestion_type = "near"
-        low_idea = score_recipe_against_stock(
-            self._recipe(id="id1", title="Low idea", ingredients_required=["oeuf", "fromage", "pain", "lait", "tomate", "oignon"]),
-            ["oeufs", "gruyere"],
-        )
-        low_idea.suggestion_type = "idea"
-        low_idea.score = 0.2
-
-        async def _run():
-            with patch("server.stock_col", fake_stock):
-                with patch("server.suggest_recipes_from_catalog", return_value=[perfect, near, low_idea]):
-                    response = Response()
-                    payload = await get_recipe_suggestions(
-                        response=response,
-                        recipe_filter="personalized",
+                        response=Response(),
+                        recipe_filter="day",
                         include_meta=True,
                         current_user={"id": "u1"},
                     )
-                    return payload, response
 
-        payload, response = asyncio.run(_run())
-        ids = [r["id"] for r in payload["recipes"]]
+        payload = asyncio.run(_run())
+        self.assertEqual(payload["meta"]["returned"], 1)
+        self.assertFalse(payload["meta"]["gap_logged"])
+        self.assertEqual(payload["recipes"][0]["available_count"], 2)
 
-        self.assertIn("pf1", ids)
-        self.assertIn("nr1", ids)
-        self.assertNotIn("id1", ids)
-        self.assertEqual(payload["meta"]["filter"], "personalized")
-        self.assertEqual(payload["meta"]["filter_effective"], "all")
-        self.assertEqual(response.headers.get("X-Recipes-Filter"), "all")
-
-    def test_suggestion_style_is_forwarded_and_exposed_in_headers(self):
-        fake_stock = _FakeStockCol(
-            aggregate_items=[{"name": "oeufs"}, {"name": "gruyere"}],
-            find_items=[{"name": "oeufs"}, {"name": "gruyere"}],
+    def test_gap_is_logged_when_no_recipe_is_relevant(self):
+        fake_recipes = _FakeCollection(
+            [
+                {
+                    "id": "recipe_missing",
+                    "title": "Soupe tomate",
+                    "ingredients": [{"name": "tomate", "optional": False}, {"name": "oignon", "optional": False}],
+                    "steps": ["Cuire"],
+                    "is_active": True,
+                }
+            ]
         )
-        matches = [score_recipe_against_stock(self._recipe(id="style_1", title="Style 1"), ["oeufs", "gruyere"])]
+        fake_stock = [{"name": "courgette"}]
 
         async def _run():
-            with patch("server.stock_col", fake_stock):
-                with patch("server.suggest_recipes_from_catalog", return_value=matches) as mocked:
-                    response = Response()
-                    payload = await get_recipe_suggestions(
-                        response=response,
-                        recipe_filter="all",
-                        suggestion_style="open",
-                        include_meta=True,
-                        current_user={"id": "u1"},
-                    )
-                    return payload, response, mocked
+            with patch("server.recipes_col", fake_recipes):
+                with patch("server._fetch_stock_candidates", AsyncMock(return_value=fake_stock)):
+                    with patch("server._upsert_recipe_gap", AsyncMock(return_value=True)) as mocked_gap:
+                        payload = await get_recipe_suggestions(
+                            response=Response(),
+                            recipe_filter="week",
+                            include_meta=True,
+                            current_user={"id": "u1"},
+                        )
+                        return payload, mocked_gap
 
-        payload, response, mocked = asyncio.run(_run())
-        self.assertEqual(payload["meta"]["suggestion_style"], "ouvert")
-        self.assertEqual(response.headers.get("X-Recipes-Suggestion-Style"), "ouvert")
-        self.assertEqual(mocked.call_args.kwargs.get("suggestion_style"), "ouvert")
+        payload, mocked_gap = asyncio.run(_run())
+        self.assertEqual(payload["recipes"], [])
+        self.assertTrue(payload["meta"]["gap_logged"])
+        mocked_gap.assert_awaited_once()
+
+    def test_legacy_filter_value_is_mapped_to_all(self):
+        fake_recipes = _FakeCollection([])
+
+        async def _run():
+            with patch("server.recipes_col", fake_recipes):
+                with patch("server._fetch_stock_candidates", AsyncMock(return_value=[])) as mocked_stock:
+                    with patch("server._upsert_recipe_gap", AsyncMock(return_value=False)):
+                        await get_recipe_suggestions(
+                            response=Response(),
+                            recipe_filter="stock",
+                            include_meta=True,
+                            current_user={"id": "u1"},
+                        )
+                        return mocked_stock
+
+        mocked_stock = asyncio.run(_run())
+        self.assertEqual(mocked_stock.await_args.kwargs["filter_value"], "all")
 
 
 if __name__ == "__main__":
