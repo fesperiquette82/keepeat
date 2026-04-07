@@ -10,7 +10,7 @@ import { countLabelFr } from '../../utils/uiText';
 import { UI_LABELS } from '../../utils/uiLabels';
 import { useLanguageStore } from '../../store/languageStore';
 import { logger } from '../../utils/logger';
-import { useRecipesStore, type BackendRecipeSuggestion, type RecipesFilter } from '../../store/recipesStore';
+import { fetchRecipesSuggestions } from '../../utils/recipesApi';
 
 const TYPE_LABEL: Record<string, string> = {
   apero: 'Apéro',
@@ -66,12 +66,10 @@ export default function RecipesScreen() {
   const router = useRouter();
   const { t } = useLanguageStore();
   const { items: storeItems, fetchStock } = useStockStore();
-  const [activeFilter, setActiveFilter] = useState<RecipesFilter>('expiryDay');
-  const [imageErrors, setImageErrors] = useState<Record<string, boolean>>({});
-
-  const recipesByFilter = useRecipesStore((state) => state.suggestionsByFilter);
-  const isLoading = useRecipesStore((state) => state.isLoading);
-  const fetchRecipesSuggestions = useRecipesStore((state) => state.fetchSuggestions);
+  const [imageErrors, setImageErrors] = React.useState<Record<string, boolean>>({});
+  const [activeFilter, setActiveFilter] = React.useState<RecipesFilter>('expiryDay');
+  const [recipes, setRecipes] = React.useState<any[]>([]);
+  const [isLoading, setIsLoading] = React.useState(false);
 
   useFocusEffect(
     React.useCallback(() => {
@@ -80,26 +78,48 @@ export default function RecipesScreen() {
     }, [activeFilter, fetchRecipesSuggestions, fetchStock]),
   );
 
-  useEffect(() => {
-    fetchRecipesSuggestions(activeFilter);
-  }, [activeFilter, fetchRecipesSuggestions]);
-
-  const recipes = useMemo(() => {
-    const raw = recipesByFilter[activeFilter] ?? [];
-    return raw.map(toRecipeCard);
-  }, [activeFilter, recipesByFilter]);
-
-  const classicSuggestions = useMemo(() => recipes, [recipes]);
+  const activeStockCount = useMemo(() => storeItems.filter((item) => item.status === 'active').length, [storeItems]);
+  const classicSuggestions = useMemo(
+    () =>
+      recipes.map((recipe) => ({
+        ...recipe,
+        timeMinutes: recipe.duration_min ?? 0,
+        type: String(recipe.dish_type || 'rapide').toLowerCase(),
+        matchedCount: recipe.available_count ?? 0,
+        missingCount: recipe.missing_count ?? 0,
+      })),
+    [recipes],
+  );
   const hasAnySuggestion = classicSuggestions.length > 0;
 
   useEffect(() => {
-    logger.debug('[RECIPES] backend recipes state updated', {
+    logger.debug('[RECIPES_MATCH] list availability recomputed', {
       activeFilter,
-      stockCount: storeItems.length,
-      recipesCount: recipes.length,
-      isLoading,
+      stockItemsCount: activeStockCount,
+      recipesCount: classicSuggestions.length,
     });
-  }, [activeFilter, isLoading, recipes.length, storeItems.length]);
+  }, [activeFilter, activeStockCount, classicSuggestions.length]);
+
+  useEffect(() => {
+    let cancelled = false;
+    const load = async () => {
+      setIsLoading(true);
+      try {
+        const payload = await fetchRecipesSuggestions(activeFilter);
+        if (cancelled) return;
+        setRecipes(payload.recipes ?? []);
+      } catch (error) {
+        logger.warn('[RECIPES_MATCH] fetch suggestions failed', { error: String(error), activeFilter });
+        if (!cancelled) setRecipes([]);
+      } finally {
+        if (!cancelled) setIsLoading(false);
+      }
+    };
+    load();
+    return () => {
+      cancelled = true;
+    };
+  }, [activeFilter, activeStockCount]);
 
   const filters = useMemo(
     () =>
@@ -111,7 +131,9 @@ export default function RecipesScreen() {
   );
 
   const emptyMessage = useMemo(() => {
-    const activeStockCount = storeItems.filter((item) => item.status === 'active').length;
+    if (isLoading) {
+      return 'Chargement des suggestions...';
+    }
     if (activeStockCount === 0) {
       return 'Aucune recette disponible : ajoutez d’abord des ingrédients au stock.';
     }
@@ -119,36 +141,7 @@ export default function RecipesScreen() {
       return 'Chargement des suggestions…';
     }
     return t(EMPTY_FILTER_LABEL_KEYS[activeFilter]);
-  }, [activeFilter, isLoading, storeItems, t]);
-
-  const listHeader = useMemo(() => {
-    const topRecipes = classicSuggestions.slice(0, 3);
-    return (
-      <View style={styles.planCard}>
-        <Text style={styles.planTitle}>Plan anti-gaspi</Text>
-        {topRecipes.length === 0 ? (
-          <Text style={styles.planEmptyText}>Aucun plan utile pour ce segment.</Text>
-        ) : (
-          <>
-            <Text style={styles.planMeta}>
-              {topRecipes.length} recette{topRecipes.length > 1 ? 's' : ''} · {countLabelFr(topRecipes.reduce((sum, recipe) => sum + recipe.matchedCount, 0), 'ingrédient')} disponible{topRecipes.reduce((sum, recipe) => sum + recipe.matchedCount, 0) > 1 ? 's' : ''}
-            </Text>
-            {topRecipes.map((recipe, index) => (
-              <TouchableOpacity
-                key={`plan-${recipe.id}`}
-                onPress={() => router.push({ pathname: '/recipes/[id]', params: { id: recipe.id } })}
-                style={styles.planRecipeButton}
-              >
-                <Text style={styles.planRecipeTitle}>{index + 1}. {recipe.title}</Text>
-                <Text style={styles.planRecipeMeta}>{recipe.timeMinutes} min · {countLabelFr(recipe.matchedCount, 'ingrédient')} disponible{recipe.matchedCount > 1 ? 's' : ''}</Text>
-              </TouchableOpacity>
-            ))}
-          </>
-        )}
-        <Text style={styles.planSectionHint}>Suggestions classiques</Text>
-      </View>
-    );
-  }, [classicSuggestions, router]);
+  }, [activeFilter, activeStockCount, isLoading, t]);
 
   return (
     <SafeAreaView style={styles.container}>
@@ -188,7 +181,31 @@ export default function RecipesScreen() {
           data={classicSuggestions}
           keyExtractor={(item) => item.id}
           contentContainerStyle={styles.listContent}
-          ListHeaderComponent={listHeader}
+          ListHeaderComponent={
+            <View style={styles.planCard}>
+              <Text style={styles.planTitle}>Top suggestions anti-gaspi</Text>
+              {classicSuggestions.length === 0 ? (
+                <Text style={styles.planEmptyText}>Aucun plan utile pour ce segment.</Text>
+              ) : (
+                <>
+                  <Text style={styles.planMeta}>
+                    {classicSuggestions.length} recette{classicSuggestions.length > 1 ? 's' : ''} · {countLabelFr(classicSuggestions.reduce((acc, item) => acc + (item.matchedCount ?? 0), 0), 'ingrédient')} couvert{classicSuggestions.length > 1 ? 's' : ''}
+                  </Text>
+                  {classicSuggestions.slice(0, 2).map((recipe, index) => (
+                    <TouchableOpacity
+                      key={`plan-${recipe.id}`}
+                      onPress={() => router.push({ pathname: '/recipes/[id]', params: { id: recipe.id } })}
+                      style={styles.planRecipeButton}
+                    >
+                      <Text style={styles.planRecipeTitle}>{index + 1}. {recipe.title}</Text>
+                      <Text style={styles.planRecipeMeta}>{recipe.timeMinutes} min · {countLabelFr(recipe.matchedCount, 'ingrédient')} disponible{recipe.matchedCount > 1 ? 's' : ''}</Text>
+                    </TouchableOpacity>
+                  ))}
+                </>
+              )}
+              <Text style={styles.planSectionHint}>Suggestions classiques</Text>
+            </View>
+          }
           renderItem={({ item }) => (
             <TouchableOpacity
               style={styles.card}

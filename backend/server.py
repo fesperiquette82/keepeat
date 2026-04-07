@@ -10,6 +10,7 @@ import re
 import secrets
 import subprocess
 import time
+import unicodedata
 from contextlib import asynccontextmanager
 from datetime import datetime, timedelta, timezone
 from email.mime.multipart import MIMEMultipart
@@ -129,6 +130,8 @@ user_alerts_col = db["user_alerts"]
 app_state_col = db["app_state"]
 products_cache_col = db["products_cache"]
 community_recipes_col = db["community_recipes"]
+recipes_col = db["recipes"]
+recipe_gap_requests_col = db["recipe_gap_requests"]
 api_request_logs_col = db["api_request_logs"]
 business_events_col = db["business_events"]
 service_usage_logs_col = db["service_usage_logs"]
@@ -472,6 +475,40 @@ async def run_backend_warmup() -> dict[str, Any]:
     return summary
 
 
+async def _seed_shared_recipes_collection_if_needed() -> None:
+    try:
+        existing = await recipes_col.count_documents({}, limit=1)
+        if existing > 0:
+            return
+        seeded_docs: list[dict[str, Any]] = []
+        for recipe in load_local_recipes():
+            doc = {
+                "_id": recipe.id,
+                "id": recipe.id,
+                "title": recipe.title,
+                "description": recipe.summary,
+                "dish_type": recipe.meal_type[0].value if recipe.meal_type else "plat",
+                "duration_min": int(recipe.prep_time_min + recipe.cook_time_min),
+                "difficulty": recipe.difficulty.value,
+                "ingredients": [{"name": ingredient, "quantity": "", "optional": False} for ingredient in recipe.ingredients_required]
+                + [{"name": ingredient, "quantity": "", "optional": True} for ingredient in recipe.ingredients_optional],
+                "steps": recipe.steps,
+                "tags": recipe.tags,
+                "is_active": True,
+                "created_by": "seed_local_catalog",
+                "created_at": utc_now().isoformat(),
+                "updated_at": utc_now().isoformat(),
+                "usage_count": 0,
+                "view_count": 0,
+            }
+            seeded_docs.append(doc)
+        if seeded_docs:
+            await recipes_col.insert_many(seeded_docs, ordered=False)
+            logger.info("Seed recipes collection completed with %d recipes", len(seeded_docs))
+    except Exception as exc:
+        logger.warning("Seed recipes collection skipped/failed: %s", exc)
+
+
 @asynccontextmanager
 async def lifespan(app: FastAPI):
     logger.info("Warm-up startup: trigger from FastAPI lifespan")
@@ -486,6 +523,11 @@ async def lifespan(app: FastAPI):
     await products_cache_col.create_index("cached_at", expireAfterSeconds=7 * 24 * 3600)
     await products_cache_col.create_index("barcode", unique=True)
     await community_recipes_col.create_index("created_at")
+    await recipes_col.create_index("id", unique=True)
+    await recipes_col.create_index([("is_active", 1), ("updated_at", -1)])
+    await recipe_gap_requests_col.create_index("signature", unique=True)
+    await recipe_gap_requests_col.create_index([("status", 1), ("last_seen_at", -1)])
+    await recipe_gap_requests_col.create_index([("user_id", 1), ("last_seen_at", -1)])
     await api_request_logs_col.create_index([("created_at", -1)])
     await api_request_logs_col.create_index([("endpoint_key", 1), ("created_at", -1)])
     await api_request_logs_col.create_index([("status_code", 1), ("created_at", -1)])
@@ -500,6 +542,7 @@ async def lifespan(app: FastAPI):
     await users_col.create_index("email", unique=True)
     await users_col.create_index("verification_token", sparse=True)
     await users_col.create_index("reset_token", sparse=True)
+    await _seed_shared_recipes_collection_if_needed()
 
     deps = AlertDependencies(
         users_col=users_col,
@@ -1923,6 +1966,250 @@ async def update_alert_preferences(
     return AlertPreferences(**merged)
 
 
+_RECIPES_FILTER_MAP: dict[str, str] = {
+    "expiryDay": "day",
+    "expiryWeek": "week",
+    "expiryMonth": "month",
+    "stock": "all",
+    "all": "all",
+    "urgent": "week",
+    "personalized": "all",
+}
+
+
+def _normalize_ingredient_name(raw_name: Any) -> str:
+    token = str(raw_name or "").strip().lower()
+    if not token:
+        return ""
+    normalized = unicodedata.normalize("NFD", token)
+    normalized = "".join(ch for ch in normalized if unicodedata.category(ch) != "Mn")
+    normalized = re.sub(r"[^a-z0-9\\s]", " ", normalized)
+    normalized = re.sub(r"\\s+", " ", normalized).strip()
+    aliases = {
+        "oeufs": "oeuf",
+        "tomates": "tomate",
+        "pommes de terre": "pomme de terre",
+        "patates": "pomme de terre",
+        "courgettes": "courgette",
+        "oignons": "oignon",
+    }
+    if normalized in aliases:
+        normalized = aliases[normalized]
+    elif len(normalized) > 3 and normalized.endswith("s"):
+        normalized = normalized[:-1]
+    return normalized
+
+
+def _to_iso_date(raw_date: Any) -> datetime | None:
+    if not raw_date:
+        return None
+    if isinstance(raw_date, datetime):
+        return raw_date
+    value = str(raw_date).strip()
+    if not value:
+        return None
+    try:
+        if len(value) <= 10:
+            return datetime.fromisoformat(value[:10]).replace(tzinfo=timezone.utc)
+        parsed = datetime.fromisoformat(value.replace("Z", "+00:00"))
+        if parsed.tzinfo is None:
+            return parsed.replace(tzinfo=timezone.utc)
+        return parsed.astimezone(timezone.utc)
+    except ValueError:
+        return None
+
+
+def _build_gap_signature(*, normalized_ingredients: list[str], recipe_filter: str, criteria: dict[str, Any]) -> str:
+    payload = {
+        "filter": recipe_filter,
+        "ingredients": sorted(set(normalized_ingredients)),
+        "criteria": criteria,
+    }
+    return json.dumps(payload, ensure_ascii=False, sort_keys=True)
+
+
+async def _send_recipe_gap_email(gap_doc: dict[str, Any], *, is_new: bool) -> None:
+    threshold = int(os.getenv("RECIPE_GAP_EMAIL_THRESHOLD", "3"))
+    count = int(gap_doc.get("occurrence_count") or 0)
+    if not is_new and (threshold <= 1 or count % threshold != 0):
+        return
+    destination = os.getenv("RECIPE_GAP_EMAIL_TO", "fesperiquette@hotmail.com").strip() or "fesperiquette@hotmail.com"
+    subject = "KeepEat - Besoin recette non couvert"
+    html_body = f"""
+    <h3>Besoin recette non couvert</h3>
+    <p><b>Signature:</b> {gap_doc.get('signature')}</p>
+    <p><b>Filtre:</b> {gap_doc.get('filter')}</p>
+    <p><b>Statut:</b> {gap_doc.get('status')}</p>
+    <p><b>Occurrences:</b> {gap_doc.get('occurrence_count')}</p>
+    <p><b>Ingrédients disponibles:</b> {', '.join(gap_doc.get('available_ingredients', []))}</p>
+    <p><b>Ingrédients normalisés:</b> {', '.join(gap_doc.get('normalized_ingredients', []))}</p>
+    <p><b>Dernière détection:</b> {gap_doc.get('last_seen_at')}</p>
+    """
+    await _send_email(destination, subject, html_body)
+
+
+async def _mark_coverable_gaps_after_recipe_insert(recipe_doc: dict[str, Any]) -> None:
+    ingredient_names = [_normalize_ingredient_name(i.get("name")) for i in recipe_doc.get("ingredients", [])]
+    normalized_recipe_ingredients = sorted({name for name in ingredient_names if name})
+    if not normalized_recipe_ingredients:
+        return
+    pending_gaps = await recipe_gap_requests_col.find({"status": {"$in": ["pending", "partially_resolved"]}}).to_list(length=500)
+    for gap in pending_gaps:
+        gap_ingredients = set(gap.get("normalized_ingredients", []))
+        if not gap_ingredients:
+            continue
+        covered = gap_ingredients.intersection(normalized_recipe_ingredients)
+        if not covered:
+            continue
+        coverage_ratio = len(covered) / max(1, len(gap_ingredients))
+        next_status = "resolved" if coverage_ratio >= 0.8 else "partially_resolved"
+        await recipe_gap_requests_col.update_one(
+            {"_id": gap["_id"]},
+            {
+                "$set": {
+                    "status": next_status,
+                    "resolved_at": utc_now().isoformat(),
+                },
+                "$addToSet": {"resolved_by_recipe_ids": recipe_doc.get("id")},
+            },
+        )
+
+
+async def _fetch_stock_candidates(*, uid: str, filter_value: str) -> list[dict[str, Any]]:
+    now = utc_now()
+    today = now.date()
+    max_day = today
+    if filter_value == "week":
+        max_day = today + timedelta(days=7)
+    elif filter_value == "month":
+        max_day = today + timedelta(days=31)
+
+    query: dict[str, Any] = {"user_id": uid, "status": "active"}
+    items = await stock_col.find(query).to_list(length=1500)
+    filtered: list[dict[str, Any]] = []
+    for item in items:
+        expiry_date = _to_iso_date(item.get("expiry_date"))
+        if expiry_date and expiry_date.date() < today:
+            continue
+        if filter_value in {"day", "week", "month"}:
+            if expiry_date is None or expiry_date.date() > max_day:
+                continue
+        enriched = dict(item)
+        enriched["_expiry_dt"] = expiry_date
+        filtered.append(enriched)
+    filtered.sort(key=lambda product: (product.get("_expiry_dt") is None, product.get("_expiry_dt") or datetime.max.replace(tzinfo=timezone.utc)))
+    return filtered
+
+
+def _score_recipe_match(recipe_doc: dict[str, Any], stock_items: list[dict[str, Any]]) -> dict[str, Any]:
+    normalized_stock_names = [_normalize_ingredient_name(i.get("name")) for i in stock_items if i.get("name")]
+    stock_set = set(name for name in normalized_stock_names if name)
+    urgents = {
+        _normalize_ingredient_name(item.get("name"))
+        for item in stock_items
+        if item.get("_expiry_dt") and 0 <= (item["_expiry_dt"].date() - utc_now().date()).days <= 2
+    }
+
+    ingredients = recipe_doc.get("ingredients", []) or []
+    required_ingredients = [i for i in ingredients if not bool(i.get("optional"))]
+    available: list[str] = []
+    missing: list[str] = []
+    urgent_hits = 0
+    for ingredient in required_ingredients:
+        normalized_name = _normalize_ingredient_name(ingredient.get("name"))
+        if not normalized_name:
+            continue
+        if normalized_name in stock_set:
+            available.append(normalized_name)
+            if normalized_name in urgents:
+                urgent_hits += 1
+        else:
+            missing.append(normalized_name)
+
+    available_count = len(available)
+    missing_count = len(missing)
+    if available_count == 0:
+        return {}
+
+    duration = int(recipe_doc.get("duration_min") or 0)
+    simple_bonus = 4 if duration and duration <= 20 else (2 if duration <= 35 else 0)
+    score = (
+        available_count * 3
+        + urgent_hits * 5
+        + simple_bonus
+        - missing_count * 2
+    )
+    if missing_count >= 4:
+        score -= 6
+    return {
+        "id": recipe_doc.get("id"),
+        "title": recipe_doc.get("title"),
+        "description": recipe_doc.get("description", ""),
+        "duration_min": duration,
+        "dish_type": recipe_doc.get("dish_type", "Plat"),
+        "available_count": available_count,
+        "missing_count": missing_count,
+        "available_ingredients": sorted(set(available)),
+        "missing_ingredients": sorted(set(missing)),
+        "steps": recipe_doc.get("steps", []),
+        "score": score,
+    }
+
+
+async def _upsert_recipe_gap(
+    *,
+    uid: str,
+    recipe_filter: str,
+    stock_items: list[dict[str, Any]],
+    criteria: dict[str, Any],
+) -> bool:
+    normalized_ingredients = sorted(
+        {
+            _normalize_ingredient_name(item.get("name"))
+            for item in stock_items
+            if item.get("name")
+        }
+    )
+    normalized_ingredients = [name for name in normalized_ingredients if name]
+    signature = _build_gap_signature(
+        normalized_ingredients=normalized_ingredients,
+        recipe_filter=recipe_filter,
+        criteria=criteria,
+    )
+    now_iso = utc_now().isoformat()
+    existing = await recipe_gap_requests_col.find_one({"signature": signature})
+    if existing:
+        await recipe_gap_requests_col.update_one(
+            {"_id": existing["_id"]},
+            {
+                "$set": {"last_seen_at": now_iso, "status": "pending"},
+                "$inc": {"occurrence_count": 1},
+            },
+        )
+        refreshed = await recipe_gap_requests_col.find_one({"_id": existing["_id"]})
+        if refreshed:
+            await _send_recipe_gap_email(refreshed, is_new=False)
+        return True
+
+    doc = {
+        "user_id": uid,
+        "filter": recipe_filter,
+        "available_ingredients": [item.get("name") for item in stock_items if item.get("name")],
+        "normalized_ingredients": normalized_ingredients,
+        "criteria": criteria,
+        "signature": signature,
+        "status": "pending",
+        "occurrence_count": 1,
+        "created_at": now_iso,
+        "last_seen_at": now_iso,
+        "resolved_at": None,
+        "resolved_by_recipe_ids": [],
+    }
+    await recipe_gap_requests_col.insert_one(doc)
+    await _send_recipe_gap_email(doc, is_new=True)
+    return True
+
+
 @api_router.get("/recipes/suggestions")
 async def get_recipe_suggestions(
     response: Response = None,
@@ -1933,58 +2220,20 @@ async def get_recipe_suggestions(
     accept_language: str | None = Header(None, alias="Accept-Language"),
     current_user: Dict[str, Any] = Depends(_get_current_user),
 ):
-    """Suggère des recettes depuis le catalogue local.
-    filter: urgent (≤7j) | personalized | all | frigo | placard
-    - personalized: vue principale recommandée, restreinte aux suggestions les plus accessibles
-    - all: compat/debug, conserve le comportement historique
-    """
+    """Suggère des recettes depuis la collection backend partagée `recipes`."""
     uid = current_user["id"]
     include_meta_enabled = include_meta is True or str(include_meta).lower() in {"1", "true", "yes"}
     requested_locale, effective_locale = _resolve_recipes_locale(locale, accept_language)
     resolved_suggestion_style = resolve_suggestion_style(suggestion_style)
-    effective_filter = "all" if recipe_filter in {"all", "personalized", "stock"} else recipe_filter
-    temporal_window_days = _resolve_temporal_filter_window_days(recipe_filter)
-    if temporal_window_days is not None:
-        effective_filter = recipe_filter
-    plan = resolve_plan(current_user)
-    premium_ai_enabled = plan == PREMIUM_PLAN
-    openai_key = (os.getenv("OPENAI_API_KEY") or "").strip()
-    openai_model = (os.getenv("OPENAI_MODEL") or "gpt-4o-mini").strip() or "gpt-4o-mini"
+    effective_filter = _RECIPES_FILTER_MAP.get(recipe_filter, "all")
     logger.debug(
         "RECIPES_DEBUG suggestions called — user=%s filter=%s suggestion_style=%s",
         uid,
         recipe_filter,
         resolved_suggestion_style,
     )
-    today_str = utc_now().strftime("%Y-%m-%d")
 
-    # Récupérer les items actifs non expirés selon le filtre
-    match: dict = {"user_id": uid, "status": "active"}
-    if temporal_window_days is not None:
-        target_day = (utc_now().date() + timedelta(days=temporal_window_days)).strftime("%Y-%m-%d")
-        match["expiry_date"] = {"$nin": [None, ""], "$gte": today_str, "$lte": target_day}
-    else:
-        match["$or"] = [
-            {"expiry_date": {"$in": [None, ""]}},
-            {"expiry_date": {"$gte": today_str}},
-        ]
-
-    if effective_filter == "frigo":
-        match["food_category"] = {"$in": _FRIGO_CATS}
-    elif effective_filter == "placard":
-        match["food_category"] = {"$in": _PLACARD_CATS}
-    elif effective_filter == "urgent" and temporal_window_days is None:
-        in_7_days = (utc_now().date() + timedelta(days=7)).strftime("%Y-%m-%d")
-        match["expiry_date"] = {"$nin": [None, ""], "$gte": today_str, "$lte": in_7_days}
-
-    max_stock_items = 1000
-    pipeline = [
-        {"$match": match},
-        {"$addFields": {"_no_expiry": {"$cond": [{"$or": [{"$eq": ["$expiry_date", None]}, {"$eq": ["$expiry_date", ""]}]}, 1, 0]}}},
-        {"$sort": {"_no_expiry": 1, "expiry_date": 1}},
-        {"$limit": max_stock_items},
-    ]
-    items = await stock_col.aggregate(pipeline).to_list(length=max_stock_items)
+    items = await _fetch_stock_candidates(uid=uid, filter_value=effective_filter)
     logger.debug(
         "RECIPES_DEBUG suggestions stock_items_raw — user=%s filter=%s count=%d sample=%s",
         uid,
@@ -2001,165 +2250,31 @@ async def get_recipe_suggestions(
         ],
     )
     stock_names = [i.get("name", "") for i in items if i.get("name")]
-    storage_focus = effective_filter if effective_filter in {"frigo", "placard"} else None
-    matches = suggest_recipes_from_catalog(
-        stock_names,
-        limit=5,
-        storage_focus=storage_focus,
-        suggestion_style=resolved_suggestion_style,
-    )
-
-    if recipe_filter == "personalized":
-        # Mode principal orienté expérience: limiter les cartes peu accessibles (scores bas / idées lointaines).
-        preferred = [m for m in matches if m.score >= 0.45 and m.suggestion_type in {"perfect", "near"}]
-        fallback = [m for m in matches if m not in preferred and m.score >= 0.35]
-        matches = (preferred + fallback)[:5]
-
-    # Fallback contrôlé: si un filtre contraint retourne trop peu de recettes,
-    # compléter avec des suggestions "all" pour éviter un écran trop vide.
-    if (effective_filter in {"urgent", "frigo", "placard"} or _is_filter_with_temporal_window(recipe_filter)) and len(matches) < 3:
-        initial_count = len(matches)
-        all_items = await stock_col.find(
-            {
-                "user_id": uid,
-                "status": "active",
-                "$or": [
-                    {"expiry_date": {"$in": [None, ""]}},
-                    {"expiry_date": {"$gte": today_str}},
-                ],
-            },
-            {"name": 1},
-        ).sort("expiry_date", 1).limit(max_stock_items).to_list(length=max_stock_items)
-        all_stock_names = [i.get("name", "") for i in all_items if i.get("name")]
-        fallback_matches = suggest_recipes_from_catalog(
-            all_stock_names,
-            limit=8,
-            storage_focus=None,
-            suggestion_style=resolved_suggestion_style,
-        )
-        existing_ids = {m.recipe.id for m in matches}
-        for fallback in fallback_matches:
-            if fallback.recipe.id in existing_ids:
-                continue
-            matches.append(fallback)
-            existing_ids.add(fallback.recipe.id)
-            if len(matches) >= 5:
-                break
-        logger.debug(
-            "RECIPES_DEBUG suggestions fallback_all_applied — user=%s filter=%s initial_count=%d final_count=%d",
-            uid,
-            effective_filter,
-            initial_count,
-            len(matches),
-        )
-
-    recipes_payload = [recipe_match_to_suggestion(match).model_dump(mode="json") for match in matches]
-
-    ai_used = False
-    ai_recipes_payload: list[dict[str, Any]] = []
-    if premium_ai_enabled and openai_key and stock_names:
-        stock_snapshot: list[dict[str, Any]] = []
-        now_utc = utc_now()
-        for item in items:
-            name = (item.get("name") or "").strip()
-            if not name:
-                continue
-            stock_snapshot.append(
-                {
-                    "name": name,
-                    "category": item.get("food_category") or item.get("category") or "autres",
-                    "quantity": item.get("quantity") or "",
-                    "expiry_date": item.get("expiry_date"),
-                    "anti_waste_priority": _compute_anti_waste_priority(item.get("expiry_date"), now_utc),
-                }
-            )
-        gpt_recipes = await _fetch_gpt_recipes(
-            openai_key=openai_key,
-            openai_model=openai_model,
-            stock_snapshot=stock_snapshot,
-            active_filter=recipe_filter,
-        )
-        existing_titles = [payload.get("title", "") for payload in recipes_payload]
-        existing_ingredients = [
-            [*payload.get("usedIngredients", []), *payload.get("missedIngredients", [])]
-            for payload in recipes_payload
-        ]
-        for idx, gpt_recipe in enumerate(gpt_recipes):
-            available = [ingredient.strip() for ingredient in gpt_recipe.available_ingredients if ingredient.strip()]
-            missing = [ingredient.strip() for ingredient in gpt_recipe.missing_ingredients if ingredient.strip()]
-            if not available:
-                continue
-            title = gpt_recipe.title.strip()
-            if not title:
-                continue
-            has_close_title = any(_title_similarity(title, existing_title) >= 0.86 for existing_title in existing_titles)
-            if has_close_title:
-                continue
-            all_ingredients = [*available, *missing]
-            has_high_overlap = any(_ingredients_overlap_ratio(all_ingredients, existing) >= 0.75 for existing in existing_ingredients)
-            if has_high_overlap:
-                continue
-            suggestion_payload = {
-                "id": f"gpt-{uid[:8]}-{idx}-{abs(hash(title)) % 100000}",
-                "title": title,
-                "image": "",
-                "usedIngredients": available,
-                "missedIngredients": missing,
-                "optionalIngredientsUsed": [],
-                "sourceUrl": "",
-                "is_fallback": False,
-                "instructions_summary": gpt_recipe.description.strip(),
-                "prep_time_min": int(gpt_recipe.duration_min),
-                "cook_time_min": 0,
-                "difficulty": "easy",
-                "tags": ["anti-gaspi", "gpt"],
-                "meal_type": ["dinner"],
-                "cuisine": "française",
-                "servings": 2,
-                "score": 0.0,
-                "suggestion_type": "idea",
-                "used_ingredients_count": len(available),
-                "missing_ingredients_count": len(missing),
-                "debug": {
-                    "source": "gpt",
-                    "dish_type": gpt_recipe.dish_type,
-                    "steps": gpt_recipe.steps[:8],
-                    "anti_waste_reason": gpt_recipe.anti_waste_reason,
-                    "final_score": 0.0,
-                },
-            }
-            ai_recipes_payload.append(suggestion_payload)
-            existing_titles.append(title)
-            existing_ingredients.append(all_ingredients)
-
-    combined_payload = recipes_payload + ai_recipes_payload
-    for payload in combined_payload:
-        used_count = len(payload.get("usedIngredients", []))
-        missing_count = len(payload.get("missedIngredients", []))
-        temporal_bonus = 0.0
-        if _is_filter_with_temporal_window(recipe_filter):
-            temporal_bonus = 0.25
-        payload["score"] = round((used_count * 1.4) - (missing_count * 0.9) + temporal_bonus, 4)
-        payload["used_ingredients_count"] = used_count
-        payload["missing_ingredients_count"] = missing_count
-        if isinstance(payload.get("debug"), dict):
-            payload["debug"]["final_score"] = payload["score"]
-    combined_payload.sort(
-        key=lambda recipe: (
-            recipe.get("score", 0),
-            recipe.get("used_ingredients_count", 0),
-            -recipe.get("missing_ingredients_count", 0),
-            -(recipe.get("prep_time_min") or 999),
+    recipe_docs = await recipes_col.find({"is_active": True}).to_list(length=500)
+    scored = [_score_recipe_match(recipe_doc, items) for recipe_doc in recipe_docs]
+    scored = [candidate for candidate in scored if candidate]
+    scored.sort(
+        key=lambda candidate: (
+            candidate.get("score", 0),
+            candidate.get("available_count", 0),
+            -candidate.get("missing_count", 0),
+            -candidate.get("duration_min", 0),
         ),
         reverse=True,
     )
-    recipes_payload = combined_payload[:8]
-    ai_used = len(ai_recipes_payload) > 0
+    relevant = [candidate for candidate in scored if candidate.get("available_count", 0) >= 1 and candidate.get("missing_count", 0) <= 3][:5]
 
-    logger.info(
-        "Recipes suggestions: filter=%s stock=%s top5=%s",
-        recipe_filter, stock_names[:5], [match.recipe.title for match in matches],
-    )
+    gap_logged = False
+    if not relevant:
+        gap_logged = await _upsert_recipe_gap(
+            uid=uid,
+            recipe_filter=effective_filter,
+            stock_items=items,
+            criteria={"min_score": 1, "max_missing": 3},
+        )
+
+    logger.info("Recipes suggestions: filter=%s stock=%s top5=%s", recipe_filter, stock_names[:5], [match.get("title") for match in relevant])
+    recipes_payload = relevant
     logger.debug(
         "RECIPES_DEBUG suggestions response — user=%s filter=%s count=%d ids=%s titles=%s",
         uid,
@@ -2176,9 +2291,9 @@ async def get_recipe_suggestions(
         effective_locale=effective_locale,
         suggestion_style=resolved_suggestion_style,
     )
-    meta["premium_ai_enabled"] = premium_ai_enabled
-    meta["ai_used"] = ai_used
-    meta["ai_recipe_count"] = len(ai_recipes_payload)
+    meta["total_candidates"] = len(scored)
+    meta["returned"] = len(recipes_payload)
+    meta["gap_logged"] = gap_logged
     _apply_recipes_debug_headers(response=response, meta=meta)
     if include_meta_enabled:
         return {"recipes": recipes_payload, "meta": meta}
@@ -2305,6 +2420,74 @@ async def get_recipe_catalog(
         [r.id for r in recipes[:20]],
     )
     return RecipeCatalogResponse(recipes=recipes, total=len(recipes))
+
+
+@api_router.get("/recipes/{recipe_id}")
+async def get_recipe_by_id(
+    recipe_id: str,
+    current_user: Dict[str, Any] = Depends(_get_current_user),
+):
+    _ = current_user
+    recipe_doc = await recipes_col.find_one({"id": recipe_id, "is_active": True}, {"_id": 0})
+    if not recipe_doc:
+        raise HTTPException(status_code=404, detail="Recipe not found")
+    return recipe_doc
+
+
+@api_router.post("/admin/recipes")
+async def admin_add_recipe(
+    body: Dict[str, Any],
+    admin_user: Dict[str, Any] = Depends(_require_admin_user),
+):
+    now_iso = utc_now().isoformat()
+    recipe_id = str(body.get("id") or "").strip()
+    if not recipe_id:
+        raise HTTPException(status_code=400, detail="id is required")
+    ingredients = body.get("ingredients") or []
+    if not isinstance(ingredients, list) or len(ingredients) == 0:
+        raise HTTPException(status_code=400, detail="ingredients must be a non-empty array")
+    doc = {
+        "id": recipe_id,
+        "title": str(body.get("title") or "").strip(),
+        "description": str(body.get("description") or "").strip(),
+        "dish_type": str(body.get("dish_type") or "Plat"),
+        "duration_min": int(body.get("duration_min") or 0),
+        "difficulty": str(body.get("difficulty") or "easy"),
+        "ingredients": ingredients,
+        "steps": body.get("steps") or [],
+        "tags": body.get("tags") or [],
+        "is_active": bool(body.get("is_active", True)),
+        "created_by": admin_user.get("id"),
+        "created_at": now_iso,
+        "updated_at": now_iso,
+        "usage_count": int(body.get("usage_count") or 0),
+        "view_count": int(body.get("view_count") or 0),
+    }
+    await recipes_col.update_one({"id": recipe_id}, {"$set": doc}, upsert=True)
+    await _mark_coverable_gaps_after_recipe_insert(doc)
+    return {"ok": True, "recipe_id": recipe_id}
+
+
+@api_router.post("/admin/recipe-gaps/{gap_id}/resolve")
+async def admin_resolve_recipe_gap(
+    gap_id: str,
+    body: Dict[str, Any],
+    _admin_user: Dict[str, Any] = Depends(_require_admin_user),
+):
+    status_value = str(body.get("status") or "resolved")
+    if status_value not in {"pending", "partially_resolved", "resolved", "ignored"}:
+        raise HTTPException(status_code=400, detail="Invalid status")
+    recipe_ids = body.get("resolved_by_recipe_ids") or []
+    update_doc = {
+        "status": status_value,
+        "resolved_at": utc_now().isoformat() if status_value in {"partially_resolved", "resolved"} else None,
+    }
+    if recipe_ids:
+        update_doc["resolved_by_recipe_ids"] = recipe_ids
+    result = await recipe_gap_requests_col.update_one({"_id": ObjectId(gap_id)}, {"$set": update_doc})
+    if result.matched_count == 0:
+        raise HTTPException(status_code=404, detail="Gap not found")
+    return {"ok": True, "gap_id": gap_id, "status": status_value}
 
 
 # -----------------------------------------------------------------------------
