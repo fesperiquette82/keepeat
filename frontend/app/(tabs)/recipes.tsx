@@ -11,6 +11,8 @@ import { UI_LABELS } from '../../utils/uiLabels';
 import { useLanguageStore } from '../../store/languageStore';
 import { logger } from '../../utils/logger';
 import { fetchRecipesSuggestions } from '../../utils/recipesApi';
+import { daysUntil, resolveStockItems } from '../../data/mockDashboardData';
+import { normalizeIngredientName } from '../../utils/ingredientMatching';
 
 const TYPE_LABEL: Record<string, string> = {
   apero: 'Apéro',
@@ -36,6 +38,12 @@ const EMPTY_FILTER_LABEL_KEYS: Record<RecipesFilter, string> = {
   expiryDay: 'recipesEmptyExpiryDay',
   expiryWeek: 'recipesEmptyExpiryWeek',
   expiryMonth: 'recipesEmptyExpiryMonth',
+};
+
+const MAX_DAYS_BY_FILTER: Record<Exclude<RecipesFilter, 'stock'>, number> = {
+  expiryDay: 0,
+  expiryWeek: 7,
+  expiryMonth: 31,
 };
 
 interface RecipeCard {
@@ -78,7 +86,23 @@ export default function RecipesScreen() {
     }, [activeFilter, fetchRecipesSuggestions, fetchStock]),
   );
 
-  const activeStockCount = useMemo(() => storeItems.filter((item) => item.status === 'active').length, [storeItems]);
+  const { items } = useMemo(() => resolveStockItems(storeItems, { useMockFallback: false }), [storeItems]);
+  const activeItems = useMemo(() => items.filter((item) => item.status === 'active'), [items]);
+  const targetItems = useMemo(() => {
+    if (activeFilter === 'stock') return activeItems;
+    const maxDays = MAX_DAYS_BY_FILTER[activeFilter];
+    return activeItems.filter((item) => {
+      const days = daysUntil(item.expiry_date);
+      if (days === null) return false;
+      return days >= 0 && days <= maxDays;
+    });
+  }, [activeFilter, activeItems]);
+
+  const activeStockCount = activeItems.length;
+  const targetIngredientNames = useMemo(
+    () => new Set(targetItems.map((item) => normalizeIngredientName(item.name)).filter(Boolean)),
+    [targetItems],
+  );
   const classicSuggestions = useMemo(
     () =>
       recipes.map((recipe) => ({
@@ -91,14 +115,16 @@ export default function RecipesScreen() {
     [recipes],
   );
   const hasAnySuggestion = classicSuggestions.length > 0;
+  const hasTargetItems = targetItems.length > 0;
 
   useEffect(() => {
     logger.debug('[RECIPES_MATCH] list availability recomputed', {
       activeFilter,
       stockItemsCount: activeStockCount,
+      targetItemsCount: targetItems.length,
       recipesCount: classicSuggestions.length,
     });
-  }, [activeFilter, activeStockCount, classicSuggestions.length]);
+  }, [activeFilter, activeStockCount, classicSuggestions.length, targetItems.length]);
 
   useEffect(() => {
     let cancelled = false;
@@ -107,7 +133,14 @@ export default function RecipesScreen() {
       try {
         const payload = await fetchRecipesSuggestions(activeFilter);
         if (cancelled) return;
-        setRecipes(payload.recipes ?? []);
+        const scopedRecipes = (payload.recipes ?? []).filter((recipe) => {
+          if (targetIngredientNames.size === 0) return false;
+          const recipeAvailableIngredients = Array.isArray(recipe.available_ingredients)
+            ? recipe.available_ingredients
+            : [];
+          return recipeAvailableIngredients.some((ingredient) => targetIngredientNames.has(normalizeIngredientName(String(ingredient ?? ''))));
+        });
+        setRecipes(scopedRecipes);
       } catch (error) {
         logger.warn('[RECIPES_MATCH] fetch suggestions failed', { error: String(error), activeFilter });
         if (!cancelled) setRecipes([]);
@@ -119,7 +152,7 @@ export default function RecipesScreen() {
     return () => {
       cancelled = true;
     };
-  }, [activeFilter, activeStockCount]);
+  }, [activeFilter, activeStockCount, targetIngredientNames]);
 
   const filters = useMemo(
     () =>
@@ -137,11 +170,14 @@ export default function RecipesScreen() {
     if (activeStockCount === 0) {
       return 'Aucune recette disponible : ajoutez d’abord des ingrédients au stock.';
     }
-    if (isLoading) {
-      return 'Chargement des suggestions…';
+    if (!hasTargetItems) {
+      return t(EMPTY_FILTER_LABEL_KEYS[activeFilter]);
     }
-    return t(EMPTY_FILTER_LABEL_KEYS[activeFilter]);
-  }, [activeFilter, activeStockCount, isLoading, t]);
+    if (activeFilter === 'stock') {
+      return 'J’ai détecté des articles dans votre stock, mais je n’arrive pas à vous proposer de recette pour le moment.';
+    }
+    return `J’ai détecté des articles avec des dates de péremption cohérentes pour le filtre “${t(FILTER_LABEL_KEYS[activeFilter])}”, mais je n’arrive pas à vous proposer de recette pour le moment.`;
+  }, [activeFilter, activeStockCount, hasTargetItems, isLoading, t]);
 
   return (
     <SafeAreaView style={styles.container}>
