@@ -107,3 +107,14 @@ test('filtrage recettes: aucun ingrédient cible normalisable => aucune recette'
   const filtered = filterRecipesByTargetIngredients(recipes, new Set());
   assert.equal(filtered.length, 0);
 });
+
+test('filtrage recettes: exclut les recettes fallback génériques même si les ingrédients matchent', () => {
+  const recipes = [
+    { id: 'generic-fallback', available_ingredients: ['oeufs'], is_fallback: true },
+    { id: 'generic-fallback-debug', available_ingredients: ['oeufs'], debug: { is_fallback: true } },
+    { id: 'scoped', available_ingredients: ['oeufs'] },
+  ];
+
+  const filtered = filterRecipesByTargetIngredients(recipes, new Set(['oeuf']));
+  assert.deepEqual(filtered.map((recipe) => recipe.id), ['scoped']);
+});

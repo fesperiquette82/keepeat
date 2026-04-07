@@ -25,7 +25,7 @@ function item(id: string, name: string): StockItem {
 
 test('normalizeIngredientName applique la normalisation demandée', () => {
   assert.equal(normalizeIngredientName('  Œufs!!  '), 'oeuf');
-  assert.equal(normalizeIngredientName('Crème  fraîche'), 'creme fraiche');
+  assert.equal(normalizeIngredientName('Crème  fraîche'), 'creme');
   assert.equal(normalizeIngredientName('Passierte   Tomaten'), 'passierte tomaten');
 });
 

@@ -35,7 +35,7 @@ jobs:
         run: npm run lint
 
       - name: Unit tests
-        run: npm run test:ci
+        run: npm run test
 
   test-policy:
     name: Enforce test changes

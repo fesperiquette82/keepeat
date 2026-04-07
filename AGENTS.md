@@ -61,6 +61,10 @@ il faut ajouter ou mettre à jour des tests couvrant exactement la régression c
 - tests unitaires : `npm run test`
 - tests CI : `npm run test:ci`
 
+Stack de test frontend actuelle (temporaire) :
+- `npm run test` / `npm run test:ci` compilent TypeScript puis exécutent les tests avec `node --test`
+- ne pas réintroduire Jest tant que la migration n'est pas explicitement demandée
+
 ## Commandes backend
 À exécuter depuis `backend/` :
 - installation : `pip install -r requirements.txt`

@@ -1,0 +1,23 @@
+{
+  "extends": "./tsconfig.json",
+  "compilerOptions": {
+    "module": "nodenext",
+    "moduleResolution": "nodenext",
+    "target": "es2022",
+    "outDir": ".test-dist",
+    "noEmit": false,
+    "declaration": false,
+    "sourceMap": false,
+    "types": [
+      "node"
+    ]
+  },
+  "include": [
+    "utils/**/*.test.ts",
+    "data/**/*.test.ts"
+  ],
+  "exclude": [
+    "node_modules",
+    ".test-dist"
+  ]
+}
