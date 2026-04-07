@@ -18,6 +18,11 @@ export function filterRecipesByTargetIngredients(
 ): any[] {
   if (targetIngredientNames.size === 0) return [];
   return backendRecipes.filter((recipe) => {
+    const isGenericFallback = Boolean(
+      recipe?.is_fallback || (recipe?.debug && typeof recipe.debug === 'object' && (recipe.debug as any).is_fallback),
+    );
+    if (isGenericFallback) return false;
+
     const recipeAvailableIngredients = getRecipeAvailableIngredients(recipe);
     return recipeAvailableIngredients.some((ingredient) =>
       targetIngredientNames.has(normalizeIngredientName(String(ingredient ?? ''))),

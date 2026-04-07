@@ -10,9 +10,9 @@
     "ios": "expo start --ios",
     "web": "expo start --web",
     "lint": "expo lint",
-    "test": "jest",
-    "test:ci": "jest --runInBand --coverage"
-},
+    "test": "npm run test:ci",
+    "test:ci": "rm -rf .test-dist && tsc -p tsconfig.test.json && node --test .test-dist/**/*.test.js"
+  },
   "dependencies": {
     "@expo/metro-runtime": "^6.1.2",
     "@expo/ngrok": "^4.1.3",
