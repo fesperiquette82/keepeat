@@ -45,6 +45,7 @@ function asNumber(value: unknown): number | undefined {
 
 export function normalizeSuggestionRecipe(raw: any, index: number): FrontRecipeSuggestion {
   const debugObject = (raw?.debug && typeof raw.debug === 'object') ? raw.debug : undefined;
+  const debugFallback = typeof debugObject?.is_fallback === 'boolean' ? debugObject.is_fallback : false;
   const countryFromMeta = raw?.country ?? raw?.origin_country ?? raw?.locale_country;
   const countryFromDebug = debugObject?.country ?? debugObject?.origin_country;
   return {
@@ -54,7 +55,7 @@ export function normalizeSuggestionRecipe(raw: any, index: number): FrontRecipeS
     usedIngredients: asStringArray(raw?.usedIngredients ?? raw?.used_ingredients ?? raw?.matchedIngredients ?? raw?.matched_ingredients),
     missedIngredients: asStringArray(raw?.missedIngredients ?? raw?.missingIngredients ?? raw?.missing_ingredients),
     sourceUrl: String(raw?.sourceUrl ?? raw?.source_url ?? ''),
-    is_fallback: Boolean(raw?.is_fallback),
+    is_fallback: Boolean(raw?.is_fallback) || debugFallback,
     is_ai: Boolean(raw?.is_ai),
     ingredients_used: asStringArray(raw?.ingredients_used),
     instructions_summary: String(raw?.instructions_summary ?? ''),
