@@ -1,4 +1,4 @@
-name: Enable auto-merge on PRs
+name: Enable auto-merge on PRs to main
 
 on:
   pull_request_target:
@@ -7,10 +7,14 @@ on:
       - reopened
       - ready_for_review
       - synchronize
+  check_suite:
+    types:
+      - completed
 
 jobs:
-  enable-automerge:
+  enable-automerge-pr:
     if: >
+      github.event_name == 'pull_request_target' &&
       github.event.pull_request.draft == false &&
       github.event.pull_request.base.ref == 'main'
     runs-on: ubuntu-latest
@@ -19,11 +23,13 @@ jobs:
       pull-requests: write
 
     steps:
-      - name: Enable auto-merge on PR
+      - name: Try to enable auto-merge from pull_request_target
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
           PR_NODE_ID: ${{ github.event.pull_request.node_id }}
         run: |
+          set +e
+
           gh api graphql -f query='
             mutation($pullRequestId: ID!) {
               enablePullRequestAutoMerge(input: {
@@ -36,3 +42,63 @@ jobs:
               }
             }
           ' -F pullRequestId="$PR_NODE_ID"
+
+          echo "Done."
+          exit 0
+
+  enable-automerge-checksuite:
+    if: github.event_name == 'check_suite'
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      pull-requests: write
+
+    steps:
+      - name: Find PR linked to completed check suite
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          HEAD_SHA: ${{ github.event.check_suite.head_sha }}
+          REPO: ${{ github.repository }}
+        run: |
+          PR_NUMBER=$(gh api \
+            repos/$REPO/commits/$HEAD_SHA/pulls \
+            --jq 'map(select(.base.ref == "main" and .draft == false))[0].number')
+
+          if [ -z "$PR_NUMBER" ] || [ "$PR_NUMBER" = "null" ]; then
+            echo "No eligible PR found for this check suite."
+            exit 0
+          fi
+
+          echo "PR_NUMBER=$PR_NUMBER" >> $GITHUB_ENV
+
+      - name: Get PR node id
+        if: env.PR_NUMBER != ''
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          REPO: ${{ github.repository }}
+        run: |
+          PR_NODE_ID=$(gh api repos/$REPO/pulls/$PR_NUMBER --jq '.node_id')
+          echo "PR_NODE_ID=$PR_NODE_ID" >> $GITHUB_ENV
+
+      - name: Try to enable auto-merge after checks complete
+        if: env.PR_NODE_ID != ''
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          set +e
+
+          gh api graphql -f query='
+            mutation($pullRequestId: ID!) {
+              enablePullRequestAutoMerge(input: {
+                pullRequestId: $pullRequestId,
+                mergeMethod: SQUASH
+              }) {
+                pullRequest {
+                  number
+                }
+              }
+            }
+          ' -F pullRequestId="$PR_NODE_ID"
+
+          echo "Done."
+          exit 0
