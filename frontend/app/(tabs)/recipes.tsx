@@ -1,4 +1,4 @@
-import React, { useEffect, useMemo, useState } from 'react';
+import React, { useEffect, useMemo } from 'react';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { View, Text, StyleSheet, FlatList, TouchableOpacity, Image } from 'react-native';
 import Ionicons from '@expo/vector-icons/Ionicons';
@@ -46,28 +46,12 @@ const MAX_DAYS_BY_FILTER: Record<Exclude<RecipesFilter, 'stock'>, number> = {
   expiryMonth: 31,
 };
 
-interface RecipeCard {
-  id: string;
-  title: string;
-  timeMinutes: number;
-  type: string;
-  matchedCount: number;
-  missingCount: number;
-  imageUrl: string;
-}
-
-function toRecipeCard(recipe: BackendRecipeSuggestion): RecipeCard {
-  const prep = typeof recipe.prep_time_min === 'number' ? recipe.prep_time_min : 0;
-  const cook = typeof recipe.cook_time_min === 'number' ? recipe.cook_time_min : 0;
-  return {
-    id: recipe.id,
-    title: recipe.title,
-    timeMinutes: prep + cook > 0 ? prep + cook : 15,
-    type: 'rapide',
-    matchedCount: Array.isArray(recipe.usedIngredients) ? recipe.usedIngredients.length : 0,
-    missingCount: Array.isArray(recipe.missedIngredients) ? recipe.missedIngredients.length : 0,
-    imageUrl: typeof recipe.image === 'string' ? recipe.image : '',
-  };
+function getRecipeAvailableIngredients(recipe: any): string[] {
+  if (Array.isArray(recipe?.available_ingredients)) return recipe.available_ingredients;
+  if (Array.isArray(recipe?.availableIngredients)) return recipe.availableIngredients;
+  if (Array.isArray(recipe?.usedIngredients)) return recipe.usedIngredients;
+  if (Array.isArray(recipe?.used_ingredients)) return recipe.used_ingredients;
+  return [];
 }
 
 export default function RecipesScreen() {
@@ -83,7 +67,7 @@ export default function RecipesScreen() {
     React.useCallback(() => {
       fetchStock();
       fetchRecipesSuggestions(activeFilter);
-    }, [activeFilter, fetchRecipesSuggestions, fetchStock]),
+    }, [activeFilter, fetchStock]),
   );
 
   const { items } = useMemo(() => resolveStockItems(storeItems, { useMockFallback: false }), [storeItems]);
@@ -107,10 +91,10 @@ export default function RecipesScreen() {
     () =>
       recipes.map((recipe) => ({
         ...recipe,
-        timeMinutes: recipe.duration_min ?? 0,
+        timeMinutes: recipe.duration_min ?? recipe.timeMinutes ?? 0,
         type: String(recipe.dish_type || 'rapide').toLowerCase(),
-        matchedCount: recipe.available_count ?? 0,
-        missingCount: recipe.missing_count ?? 0,
+        matchedCount: recipe.available_count ?? recipe.availableCount ?? getRecipeAvailableIngredients(recipe).length ?? 0,
+        missingCount: recipe.missing_count ?? recipe.missingCount ?? 0,
       })),
     [recipes],
   );
@@ -133,12 +117,25 @@ export default function RecipesScreen() {
       try {
         const payload = await fetchRecipesSuggestions(activeFilter);
         if (cancelled) return;
-        const scopedRecipes = (payload.recipes ?? []).filter((recipe) => {
-          if (targetIngredientNames.size === 0) return false;
-          const recipeAvailableIngredients = Array.isArray(recipe.available_ingredients)
-            ? recipe.available_ingredients
-            : [];
+        const backendRecipes = payload.recipes ?? [];
+        const scopedRecipes = backendRecipes.filter((recipe) => {
+          if (targetIngredientNames.size === 0) {
+            // État transitoire possible: items ciblés présents mais noms non normalisables.
+            // Dans ce cas on ne doit pas masquer toutes les suggestions backend.
+            return targetItems.length > 0 && activeStockCount > 0;
+          }
+          const recipeAvailableIngredients = getRecipeAvailableIngredients(recipe);
           return recipeAvailableIngredients.some((ingredient) => targetIngredientNames.has(normalizeIngredientName(String(ingredient ?? ''))));
+        });
+        logger.debug('[RECIPES_MATCH] suggestions payload diagnostics', {
+          activeFilter,
+          storeItemsCount: storeItems.length,
+          normalizedItemsCount: items.length,
+          activeItemsCount: activeItems.length,
+          targetItemsCount: targetItems.length,
+          targetIngredientNamesCount: targetIngredientNames.size,
+          backendRecipesCount: backendRecipes.length,
+          scopedRecipesCount: scopedRecipes.length,
         });
         setRecipes(scopedRecipes);
       } catch (error) {
@@ -152,7 +149,7 @@ export default function RecipesScreen() {
     return () => {
       cancelled = true;
     };
-  }, [activeFilter, activeStockCount, targetIngredientNames]);
+  }, [activeFilter, activeItems.length, activeStockCount, items.length, storeItems.length, targetIngredientNames, targetItems.length]);
 
   const filters = useMemo(
     () =>
