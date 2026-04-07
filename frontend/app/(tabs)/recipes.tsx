@@ -11,8 +11,8 @@ import { UI_LABELS } from '../../utils/uiLabels';
 import { useLanguageStore } from '../../store/languageStore';
 import { logger } from '../../utils/logger';
 import { fetchRecipesSuggestions } from '../../utils/recipesApi';
-import { daysUntil, resolveStockItems } from '../../data/mockDashboardData';
-import { normalizeIngredientName } from '../../utils/ingredientMatching';
+import { getActiveItemsByScope, resolveStockItems } from '../../data/mockDashboardData';
+import { buildTargetIngredientNames, filterRecipesByTargetIngredients, getRecipeAvailableIngredients } from '../../utils/recipesScoping';
 
 const TYPE_LABEL: Record<string, string> = {
   apero: 'Apéro',
@@ -40,20 +40,6 @@ const EMPTY_FILTER_LABEL_KEYS: Record<RecipesFilter, string> = {
   expiryMonth: 'recipesEmptyExpiryMonth',
 };
 
-const MAX_DAYS_BY_FILTER: Record<Exclude<RecipesFilter, 'stock'>, number> = {
-  expiryDay: 0,
-  expiryWeek: 7,
-  expiryMonth: 31,
-};
-
-function getRecipeAvailableIngredients(recipe: any): string[] {
-  if (Array.isArray(recipe?.available_ingredients)) return recipe.available_ingredients;
-  if (Array.isArray(recipe?.availableIngredients)) return recipe.availableIngredients;
-  if (Array.isArray(recipe?.usedIngredients)) return recipe.usedIngredients;
-  if (Array.isArray(recipe?.used_ingredients)) return recipe.used_ingredients;
-  return [];
-}
-
 export default function RecipesScreen() {
   const router = useRouter();
   const { t } = useLanguageStore();
@@ -66,27 +52,15 @@ export default function RecipesScreen() {
   useFocusEffect(
     React.useCallback(() => {
       fetchStock();
-      fetchRecipesSuggestions(activeFilter);
-    }, [activeFilter, fetchStock]),
+    }, [fetchStock]),
   );
 
   const { items } = useMemo(() => resolveStockItems(storeItems, { useMockFallback: false }), [storeItems]);
-  const activeItems = useMemo(() => items.filter((item) => item.status === 'active'), [items]);
-  const targetItems = useMemo(() => {
-    if (activeFilter === 'stock') return activeItems;
-    const maxDays = MAX_DAYS_BY_FILTER[activeFilter];
-    return activeItems.filter((item) => {
-      const days = daysUntil(item.expiry_date);
-      if (days === null) return false;
-      return days >= 0 && days <= maxDays;
-    });
-  }, [activeFilter, activeItems]);
+  const activeItems = useMemo(() => getActiveItemsByScope(items, 'stock'), [items]);
+  const targetItems = useMemo(() => getActiveItemsByScope(items, activeFilter), [activeFilter, items]);
 
   const activeStockCount = activeItems.length;
-  const targetIngredientNames = useMemo(
-    () => new Set(targetItems.map((item) => normalizeIngredientName(item.name)).filter(Boolean)),
-    [targetItems],
-  );
+  const targetIngredientNames = useMemo(() => buildTargetIngredientNames(targetItems), [targetItems]);
   const classicSuggestions = useMemo(
     () =>
       recipes.map((recipe) => ({
@@ -115,18 +89,10 @@ export default function RecipesScreen() {
     const load = async () => {
       setIsLoading(true);
       try {
-        const payload = await fetchRecipesSuggestions(activeFilter);
+        const payload = await fetchRecipesSuggestions('stock');
         if (cancelled) return;
         const backendRecipes = payload.recipes ?? [];
-        const scopedRecipes = backendRecipes.filter((recipe) => {
-          if (targetIngredientNames.size === 0) {
-            // État transitoire possible: items ciblés présents mais noms non normalisables.
-            // Dans ce cas on ne doit pas masquer toutes les suggestions backend.
-            return targetItems.length > 0 && activeStockCount > 0;
-          }
-          const recipeAvailableIngredients = getRecipeAvailableIngredients(recipe);
-          return recipeAvailableIngredients.some((ingredient) => targetIngredientNames.has(normalizeIngredientName(String(ingredient ?? ''))));
-        });
+        const scopedRecipes = filterRecipesByTargetIngredients(backendRecipes, targetIngredientNames);
         logger.debug('[RECIPES_MATCH] suggestions payload diagnostics', {
           activeFilter,
           storeItemsCount: storeItems.length,

@@ -233,11 +233,23 @@ export function findRecipeBaseById(recipeId: string): BaseMockRecipe | undefined
 
 export function daysUntil(expiryDate?: string): number | null {
   if (!expiryDate) return null;
-  const today = new Date();
-  today.setUTCHours(0, 0, 0, 0);
-  const expiry = new Date(expiryDate);
-  expiry.setUTCHours(0, 0, 0, 0);
-  return Math.round((expiry.getTime() - today.getTime()) / 86400000);
+  const value = String(expiryDate).trim();
+  if (!value) return null;
+
+  const isoDateOnly = value.match(/^(\d{4})-(\d{2})-(\d{2})/);
+  let expiryUtcMs: number;
+  if (isoDateOnly) {
+    const [, year, month, day] = isoDateOnly;
+    expiryUtcMs = Date.UTC(Number(year), Number(month) - 1, Number(day));
+  } else {
+    const parsed = new Date(value);
+    if (Number.isNaN(parsed.getTime())) return null;
+    expiryUtcMs = Date.UTC(parsed.getUTCFullYear(), parsed.getUTCMonth(), parsed.getUTCDate());
+  }
+
+  const now = new Date();
+  const todayUtcMs = Date.UTC(now.getUTCFullYear(), now.getUTCMonth(), now.getUTCDate());
+  return Math.round((expiryUtcMs - todayUtcMs) / 86400000);
 }
 
 export function resolveStockItems(
@@ -274,7 +286,7 @@ export function buildRecipeSuggestions(items: DashboardStockItem[]): MockRecipe[
   return buildRecipeSuggestionsByScope(items, 'stock');
 }
 
-function getActiveItemsByScope(items: DashboardStockItem[], scope: RecipeSuggestionScope): DashboardStockItem[] {
+export function getActiveItemsByScope(items: DashboardStockItem[], scope: RecipeSuggestionScope): DashboardStockItem[] {
   const activeItems = items.filter((item) => item.status === 'active');
   if (scope === 'stock') return activeItems;
 
