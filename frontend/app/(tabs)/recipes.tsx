@@ -9,6 +9,7 @@ import { C, T } from '../../utils/theme';
 import { countLabelFr } from '../../utils/uiText';
 import { UI_LABELS } from '../../utils/uiLabels';
 import { useLanguageStore } from '../../store/languageStore';
+import { RecipesFilter } from '../../store/recipesStore';
 import { logger } from '../../utils/logger';
 import { fetchRecipesSuggestions } from '../../utils/recipesApi';
 import { getActiveItemsByScope, resolveStockItems } from '../../data/mockDashboardData';
@@ -89,21 +90,24 @@ export default function RecipesScreen() {
     const load = async () => {
       setIsLoading(true);
       try {
-        const payload = await fetchRecipesSuggestions('stock');
+        const payload = await fetchRecipesSuggestions(activeFilter);
         if (cancelled) return;
-        const backendRecipes = payload.recipes ?? [];
-        const scopedRecipes = filterRecipesByTargetIngredients(backendRecipes, targetIngredientNames);
+        const backendRecipesOnRecipesScreen = payload.recipes ?? [];
+        const scopedRecipesOnRecipesScreen = filterRecipesByTargetIngredients(backendRecipesOnRecipesScreen, targetIngredientNames);
         logger.debug('[RECIPES_MATCH] suggestions payload diagnostics', {
           activeFilter,
           storeItemsCount: storeItems.length,
           normalizedItemsCount: items.length,
           activeItemsCount: activeItems.length,
           targetItemsCount: targetItems.length,
-          targetIngredientNamesCount: targetIngredientNames.size,
-          backendRecipesCount: backendRecipes.length,
-          scopedRecipesCount: scopedRecipes.length,
+          targetItems: targetItems.map((item) => ({ id: item.id, name: item.name, expiry_date: item.expiry_date })).slice(0, 20),
+          targetIngredientNames: Array.from(targetIngredientNames).slice(0, 30),
+          backendRecipesOnRecipesScreenCount: backendRecipesOnRecipesScreen.length,
+          backendRecipesOnRecipesScreenIds: backendRecipesOnRecipesScreen.map((recipe) => recipe.id).slice(0, 10),
+          scopedRecipesOnRecipesScreenCount: scopedRecipesOnRecipesScreen.length,
+          scopedRecipesOnRecipesScreenIds: scopedRecipesOnRecipesScreen.map((recipe) => recipe.id).slice(0, 10),
         });
-        setRecipes(scopedRecipes);
+        setRecipes(backendRecipesOnRecipesScreen);
       } catch (error) {
         logger.warn('[RECIPES_MATCH] fetch suggestions failed', { error: String(error), activeFilter });
         if (!cancelled) setRecipes([]);
@@ -115,7 +119,7 @@ export default function RecipesScreen() {
     return () => {
       cancelled = true;
     };
-  }, [activeFilter, activeItems.length, activeStockCount, items.length, storeItems.length, targetIngredientNames, targetItems.length]);
+  }, [activeFilter, activeItems.length, activeStockCount, items.length, storeItems.length, targetIngredientNames, targetItems]);
 
   const filters = useMemo(
     () =>
