@@ -33,3 +33,4 @@ project.zip
 # Claude Code — paramètres locaux machine
 .claude/settings.local.json
 
+frontend/.test-dist/
