@@ -57,3 +57,33 @@ test('resolveDisplayedRecipesWithScope utilise le scope stock quand fallback act
 
   assert.deepEqual(displayed.map((recipe) => recipe.id), ['stock']);
 });
+
+test('fetchRecipesSuggestionsWithStockFallback préserve suggest_later=true quand recipes vides', async () => {
+  const result = await fetchRecipesSuggestionsWithStockFallback('stock', async () => ({
+    recipes: [],
+    meta: { suggest_later: true },
+  }));
+
+  assert.equal(result.payload.meta?.suggest_later, true);
+  assert.equal(result.payload.recipes.length, 0);
+});
+
+test('fetchRecipesSuggestionsWithStockFallback préserve suggest_later=false quand recipes présentes', async () => {
+  const result = await fetchRecipesSuggestionsWithStockFallback('stock', async () => ({
+    recipes: [{ id: 'r1' } as any],
+    meta: { suggest_later: false },
+  }));
+
+  assert.equal(result.payload.meta?.suggest_later, false);
+  assert.equal(result.usedFallback, false);
+});
+
+test('fetchRecipesSuggestionsWithStockFallback utilise le meta du fallback quand bascule sur stock', async () => {
+  const result = await fetchRecipesSuggestionsWithStockFallback('expiryMonth', async (filter) => {
+    if (filter === 'expiryMonth') return { recipes: [], meta: { suggest_later: false } };
+    return { recipes: [], meta: { suggest_later: true } };
+  });
+
+  assert.equal(result.usedFallback, true);
+  assert.equal(result.payload.meta?.suggest_later, true);
+});
