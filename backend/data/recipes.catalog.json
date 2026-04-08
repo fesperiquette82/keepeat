@@ -2365,7 +2365,7 @@
       "lunch",
       "dinner"
     ],
-    "cuisine": "mediterraneenne",
+    "cuisine": "française",
     "servings": 2,
     "search_terms": [
       "shakshuka",
@@ -2422,7 +2422,7 @@
       "lunch",
       "dinner"
     ],
-    "cuisine": "italienne",
+    "cuisine": "française",
     "servings": 2,
     "search_terms": [
       "spaghetti",
@@ -2646,7 +2646,7 @@
       "lunch",
       "dinner"
     ],
-    "cuisine": "italienne",
+    "cuisine": "française",
     "servings": 2,
     "search_terms": [
       "spirales",
@@ -2758,7 +2758,7 @@
       "breakfast",
       "snack"
     ],
-    "cuisine": "internationale",
+    "cuisine": "française",
     "servings": 1,
     "search_terms": [
       "bowl energie",
