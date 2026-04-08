@@ -1,6 +1,7 @@
 import axios from 'axios';
 import { buildApiUrl } from './config';
 import { useAuthStore } from '../store/authStore';
+import { mapRecipesFilterToApi, RecipesApiFilter } from './recipesFilter';
 
 const authHeaders = () => {
   const token = useAuthStore.getState().token;
@@ -30,16 +31,9 @@ export interface BackendRecipesSuggestionsResponse {
   };
 }
 
-const FILTER_MAP: Record<'expiryDay' | 'expiryWeek' | 'expiryMonth' | 'stock', string> = {
-  expiryDay: 'day',
-  expiryWeek: 'week',
-  expiryMonth: 'month',
-  stock: 'all',
-};
-
-export async function fetchRecipesSuggestions(filter: 'expiryDay' | 'expiryWeek' | 'expiryMonth' | 'stock'): Promise<BackendRecipesSuggestionsResponse> {
+export async function fetchRecipesSuggestions(filter: RecipesApiFilter): Promise<BackendRecipesSuggestionsResponse> {
   const response = await axios.get(
-    buildApiUrl(`/api/recipes/suggestions?include_meta=true&filter=${FILTER_MAP[filter]}`),
+    buildApiUrl(`/api/recipes/suggestions?include_meta=true&filter=${mapRecipesFilterToApi(filter)}`),
     { headers: authHeaders() },
   );
   const payload = response.data;
