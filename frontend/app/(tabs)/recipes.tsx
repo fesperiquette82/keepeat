@@ -13,9 +13,13 @@ import { useLanguageStore } from '../../store/languageStore';
 import { RecipesFilter, useRecipesStore } from '../../store/recipesStore';
 import { logger } from '../../utils/logger';
 import { fetchRecipesSuggestions } from '../../utils/recipesApi';
-import { fetchRecipesSuggestionsWithStockFallback, resolveDisplayedRecipesWithScope } from '../../utils/recipesSuggestionsFallback';
 import { getActiveItemsByScope, resolveStockItems } from '../../data/mockDashboardData';
-import { buildTargetIngredientNames, getRecipeAvailableIngredients } from '../../utils/recipesScoping';
+import {
+  buildTargetIngredientNames,
+  filterRecipesByTargetIngredients,
+  getRecipeAvailableIngredients,
+  scopeAndDedupeRecipes,
+} from '../../utils/recipesScoping';
 
 const TYPE_LABEL: Record<string, string> = {
   apero: 'Apéro',
@@ -68,7 +72,6 @@ export default function RecipesScreen() {
   const targetItems = useMemo(() => getActiveItemsByScope(items, activeFilter), [activeFilter, items]);
 
   const activeStockCount = activeItems.length;
-  const stockIngredientNames = useMemo(() => buildTargetIngredientNames(activeItems), [activeItems]);
   const targetIngredientNames = useMemo(() => buildTargetIngredientNames(targetItems), [targetItems]);
   const classicSuggestions = useMemo(
     () =>
@@ -99,29 +102,26 @@ export default function RecipesScreen() {
     const load = async () => {
       setIsLoading(true);
       try {
-        const { payload, usedFallback } = await fetchRecipesSuggestionsWithStockFallback(activeFilter, fetchRecipesSuggestions);
+        const payload = await fetchRecipesSuggestions('stock');
         if (cancelled) return;
-        const backendRecipesOnRecipesScreen = payload.recipes ?? [];
-        const scopedRecipesOnRecipesScreen = resolveDisplayedRecipesWithScope(backendRecipesOnRecipesScreen, {
-          usedFallback,
-          targetIngredientNames,
-          stockIngredientNames,
-        });
+        const rawRecipes = Array.isArray(payload?.recipes) ? payload.recipes : [];
+        const scopedRecipesBeforeDedupe = filterRecipesByTargetIngredients(rawRecipes, targetIngredientNames);
+        const scopedRecipes = scopeAndDedupeRecipes(rawRecipes, targetIngredientNames);
+        const antiWasteRecipes = scopedRecipes.slice(0, 2);
         logger.debug('[RECIPES_MATCH] suggestions payload diagnostics', {
           activeFilter,
-          usedStockFallback: usedFallback,
+          rawRecipesCount: rawRecipes.length,
+          scopedRecipesCount: scopedRecipesBeforeDedupe.length,
+          dedupedRecipesCount: scopedRecipes.length,
+          targetItemsCount: targetItems.length,
+          targetIngredientNamesCount: targetIngredientNames.size,
+          antiWasteRecipesCount: antiWasteRecipes.length,
+          classicRecipesCount: scopedRecipes.length,
           storeItemsCount: storeItems.length,
           normalizedItemsCount: items.length,
           activeItemsCount: activeItems.length,
-          targetItemsCount: targetItems.length,
-          targetItems: targetItems.map((item) => ({ id: item.id, name: item.name, expiry_date: item.expiry_date })).slice(0, 20),
-          targetIngredientNames: Array.from(targetIngredientNames).slice(0, 30),
-          backendRecipesOnRecipesScreenCount: backendRecipesOnRecipesScreen.length,
-          backendRecipesOnRecipesScreenIds: backendRecipesOnRecipesScreen.map((recipe) => recipe.id).slice(0, 10),
-          scopedRecipesOnRecipesScreenCount: scopedRecipesOnRecipesScreen.length,
-          scopedRecipesOnRecipesScreenIds: scopedRecipesOnRecipesScreen.map((recipe) => recipe.id).slice(0, 10),
         });
-        setRecipes(scopedRecipesOnRecipesScreen);
+        setRecipes(scopedRecipes);
       } catch (error) {
         logger.warn('[RECIPES_MATCH] fetch suggestions failed', { error: String(error), activeFilter });
         if (!cancelled) setRecipes([]);
@@ -133,7 +133,7 @@ export default function RecipesScreen() {
     return () => {
       cancelled = true;
     };
-  }, [activeFilter, activeItems.length, activeStockCount, items.length, stockIngredientNames, storeItems.length, targetIngredientNames, targetItems]);
+  }, [activeFilter, activeItems.length, activeStockCount, items.length, storeItems.length, targetIngredientNames, targetItems]);
 
   const filters = useMemo(
     () =>

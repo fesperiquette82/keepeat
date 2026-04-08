@@ -29,3 +29,20 @@ export function filterRecipesByTargetIngredients(
     );
   });
 }
+
+export function dedupeRecipesById(recipes: any[]): any[] {
+  const seen = new Set<string>();
+  return recipes.filter((recipe) => {
+    const id = String(recipe?.id ?? '').trim();
+    if (!id || seen.has(id)) return false;
+    seen.add(id);
+    return true;
+  });
+}
+
+export function scopeAndDedupeRecipes(
+  backendRecipes: any[],
+  targetIngredientNames: Set<string>,
+): any[] {
+  return dedupeRecipesById(filterRecipesByTargetIngredients(backendRecipes, targetIngredientNames));
+}
