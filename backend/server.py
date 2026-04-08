@@ -3512,6 +3512,91 @@ async def admin_add_recipe(
     return {"id": recipe_id, "title": payload.title, "saved": True}
 
 
+# ── Endpoint admin : import en masse depuis un tableau JSON ───────────────────
+
+class AdminRecipeImportPayload(BaseModel):
+    recipes: list[AdminRecipePayload] = Field(..., min_length=1, max_length=200)
+
+
+@api_router.post("/admin/recipes/import", status_code=201)
+async def admin_import_recipes(
+    payload: AdminRecipeImportPayload,
+    _admin_user: Dict[str, Any] = Depends(_require_admin_user),
+):
+    """Importe un tableau de recettes dans MongoDB ET le catalogue JSON en une seule requête.
+    Requiert un compte admin (is_admin=True).
+    Retourne le détail de chaque recette : ajoutée, ignorée (doublon) ou en erreur.
+    """
+    now_iso = utc_now().isoformat()
+    actor = _admin_user.get("email", "unknown")
+    results: list[dict] = []
+
+    for recipe in payload.recipes:
+        slug = re.sub(r"[^a-z0-9]+", "-", unicodedata.normalize("NFD", recipe.title.lower()))[:40].strip("-")
+        recipe_id = f"manual-{slug}-{secrets.token_hex(4)}"
+
+        mongo_doc: dict[str, Any] = {
+            "_id": recipe_id,
+            "id": recipe_id,
+            "title": recipe.title,
+            "description": recipe.summary,
+            "dish_type": recipe.meal_type[0] if recipe.meal_type else "plat",
+            "duration_min": recipe.prep_time_min + recipe.cook_time_min,
+            "difficulty": recipe.difficulty,
+            "ingredients": [{"name": i, "quantity": "", "optional": False} for i in recipe.ingredients_required]
+                + [{"name": i, "quantity": "", "optional": True} for i in recipe.ingredients_optional],
+            "steps": recipe.steps,
+            "tags": recipe.tags,
+            "is_active": True,
+            "created_by": f"admin:{actor}",
+            "created_at": now_iso,
+            "updated_at": now_iso,
+            "usage_count": 0,
+            "view_count": 0,
+        }
+        try:
+            await recipes_col.insert_one(mongo_doc)
+        except DuplicateKeyError:
+            results.append({"title": recipe.title, "status": "skipped", "reason": "duplicate"})
+            continue
+        except Exception as exc:
+            results.append({"title": recipe.title, "status": "error", "reason": str(exc)})
+            continue
+
+        catalog_entry = {
+            "id": recipe_id,
+            "title": recipe.title,
+            "summary": recipe.summary,
+            "ingredients_required": recipe.ingredients_required,
+            "ingredients_optional": recipe.ingredients_optional,
+            "steps": recipe.steps,
+            "prep_time_min": recipe.prep_time_min,
+            "cook_time_min": recipe.cook_time_min,
+            "difficulty": recipe.difficulty,
+            "tags": recipe.tags,
+            "meal_type": recipe.meal_type or ["dinner"],
+            "cuisine": "française",
+            "servings": recipe.servings,
+            "search_terms": recipe.ingredients_required,
+            "compat": {"storage_focus": []},
+            "source": {"type": "manual_admin", "name": "KeepEat Admin"},
+            "version": 1,
+        }
+        try:
+            append_recipe_to_catalog(catalog_entry)
+        except Exception as exc:
+            logger.warning("admin_import_recipes: ajout catalogue JSON échoué id=%s: %s", recipe_id, exc)
+
+        await _mark_coverable_gaps_after_recipe_insert(mongo_doc)
+        results.append({"title": recipe.title, "id": recipe_id, "status": "added"})
+
+    added = sum(1 for r in results if r["status"] == "added")
+    skipped = sum(1 for r in results if r["status"] == "skipped")
+    errors = sum(1 for r in results if r["status"] == "error")
+    logger.info("ADMIN_ACTION action=import_recipes added=%d skipped=%d errors=%d actor=%s", added, skipped, errors, actor)
+    return {"added": added, "skipped": skipped, "errors": errors, "details": results}
+
+
 # Redirect pages (deep link fallback for email clients)
 # -----------------------------------------------------------------------------
 @app.get("/redirect/reset-password", response_class=HTMLResponse, include_in_schema=False)

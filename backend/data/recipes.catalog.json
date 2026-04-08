@@ -2330,5 +2330,453 @@
       "name": "keepeat"
     },
     "version": 1
+  },
+  {
+    "id": "manual-shakshuka-aux-anchois-et-olives",
+    "title": "Shakshuka aux anchois et olives",
+    "summary": "Une poêlée de tomates aux oeufs relevée par les anchois et les olives kalamata.",
+    "ingredients_required": [
+      "passierte tomaten",
+      "oeufs plein air bleu blanc coeur boite de 10",
+      "anchois entier",
+      "huile d olive",
+      "kalamata olive"
+    ],
+    "ingredients_optional": [
+      "creme entiere uht 30mg 3x20cl"
+    ],
+    "steps": [
+      "Fais chauffer l huile d olive dans une poêle et ajoute les anchois pour les faire fondre légèrement.",
+      "Verse les passierte tomaten et ajoute les olives kalamata coupées en morceaux, puis laisse mijoter 10 minutes.",
+      "Creuse deux à trois petits puits dans la sauce et casse les oeufs dedans.",
+      "Couvre et laisse cuire jusqu à ce que les blancs soient pris.",
+      "Ajoute un filet de crème si souhaité avant de servir."
+    ],
+    "prep_time_min": 10,
+    "cook_time_min": 18,
+    "difficulty": "easy",
+    "tags": [
+      "anti-gaspi",
+      "oeufs",
+      "tomate",
+      "poelee"
+    ],
+    "meal_type": [
+      "lunch",
+      "dinner"
+    ],
+    "cuisine": "mediterraneenne",
+    "servings": 2,
+    "search_terms": [
+      "shakshuka",
+      "oeufs",
+      "anchois",
+      "olives",
+      "tomates"
+    ],
+    "compat": {
+      "storage_focus": [
+        "oeufs plein air bleu blanc coeur boite de 10",
+        "anchois entier",
+        "passierte tomaten"
+      ]
+    },
+    "source": {
+      "type": "manual_admin",
+      "name": "KeepEat Admin"
+    },
+    "version": 1
+  },
+  {
+    "id": "manual-spaghetti-creme-tomate-mejillone",
+    "title": "Spaghetti creme tomate aux mejillone",
+    "summary": "Des spaghetti au quinoa nappes d une sauce tomate cremeuse avec des moules.",
+    "ingredients_required": [
+      "spaghetti au quinoa curry curcuma",
+      "passierte tomaten",
+      "creme entiere uht 30mg 3x20cl",
+      "mejillone",
+      "huile d olive"
+    ],
+    "ingredients_optional": [
+      "kalamata olive",
+      "anchois entier"
+    ],
+    "steps": [
+      "Fais cuire les spaghetti selon les indications du paquet.",
+      "Pendant ce temps, fais chauffer un peu d huile d olive puis ajoute les passierte tomaten et la creme.",
+      "Ajoute les mejillone egouttés et mélange délicatement.",
+      "Incorpore quelques olives ou un peu d anchois si souhaité pour renforcer le goût.",
+      "Égoutte les pâtes et mélange-les à la sauce avant de servir."
+    ],
+    "prep_time_min": 8,
+    "cook_time_min": 15,
+    "difficulty": "easy",
+    "tags": [
+      "pates",
+      "fruits-de-mer",
+      "cremeux",
+      "rapide"
+    ],
+    "meal_type": [
+      "lunch",
+      "dinner"
+    ],
+    "cuisine": "italienne",
+    "servings": 2,
+    "search_terms": [
+      "spaghetti",
+      "moules",
+      "tomate",
+      "creme",
+      "quinoa"
+    ],
+    "compat": {
+      "storage_focus": [
+        "spaghetti au quinoa curry curcuma",
+        "mejillone",
+        "creme entiere uht 30mg 3x20cl"
+      ]
+    },
+    "source": {
+      "type": "manual_admin",
+      "name": "KeepEat Admin"
+    },
+    "version": 1
+  },
+  {
+    "id": "manual-riz-tomate-anchois-olivade",
+    "title": "Riz tomate anchois et olivade",
+    "summary": "Un riz parfumé à la tomate relevé avec anchois et olivade à la pistache.",
+    "ingredients_required": [
+      "riz de camargue long demi complet",
+      "passierte tomaten",
+      "anchois entier",
+      "huile d olive",
+      "olivade a la pistache"
+    ],
+    "ingredients_optional": [
+      "kalamata olive",
+      "creme entiere uht 30mg 3x20cl"
+    ],
+    "steps": [
+      "Fais cuire le riz dans une casserole d eau bouillante jusqu à ce qu il soit tendre.",
+      "Dans une poêle, fais revenir les anchois dans un filet d huile d olive.",
+      "Ajoute les passierte tomaten puis une cuillère d olivade à la pistache et mélange.",
+      "Incorpore le riz cuit dans la sauce et mélange jusqu à ce qu il soit bien enrobé.",
+      "Ajoute quelques olives ou un trait de crème si souhaité avant de servir."
+    ],
+    "prep_time_min": 10,
+    "cook_time_min": 25,
+    "difficulty": "easy",
+    "tags": [
+      "riz",
+      "placard",
+      "mediterraneen",
+      "anti-gaspi"
+    ],
+    "meal_type": [
+      "lunch",
+      "dinner"
+    ],
+    "cuisine": "française",
+    "servings": 2,
+    "search_terms": [
+      "riz tomate",
+      "anchois",
+      "olivade",
+      "pistache"
+    ],
+    "compat": {
+      "storage_focus": [
+        "riz de camargue long demi complet",
+        "passierte tomaten",
+        "olivade a la pistache"
+      ]
+    },
+    "source": {
+      "type": "manual_admin",
+      "name": "KeepEat Admin"
+    },
+    "version": 1
+  },
+  {
+    "id": "manual-oeufs-brouilles-foie-de-morue-et-olives",
+    "title": "Oeufs brouilles au foie de morue et olives",
+    "summary": "Des oeufs brouilles riches et fondants garnis de foie de morue et d olives.",
+    "ingredients_required": [
+      "oeufs plein air bleu blanc coeur boite de 10",
+      "foie de morue au naturel",
+      "huile d olive",
+      "kalamata olive"
+    ],
+    "ingredients_optional": [
+      "creme entiere uht 30mg 3x20cl",
+      "anchois entier"
+    ],
+    "steps": [
+      "Bats les oeufs dans un bol avec un peu de creme si souhaité.",
+      "Fais chauffer doucement une poêle avec un filet d huile d olive.",
+      "Verse les oeufs et remue sans cesse pour obtenir des oeufs brouillés moelleux.",
+      "Ajoute le foie de morue emietté en fin de cuisson.",
+      "Sers avec les olives coupées et quelques morceaux d anchois si souhaité."
+    ],
+    "prep_time_min": 5,
+    "cook_time_min": 8,
+    "difficulty": "easy",
+    "tags": [
+      "oeufs",
+      "rapide",
+      "proteine",
+      "poisson"
+    ],
+    "meal_type": [
+      "breakfast",
+      "lunch",
+      "dinner"
+    ],
+    "cuisine": "française",
+    "servings": 2,
+    "search_terms": [
+      "oeufs brouilles",
+      "foie de morue",
+      "olives"
+    ],
+    "compat": {
+      "storage_focus": [
+        "oeufs plein air bleu blanc coeur boite de 10",
+        "foie de morue au naturel"
+      ]
+    },
+    "source": {
+      "type": "manual_admin",
+      "name": "KeepEat Admin"
+    },
+    "version": 1
+  },
+  {
+    "id": "manual-cake-sale-rillettes-olives-et-tomate",
+    "title": "Cake sale rillettes olives et tomate",
+    "summary": "Un cake moelleux sale prepare avec des oeufs, des rillettes de canard et des olives.",
+    "ingredients_required": [
+      "oeufs plein air bleu blanc coeur boite de 10",
+      "poudre a lever",
+      "creme entiere uht 30mg 3x20cl",
+      "rillettes de canard nature",
+      "kalamata olive",
+      "passierte tomaten"
+    ],
+    "ingredients_optional": [
+      "delice de canard",
+      "huile d olive"
+    ],
+    "steps": [
+      "Préchauffe le four et mélange les oeufs avec la creme.",
+      "Ajoute une petite quantité de passierte tomaten pour parfumer la pâte et incorpore la poudre à lever.",
+      "Ajoute les rillettes de canard et les olives coupées en morceaux.",
+      "Verse la préparation dans un moule légèrement huilé.",
+      "Fais cuire au four jusqu à ce que le cake soit bien gonflé et doré."
+    ],
+    "prep_time_min": 15,
+    "cook_time_min": 35,
+    "difficulty": "medium",
+    "tags": [
+      "cake-sale",
+      "canard",
+      "olives",
+      "batch-cooking"
+    ],
+    "meal_type": [
+      "lunch",
+      "dinner"
+    ],
+    "cuisine": "française",
+    "servings": 4,
+    "search_terms": [
+      "cake sale",
+      "rillettes de canard",
+      "olives",
+      "oeufs"
+    ],
+    "compat": {
+      "storage_focus": [
+        "rillettes de canard nature",
+        "oeufs plein air bleu blanc coeur boite de 10",
+        "creme entiere uht 30mg 3x20cl"
+      ]
+    },
+    "source": {
+      "type": "manual_admin",
+      "name": "KeepEat Admin"
+    },
+    "version": 1
+  },
+  {
+    "id": "manual-spirales-creme-pistache-et-olivade",
+    "title": "Spirales creme pistache et olivade",
+    "summary": "Des pates courtes en sauce cremeuse à la pistache avec une touche salee d olivade.",
+    "ingredients_required": [
+      "spirale 1 2 complet",
+      "creme entiere uht 30mg 3x20cl",
+      "crema de pistacho",
+      "olivade a la pistache"
+    ],
+    "ingredients_optional": [
+      "kalamata olive",
+      "anchois entier",
+      "huile d olive"
+    ],
+    "steps": [
+      "Fais cuire les spirales dans une grande casserole d eau bouillante.",
+      "Dans une poêle, chauffe doucement la creme avec la crema de pistacho.",
+      "Ajoute une petite cuillère d olivade à la pistache pour apporter une note salee.",
+      "Mélange les pâtes egouttées avec la sauce.",
+      "Ajoute quelques olives ou un peu d anchois haché pour terminer si souhaité."
+    ],
+    "prep_time_min": 8,
+    "cook_time_min": 12,
+    "difficulty": "easy",
+    "tags": [
+      "pates",
+      "pistache",
+      "cremeux",
+      "original"
+    ],
+    "meal_type": [
+      "lunch",
+      "dinner"
+    ],
+    "cuisine": "italienne",
+    "servings": 2,
+    "search_terms": [
+      "spirales",
+      "pistache",
+      "creme",
+      "olivade"
+    ],
+    "compat": {
+      "storage_focus": [
+        "spirale 1 2 complet",
+        "crema de pistacho",
+        "olivade a la pistache"
+      ]
+    },
+    "source": {
+      "type": "manual_admin",
+      "name": "KeepEat Admin"
+    },
+    "version": 1
+  },
+  {
+    "id": "manual-creme-dessert-pomme-poire-vanille-amande",
+    "title": "Creme dessert pomme poire vanille amande",
+    "summary": "Un dessert doux et rapide à base de compote, vanille et puree d amande.",
+    "ingredients_required": [
+      "puree pomme poire sans sucres ajoutes 625g",
+      "bio vanille bourbon arome naturel",
+      "puree crue d amande blanche",
+      "sirop agave 345g"
+    ],
+    "ingredients_optional": [
+      "creme entiere uht 30mg 3x20cl",
+      "mix energie",
+      "sirop d erable 250g"
+    ],
+    "steps": [
+      "Verse la puree pomme poire dans une casserole ou un bol.",
+      "Ajoute quelques gouttes de vanille et une cuillère de puree d amande blanche.",
+      "Sucre légèrement avec le sirop d agave selon le goût.",
+      "Ajoute un peu de creme pour une texture plus onctueuse si souhaité.",
+      "Sers frais avec du mix energie par dessus ou un filet de sirop d erable."
+    ],
+    "prep_time_min": 5,
+    "cook_time_min": 0,
+    "difficulty": "easy",
+    "tags": [
+      "dessert",
+      "sans-cuisson",
+      "fruit",
+      "gouter"
+    ],
+    "meal_type": [
+      "snack",
+      "breakfast"
+    ],
+    "cuisine": "française",
+    "servings": 2,
+    "search_terms": [
+      "compote",
+      "vanille",
+      "amande",
+      "dessert rapide"
+    ],
+    "compat": {
+      "storage_focus": [
+        "puree pomme poire sans sucres ajoutes 625g",
+        "bio vanille bourbon arome naturel",
+        "puree crue d amande blanche"
+      ]
+    },
+    "source": {
+      "type": "manual_admin",
+      "name": "KeepEat Admin"
+    },
+    "version": 1
+  },
+  {
+    "id": "manual-bowl-energie-amande-noix-de-coco-erable",
+    "title": "Bowl energie amande noix de coco erable",
+    "summary": "Un bowl sucre et nourrissant aux purees d amande, noix de coco et fruits.",
+    "ingredients_required": [
+      "puree d amande noix de coco",
+      "mix energie",
+      "puree pomme poire sans sucres ajoutes 625g",
+      "sirop d erable 250g"
+    ],
+    "ingredients_optional": [
+      "crema de pistacho",
+      "bio vanille bourbon arome naturel",
+      "sirop agave 345g"
+    ],
+    "steps": [
+      "Depose la puree pomme poire dans un bol.",
+      "Ajoute une genereuse cuillère de puree d amande noix de coco.",
+      "Parseme de mix energie pour apporter du croquant.",
+      "Ajoute un filet de sirop d erable.",
+      "Complete avec un peu de crema de pistacho ou de vanille si souhaité."
+    ],
+    "prep_time_min": 5,
+    "cook_time_min": 0,
+    "difficulty": "easy",
+    "tags": [
+      "petit-dejeuner",
+      "snack",
+      "energie",
+      "sucre"
+    ],
+    "meal_type": [
+      "breakfast",
+      "snack"
+    ],
+    "cuisine": "internationale",
+    "servings": 1,
+    "search_terms": [
+      "bowl energie",
+      "amande coco",
+      "erable",
+      "compote"
+    ],
+    "compat": {
+      "storage_focus": [
+        "puree d amande noix de coco",
+        "mix energie",
+        "puree pomme poire sans sucres ajoutes 625g"
+      ]
+    },
+    "source": {
+      "type": "manual_admin",
+      "name": "KeepEat Admin"
+    },
+    "version": 1
   }
 ]
