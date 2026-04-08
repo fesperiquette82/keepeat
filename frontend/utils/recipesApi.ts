@@ -28,6 +28,7 @@ export interface BackendRecipesSuggestionsResponse {
     total_candidates?: number;
     returned?: number;
     gap_logged?: boolean;
+    suggest_later?: boolean;
   };
 }
 

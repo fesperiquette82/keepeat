@@ -245,6 +245,21 @@ def clear_recipe_catalog_cache() -> None:
     load_local_recipes.cache_clear()
 
 
+def append_recipe_to_catalog(recipe_dict: dict, catalog_path: str | os.PathLike[str] | None = None) -> None:
+    """Ajoute une nouvelle recette au fichier JSON du catalogue et invalide le cache mémoire."""
+    path = Path(catalog_path) if catalog_path else _DEFAULT_CATALOG_PATH
+    try:
+        raw: list = json.loads(path.read_text(encoding="utf-8"))
+    except Exception as exc:
+        raise RecipeCatalogError(f"Impossible de lire le catalogue pour l'ajout : {exc}") from exc
+    raw.append(recipe_dict)
+    try:
+        path.write_text(json.dumps(raw, ensure_ascii=False, indent=2), encoding="utf-8")
+    except Exception as exc:
+        raise RecipeCatalogError(f"Impossible d'écrire le catalogue après ajout : {exc}") from exc
+    load_local_recipes.cache_clear()
+
+
 def load_recipe_catalog(catalog_path: str | os.PathLike[str] | None = None) -> list[Recipe]:
     """Service function for loading the local recipe catalog."""
     return list(load_local_recipes(catalog_path))

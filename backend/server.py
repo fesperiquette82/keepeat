@@ -87,7 +87,7 @@ from entitlements import (
     feature_policy,
     resolve_plan,
 )
-from ocr_service import ocr_receipt
+from ocr_service import OcrApiError, ocr_receipt
 from priority_refresh import build_priority_refresh_state
 from observability import (
     build_monitoring_kpis,
@@ -104,6 +104,7 @@ from product_catalog import infer_food_category, infer_shelf_life, lookup_produc
 from recipes_service import (
     _FRIGO_CATS,
     _PLACARD_CATS,
+    append_recipe_to_catalog,
     load_local_recipes,
     get_recipes_catalog,
     get_recipe_catalog_debug_info,
@@ -2033,7 +2034,7 @@ async def _send_recipe_gap_email(gap_doc: dict[str, Any], *, is_new: bool) -> No
     count = int(gap_doc.get("occurrence_count") or 0)
     if not is_new and (threshold <= 1 or count % threshold != 0):
         return
-    destination = os.getenv("RECIPE_GAP_EMAIL_TO", "fesperiquette@hotmail.com").strip() or "fesperiquette@hotmail.com"
+    destination = os.getenv("RECIPE_GAP_EMAIL_TO", "keepeatfe@gmail.com").strip() or "keepeatfe@gmail.com"
     subject = "KeepEat - Besoin recette non couvert"
     html_body = f"""
     <h3>Besoin recette non couvert</h3>
@@ -2265,13 +2266,32 @@ async def get_recipe_suggestions(
     relevant = [candidate for candidate in scored if candidate.get("available_count", 0) >= 1 and candidate.get("missing_count", 0) <= 3][:5]
 
     gap_logged = False
+    suggest_later = False
     if not relevant:
-        gap_logged = await _upsert_recipe_gap(
-            uid=uid,
-            recipe_filter=effective_filter,
-            stock_items=items,
-            criteria={"min_score": 1, "max_missing": 3},
-        )
+        openai_key = os.environ.get("KEEPEAT_OPENAI_TOKEN", "")
+        if openai_key and stock_names:
+            try:
+                ai_raw = await asyncio.wait_for(
+                    _ai_gap_fill(stock_names, openai_key),
+                    timeout=10.0,
+                )
+                if ai_raw:
+                    ai_scored = await _save_ai_recipe_to_stores(ai_raw, stock_names=stock_names)
+                    relevant = [ai_scored]
+                    logger.info("AI gap fill: recette proposée pour user=%s", uid)
+            except asyncio.TimeoutError:
+                logger.warning("AI gap fill: timeout 10s dépassé pour user=%s", uid)
+            except Exception as exc:
+                logger.warning("AI gap fill: erreur pour user=%s: %s", uid, exc)
+
+        if not relevant:
+            gap_logged = await _upsert_recipe_gap(
+                uid=uid,
+                recipe_filter=effective_filter,
+                stock_items=items,
+                criteria={"min_score": 1, "max_missing": 3},
+            )
+            suggest_later = True
 
     logger.info("Recipes suggestions: filter=%s stock=%s top5=%s", recipe_filter, stock_names[:5], [match.get("title") for match in relevant])
     recipes_payload = relevant
@@ -2294,6 +2314,7 @@ async def get_recipe_suggestions(
     meta["total_candidates"] = len(scored)
     meta["returned"] = len(recipes_payload)
     meta["gap_logged"] = gap_logged
+    meta["suggest_later"] = suggest_later
     _apply_recipes_debug_headers(response=response, meta=meta)
     if include_meta_enabled:
         return {"recipes": recipes_payload, "meta": meta}
@@ -2537,7 +2558,18 @@ async def ocr_receipt_route(
         feature=FEATURE_OCR,
         consume_quota=False,
     )
-    result = await ocr_receipt(request, current_user)
+    try:
+        result = await ocr_receipt(request, current_user)
+    except OcrApiError as exc:
+        logger.warning("OCR receipt failed for user=%s: %s", current_user["id"], exc)
+        await track_business_event(
+            business_events_col=business_events_col,
+            user_id=current_user["id"],
+            event_name="ocr_scan_failed",
+            event_category="ocr",
+            metadata_json={"reason": str(exc)},
+        )
+        raise HTTPException(status_code=502, detail=str(exc))
     # Quota consommé APRÈS l'appel externe réussi
     await _enforce_feature_access(
         current_user=current_user,
@@ -2732,6 +2764,145 @@ async def get_gamification(
         "level_emoji":       level_emoji,
         "progress_to_next":  round(min(progress, 1.0), 3),
         "next_level":        next_level,
+    }
+
+
+# ── Gap-fill IA : génération automatique quand le catalogue est vide ──────────
+
+async def _ai_gap_fill(stock_names: list[str], openai_key: str) -> dict | None:
+    """Appelle OpenAI pour générer une recette française à partir des articles en stock.
+    Retourne le premier dict recette valide, ou None en cas d'échec.
+    Timeout géré par l'appelant via asyncio.wait_for.
+    """
+    ingredients_list = "\n".join(f"- {name}" for name in stock_names[:10])
+    prompt = _AI_RECIPE_PROMPT.format(ingredients=ingredients_list)
+    try:
+        async with httpx.AsyncClient(timeout=12) as http:
+            r = await http.post(
+                "https://api.openai.com/v1/chat/completions",
+                headers={"Authorization": f"Bearer {openai_key}", "Content-Type": "application/json"},
+                json={
+                    "model": "gpt-4o-mini",
+                    "max_tokens": 600,
+                    "messages": [
+                        {"role": "system", "content": _AI_RECIPE_SYSTEM},
+                        {"role": "user", "content": prompt},
+                    ],
+                },
+            )
+            if r.status_code != 200:
+                logger.warning("AI gap fill OpenAI HTTP %s: %s", r.status_code, r.text[:200])
+                return None
+            text = r.json()["choices"][0]["message"]["content"].strip()
+    except Exception as exc:
+        logger.warning("AI gap fill request failed: %s", exc)
+        return None
+
+    if "```" in text:
+        parts = text.split("```")
+        text = parts[1] if len(parts) > 1 else parts[0]
+        if text.startswith("json"):
+            text = text[4:]
+        text = text.strip().rstrip("```").strip()
+
+    try:
+        recipes = json.loads(text)
+        if not isinstance(recipes, list):
+            recipes = [recipes]
+    except Exception:
+        logger.warning("AI gap fill JSON parse failed: %s", text[:200])
+        return None
+
+    for recipe in recipes:
+        if _is_french_ai_recipe(recipe) and isinstance(recipe.get("title"), str):
+            return recipe
+    return None
+
+
+async def _save_ai_recipe_to_stores(ai_recipe: dict, *, stock_names: list[str]) -> dict:
+    """Sauvegarde une recette générée par l'IA dans MongoDB recipes_col ET le catalogue JSON.
+    Retourne un dict scoré compatible avec le format de réponse /api/recipes/suggestions.
+    """
+    title = str(ai_recipe.get("title", "Recette IA")).strip()
+    slug = re.sub(r"[^a-z0-9]+", "-", unicodedata.normalize("NFD", title.lower()))[:40].strip("-")
+    recipe_id = f"ai-{slug}-{secrets.token_hex(4)}"
+
+    prep_time = int(ai_recipe.get("prep_time_min") or 30)
+    ingredients_used = [str(i) for i in ai_recipe.get("ingredients_used", []) if i]
+    summary = str(ai_recipe.get("instructions_summary", "")).strip()
+    steps = [summary] if summary else ["Préparer selon les instructions."]
+    now_iso = utc_now().isoformat()
+
+    # Sauvegarde MongoDB
+    mongo_doc: dict[str, Any] = {
+        "_id": recipe_id,
+        "id": recipe_id,
+        "title": title,
+        "description": summary,
+        "dish_type": "plat",
+        "duration_min": prep_time,
+        "difficulty": "easy",
+        "ingredients": [{"name": i, "quantity": "", "optional": False} for i in ingredients_used],
+        "steps": steps,
+        "tags": ["anti-gaspi", "ia"],
+        "is_active": True,
+        "created_by": "ai_gap_fill",
+        "created_at": now_iso,
+        "updated_at": now_iso,
+        "usage_count": 0,
+        "view_count": 0,
+    }
+    try:
+        await recipes_col.insert_one(mongo_doc)
+        logger.info("AI gap fill: recette sauvée en MongoDB id=%s title=%s", recipe_id, title)
+    except Exception as exc:
+        logger.warning("AI gap fill: MongoDB insert échoué: %s", exc)
+
+    # Sauvegarde catalogue JSON
+    catalog_entry = {
+        "id": recipe_id,
+        "title": title,
+        "summary": summary,
+        "ingredients_required": ingredients_used,
+        "ingredients_optional": [],
+        "steps": steps,
+        "prep_time_min": prep_time,
+        "cook_time_min": 0,
+        "difficulty": "easy",
+        "tags": ["anti-gaspi", "ia"],
+        "meal_type": ["dinner"],
+        "cuisine": "française",
+        "servings": 2,
+        "search_terms": ingredients_used,
+        "compat": {"storage_focus": []},
+        "source": {"type": "ai_generated", "name": "KeepEat AI"},
+        "version": 1,
+    }
+    try:
+        append_recipe_to_catalog(catalog_entry)
+        logger.info("AI gap fill: recette ajoutée au catalogue JSON id=%s", recipe_id)
+    except Exception as exc:
+        logger.warning("AI gap fill: ajout catalogue JSON échoué: %s", exc)
+
+    # Mise à jour des gaps couverts
+    try:
+        await _mark_coverable_gaps_after_recipe_insert(mongo_doc)
+    except Exception as exc:
+        logger.warning("AI gap fill: marquage gaps échoué: %s", exc)
+
+    return {
+        "id": recipe_id,
+        "title": title,
+        "description": summary,
+        "duration_min": prep_time,
+        "dish_type": "plat",
+        "available_count": len(ingredients_used),
+        "missing_count": 0,
+        "available_ingredients": ingredients_used,
+        "missing_ingredients": [],
+        "steps": steps,
+        "score": 10,
+        "is_ai": True,
     }
 
 
@@ -3253,6 +3424,92 @@ async def admin_monitoring_events(
         "total": total,
         "events": [serialize_mongo(r) for r in rows],
     }
+
+
+# ── Endpoint admin : ajout manuel d'une recette dans les deux stores ──────────
+
+class AdminRecipePayload(BaseModel):
+    title: str = Field(..., min_length=2, max_length=120)
+    summary: str = Field(..., min_length=10)
+    ingredients_required: list[str] = Field(..., min_length=1)
+    ingredients_optional: list[str] = Field(default_factory=list)
+    steps: list[str] = Field(..., min_length=1)
+    prep_time_min: int = Field(..., ge=0)
+    cook_time_min: int = Field(0, ge=0)
+    difficulty: str = Field("easy", pattern="^(easy|medium|hard)$")
+    tags: list[str] = Field(default_factory=list)
+    meal_type: list[str] = Field(default_factory=list)
+    servings: int = Field(2, ge=1)
+
+
+@api_router.post("/admin/recipes", status_code=201)
+async def admin_add_recipe(
+    payload: AdminRecipePayload,
+    _admin_user: Dict[str, Any] = Depends(_require_admin_user),
+):
+    """Ajoute manuellement une recette dans MongoDB recipes_col ET le catalogue JSON.
+    Requiert un compte admin (is_admin=True).
+    """
+    slug = re.sub(r"[^a-z0-9]+", "-", unicodedata.normalize("NFD", payload.title.lower()))[:40].strip("-")
+    recipe_id = f"manual-{slug}-{secrets.token_hex(4)}"
+    now_iso = utc_now().isoformat()
+
+    # Sauvegarde MongoDB
+    mongo_doc: dict[str, Any] = {
+        "_id": recipe_id,
+        "id": recipe_id,
+        "title": payload.title,
+        "description": payload.summary,
+        "dish_type": payload.meal_type[0] if payload.meal_type else "plat",
+        "duration_min": payload.prep_time_min + payload.cook_time_min,
+        "difficulty": payload.difficulty,
+        "ingredients": [{"name": i, "quantity": "", "optional": False} for i in payload.ingredients_required]
+            + [{"name": i, "quantity": "", "optional": True} for i in payload.ingredients_optional],
+        "steps": payload.steps,
+        "tags": payload.tags,
+        "is_active": True,
+        "created_by": f"admin:{_admin_user.get('email', 'unknown')}",
+        "created_at": now_iso,
+        "updated_at": now_iso,
+        "usage_count": 0,
+        "view_count": 0,
+    }
+    try:
+        await recipes_col.insert_one(mongo_doc)
+    except DuplicateKeyError:
+        raise HTTPException(status_code=409, detail="Une recette avec cet identifiant existe déjà.")
+
+    # Sauvegarde catalogue JSON
+    catalog_entry = {
+        "id": recipe_id,
+        "title": payload.title,
+        "summary": payload.summary,
+        "ingredients_required": payload.ingredients_required,
+        "ingredients_optional": payload.ingredients_optional,
+        "steps": payload.steps,
+        "prep_time_min": payload.prep_time_min,
+        "cook_time_min": payload.cook_time_min,
+        "difficulty": payload.difficulty,
+        "tags": payload.tags,
+        "meal_type": payload.meal_type or ["dinner"],
+        "cuisine": "française",
+        "servings": payload.servings,
+        "search_terms": payload.ingredients_required,
+        "compat": {"storage_focus": []},
+        "source": {"type": "manual_admin", "name": "KeepEat Admin"},
+        "version": 1,
+    }
+    try:
+        append_recipe_to_catalog(catalog_entry)
+    except Exception as exc:
+        logger.warning("admin_add_recipe: ajout catalogue JSON échoué: %s", exc)
+
+    await _mark_coverable_gaps_after_recipe_insert(mongo_doc)
+    logger.info(
+        "ADMIN_ACTION action=add_recipe id=%s title=%s actor=%s",
+        recipe_id, payload.title, _admin_user.get("email", "unknown"),
+    )
+    return {"id": recipe_id, "title": payload.title, "saved": True}
 
 
 # Redirect pages (deep link fallback for email clients)

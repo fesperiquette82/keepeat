@@ -9,6 +9,10 @@ from fastapi import HTTPException, Request
 
 from app_core import logger
 
+class OcrApiError(RuntimeError):
+    """Levée quand l'appel OpenAI échoue (HTTP error, timeout, JSON invalide, clé absente)."""
+
+
 SHELF_BY_CATEGORY: dict[str, dict[str, int | None]] = {
     "frais": {"fridge": 7, "pantry": None, "freezer": None},
     "proteines": {"fridge": 3, "pantry": None, "freezer": 90},
@@ -36,7 +40,7 @@ async def ocr_receipt(request: Request, current_user: dict[str, Any]) -> list[di
     openai_key = os.environ.get("KEEPEAT_OPENAI_TOKEN", "")
     if not openai_key:
         logger.warning("KEEPEAT_OPENAI_TOKEN non configuré — scan ticket désactivé")
-        return []
+        raise OcrApiError("Service OCR non configuré sur ce serveur")
 
     body = await request.json()
     image_b64: str = body.get("image", "")
@@ -72,11 +76,13 @@ async def ocr_receipt(request: Request, current_user: dict[str, Any]) -> list[di
             )
             if response.status_code != 200:
                 logger.warning("OpenAI receipt OCR error %s: %s", response.status_code, response.text[:200])
-                return []
+                raise OcrApiError(f"OpenAI a retourné une erreur HTTP {response.status_code}")
             text = response.json()["choices"][0]["message"]["content"].strip()
+    except OcrApiError:
+        raise
     except Exception as exc:
         logger.warning("OpenAI request failed: %s", exc)
-        return []
+        raise OcrApiError(f"Impossible de contacter le service OCR : {exc}") from exc
 
     if "```" in text:
         text = text.split("```")[1]
@@ -88,7 +94,7 @@ async def ocr_receipt(request: Request, current_user: dict[str, Any]) -> list[di
         products: list[dict[str, Any]] = json.loads(text)
     except Exception:
         logger.warning("OCR receipt: JSON parse failed — raw=%s", text[:200])
-        return []
+        raise OcrApiError("Réponse OCR invalide (JSON inattendu)")
 
     result: list[dict[str, Any]] = []
     for product in products:

@@ -9,7 +9,7 @@ import { C, T } from '../../utils/theme';
 import { countLabelFr } from '../../utils/uiText';
 import { UI_LABELS } from '../../utils/uiLabels';
 import { useLanguageStore } from '../../store/languageStore';
-import { RecipesFilter } from '../../store/recipesStore';
+import { RecipesFilter, useRecipesStore } from '../../store/recipesStore';
 import { logger } from '../../utils/logger';
 import { fetchRecipesSuggestions } from '../../utils/recipesApi';
 import { fetchRecipesSuggestionsWithStockFallback, resolveDisplayedRecipesWithScope } from '../../utils/recipesSuggestionsFallback';
@@ -46,6 +46,7 @@ export default function RecipesScreen() {
   const router = useRouter();
   const { t } = useLanguageStore();
   const { items: storeItems, fetchStock } = useStockStore();
+  const { suggestLaterByFilter } = useRecipesStore();
   const [imageErrors, setImageErrors] = React.useState<Record<string, boolean>>({});
   const [activeFilter, setActiveFilter] = React.useState<RecipesFilter>('expiryDay');
   const [recipes, setRecipes] = React.useState<any[]>([]);
@@ -139,19 +140,22 @@ export default function RecipesScreen() {
 
   const emptyMessage = useMemo(() => {
     if (isLoading) {
-      return 'Chargement des suggestions...';
+      return ‘Chargement des suggestions...’;
     }
     if (activeStockCount === 0) {
-      return 'Aucune recette disponible : ajoutez d’abord des ingrédients au stock.';
+      return ‘Aucune recette disponible : ajoutez d’abord des ingrédients au stock.’;
+    }
+    if (suggestLaterByFilter[activeFilter]) {
+      return ‘Aucune recette disponible pour l’instant. Notre équipe travaille à en ajouter de nouvelles — revenez bientôt !’;
     }
     if (!hasTargetItems) {
       return t(EMPTY_FILTER_LABEL_KEYS[activeFilter]);
     }
-    if (activeFilter === 'stock') {
-      return 'J’ai détecté des articles dans votre stock, mais je n’arrive pas à vous proposer de recette pour le moment.';
+    if (activeFilter === ‘stock’) {
+      return ‘J’ai détecté des articles dans votre stock, mais je n’arrive pas à vous proposer de recette pour le moment.’;
     }
     return `J’ai détecté des articles avec des dates de péremption cohérentes pour le filtre “${t(FILTER_LABEL_KEYS[activeFilter])}”, mais je n’arrive pas à vous proposer de recette pour le moment.`;
-  }, [activeFilter, activeStockCount, hasTargetItems, isLoading, t]);
+  }, [activeFilter, activeStockCount, hasTargetItems, isLoading, suggestLaterByFilter, t]);
 
   return (
     <SafeAreaView style={styles.container}>

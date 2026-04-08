@@ -21,6 +21,7 @@ export interface BackendRecipeSuggestion {
 
 interface RecipesStoreState {
   suggestionsByFilter: Record<RecipesFilter, BackendRecipeSuggestion[]>;
+  suggestLaterByFilter: Record<RecipesFilter, boolean>;
   isLoading: boolean;
   error: string | null;
   fetchSuggestions: (filter: RecipesFilter) => Promise<BackendRecipeSuggestion[]>;
@@ -64,13 +65,19 @@ export const useRecipesStore = create<RecipesStoreState>((set, get) => ({
     expiryWeek: [],
     expiryMonth: [],
   },
+  suggestLaterByFilter: {
+    stock: false,
+    expiryDay: false,
+    expiryWeek: false,
+    expiryMonth: false,
+  },
   isLoading: false,
   error: null,
   fetchSuggestions: async (filter) => {
     set({ isLoading: true, error: null });
     try {
       const apiFilter = FILTER_TO_API[filter];
-      const response = await axios.get(buildApiUrl(`/api/recipes/suggestions?filter=${encodeURIComponent(apiFilter)}`), {
+      const response = await axios.get(buildApiUrl(`/api/recipes/suggestions?include_meta=true&filter=${encodeURIComponent(apiFilter)}`), {
         headers: authHeaders(),
       });
       const payload = Array.isArray(response.data)
@@ -78,9 +85,11 @@ export const useRecipesStore = create<RecipesStoreState>((set, get) => ({
         : Array.isArray(response.data?.recipes)
           ? response.data.recipes
           : [];
+      const suggestLater = response.data?.meta?.suggest_later === true;
       const sanitized = payload.map((item: unknown, index: number) => sanitizeRecipe(item, index));
       set((state) => ({
         suggestionsByFilter: { ...state.suggestionsByFilter, [filter]: sanitized },
+        suggestLaterByFilter: { ...state.suggestLaterByFilter, [filter]: suggestLater },
       }));
       return sanitized;
     } catch (error: any) {
