@@ -3597,6 +3597,197 @@ async def admin_import_recipes(
     return {"added": added, "skipped": skipped, "errors": errors, "details": results}
 
 
+# ── Page admin : import de recettes ──────────────────────────────────────────
+
+_ADMIN_RECIPES_HTML = """<!DOCTYPE html>
+<html lang="fr">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>KeepEat — Import recettes</title>
+<style>
+  *{box-sizing:border-box;margin:0;padding:0}
+  body{font-family:system-ui,sans-serif;background:#f0fdf4;color:#1a1a1a;min-height:100vh}
+  .header{background:#16a34a;color:#fff;padding:16px 24px;display:flex;align-items:center;gap:12px}
+  .header h1{font-size:18px;font-weight:700}
+  .header span{font-size:22px}
+  .container{max-width:860px;margin:32px auto;padding:0 16px}
+  .card{background:#fff;border-radius:12px;border:1px solid #d1fae5;padding:24px;margin-bottom:20px}
+  .card h2{font-size:15px;font-weight:700;color:#166534;margin-bottom:16px}
+  label{display:block;font-size:13px;font-weight:600;color:#374151;margin-bottom:6px}
+  input[type=email],input[type=password],input[type=text]{width:100%;padding:10px 12px;border:1px solid #d1d5db;border-radius:8px;font-size:14px;outline:none}
+  input:focus{border-color:#16a34a;box-shadow:0 0 0 2px #bbf7d0}
+  .row{display:grid;grid-template-columns:1fr 1fr;gap:12px}
+  button{background:#16a34a;color:#fff;border:none;border-radius:8px;padding:10px 20px;font-size:14px;font-weight:700;cursor:pointer}
+  button:hover{background:#15803d}
+  button.secondary{background:#fff;color:#16a34a;border:1px solid #16a34a}
+  button.secondary:hover{background:#f0fdf4}
+  button:disabled{opacity:.5;cursor:not-allowed}
+  textarea{width:100%;height:320px;padding:12px;border:1px solid #d1d5db;border-radius:8px;font-family:monospace;font-size:12px;resize:vertical;outline:none}
+  textarea:focus{border-color:#16a34a;box-shadow:0 0 0 2px #bbf7d0}
+  .drop-zone{border:2px dashed #86efac;border-radius:10px;padding:28px;text-align:center;color:#166534;cursor:pointer;transition:.2s;background:#f0fdf4;margin-bottom:12px}
+  .drop-zone:hover,.drop-zone.drag-over{border-color:#16a34a;background:#dcfce7}
+  .drop-zone p{font-size:14px;font-weight:600;margin-bottom:4px}
+  .drop-zone small{font-size:12px;color:#4ade80}
+  .or{text-align:center;font-size:12px;color:#9ca3af;margin:12px 0;position:relative}
+  .or::before,.or::after{content:"";position:absolute;top:50%;width:44%;height:1px;background:#e5e7eb}
+  .or::before{left:0}.or::after{right:0}
+  .result{border-radius:8px;padding:14px;font-size:13px;line-height:1.6;margin-top:16px}
+  .result.success{background:#f0fdf4;border:1px solid #86efac;color:#166534}
+  .result.error{background:#fef2f2;border:1px solid #fca5a5;color:#dc2626}
+  .result.info{background:#eff6ff;border:1px solid #93c5fd;color:#1d4ed8}
+  .detail-row{display:flex;gap:8px;align-items:center;padding:4px 0;border-bottom:1px solid rgba(0,0,0,.06)}
+  .badge{display:inline-block;padding:2px 8px;border-radius:999px;font-size:11px;font-weight:700}
+  .badge.added{background:#dcfce7;color:#166534}
+  .badge.skipped{background:#fef9c3;color:#854d0e}
+  .badge.error{background:#fee2e2;color:#991b1b}
+  #login-section{display:block}
+  #import-section{display:none}
+  .logged-as{font-size:12px;color:#6b7280;margin-left:auto}
+  a.logout{font-size:12px;color:#dc2626;cursor:pointer;margin-left:12px;text-decoration:underline}
+  .hint{font-size:12px;color:#6b7280;margin-top:6px}
+</style>
+</head>
+<body>
+<div class="header">
+  <span>🥗</span>
+  <h1>KeepEat — Import de recettes</h1>
+  <span id="logged-info" class="logged-as" style="display:none"></span>
+  <a id="btn-logout" class="logout" style="display:none" onclick="logout()">Deconnexion</a>
+</div>
+<div class="container">
+
+  <!-- LOGIN -->
+  <div class="card" id="login-section">
+    <h2>Connexion admin</h2>
+    <div class="row" style="margin-bottom:12px">
+      <div><label>Email</label><input id="email" type="email" placeholder="admin@example.com" autocomplete="username"></div>
+      <div><label>Mot de passe</label><input id="password" type="password" placeholder="••••••••" autocomplete="current-password"></div>
+    </div>
+    <button onclick="login()">Se connecter</button>
+    <div id="login-result"></div>
+  </div>
+
+  <!-- IMPORT -->
+  <div class="card" id="import-section">
+    <h2>Importer des recettes</h2>
+    <div class="drop-zone" id="drop-zone" onclick="document.getElementById('file-input').click()">
+      <p>Glisser-deposer un fichier JSON ici</p>
+      <small>ou cliquer pour choisir un fichier</small>
+    </div>
+    <input id="file-input" type="file" accept=".json,application/json" style="display:none" onchange="loadFile(this)">
+    <div class="or">ou coller le JSON directement</div>
+    <label>Contenu JSON <span style="font-weight:400;color:#9ca3af">(tableau de recettes ou objet avec clé "recipes")</span></label>
+    <textarea id="json-input" placeholder='[&#10;  {&#10;    "title": "Ma recette",&#10;    "summary": "Description...",&#10;    "ingredients_required": ["ingredient1"],&#10;    "ingredients_optional": [],&#10;    "steps": ["Etape 1.", "Etape 2."],&#10;    "prep_time_min": 10,&#10;    "cook_time_min": 15,&#10;    "difficulty": "easy",&#10;    "tags": [],&#10;    "meal_type": ["dinner"],&#10;    "servings": 2&#10;  }&#10;]'></textarea>
+    <p class="hint">Champs obligatoires : title, summary, ingredients_required, steps, prep_time_min</p>
+    <div style="display:flex;gap:10px;margin-top:14px">
+      <button onclick="importRecipes()" id="btn-import">Importer</button>
+      <button class="secondary" onclick="document.getElementById('json-input').value=''">Effacer</button>
+    </div>
+    <div id="import-result"></div>
+  </div>
+
+</div>
+<script>
+let token = localStorage.getItem('keepeat_admin_token');
+let userEmail = localStorage.getItem('keepeat_admin_email');
+if (token) showImportSection();
+
+function showImportSection() {
+  document.getElementById('login-section').style.display = 'none';
+  document.getElementById('import-section').style.display = 'block';
+  const info = document.getElementById('logged-info');
+  info.textContent = userEmail || 'admin';
+  info.style.display = 'inline';
+  document.getElementById('btn-logout').style.display = 'inline';
+}
+
+async function login() {
+  const email = document.getElementById('email').value.trim();
+  const password = document.getElementById('password').value;
+  const res = document.getElementById('login-result');
+  if (!email || !password) { res.innerHTML = '<div class="result error">Email et mot de passe requis.</div>'; return; }
+  try {
+    const r = await fetch('/api/auth/login', {method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({email,password})});
+    const data = await r.json();
+    if (!r.ok) { res.innerHTML = '<div class="result error">' + (data.detail || 'Identifiants incorrects.') + '</div>'; return; }
+    token = data.access_token;
+    localStorage.setItem('keepeat_admin_token', token);
+    localStorage.setItem('keepeat_admin_email', email);
+    userEmail = email;
+    showImportSection();
+  } catch(e) { res.innerHTML = '<div class="result error">Erreur reseau : ' + e.message + '</div>'; }
+}
+
+function logout() {
+  localStorage.removeItem('keepeat_admin_token');
+  localStorage.removeItem('keepeat_admin_email');
+  token = null;
+  document.getElementById('login-section').style.display = 'block';
+  document.getElementById('import-section').style.display = 'none';
+  document.getElementById('logged-info').style.display = 'none';
+  document.getElementById('btn-logout').style.display = 'none';
+}
+
+function loadFile(input) {
+  const file = input.files[0];
+  if (!file) return;
+  const reader = new FileReader();
+  reader.onload = e => { document.getElementById('json-input').value = e.target.result; };
+  reader.readAsText(file);
+}
+
+const dz = document.getElementById('drop-zone');
+dz.addEventListener('dragover', e => { e.preventDefault(); dz.classList.add('drag-over'); });
+dz.addEventListener('dragleave', () => dz.classList.remove('drag-over'));
+dz.addEventListener('drop', e => {
+  e.preventDefault(); dz.classList.remove('drag-over');
+  const file = e.dataTransfer.files[0];
+  if (file) { const r = new FileReader(); r.onload = ev => { document.getElementById('json-input').value = ev.target.result; }; r.readAsText(file); }
+});
+
+async function importRecipes() {
+  const raw = document.getElementById('json-input').value.trim();
+  const res = document.getElementById('import-result');
+  const btn = document.getElementById('btn-import');
+  if (!raw) { res.innerHTML = '<div class="result error">Collez ou chargez un fichier JSON d abord.</div>'; return; }
+  let parsed;
+  try { parsed = JSON.parse(raw); } catch(e) { res.innerHTML = '<div class="result error">JSON invalide : ' + e.message + '</div>'; return; }
+  const recipes = Array.isArray(parsed) ? parsed : (parsed.recipes || null);
+  if (!recipes) { res.innerHTML = '<div class="result error">Format attendu : tableau JSON ou objet avec cle "recipes".</div>'; return; }
+  btn.disabled = true; btn.textContent = 'Import en cours...';
+  try {
+    const r = await fetch('/api/admin/recipes/import', {
+      method:'POST',
+      headers:{'Content-Type':'application/json','Authorization':'Bearer '+token},
+      body: JSON.stringify({recipes})
+    });
+    const data = await r.json();
+    if (r.status === 401) { logout(); res.innerHTML = '<div class="result error">Session expiree. Reconnectez-vous.</div>'; return; }
+    if (!r.ok) { res.innerHTML = '<div class="result error">' + JSON.stringify(data.detail || data) + '</div>'; return; }
+    let html = '<div class="result success"><strong>Resultat : ' + data.added + ' ajoutee(s), ' + data.skipped + ' ignoree(s), ' + data.errors + ' erreur(s).</strong><br><br>';
+    for (const d of data.details) {
+      const badge = '<span class="badge ' + d.status + '">' + d.status + '</span>';
+      html += '<div class="detail-row">' + badge + ' ' + d.title + (d.reason ? ' <em style=\\"color:#9ca3af\\">(' + d.reason + ')</em>' : '') + '</div>';
+    }
+    html += '</div>';
+    res.innerHTML = html;
+  } catch(e) { res.innerHTML = '<div class="result error">Erreur reseau : ' + e.message + '</div>'; }
+  finally { btn.disabled = false; btn.textContent = 'Importer'; }
+}
+
+document.getElementById('password').addEventListener('keydown', e => { if(e.key==='Enter') login(); });
+</script>
+</body>
+</html>"""
+
+
+@app.get("/admin/recipes", response_class=HTMLResponse, include_in_schema=False)
+async def admin_recipes_page():
+    """Page web d'import de recettes pour les administrateurs KeepEat."""
+    return HTMLResponse(content=_ADMIN_RECIPES_HTML)
+
+
 # Redirect pages (deep link fallback for email clients)
 # -----------------------------------------------------------------------------
 @app.get("/redirect/reset-password", response_class=HTMLResponse, include_in_schema=False)
