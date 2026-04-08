@@ -12,8 +12,9 @@ import { useLanguageStore } from '../../store/languageStore';
 import { RecipesFilter } from '../../store/recipesStore';
 import { logger } from '../../utils/logger';
 import { fetchRecipesSuggestions } from '../../utils/recipesApi';
+import { fetchRecipesSuggestionsWithStockFallback, resolveDisplayedRecipesWithScope } from '../../utils/recipesSuggestionsFallback';
 import { getActiveItemsByScope, resolveStockItems } from '../../data/mockDashboardData';
-import { buildTargetIngredientNames, filterRecipesByTargetIngredients, getRecipeAvailableIngredients } from '../../utils/recipesScoping';
+import { buildTargetIngredientNames, getRecipeAvailableIngredients } from '../../utils/recipesScoping';
 
 const TYPE_LABEL: Record<string, string> = {
   apero: 'Apéro',
@@ -61,6 +62,7 @@ export default function RecipesScreen() {
   const targetItems = useMemo(() => getActiveItemsByScope(items, activeFilter), [activeFilter, items]);
 
   const activeStockCount = activeItems.length;
+  const stockIngredientNames = useMemo(() => buildTargetIngredientNames(activeItems), [activeItems]);
   const targetIngredientNames = useMemo(() => buildTargetIngredientNames(targetItems), [targetItems]);
   const classicSuggestions = useMemo(
     () =>
@@ -90,12 +92,17 @@ export default function RecipesScreen() {
     const load = async () => {
       setIsLoading(true);
       try {
-        const payload = await fetchRecipesSuggestions(activeFilter);
+        const { payload, usedFallback } = await fetchRecipesSuggestionsWithStockFallback(activeFilter, fetchRecipesSuggestions);
         if (cancelled) return;
         const backendRecipesOnRecipesScreen = payload.recipes ?? [];
-        const scopedRecipesOnRecipesScreen = filterRecipesByTargetIngredients(backendRecipesOnRecipesScreen, targetIngredientNames);
+        const scopedRecipesOnRecipesScreen = resolveDisplayedRecipesWithScope(backendRecipesOnRecipesScreen, {
+          usedFallback,
+          targetIngredientNames,
+          stockIngredientNames,
+        });
         logger.debug('[RECIPES_MATCH] suggestions payload diagnostics', {
           activeFilter,
+          usedStockFallback: usedFallback,
           storeItemsCount: storeItems.length,
           normalizedItemsCount: items.length,
           activeItemsCount: activeItems.length,
@@ -107,7 +114,7 @@ export default function RecipesScreen() {
           scopedRecipesOnRecipesScreenCount: scopedRecipesOnRecipesScreen.length,
           scopedRecipesOnRecipesScreenIds: scopedRecipesOnRecipesScreen.map((recipe) => recipe.id).slice(0, 10),
         });
-        setRecipes(backendRecipesOnRecipesScreen);
+        setRecipes(scopedRecipesOnRecipesScreen);
       } catch (error) {
         logger.warn('[RECIPES_MATCH] fetch suggestions failed', { error: String(error), activeFilter });
         if (!cancelled) setRecipes([]);
@@ -119,7 +126,7 @@ export default function RecipesScreen() {
     return () => {
       cancelled = true;
     };
-  }, [activeFilter, activeItems.length, activeStockCount, items.length, storeItems.length, targetIngredientNames, targetItems]);
+  }, [activeFilter, activeItems.length, activeStockCount, items.length, stockIngredientNames, storeItems.length, targetIngredientNames, targetItems]);
 
   const filters = useMemo(
     () =>
