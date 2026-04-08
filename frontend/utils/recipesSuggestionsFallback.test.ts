@@ -87,3 +87,33 @@ test('fetchRecipesSuggestionsWithStockFallback utilise le meta du fallback quand
   assert.equal(result.usedFallback, true);
   assert.equal(result.payload.meta?.suggest_later, true);
 });
+
+test('resolveDisplayedRecipesWithScope fonctionne avec le champ available_ingredients du backend', () => {
+  const recipes = [
+    { id: 'r1', available_ingredients: ['lait', 'oeuf'] },
+    { id: 'r2', available_ingredients: ['farine'] },
+  ];
+
+  const displayed = resolveDisplayedRecipesWithScope(recipes, {
+    usedFallback: false,
+    targetIngredientNames: new Set(['lait']),
+    stockIngredientNames: new Set(['farine']),
+  });
+
+  assert.deepEqual(displayed.map((r) => r.id), ['r1']);
+});
+
+test('resolveDisplayedRecipesWithScope fonctionne avec le champ usedIngredients apres sanitize', () => {
+  const recipes = [
+    { id: 'r1', usedIngredients: ['lait', 'oeuf'] },
+    { id: 'r2', usedIngredients: ['farine'] },
+  ];
+
+  const displayed = resolveDisplayedRecipesWithScope(recipes, {
+    usedFallback: true,
+    targetIngredientNames: new Set(['lait']),
+    stockIngredientNames: new Set(['farine']),
+  });
+
+  assert.deepEqual(displayed.map((r) => r.id), ['r2']);
+});

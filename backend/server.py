@@ -2102,6 +2102,49 @@ async def _fetch_stock_candidates(*, uid: str, filter_value: str) -> list[dict[s
     return filtered
 
 
+# ── Image fetch helpers ───────────────────────────────────────────────────────
+
+_PEXELS_SEARCH_URL = "https://api.pexels.com/v1/search"
+_RECIPE_STOPWORDS = {
+    "a", "à", "au", "aux", "de", "du", "des", "la", "le", "les",
+    "avec", "en", "et", "sur", "pour", "par", "un", "une", "sans",
+}
+
+
+def _recipe_search_keywords(title: str) -> str:
+    """Extrait les mots-clés significatifs d'un titre de recette pour la recherche d'images."""
+    words = re.sub(r"[^a-zA-ZÀ-ÿ\s]", "", title.lower()).split()
+    meaningful = [w for w in words if w not in _RECIPE_STOPWORDS]
+    return " ".join(meaningful[:3]) + " recette cuisine"
+
+
+async def _fetch_recipe_image_url(client: httpx.AsyncClient, title: str) -> str:
+    """Interroge Pexels pour obtenir une URL d'image pour le titre de recette donné.
+    Nécessite la variable d'environnement PEXELS_API_KEY.
+    Retourne une chaîne vide si l'API échoue ou si la clé est absente.
+    """
+    pexels_key = os.environ.get("PEXELS_API_KEY", "")
+    if not pexels_key:
+        return ""
+    keywords = _recipe_search_keywords(title)
+    try:
+        resp = await client.get(
+            _PEXELS_SEARCH_URL,
+            params={"query": keywords, "per_page": 1, "orientation": "landscape"},
+            headers={"Authorization": pexels_key},
+            timeout=8.0,
+        )
+        if resp.status_code == 200:
+            photos = resp.json().get("photos", [])
+            if photos:
+                url = photos[0].get("src", {}).get("medium", "")
+                if url:
+                    return url
+    except Exception as exc:
+        logger.warning("Pexels image fetch failed for '%s': %s", title, exc)
+    return ""
+
+
 def _score_recipe_match(recipe_doc: dict[str, Any], stock_items: list[dict[str, Any]]) -> dict[str, Any]:
     normalized_stock_names = [_normalize_ingredient_name(i.get("name")) for i in stock_items if i.get("name")]
     stock_set = set(name for name in normalized_stock_names if name)
@@ -2145,7 +2188,8 @@ def _score_recipe_match(recipe_doc: dict[str, Any], stock_items: list[dict[str, 
     return {
         "id": recipe_doc.get("id"),
         "title": recipe_doc.get("title"),
-        "description": recipe_doc.get("description", ""),
+        "instructions_summary": recipe_doc.get("description", ""),
+        "image": recipe_doc.get("image", ""),
         "duration_min": duration,
         "dish_type": recipe_doc.get("dish_type", "Plat"),
         "available_count": available_count,
@@ -2172,6 +2216,9 @@ async def _upsert_recipe_gap(
         }
     )
     normalized_ingredients = [name for name in normalized_ingredients if name]
+    if not normalized_ingredients:
+        # Pas d'ingrédients en stock : aucun gap à signaler, pas d'e-mail.
+        return False
     signature = _build_gap_signature(
         normalized_ingredients=normalized_ingredients,
         recipe_filter=recipe_filter,
@@ -2285,12 +2332,16 @@ async def get_recipe_suggestions(
                 logger.warning("AI gap fill: erreur pour user=%s: %s", uid, exc)
 
         if not relevant:
-            gap_logged = await _upsert_recipe_gap(
-                uid=uid,
-                recipe_filter=effective_filter,
-                stock_items=items,
-                criteria={"min_score": 1, "max_missing": 3},
-            )
+            # Ne signaler un gap que si l'utilisateur a bien des ingrédients en stock
+            # correspondant au filtre actif. Un stock vide ou un filtre temporel sans
+            # produits expirants ne doit pas déclencher d'e-mail.
+            if stock_names:
+                gap_logged = await _upsert_recipe_gap(
+                    uid=uid,
+                    recipe_filter=effective_filter,
+                    stock_items=items,
+                    criteria={"min_score": 1, "max_missing": 3},
+                )
             suggest_later = True
 
     logger.info("Recipes suggestions: filter=%s stock=%s top5=%s", recipe_filter, stock_names[:5], [match.get("title") for match in relevant])
@@ -3595,6 +3646,87 @@ async def admin_import_recipes(
     errors = sum(1 for r in results if r["status"] == "error")
     logger.info("ADMIN_ACTION action=import_recipes added=%d skipped=%d errors=%d actor=%s", added, skipped, errors, actor)
     return {"added": added, "skipped": skipped, "errors": errors, "details": results}
+
+
+# ── Endpoint admin : dédoublonnage MongoDB ────────────────────────────────────
+
+@api_router.post("/admin/recipes/dedup", status_code=200)
+async def admin_dedup_recipes(
+    _admin_user: Dict[str, Any] = Depends(_require_admin_user),
+):
+    """Supprime les recettes en double dans MongoDB (même titre, insensible à la casse).
+    Pour chaque groupe de doublons, garde la première recette insérée (id lexicographiquement min)
+    et supprime les autres.
+    Retourne le nombre de recettes supprimées et le nombre de groupes concernés.
+    """
+    pipeline = [
+        {"$group": {
+            "_id": {"$toLower": "$title"},
+            "count": {"$sum": 1},
+            "ids": {"$push": "$_id"},
+        }},
+        {"$match": {"count": {"$gt": 1}}},
+    ]
+    duplicates = await recipes_col.aggregate(pipeline).to_list(length=None)
+
+    removed_total = 0
+    groups: list[dict] = []
+    for group in duplicates:
+        ids = sorted(group["ids"])  # garde l'id lexicographiquement le plus petit (le plus ancien)
+        ids_to_remove = ids[1:]
+        result = await recipes_col.delete_many({"_id": {"$in": ids_to_remove}})
+        removed_total += result.deleted_count
+        groups.append({"title": group["_id"], "kept": ids[0], "removed": ids_to_remove})
+
+    logger.info(
+        "ADMIN_ACTION action=dedup_recipes groups=%d removed=%d actor=%s",
+        len(groups), removed_total, _admin_user.get("email", "unknown"),
+    )
+    return {"groups": len(groups), "removed": removed_total, "details": groups}
+
+
+# ── Endpoint admin : enrichissement images ────────────────────────────────────
+
+@api_router.post("/admin/recipes/fetch-images", status_code=200)
+async def admin_fetch_recipe_images(
+    _admin_user: Dict[str, Any] = Depends(_require_admin_user),
+):
+    """Enrichit les recettes MongoDB sans image en cherchant une URL photo sur Pexels
+    Stocke uniquement l'URL (chaîne ~150 octets), pas le binaire.
+    Nécessite la variable d'environnement PEXELS_API_KEY.
+    """
+    recipes_without_image = await recipes_col.find(
+        {"is_active": True, "$or": [{"image": {"$exists": False}}, {"image": ""}, {"image": None}]},
+        {"_id": 1, "title": 1},
+    ).to_list(length=500)
+
+    updated = 0
+    skipped = 0
+    errors = 0
+
+    async with httpx.AsyncClient() as client:
+        for recipe in recipes_without_image:
+            title = recipe.get("title", "")
+            if not title:
+                skipped += 1
+                continue
+            url = await _fetch_recipe_image_url(client, title)
+            if url:
+                await recipes_col.update_one(
+                    {"_id": recipe["_id"]},
+                    {"$set": {"image": url, "updated_at": utc_now().isoformat()}},
+                )
+                updated += 1
+            else:
+                errors += 1
+            # Pause courte pour respecter les rate limits (200 req/h Pexels, 50 req/h Unsplash)
+            await asyncio.sleep(0.4)
+
+    logger.info(
+        "ADMIN_ACTION action=fetch_recipe_images updated=%d skipped=%d errors=%d actor=%s",
+        updated, skipped, errors, _admin_user.get("email", "unknown"),
+    )
+    return {"updated": updated, "skipped": skipped, "errors": errors}
 
 
 # ── Page admin : import de recettes ──────────────────────────────────────────

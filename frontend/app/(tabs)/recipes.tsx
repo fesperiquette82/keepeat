@@ -73,6 +73,7 @@ export default function RecipesScreen() {
         type: String(recipe.dish_type || 'rapide').toLowerCase(),
         matchedCount: recipe.available_count ?? recipe.availableCount ?? getRecipeAvailableIngredients(recipe).length ?? 0,
         missingCount: recipe.missing_count ?? recipe.missingCount ?? 0,
+        imageUrl: recipe.image || recipe.imageUrl || '',
       })),
     [recipes],
   );

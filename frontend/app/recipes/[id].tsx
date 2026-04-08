@@ -1,6 +1,6 @@
 import React, { useEffect, useMemo, useState } from 'react';
 import { SafeAreaView } from 'react-native-safe-area-context';
-import { View, Text, StyleSheet, TouchableOpacity, ScrollView, Alert } from 'react-native';
+import { View, Text, StyleSheet, TouchableOpacity, ScrollView, Alert, Image } from 'react-native';
 import Ionicons from '@expo/vector-icons/Ionicons';
 import { useLocalSearchParams, useRouter } from 'expo-router';
 import { useFocusEffect } from '@react-navigation/native';
@@ -271,6 +271,9 @@ export default function RecipeDetailScreen() {
       </View>
 
       <ScrollView contentContainerStyle={styles.content}>
+        {!!baseRecipe.image && (
+          <Image source={{ uri: baseRecipe.image }} style={styles.heroImage} resizeMode="cover" />
+        )}
         <Text style={styles.title}>{baseRecipe.title}</Text>
         <Text style={styles.meta}>{totalTime} min · Idée simple</Text>
 
@@ -345,6 +348,7 @@ const styles = StyleSheet.create({
   backIcon: { width: 32, height: 32, borderRadius: 16, backgroundColor: '#fff', alignItems: 'center', justifyContent: 'center' },
   headerTitle: { color: C.text, fontSize: 16, fontWeight: '700' },
   content: { padding: 16, paddingBottom: 28, gap: 12 },
+  heroImage: { width: '100%', height: 200, borderRadius: 12, backgroundColor: '#E5E7EB' },
   title: { color: C.text, fontSize: 24, fontWeight: '800' },
   meta: { ...T.secondary },
   servingsCard: { backgroundColor: '#fff', borderRadius: 12, padding: 12, gap: 8 },
