@@ -11,6 +11,7 @@ import { useAuthStore } from '../store/authStore';
 import { useLanguageStore } from '../store/languageStore';
 import { useStockStore } from '../store/stockStore';
 import { useAppSettingsStore } from '../store/appSettingsStore';
+import { getThemeColors } from '../utils/theme';
 import { requestNotificationPermissions, registerPushToken, checkAndNotifyUrgentOnOpen } from '../utils/notificationService';
 import { API_ENV, API_URL, buildApiUrl } from '../utils/config';
 import { useNetworkSync } from '../utils/useNetworkSync';
@@ -58,6 +59,8 @@ export default function RootLayout() {
   const loadLanguage = useLanguageStore(state => state.loadLanguage);
   const items = useStockStore(state => state.items);
   const loadAppSettings = useAppSettingsStore(state => state.loadSettings);
+  const themeMode = useAppSettingsStore(state => state.themeMode);
+  const themeColors = useMemo(() => getThemeColors(themeMode), [themeMode]);
   const [appReady, setAppReady] = useState(false);
   const [animationDone, setAnimationDone] = useState(false);
   const [showAnimatedOverlay, setShowAnimatedOverlay] = useState(true);
@@ -73,10 +76,10 @@ export default function RootLayout() {
   useEffect(() => {
     if (Platform.OS === 'android') {
       NavigationBar.setVisibilityAsync('visible');
-      NavigationBar.setBackgroundColorAsync('#ffffff');
-      NavigationBar.setButtonStyleAsync('dark');
+      NavigationBar.setBackgroundColorAsync(themeColors.bg);
+      NavigationBar.setButtonStyleAsync(themeMode === 'dark' ? 'light' : 'dark');
     }
-  }, []);
+  }, [themeColors.bg, themeMode]);
 
   // Initialisation au démarrage + keepalive Render.com toutes les 4 min
   useEffect(() => {
@@ -186,8 +189,8 @@ export default function RootLayout() {
   return (
     <GestureHandlerRootView style={{ flex: 1 }}>
       <ErrorBoundary>
-        <View style={styles.container}>
-          <StatusBar style="dark" />
+        <View style={[styles.container, { backgroundColor: themeColors.bg }]}>
+          <StatusBar style={themeMode === 'dark' ? 'light' : 'dark'} />
           <Slot />
           <AnimatedSplashOverlay
             visible={showAnimatedOverlay}

@@ -146,6 +146,9 @@ const translations: Translations = {
 
   // Settings
   settingsTitle: { fr: 'Paramètres', en: 'Settings' },
+  themeSection: { fr: 'Thème', en: 'Theme' },
+  themeLight: { fr: 'Clair', en: 'Light' },
+  themeDark: { fr: 'Sombre', en: 'Dark' },
   languageSection: { fr: 'Langue', en: 'Language' },
   householdSize: { fr: 'Nombre de personnes du foyer', en: 'Household size' },
   peopleCount: { fr: '{count} personnes', en: '{count} people' },

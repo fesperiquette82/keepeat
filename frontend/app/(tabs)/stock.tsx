@@ -6,7 +6,8 @@ import Ionicons from '@expo/vector-icons/Ionicons';
 import { Swipeable } from 'react-native-gesture-handler';
 import { useStockStore } from '../../store/stockStore';
 import { ActionBanner } from '../../component/ActionBanner';
-import { C, T } from '../../utils/theme';
+import { getThemeColors, getThemeText } from '../../utils/theme';
+import { useAppSettingsStore } from '../../store/appSettingsStore';
 import { daysUntil, resolveStockItems } from '../../data/mockDashboardData';
 import { removeStockItems, undoRemovedStockItems } from '../../utils/stockRemoval';
 import { countLabelFr } from '../../utils/uiText';
@@ -53,6 +54,10 @@ export default function StockScreen() {
   const [processingIds, setProcessingIds] = useState<Record<string, boolean>>({});
   const [undoItems, setUndoItems] = useState<typeof storeItems>([]);
   const [banner, setBanner] = useState<{ message: string; canUndo: boolean; variant: 'success' | 'error' } | null>(null);
+  const themeMode = useAppSettingsStore((state) => state.themeMode);
+  const C = getThemeColors(themeMode);
+  const T = getThemeText(C);
+  const styles = useMemo(() => createStyles(C, T), [C, T]);
 
   useEffect(() => {
     fetchStock();
@@ -258,7 +263,7 @@ export default function StockScreen() {
   );
 }
 
-const styles = StyleSheet.create({
+const createStyles = (C: ReturnType<typeof getThemeColors>, T: ReturnType<typeof getThemeText>) => StyleSheet.create({
   container: { flex: 1, backgroundColor: C.bg },
   header: { paddingHorizontal: 16, paddingTop: 8, paddingBottom: 10 },
   title: { fontSize: 26, fontWeight: '800', color: C.text },

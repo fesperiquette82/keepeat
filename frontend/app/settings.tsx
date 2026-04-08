@@ -3,7 +3,7 @@ import { SafeAreaView } from 'react-native-safe-area-context';
 import { View, Text, StyleSheet, TouchableOpacity, Switch, ActivityIndicator, Alert } from 'react-native';
 import Ionicons from '@expo/vector-icons/Ionicons';
 import { useRouter } from 'expo-router';
-import { C, T } from '../utils/theme';
+import { getThemeColors, getThemeText } from '../utils/theme';
 import { useAppSettingsStore, type ReminderLeadDays } from '../store/appSettingsStore';
 import { useStockStore } from '../store/stockStore';
 import { useAuthStore } from '../store/authStore';
@@ -52,7 +52,12 @@ export default function SettingsScreen() {
     setProductRemindersEnabled,
     setReminderDaysBefore,
     forceRefreshReminderProducts,
+    themeMode,
+    setThemeMode,
   } = useAppSettingsStore();
+  const C = getThemeColors(themeMode);
+  const T = getThemeText(C);
+  const styles = useMemo(() => createStyles(C, T), [C, T]);
   const isRefreshingPriorityItems = useStockStore((state) => state.isRefreshingPriorityItems);
   const refreshInProgress = reminderRefreshLoading || isRefreshingPriorityItems;
   const token = useAuthStore((state) => state.token);
@@ -104,6 +109,19 @@ export default function SettingsScreen() {
             </TouchableOpacity>
             <TouchableOpacity style={[styles.chip, language === 'en' && styles.chipActive]} onPress={() => setLanguage('en')}>
               <Text style={[styles.chipText, language === 'en' && styles.chipTextActive]}>🇬🇧 {t('english')}</Text>
+            </TouchableOpacity>
+          </View>
+        </View>
+
+
+        <View style={styles.card}>
+          <Text style={styles.sectionTitle}>{t('themeSection')}</Text>
+          <View style={styles.rowWrap}>
+            <TouchableOpacity style={[styles.chip, themeMode === 'light' && styles.chipActive]} onPress={() => setThemeMode('light')}>
+              <Text style={[styles.chipText, themeMode === 'light' && styles.chipTextActive]}>{t('themeLight')}</Text>
+            </TouchableOpacity>
+            <TouchableOpacity style={[styles.chip, themeMode === 'dark' && styles.chipActive]} onPress={() => setThemeMode('dark')}>
+              <Text style={[styles.chipText, themeMode === 'dark' && styles.chipTextActive]}>{t('themeDark')}</Text>
             </TouchableOpacity>
           </View>
         </View>
@@ -230,7 +248,7 @@ export default function SettingsScreen() {
   );
 }
 
-const styles = StyleSheet.create({
+const createStyles = (C: ReturnType<typeof getThemeColors>, T: ReturnType<typeof getThemeText>) => StyleSheet.create({
   container: { flex: 1, backgroundColor: C.bg },
   header: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', paddingHorizontal: 16, paddingTop: 8, paddingBottom: 6 },
   backButton: { width: 34, height: 34, borderRadius: 17, backgroundColor: '#fff', alignItems: 'center', justifyContent: 'center' },

@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useMemo } from 'react';
 import {
   View,
   Text,
@@ -19,6 +19,8 @@ import { format, addDays, parseISO } from 'date-fns';
 import { fr, enUS } from 'date-fns/locale';
 import { useOcrDatePicker } from '../utils/useOcrDatePicker';
 import { DatePickerModal, CameraModal } from '../component/CameraDateModal';
+import { useAppSettingsStore } from '../store/appSettingsStore';
+import { getThemeColors } from '../utils/theme';
 
 type DateInputMode = 'duration' | 'date' | 'camera';
 
@@ -28,6 +30,9 @@ export default function EditProductScreen() {
   const { items, updateItem, fetchStock } = useStockStore();
   const { t, language } = useLanguageStore();
   const [permission, requestPermission] = useCameraPermissions();
+  const themeMode = useAppSettingsStore((state) => state.themeMode);
+  const C = getThemeColors(themeMode);
+  const styles = useMemo(() => createStyles(C, themeMode), [C, themeMode]);
 
   const [item, setItem] = useState<any>(null);
   const [name, setName] = useState('');
@@ -310,7 +315,7 @@ export default function EditProductScreen() {
   );
 }
 
-const styles = StyleSheet.create({
+const createStyles = (C: ReturnType<typeof getThemeColors>, themeMode: 'light' | 'dark') => StyleSheet.create({
   container: { flex: 1, backgroundColor: '#0a0a0a' },
   header: {
     flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between',

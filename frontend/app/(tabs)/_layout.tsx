@@ -5,6 +5,8 @@ import Ionicons from '@expo/vector-icons/Ionicons';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useLanguageStore } from '../../store/languageStore';
 import FloatingScanButton from '../../component/FloatingScanButton';
+import { useAppSettingsStore } from '../../store/appSettingsStore';
+import { getThemeColors } from '../../utils/theme';
 
 export default function TabsLayout() {
   const router = useRouter();
@@ -13,6 +15,8 @@ export default function TabsLayout() {
   const { language } = useLanguageStore();
   const insets = useSafeAreaInsets();
   const isFr = language === 'fr';
+  const themeMode = useAppSettingsStore((state) => state.themeMode);
+  const colors = getThemeColors(themeMode);
   const activeLeaf = segments[segments.length - 1];
   const hideFabRoutes = new Set(['/scan', '/add-product', '/settings']);
   const shouldHideFabForPath = hideFabRoutes.has(pathname);
@@ -23,11 +27,11 @@ export default function TabsLayout() {
       <Tabs
         screenOptions={{
           headerShown: false,
-          tabBarActiveTintColor: '#22c55e',
-          tabBarInactiveTintColor: '#9CA3AF',
+          tabBarActiveTintColor: colors.primary,
+          tabBarInactiveTintColor: colors.textLight,
           tabBarStyle: {
-            backgroundColor: '#ffffff',
-            borderTopColor: '#E5E7EB',
+            backgroundColor: colors.card,
+            borderTopColor: colors.border,
             borderTopWidth: 1,
             height: 62 + insets.bottom,
             paddingBottom: 8 + insets.bottom,

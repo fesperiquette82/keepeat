@@ -4,7 +4,8 @@ import { View, Text, StyleSheet, ScrollView, TouchableOpacity, Image } from 'rea
 import { useRouter } from 'expo-router';
 import Ionicons from '@expo/vector-icons/Ionicons';
 import { useStockStore } from '../../store/stockStore';
-import { C, shadowSm, T } from '../../utils/theme';
+import { getThemeColors, getThemeText, shadowSm } from '../../utils/theme';
+import { useAppSettingsStore } from '../../store/appSettingsStore';
 import { daysUntil, findExpiringSoon, resolveStockItems } from '../../data/mockDashboardData';
 import { countLabelFr } from '../../utils/uiText';
 import { storageZoneLabel, UI_LABELS } from '../../utils/uiLabels';
@@ -29,6 +30,10 @@ export default function HomeDashboardScreen() {
   }, [fetchStock]);
 
   const { items, isMock } = useMemo(() => resolveStockItems(storeItems), [storeItems]);
+  const themeMode = useAppSettingsStore((state) => state.themeMode);
+  const C = getThemeColors(themeMode);
+  const T = getThemeText(C);
+  const styles = useMemo(() => createStyles(C, T), [C, T]);
 
   const summary = useMemo(() => {
     const frigo = items.filter((item) => item.storageZone === 'frigo').length;
@@ -186,7 +191,7 @@ export default function HomeDashboardScreen() {
   );
 }
 
-const styles = StyleSheet.create({
+const createStyles = (C: ReturnType<typeof getThemeColors>, T: ReturnType<typeof getThemeText>) => StyleSheet.create({
   container: { flex: 1, backgroundColor: C.bg },
   scroll: { flex: 1 },
   content: { padding: 16, gap: 12, paddingBottom: 28 },
