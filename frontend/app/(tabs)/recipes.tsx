@@ -143,16 +143,16 @@ export default function RecipesScreen() {
       return ‘Chargement des suggestions...’;
     }
     if (activeStockCount === 0) {
-      return ‘Aucune recette disponible : ajoutez d’abord des ingrédients au stock.’;
+      return “Aucune recette disponible : ajoutez d’abord des ingrédients au stock.”;
     }
     if (suggestLaterByFilter[activeFilter]) {
-      return ‘Aucune recette disponible pour l’instant. Notre équipe travaille à en ajouter de nouvelles — revenez bientôt !’;
+      return “Aucune recette disponible pour l’instant. Notre équipe travaille à en ajouter de nouvelles — revenez bientôt !”;
     }
     if (!hasTargetItems) {
       return t(EMPTY_FILTER_LABEL_KEYS[activeFilter]);
     }
     if (activeFilter === ‘stock’) {
-      return ‘J’ai détecté des articles dans votre stock, mais je n’arrive pas à vous proposer de recette pour le moment.’;
+      return “J’ai détecté des articles dans votre stock, mais je n’arrive pas à vous proposer de recette pour le moment.”;
     }
     return `J’ai détecté des articles avec des dates de péremption cohérentes pour le filtre “${t(FILTER_LABEL_KEYS[activeFilter])}”, mais je n’arrive pas à vous proposer de recette pour le moment.`;
   }, [activeFilter, activeStockCount, hasTargetItems, isLoading, suggestLaterByFilter, t]);
