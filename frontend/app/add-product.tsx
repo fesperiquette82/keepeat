@@ -20,6 +20,8 @@ import { useStockStore } from '../store/stockStore';
 import { useLanguageStore } from '../store/languageStore';
 import { useOcrDatePicker } from '../utils/useOcrDatePicker';
 import { DatePickerModal, CameraModal } from '../component/CameraDateModal';
+import { useAppSettingsStore } from '../store/appSettingsStore';
+import { getThemeColors } from '../utils/theme';
 
 type DateInputMode = 'auto' | 'duration' | 'date' | 'camera';
 
@@ -55,6 +57,9 @@ export default function AddProductScreen() {
   const { addItem, lookupProduct } = useStockStore();
   const { t, language } = useLanguageStore();
   const [permission, requestPermission] = useCameraPermissions();
+  const themeMode = useAppSettingsStore((state) => state.themeMode);
+  const C = getThemeColors(themeMode);
+  const styles = useMemo(() => createStyles(C, themeMode), [C, themeMode]);
 
   // Form fields
   const [name, setName] = useState(paramToString(params.name));
@@ -494,7 +499,7 @@ export default function AddProductScreen() {
   );
 }
 
-const styles = StyleSheet.create({
+const createStyles = (C: ReturnType<typeof getThemeColors>, themeMode: 'light' | 'dark') => StyleSheet.create({
   container: { flex: 1, backgroundColor: '#0a0a0a' },
   header: {
     flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between',

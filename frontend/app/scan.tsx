@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useMemo, useState } from 'react';
 import {
   View,
   Text,
@@ -14,10 +14,15 @@ import { useRouter } from 'expo-router';
 import Ionicons from '@expo/vector-icons/Ionicons';
 import { useLanguageStore } from '../store/languageStore';
 import { getGalleryErrorMessage, pickImageFromGallery } from '../utils/galleryPicker';
+import { useAppSettingsStore } from '../store/appSettingsStore';
+import { getThemeColors } from '../utils/theme';
 
 export default function ScanScreen() {
   const router = useRouter();
   const { t } = useLanguageStore();
+  const themeMode = useAppSettingsStore((state) => state.themeMode);
+  const C = getThemeColors(themeMode);
+  const styles = useMemo(() => createStyles(C, themeMode), [C, themeMode]);
   const [permission, requestPermission] = useCameraPermissions();
   const [scanned, setScanned] = useState(false);
   const [manualBarcode, setManualBarcode] = useState('');
@@ -198,17 +203,17 @@ export default function ScanScreen() {
   );
 }
 
-const styles = StyleSheet.create({
-  container: { flex: 1, backgroundColor: '#000' },
+const createStyles = (C: ReturnType<typeof getThemeColors>, themeMode: 'light' | 'dark') => StyleSheet.create({
+  container: { flex: 1, backgroundColor: C.bg },
   header: {
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'space-between',
     paddingHorizontal: 16,
     paddingVertical: 12,
-    backgroundColor: '#F8FAFC',
+    backgroundColor: C.card,
     borderBottomWidth: 1,
-    borderBottomColor: '#E2E8F0',
+    borderBottomColor: C.border,
     shadowColor: '#000',
     shadowOffset: { width: 0, height: 1 },
     shadowOpacity: 0.08,
@@ -217,12 +222,12 @@ const styles = StyleSheet.create({
   },
   backButton: {
     padding: 8,
-    backgroundColor: '#111827',
+    backgroundColor: themeMode === 'dark' ? C.surfaceMuted : '#111827',
     borderRadius: 12,
     borderWidth: 1,
-    borderColor: '#374151',
+    borderColor: C.border,
   },
-  headerTitle: { fontSize: 19, fontWeight: '900', color: '#0F172A', letterSpacing: 0.2 },
+  headerTitle: { fontSize: 19, fontWeight: '900', color: C.text, letterSpacing: 0.2 },
 
   cameraContainer: { flex: 1, overflow: 'hidden' },
   camera: { flex: 1 },
@@ -254,9 +259,9 @@ const styles = StyleSheet.create({
     paddingTop: 14,
     paddingBottom: 18,
     alignItems: 'center',
-    backgroundColor: 'rgba(2,6,23,0.86)',
+    backgroundColor: themeMode === 'dark' ? 'rgba(2,6,23,0.86)' : C.card,
     borderTopWidth: 1,
-    borderTopColor: 'rgba(255,255,255,0.18)',
+    borderTopColor: C.border,
   },
   instructionsText: {
     color: '#F8FAFC',
@@ -304,7 +309,7 @@ const styles = StyleSheet.create({
     gap: 12,
     paddingHorizontal: 20,
     paddingVertical: 16,
-    backgroundColor: '#F8FAFC',
+    backgroundColor: C.card,
     borderTopWidth: 1,
     borderTopColor: '#E2E8F0',
     shadowColor: '#000',

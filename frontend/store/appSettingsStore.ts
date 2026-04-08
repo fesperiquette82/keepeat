@@ -3,6 +3,7 @@ import axios from 'axios';
 import { create } from 'zustand';
 import { logger } from '../utils/logger';
 import { APP_CONFIG } from '../utils/appConfig';
+import { resolveThemeMode, type ThemeMode } from '../utils/theme';
 import { buildApiUrl, getApiUrlDiagnostics } from '../utils/config';
 import { type Language, useLanguageStore } from './languageStore';
 import { useAuthStore } from './authStore';
@@ -17,6 +18,7 @@ interface PersistedSettings {
   productRemindersEnabled: boolean;
   reminderDaysBefore: ReminderLeadDays;
   lastReminderRefreshAt: string | null;
+  themeMode: ThemeMode;
 }
 
 interface AppSettingsStore extends PersistedSettings {
@@ -27,6 +29,7 @@ interface AppSettingsStore extends PersistedSettings {
   reminderRefreshSuccessAt: string | null;
   loadSettings: () => Promise<void>;
   setLanguage: (language: Language) => Promise<void>;
+  setThemeMode: (mode: ThemeMode) => Promise<void>;
   setHouseholdSize: (size: number) => Promise<void>;
   setProductRemindersEnabled: (enabled: boolean) => Promise<void>;
   setReminderDaysBefore: (days: ReminderLeadDays) => Promise<void>;
@@ -39,6 +42,7 @@ const DEFAULT_SETTINGS: PersistedSettings = {
   productRemindersEnabled: true,
   reminderDaysBefore: 2,
   lastReminderRefreshAt: null,
+  themeMode: 'light',
 };
 
 function clampHouseholdSize(value: number): number {
@@ -55,6 +59,7 @@ function readPersistedSettings(state: AppSettingsStore): PersistedSettings {
     productRemindersEnabled: state.productRemindersEnabled,
     reminderDaysBefore: state.reminderDaysBefore,
     lastReminderRefreshAt: state.lastReminderRefreshAt,
+    themeMode: state.themeMode,
   };
 }
 
@@ -121,6 +126,7 @@ export const useAppSettingsStore = create<AppSettingsStore>((set, get) => ({
           : typeof parsed.lastRemindersUpdate === 'string'
             ? parsed.lastRemindersUpdate
             : null,
+        themeMode: resolveThemeMode(parsed.themeMode),
         isLoaded: true,
       });
     } catch (error) {
@@ -132,6 +138,15 @@ export const useAppSettingsStore = create<AppSettingsStore>((set, get) => ({
   setLanguage: async (language: Language) => {
     await useLanguageStore.getState().setLanguage(language);
     set({ language: useLanguageStore.getState().language });
+  },
+
+  setThemeMode: async (themeMode: ThemeMode) => {
+    set({ themeMode });
+    try {
+      await persistSettings(readPersistedSettings(get()));
+    } catch (error) {
+      logger.warn('[SettingsStore] persist theme mode failed', { message: error instanceof Error ? error.message : String(error) });
+    }
   },
 
   setHouseholdSize: async (size: number) => {

@@ -1,5 +1,5 @@
 
-import React, { useCallback, useEffect, useState } from 'react';
+import React, { useCallback, useEffect, useMemo, useState } from 'react';
 import {
   View,
   Text,
@@ -14,7 +14,8 @@ import axios from 'axios';
 import { useAuthStore } from '../../store/authStore';
 import { useLanguageStore } from '../../store/languageStore';
 import { buildApiUrl } from '../../utils/config';
-import { C, shadowSm, T } from '../../utils/theme';
+import { getThemeColors, getThemeText, shadowSm } from '../../utils/theme';
+import { useAppSettingsStore } from '../../store/appSettingsStore';
 import { generateLastSixMonthLabels } from '../../utils/monthlyLabels';
 import { countLabelFr, formatEuroFr } from '../../utils/uiText';
 import { extractPremiumErrorDetail } from '../../utils/premiumErrors';
@@ -40,10 +41,10 @@ interface GamifData {
   next_level: string | null;
 }
 
-function scoreLabel(score: number, isFr: boolean): { text: string; icon: string; color: string } {
+function scoreLabel(score: number, isFr: boolean, warningColor: string): { text: string; icon: string; color: string } {
   if (score >= 80) return { text: isFr ? 'Excellent' : 'Excellent', icon: '🌱', color: '#16a34a' };
   if (score >= 60) return { text: isFr ? 'Bien'      : 'Good',      icon: '👍', color: '#65a30d' };
-  return              { text: isFr ? 'À améliorer' : 'Needs work', icon: '💪', color: C.orange };
+  return              { text: isFr ? 'À améliorer' : 'Needs work', icon: '💪', color: warningColor };
 }
 
 function formatMonth(month: string, lang: string): string {
@@ -57,6 +58,10 @@ export default function StatsScreen() {
   const { language } = useLanguageStore();
   const isFr = language === 'fr';
   const t = (fr: string, en: string) => isFr ? fr : en;
+  const themeMode = useAppSettingsStore((state) => state.themeMode);
+  const C = getThemeColors(themeMode);
+  const T = getThemeText(C);
+  const styles = useMemo(() => createStyles(C, T), [C, T]);
 
   const [data, setData]                 = useState<MonthlyStats[]>([]);
   const [gamif, setGamif]               = useState<GamifData | null>(null);
@@ -196,7 +201,7 @@ export default function StatsScreen() {
 
           {/* Score du mois courant */}
           {currentMonth && (() => {
-            const label = scoreLabel(currentMonth.score, isFr);
+            const label = scoreLabel(currentMonth.score, isFr, C.orange);
             const total = currentMonth.consumed + currentMonth.thrown;
             return (
               <View style={styles.scoreCard}>
@@ -327,7 +332,7 @@ export default function StatsScreen() {
   );
 }
 
-const styles = StyleSheet.create({
+const createStyles = (C: ReturnType<typeof getThemeColors>, T: ReturnType<typeof getThemeText>) => StyleSheet.create({
   container: { flex: 1, backgroundColor: '#F7F5F2' },
 
   // ── Header ──

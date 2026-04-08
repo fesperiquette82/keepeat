@@ -5,7 +5,8 @@ import Ionicons from '@expo/vector-icons/Ionicons';
 import { useRouter } from 'expo-router';
 import { useFocusEffect } from '@react-navigation/native';
 import { useStockStore } from '../../store/stockStore';
-import { C, T } from '../../utils/theme';
+import { getThemeColors, getThemeText } from '../../utils/theme';
+import { useAppSettingsStore } from '../../store/appSettingsStore';
 import { countLabelFr } from '../../utils/uiText';
 import { UI_LABELS } from '../../utils/uiLabels';
 import { useLanguageStore } from '../../store/languageStore';
@@ -51,6 +52,10 @@ export default function RecipesScreen() {
   const [activeFilter, setActiveFilter] = React.useState<RecipesFilter>('expiryDay');
   const [recipes, setRecipes] = React.useState<any[]>([]);
   const [isLoading, setIsLoading] = React.useState(false);
+  const themeMode = useAppSettingsStore((state) => state.themeMode);
+  const C = getThemeColors(themeMode);
+  const T = getThemeText(C);
+  const styles = useMemo(() => createStyles(C, T), [C, T]);
 
   useFocusEffect(
     React.useCallback(() => {
@@ -266,7 +271,7 @@ export default function RecipesScreen() {
   );
 }
 
-const styles = StyleSheet.create({
+const createStyles = (C: ReturnType<typeof getThemeColors>, T: ReturnType<typeof getThemeText>) => StyleSheet.create({
   container: { flex: 1, backgroundColor: C.bg },
   header: { paddingHorizontal: 16, paddingTop: 8, paddingBottom: 8 },
   title: { fontSize: 24, fontWeight: '800', color: C.text },
