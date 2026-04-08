@@ -8,7 +8,7 @@ import {
   getActiveItemsByScope,
   type DashboardStockItem,
 } from './mockDashboardData';
-import { buildTargetIngredientNames, filterRecipesByTargetIngredients } from '../utils/recipesScoping';
+import { buildRecipeScopeDiagnostics, buildTargetIngredientNames, filterRecipesByTargetIngredients } from '../utils/recipesScoping';
 
 const ACTIVE_STATUS = 'active' as const;
 
@@ -24,6 +24,10 @@ function buildItem(id: string, name: string, expiryDate: string): DashboardStock
     added_date: '2026-03-01T00:00:00.000Z',
     status: ACTIVE_STATUS,
   };
+}
+
+function buildBackendRecipe(id: string, ingredientNames: string[]) {
+  return { id, available_ingredients: ingredientNames };
 }
 
 test('le scope stock ne propose que des recettes avec au moins un ingrédient disponible et un plan anti-gaspi global unique', () => {
@@ -117,4 +121,89 @@ test('filtrage recettes: exclut les recettes fallback génériques même si les 
 
   const filtered = filterRecipesByTargetIngredients(recipes, new Set(['oeuf']));
   assert.deepEqual(filtered.map((recipe) => recipe.id), ['scoped']);
+});
+
+test('cohérence Accueil / Toutes: toute recette présente sur Accueil doit exister dans "Toutes"', (t) => {
+  t.mock.timers.enable({ apis: ['Date'], now: new Date('2026-04-10T12:00:00.000Z') });
+
+  const items: DashboardStockItem[] = [
+    buildItem('s1', 'Tomates concassées', '2026-05-01'),
+    buildItem('s2', 'Œufs', '2026-04-28'),
+    buildItem('s3', 'Pois chiches', '2026-04-29'),
+  ];
+  const homeRecipes = [
+    buildBackendRecipe('home-1', ['Tomates concassées', 'Œufs']),
+    buildBackendRecipe('home-2', ['Pois chiches']),
+  ];
+
+  const allTargetIngredientNames = buildTargetIngredientNames(getActiveItemsByScope(items, 'stock'));
+  const recipesInAllFilter = filterRecipesByTargetIngredients(homeRecipes, allTargetIngredientNames);
+  const allIds = new Set(recipesInAllFilter.map((recipe) => recipe.id));
+
+  assert.equal(allIds.has('home-1'), true);
+  assert.equal(allIds.has('home-2'), true);
+});
+
+test('cas observé utilisateur: +18j et +23j doivent nourrir "Ce mois" si des recettes Accueil existent', (t) => {
+  t.mock.timers.enable({ apis: ['Date'], now: new Date('2026-04-10T12:00:00.000Z') });
+
+  const items: DashboardStockItem[] = [
+    buildItem('i18', 'Tomates concassées', '2026-04-28'),
+    buildItem('i23', 'Œufs', '2026-05-03'),
+  ];
+  const homeRecipes = [buildBackendRecipe('home-shakshuka', ['Tomates concassées', 'Œufs'])];
+
+  const monthItems = getActiveItemsByScope(items, 'expiryMonth');
+  const monthTargetIngredientNames = buildTargetIngredientNames(monthItems);
+  const recipesInMonth = filterRecipesByTargetIngredients(homeRecipes, monthTargetIngredientNames);
+
+  assert.equal(monthItems.length, 2);
+  assert.equal(recipesInMonth.length, 1);
+  assert.equal(recipesInMonth[0].id, 'home-shakshuka');
+});
+
+test('régression pipeline: une recette Accueil qui matche un ingrédient cible "Ce mois" ne disparaît pas côté Recettes', (t) => {
+  t.mock.timers.enable({ apis: ['Date'], now: new Date('2026-04-10T12:00:00.000Z') });
+
+  const items: DashboardStockItem[] = [
+    buildItem('m18', 'Tomates concassées', '2026-04-28'),
+    buildItem('far', 'Farine', '2026-08-20'),
+  ];
+  const recipesFromSharedSource = [
+    buildBackendRecipe('home-visible', ['Tomates concassées']),
+    buildBackendRecipe('out-of-scope', ['Farine']),
+  ];
+
+  const targetIngredientNames = buildTargetIngredientNames(getActiveItemsByScope(items, 'expiryMonth'));
+  const scopedRecipes = filterRecipesByTargetIngredients(recipesFromSharedSource, targetIngredientNames);
+
+  assert.deepEqual(scopedRecipes.map((recipe) => recipe.id), ['home-visible']);
+});
+
+test('normalisation: une recette ne doit pas être rejetée à tort sur Œufs/oeuf', (t) => {
+  t.mock.timers.enable({ apis: ['Date'], now: new Date('2026-04-10T12:00:00.000Z') });
+  const items: DashboardStockItem[] = [buildItem('e1', 'Œufs', '2026-04-12')];
+  const targetIngredientNames = buildTargetIngredientNames(getActiveItemsByScope(items, 'expiryWeek'));
+  const recipes = [buildBackendRecipe('r-oeuf', ['oeuf'])];
+
+  const filtered = filterRecipesByTargetIngredients(recipes, targetIngredientNames);
+  assert.equal(filtered.length, 1);
+  assert.equal(filtered[0].id, 'r-oeuf');
+});
+
+test('diagnostic: distingue absence de compatibilité réelle vs bug de mapping des ingrédients disponibles', () => {
+  const targetIngredientNames = new Set(['oeuf']);
+  const withNoCompatibility = [buildBackendRecipe('r1', ['tomate'])];
+  const withMappingIssue = [{ id: 'r2', available_count: 2, available_ingredients: [] }];
+
+  const noCompatibilityDiagnostics = buildRecipeScopeDiagnostics(withNoCompatibility, targetIngredientNames);
+  const mappingDiagnostics = buildRecipeScopeDiagnostics(withMappingIssue, targetIngredientNames);
+
+  assert.equal(noCompatibilityDiagnostics.rawRecipesCount, 1);
+  assert.equal(noCompatibilityDiagnostics.recipesWithAvailableIngredientsCount, 1);
+  assert.equal(noCompatibilityDiagnostics.compatibleRecipesCount, 0);
+
+  assert.equal(mappingDiagnostics.rawRecipesCount, 1);
+  assert.equal(mappingDiagnostics.recipesWithAvailableIngredientsCount, 0);
+  assert.equal(mappingDiagnostics.compatibleRecipesCount, 0);
 });

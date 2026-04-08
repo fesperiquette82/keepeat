@@ -10,6 +10,7 @@ import { countLabelFr } from '../../utils/uiText';
 import { storageZoneLabel, UI_LABELS } from '../../utils/uiLabels';
 import { fetchRecipesSuggestions } from '../../utils/recipesApi';
 import { logger } from '../../utils/logger';
+import { isFallbackRecipe } from '../../utils/recipesScoping';
 
 function expiryText(days: number | null): string {
   if (days === null) return 'Date non renseignée';
@@ -64,11 +65,12 @@ export default function HomeDashboardScreen() {
         const payload = await fetchRecipesSuggestions('stock');
         if (cancelled) return;
         const backendRecipesOnHome = payload.recipes ?? [];
-        setRecipesOnHome(backendRecipesOnHome.slice(0, 2));
+        const homeRecipes = backendRecipesOnHome.filter((recipe) => !isFallbackRecipe(recipe));
+        setRecipesOnHome(homeRecipes.slice(0, 2));
         logger.debug('[RECIPES_MATCH] home suggestions diagnostics', {
-          recipesOnHomeCount: backendRecipesOnHome.length,
-          recipesOnHomeIds: backendRecipesOnHome.map((recipe) => recipe.id).slice(0, 10),
-          recipesOnHomeTitles: backendRecipesOnHome.map((recipe) => recipe.title).slice(0, 10),
+          homeRecipesCount: backendRecipesOnHome.length,
+          fallbackHomeRecipesCount: backendRecipesOnHome.length - homeRecipes.length,
+          homeRecipes: homeRecipes.map((recipe) => ({ id: recipe.id, title: recipe.title })).slice(0, 10),
         });
       } catch (error) {
         logger.warn('[RECIPES_MATCH] home suggestions failed', { error: String(error) });

@@ -18,9 +18,7 @@ export function filterRecipesByTargetIngredients(
 ): any[] {
   if (targetIngredientNames.size === 0) return [];
   return backendRecipes.filter((recipe) => {
-    const isGenericFallback = Boolean(
-      recipe?.is_fallback || (recipe?.debug && typeof recipe.debug === 'object' && (recipe.debug as any).is_fallback),
-    );
+    const isGenericFallback = isFallbackRecipe(recipe);
     if (isGenericFallback) return false;
 
     const recipeAvailableIngredients = getRecipeAvailableIngredients(recipe);
@@ -28,4 +26,33 @@ export function filterRecipesByTargetIngredients(
       targetIngredientNames.has(normalizeIngredientName(String(ingredient ?? ''))),
     );
   });
+}
+
+export function isFallbackRecipe(recipe: any): boolean {
+  return Boolean(
+    recipe?.is_fallback || (recipe?.debug && typeof recipe.debug === 'object' && (recipe.debug as any).is_fallback),
+  );
+}
+
+export interface RecipeScopeDiagnostics {
+  rawRecipesCount: number;
+  fallbackRecipesCount: number;
+  recipesWithAvailableIngredientsCount: number;
+  compatibleRecipesCount: number;
+}
+
+export function buildRecipeScopeDiagnostics(
+  backendRecipes: any[],
+  targetIngredientNames: Set<string>,
+): RecipeScopeDiagnostics {
+  const rawRecipesCount = backendRecipes.length;
+  const fallbackRecipesCount = backendRecipes.filter((recipe) => isFallbackRecipe(recipe)).length;
+  const recipesWithAvailableIngredientsCount = backendRecipes.filter((recipe) => getRecipeAvailableIngredients(recipe).length > 0).length;
+  const compatibleRecipesCount = filterRecipesByTargetIngredients(backendRecipes, targetIngredientNames).length;
+  return {
+    rawRecipesCount,
+    fallbackRecipesCount,
+    recipesWithAvailableIngredientsCount,
+    compatibleRecipesCount,
+  };
 }

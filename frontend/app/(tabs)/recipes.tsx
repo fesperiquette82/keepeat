@@ -13,7 +13,14 @@ import { RecipesFilter } from '../../store/recipesStore';
 import { logger } from '../../utils/logger';
 import { fetchRecipesSuggestions } from '../../utils/recipesApi';
 import { getActiveItemsByScope, resolveStockItems } from '../../data/mockDashboardData';
-import { buildTargetIngredientNames, filterRecipesByTargetIngredients, getRecipeAvailableIngredients } from '../../utils/recipesScoping';
+import {
+  buildRecipeScopeDiagnostics,
+  buildTargetIngredientNames,
+  filterRecipesByTargetIngredients,
+  getRecipeAvailableIngredients,
+  type RecipeScopeDiagnostics,
+} from '../../utils/recipesScoping';
+import { buildRecipesEmptyMessage } from '../../utils/recipesEmptyState';
 
 const TYPE_LABEL: Record<string, string> = {
   apero: 'Apéro',
@@ -34,13 +41,6 @@ const FILTER_LABEL_KEYS: Record<RecipesFilter, string> = {
   stock: 'recipesFilterAll',
 };
 
-const EMPTY_FILTER_LABEL_KEYS: Record<RecipesFilter, string> = {
-  stock: 'recipesEmptyAll',
-  expiryDay: 'recipesEmptyExpiryDay',
-  expiryWeek: 'recipesEmptyExpiryWeek',
-  expiryMonth: 'recipesEmptyExpiryMonth',
-};
-
 export default function RecipesScreen() {
   const router = useRouter();
   const { t } = useLanguageStore();
@@ -49,6 +49,12 @@ export default function RecipesScreen() {
   const [activeFilter, setActiveFilter] = React.useState<RecipesFilter>('expiryDay');
   const [recipes, setRecipes] = React.useState<any[]>([]);
   const [isLoading, setIsLoading] = React.useState(false);
+  const [recipesDiagnostics, setRecipesDiagnostics] = React.useState<RecipeScopeDiagnostics>({
+    rawRecipesCount: 0,
+    fallbackRecipesCount: 0,
+    recipesWithAvailableIngredientsCount: 0,
+    compatibleRecipesCount: 0,
+  });
 
   useFocusEffect(
     React.useCallback(() => {
@@ -90,27 +96,38 @@ export default function RecipesScreen() {
     const load = async () => {
       setIsLoading(true);
       try {
-        const payload = await fetchRecipesSuggestions(activeFilter);
+        const payload = await fetchRecipesSuggestions('stock');
         if (cancelled) return;
-        const backendRecipesOnRecipesScreen = payload.recipes ?? [];
-        const scopedRecipesOnRecipesScreen = filterRecipesByTargetIngredients(backendRecipesOnRecipesScreen, targetIngredientNames);
+        const recipesScreenRawRecipes = payload.recipes ?? [];
+        const recipesScreenScopedRecipes = filterRecipesByTargetIngredients(recipesScreenRawRecipes, targetIngredientNames);
+        const diagnostics = buildRecipeScopeDiagnostics(recipesScreenRawRecipes, targetIngredientNames);
         logger.debug('[RECIPES_MATCH] suggestions payload diagnostics', {
           activeFilter,
-          storeItemsCount: storeItems.length,
-          normalizedItemsCount: items.length,
-          activeItemsCount: activeItems.length,
-          targetItemsCount: targetItems.length,
+          storeItems: storeItems.map((item) => ({ id: item.id, name: item.name, expiry_date: item.expiry_date })).slice(0, 30),
           targetItems: targetItems.map((item) => ({ id: item.id, name: item.name, expiry_date: item.expiry_date })).slice(0, 20),
           targetIngredientNames: Array.from(targetIngredientNames).slice(0, 30),
-          backendRecipesOnRecipesScreenCount: backendRecipesOnRecipesScreen.length,
-          backendRecipesOnRecipesScreenIds: backendRecipesOnRecipesScreen.map((recipe) => recipe.id).slice(0, 10),
-          scopedRecipesOnRecipesScreenCount: scopedRecipesOnRecipesScreen.length,
-          scopedRecipesOnRecipesScreenIds: scopedRecipesOnRecipesScreen.map((recipe) => recipe.id).slice(0, 10),
+          recipesScreenRawRecipesCount: recipesScreenRawRecipes.length,
+          recipesScreenRawRecipesIds: recipesScreenRawRecipes.map((recipe) => recipe.id).slice(0, 10),
+          recipesScreenScopedRecipesCount: recipesScreenScopedRecipes.length,
+          recipesScreenScopedRecipesIds: recipesScreenScopedRecipes.map((recipe) => recipe.id).slice(0, 10),
+          fallbackRecipesCount: diagnostics.fallbackRecipesCount,
+          recipesWithAvailableIngredientsCount: diagnostics.recipesWithAvailableIngredientsCount,
+          activeItemsCount: activeItems.length,
+          normalizedItemsCount: items.length,
         });
-        setRecipes(backendRecipesOnRecipesScreen);
+        setRecipes(recipesScreenScopedRecipes);
+        setRecipesDiagnostics(diagnostics);
       } catch (error) {
         logger.warn('[RECIPES_MATCH] fetch suggestions failed', { error: String(error), activeFilter });
-        if (!cancelled) setRecipes([]);
+        if (!cancelled) {
+          setRecipes([]);
+          setRecipesDiagnostics({
+            rawRecipesCount: 0,
+            fallbackRecipesCount: 0,
+            recipesWithAvailableIngredientsCount: 0,
+            compatibleRecipesCount: 0,
+          });
+        }
       } finally {
         if (!cancelled) setIsLoading(false);
       }
@@ -119,7 +136,7 @@ export default function RecipesScreen() {
     return () => {
       cancelled = true;
     };
-  }, [activeFilter, activeItems.length, activeStockCount, items.length, storeItems.length, targetIngredientNames, targetItems]);
+  }, [activeFilter, activeItems.length, activeStockCount, items.length, storeItems, targetIngredientNames, targetItems]);
 
   const filters = useMemo(
     () =>
@@ -131,20 +148,15 @@ export default function RecipesScreen() {
   );
 
   const emptyMessage = useMemo(() => {
-    if (isLoading) {
-      return 'Chargement des suggestions...';
-    }
-    if (activeStockCount === 0) {
-      return 'Aucune recette disponible : ajoutez d’abord des ingrédients au stock.';
-    }
-    if (!hasTargetItems) {
-      return t(EMPTY_FILTER_LABEL_KEYS[activeFilter]);
-    }
-    if (activeFilter === 'stock') {
-      return 'J’ai détecté des articles dans votre stock, mais je n’arrive pas à vous proposer de recette pour le moment.';
-    }
-    return `J’ai détecté des articles avec des dates de péremption cohérentes pour le filtre “${t(FILTER_LABEL_KEYS[activeFilter])}”, mais je n’arrive pas à vous proposer de recette pour le moment.`;
-  }, [activeFilter, activeStockCount, hasTargetItems, isLoading, t]);
+    return buildRecipesEmptyMessage({
+      activeFilter,
+      activeStockCount,
+      hasTargetItems,
+      isLoading,
+      diagnostics: recipesDiagnostics,
+      translate: t,
+    });
+  }, [activeFilter, activeStockCount, hasTargetItems, isLoading, recipesDiagnostics, t]);
 
   return (
     <SafeAreaView style={styles.container}>
