@@ -12,6 +12,7 @@ import { C, T } from '../../utils/theme';
 import { matchRecipeIngredientsToStock } from '../../utils/ingredientMatching';
 import { removeStockItems, undoRemovedStockItems } from '../../utils/stockRemoval';
 import { logger } from '../../utils/logger';
+import { buildRecipeIngredientDisplayRows } from '../../utils/recipeIngredientDisplay';
 
 interface RecipeIngredient {
   name: string;
@@ -35,14 +36,6 @@ function scaleIngredients(ingredients: RecipeIngredient[], factor: number): Reci
     ...ingredient,
     quantity: ingredient.quantity * factor,
   }));
-}
-
-function normalizeName(value: string): string {
-  return value
-    .normalize('NFD')
-    .replace(/[\u0300-\u036f]/g, '')
-    .toLowerCase()
-    .trim();
 }
 
 function toIngredientList(recipe: BackendRecipeSuggestion | null): RecipeIngredient[] {
@@ -86,6 +79,7 @@ export default function RecipeDetailScreen() {
   const [isValidating, setIsValidating] = useState(false);
   const [undoItems, setUndoItems] = useState<typeof storeItems>([]);
   const [banner, setBanner] = useState<{ message: string; canUndo: boolean; variant: 'success' | 'error' } | null>(null);
+  const [imageErrors, setImageErrors] = useState<Record<string, boolean>>({});
 
   useFocusEffect(
     React.useCallback(() => {
@@ -105,26 +99,13 @@ export default function RecipeDetailScreen() {
   const recipeIngredients = useMemo(() => toIngredientList(baseRecipe), [baseRecipe]);
   const factor = useMemo(() => servings / Math.max(1, householdSize), [householdSize, servings]);
   const scaledIngredients = useMemo(() => scaleIngredients(recipeIngredients, factor), [factor, recipeIngredients]);
-
-  const availableNames = useMemo(() => {
-    const stockNames = items.map((item) => normalizeName(item.name));
-    const names: string[] = [];
-    for (const ingredient of scaledIngredients) {
-      const ingredientName = normalizeName(ingredient.name);
-      const matched = stockNames.some((stockName) => stockName.includes(ingredientName) || ingredientName.includes(stockName));
-      if (matched) names.push(ingredient.name);
-    }
-    return names;
-  }, [items, scaledIngredients]);
+  const ingredientRows = useMemo(() => buildRecipeIngredientDisplayRows(items, scaledIngredients), [items, scaledIngredients]);
 
   const ingredientAvailability = useMemo(() => {
-    const availableSet = new Set(availableNames.map((value) => normalizeName(value)));
-    const matchedCount = scaledIngredients.filter((ingredient) => availableSet.has(normalizeName(ingredient.name))).length;
-    const missingCount = Math.max(0, scaledIngredients.length - matchedCount);
+    const matchedCount = ingredientRows.filter((row) => row.isAvailable).length;
+    const missingCount = Math.max(0, ingredientRows.length - matchedCount);
     return { matchedCount, missingCount };
-  }, [availableNames, scaledIngredients]);
-
-  const availableSet = useMemo(() => new Set(availableNames.map((value) => normalizeName(value))), [availableNames]);
+  }, [ingredientRows]);
   const recipeSteps = useMemo(() => resolveSteps(baseRecipe), [baseRecipe]);
   const totalTime = useMemo(() => {
     if (!baseRecipe) return 15;
@@ -293,11 +274,24 @@ export default function RecipeDetailScreen() {
 
         <View style={styles.card}>
           <Text style={styles.sectionTitle}>Ingrédients</Text>
-          {scaledIngredients.map((ingredient) => {
-            const isAvailable = availableSet.has(normalizeName(ingredient.name));
+          {ingredientRows.map((row, index) => {
+            const { ingredient, isAvailable } = row;
             const formattedQuantity = formatQuantity(ingredient.quantity);
+            const rowKey = `${ingredient.name}-${index}`;
+            const hasImage = !!row.imageUrl && !imageErrors[rowKey];
             return (
-              <View key={ingredient.name} style={styles.ingredientRow}>
+              <View key={rowKey} style={styles.ingredientRow}>
+                <View style={styles.ingredientThumb}>
+                  {hasImage ? (
+                    <Image
+                      source={{ uri: row.imageUrl ?? undefined }}
+                      style={styles.ingredientThumbImage}
+                      onError={() => setImageErrors((prev) => ({ ...prev, [rowKey]: true }))}
+                    />
+                  ) : (
+                    <Ionicons name="nutrition-outline" size={16} color={C.textMid} />
+                  )}
+                </View>
                 <View style={styles.ingredientTextWrap}>
                   <Text style={styles.ingredientName}>{ingredient.name}</Text>
                   <Text style={styles.ingredientQuantity}>
@@ -359,6 +353,8 @@ const styles = StyleSheet.create({
   card: { backgroundColor: '#fff', borderRadius: 12, padding: 12, gap: 10 },
   sectionTitle: { color: C.text, fontSize: 17, fontWeight: '700' },
   ingredientRow: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', gap: 8 },
+  ingredientThumb: { width: 34, height: 34, borderRadius: 8, backgroundColor: '#F3F4F6', overflow: 'hidden', alignItems: 'center', justifyContent: 'center' },
+  ingredientThumbImage: { width: '100%', height: '100%' },
   ingredientTextWrap: { flex: 1 },
   ingredientName: { color: C.text, fontSize: 14, fontWeight: '600' },
   ingredientQuantity: { color: C.textMid, fontSize: 13, fontWeight: '500' },

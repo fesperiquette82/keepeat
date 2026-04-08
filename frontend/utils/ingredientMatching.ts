@@ -281,28 +281,43 @@ function itemRank(item: StockItem): [number, number, string] {
   return [expiry, added, item.id];
 }
 
-export function matchRecipeIngredientsToStock(
+interface IngredientStockCandidate {
+  item: StockItem;
+  evaluation: IngredientMatchEvaluation;
+}
+
+export interface RecipeIngredientStockMatch {
+  ingredientName: string;
+  stockItem: StockItem | null;
+}
+
+function sortCandidates(a: IngredientStockCandidate, b: IngredientStockCandidate): number {
+  if (b.evaluation.score !== a.evaluation.score) return b.evaluation.score - a.evaluation.score;
+  const rankA = itemRank(a.item);
+  const rankB = itemRank(b.item);
+  if (rankA[0] !== rankB[0]) return rankA[0] - rankB[0];
+  if (rankA[1] !== rankB[1]) return rankA[1] - rankB[1];
+  return rankA[2].localeCompare(rankB[2]);
+}
+
+function findIngredientCandidates(remaining: StockItem[], ingredientName: string): IngredientStockCandidate[] {
+  return remaining
+    .filter((item) => item.status === 'active')
+    .map((item) => ({ item, evaluation: evaluateIngredientStockMatch(item.name, ingredientName) }))
+    .filter(({ evaluation }) => evaluation.isMatch)
+    .sort(sortCandidates);
+}
+
+export function mapRecipeIngredientsToStock(
   stockItems: StockItem[],
   ingredientNames: string[],
-): { matchedIds: string[]; unmatchedIngredients: string[] } {
+): { matches: RecipeIngredientStockMatch[]; unmatchedIngredients: string[] } {
   const remaining = [...stockItems];
-  const matchedIds: string[] = [];
+  const matches: RecipeIngredientStockMatch[] = [];
   const unmatchedIngredients: string[] = [];
 
   for (const ingredientName of ingredientNames) {
-    const candidates = remaining
-      .filter((item) => item.status === 'active')
-      .map((item) => ({ item, evaluation: evaluateIngredientStockMatch(item.name, ingredientName) }))
-      .filter(({ evaluation }) => evaluation.isMatch)
-      .sort((a, b) => {
-        if (b.evaluation.score !== a.evaluation.score) return b.evaluation.score - a.evaluation.score;
-        const rankA = itemRank(a.item);
-        const rankB = itemRank(b.item);
-        if (rankA[0] !== rankB[0]) return rankA[0] - rankB[0];
-        if (rankA[1] !== rankB[1]) return rankA[1] - rankB[1];
-        return rankA[2].localeCompare(rankB[2]);
-      });
-
+    const candidates = findIngredientCandidates(remaining, ingredientName);
     const picked = candidates[0];
     logger.debug('[RECIPES_MATCH] stock match decision', {
       ingredientRaw: ingredientName,
@@ -320,15 +335,27 @@ export function matchRecipeIngredientsToStock(
     });
 
     if (!picked) {
+      matches.push({ ingredientName, stockItem: null });
       unmatchedIngredients.push(ingredientName);
       continue;
     }
 
-    matchedIds.push(picked.item.id);
+    matches.push({ ingredientName, stockItem: picked.item });
     const idx = remaining.findIndex((item) => item.id === picked.item.id);
     if (idx >= 0) remaining.splice(idx, 1);
   }
 
+  return { matches, unmatchedIngredients };
+}
+
+export function matchRecipeIngredientsToStock(
+  stockItems: StockItem[],
+  ingredientNames: string[],
+): { matchedIds: string[]; unmatchedIngredients: string[] } {
+  const { matches, unmatchedIngredients } = mapRecipeIngredientsToStock(stockItems, ingredientNames);
+  const matchedIds = matches
+    .map((match) => match.stockItem?.id)
+    .filter((id): id is string => typeof id === 'string' && id.length > 0);
   return { matchedIds, unmatchedIngredients };
 }
 
