@@ -63,7 +63,7 @@ export default function HomeDashboardScreen() {
         const payload = await fetchRecipesSuggestions('expiryDay');
         if (cancelled) return;
         const backendRecipesOnHome = payload.recipes ?? [];
-        setRecipesOnHome(backendRecipesOnHome.slice(0, 2));
+        setRecipesOnHome(backendRecipesOnHome.slice(0, 4));
         logger.debug('[RECIPES_MATCH] home suggestions diagnostics', {
           recipesOnHomeCount: backendRecipesOnHome.length,
           recipesOnHomeIds: backendRecipesOnHome.map((recipe) => recipe.id).slice(0, 10),
@@ -114,7 +114,7 @@ export default function HomeDashboardScreen() {
         <View style={styles.sectionCard}>
           <View style={styles.sectionHeader}>
             <View style={styles.sectionTitleRow}>
-              <Text style={styles.sectionTitle}>Vos produits à consommer prochainement</Text>
+              <Text style={styles.sectionTitle}>Aperçu du stock :</Text>
               {expiringSoon.length > 0 && (
                 <View style={[styles.sectionDot, { backgroundColor: expiryColor(daysUntil(expiringSoon[0].expiry_date)) }]} />
               )}
@@ -144,10 +144,7 @@ export default function HomeDashboardScreen() {
                       <Text style={styles.rowMeta}>{storageZoneLabel(item.storageZone)} · {item.quantity ?? UI_LABELS.fr.unknownQuantity}</Text>
                     </View>
                   </View>
-                  <View style={styles.expiryBadge}>
-                    <View style={[styles.urgencyDot, { backgroundColor: urgColor }]} />
-                    <Text style={[styles.rowExpiry, { color: urgColor }]}>{expiryText(days)}</Text>
-                  </View>
+                  <Text style={[styles.rowExpiry, { color: urgColor }]}>{expiryText(days)}</Text>
                 </View>
               );
             })
@@ -233,8 +230,6 @@ const createStyles = (C: ReturnType<typeof getThemeColors>, T: ReturnType<typeof
   squareThumbImage: { width: '100%', height: '100%' },
   rowTitle: { fontSize: 15, color: C.text, fontWeight: '600' },
   rowMeta: { ...T.secondarySmall, marginTop: 2 },
-  expiryBadge: { flexDirection: 'row', alignItems: 'center', gap: 5 },
-  urgencyDot: { width: 8, height: 8, borderRadius: 4 },
   rowExpiry: { fontSize: 12, fontWeight: '700' },
   recipeRow: { paddingVertical: 5 },
   recipeMeta: { ...T.secondarySmall, marginTop: 2 },

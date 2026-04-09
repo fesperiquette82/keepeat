@@ -67,6 +67,12 @@ export default function StockScreen() {
 
   const { items, isMock } = useMemo(() => resolveStockItems(storeItems, { useMockFallback: false }), [storeItems]);
 
+  const mostUrgentDays = useMemo(() => {
+    const allDays = items.map((item) => daysUntil(item.expiry_date)).filter((d): d is number => d !== null);
+    if (allDays.length === 0) return null;
+    return Math.min(...allDays);
+  }, [items]);
+
   const filteredItems = useMemo(() => {
     if (activeFilter === 'urgents') {
       return items.filter((item) => {
@@ -165,7 +171,12 @@ export default function StockScreen() {
   return (
     <SafeAreaView style={styles.container}>
       <View style={styles.header}>
-        <Text style={styles.title}>Stock complet</Text>
+        <View style={styles.titleRow}>
+          <Text style={styles.title}>Stock complet</Text>
+          {mostUrgentDays !== null && (
+            <View style={[styles.titleDot, { backgroundColor: expiryColor(mostUrgentDays) }]} />
+          )}
+        </View>
         <Text style={styles.subtitle}>{countLabelFr(displayedItems.length, 'ingrédient')} affiché{displayedItems.length > 1 ? 's' : ''}</Text>
         <Text style={styles.swipeHint}>Glisser à droite = utilisé · à gauche = jeté</Text>
         {isMock && <Text style={styles.mockInfo}>Données de démonstration</Text>}
@@ -295,6 +306,8 @@ export default function StockScreen() {
 const createStyles = (C: ReturnType<typeof getThemeColors>, T: ReturnType<typeof getThemeText>) => StyleSheet.create({
   container: { flex: 1, backgroundColor: 'transparent' },
   header: { paddingHorizontal: 16, paddingTop: 8, paddingBottom: 10 },
+  titleRow: { flexDirection: 'row', alignItems: 'center', gap: 8 },
+  titleDot: { width: 10, height: 10, borderRadius: 5 },
   title: { fontSize: 26, fontWeight: '800', color: C.text },
   subtitle: { marginTop: 4, ...T.secondary },
   swipeHint: { marginTop: 4, color: C.textLight, fontSize: 12, fontWeight: '600' },

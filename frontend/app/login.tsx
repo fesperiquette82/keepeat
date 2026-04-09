@@ -98,7 +98,7 @@ export default function LoginScreen() {
       style={styles.bgImage}
       resizeMode="cover"
     >
-    <SafeAreaView style={styles.container}>
+    <SafeAreaView style={styles.container} edges={['bottom']}>
       <KeyboardAvoidingView
         style={styles.flex}
         behavior={Platform.OS === 'ios' ? 'padding' : undefined}
@@ -236,7 +236,7 @@ const styles = StyleSheet.create({
   bgImage: { flex: 1 },
   container: { flex: 1, backgroundColor: 'transparent' },
   flex: { flex: 1 },
-  scroll: { flexGrow: 1, justifyContent: 'flex-end', padding: 24, paddingTop: 0 },
+  scroll: { flexGrow: 1, justifyContent: 'flex-end', paddingHorizontal: 24, paddingBottom: 24, paddingTop: 280 },
 
   form: {
     backgroundColor: '#FFFFFF',

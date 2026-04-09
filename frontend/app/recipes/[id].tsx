@@ -279,8 +279,9 @@ export default function RecipeDetailScreen() {
             const formattedQuantity = formatQuantity(ingredient.quantity);
             const rowKey = `${ingredient.name}-${index}`;
             const hasImage = !!row.imageUrl && !imageErrors[rowKey];
-            return (
-              <View key={rowKey} style={styles.ingredientRow}>
+            const canNavigate = !!row.matchedStockItemId;
+            const rowContent = (
+              <>
                 <View style={styles.ingredientThumb}>
                   {hasImage ? (
                     <Image
@@ -303,6 +304,23 @@ export default function RecipeDetailScreen() {
                 <Text style={[styles.stockBadge, isAvailable ? styles.badgeOk : styles.badgeMissing]}>
                   {isAvailable ? 'Disponible' : 'Manquant'}
                 </Text>
+              </>
+            );
+            if (canNavigate) {
+              return (
+                <TouchableOpacity
+                  key={rowKey}
+                  style={styles.ingredientRow}
+                  activeOpacity={0.7}
+                  onPress={() => router.push({ pathname: '/edit-product', params: { id: row.matchedStockItemId! } })}
+                >
+                  {rowContent}
+                </TouchableOpacity>
+              );
+            }
+            return (
+              <View key={rowKey} style={styles.ingredientRow}>
+                {rowContent}
               </View>
             );
           })}
