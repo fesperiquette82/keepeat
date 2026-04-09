@@ -102,7 +102,7 @@ export default function RecipesScreen() {
     const load = async () => {
       setIsLoading(true);
       try {
-        const payload = await fetchRecipesSuggestions('stock');
+        const payload = await fetchRecipesSuggestions(activeFilter);
         if (cancelled) return;
         const rawRecipes = Array.isArray(payload?.recipes) ? payload.recipes : [];
         const scopedRecipesBeforeDedupe = filterRecipesByTargetIngredients(rawRecipes, targetIngredientNames);

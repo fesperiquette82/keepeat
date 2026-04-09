@@ -53,6 +53,7 @@ export default function HomeDashboardScreen() {
         timeMinutes: recipe.duration_min ?? recipe.timeMinutes ?? 0,
         matchedCount: recipe.available_count ?? recipe.availableCount ?? 0,
         missingCount: recipe.missing_count ?? recipe.missingCount ?? 0,
+        imageUrl: recipe.image || recipe.imageUrl || '',
       })),
     [recipesOnHome],
   );
@@ -66,7 +67,7 @@ export default function HomeDashboardScreen() {
     let cancelled = false;
     const loadHomeRecipes = async () => {
       try {
-        const payload = await fetchRecipesSuggestions('stock');
+        const payload = await fetchRecipesSuggestions('expiryDay');
         if (cancelled) return;
         const backendRecipesOnHome = payload.recipes ?? [];
         setRecipesOnHome(backendRecipesOnHome.slice(0, 2));
@@ -159,11 +160,16 @@ export default function HomeDashboardScreen() {
             <Text style={styles.emptyText}>Aucune recette disponible avec votre stock.</Text>
           ) : (
             recipes.map((recipe) => (
-              <View key={recipe.id} style={styles.recipeRow}>
+              <TouchableOpacity
+                key={recipe.id}
+                style={styles.recipeRow}
+                activeOpacity={0.85}
+                onPress={() => router.push({ pathname: '/recipes/[id]', params: { id: recipe.id } })}
+              >
                 <View style={styles.rowMain}>
                   <View style={styles.squareThumb}>
-                    {recipe.image_url ? (
-                      <Image source={{ uri: recipe.image_url }} style={styles.squareThumbImage} />
+                    {recipe.imageUrl ? (
+                      <Image source={{ uri: recipe.imageUrl }} style={styles.squareThumbImage} />
                     ) : (
                       <Ionicons name="restaurant-outline" size={16} color={C.textMid} />
                     )}
@@ -177,7 +183,7 @@ export default function HomeDashboardScreen() {
                     </Text>
                   </View>
                 </View>
-              </View>
+              </TouchableOpacity>
             ))
           )}
         </View>

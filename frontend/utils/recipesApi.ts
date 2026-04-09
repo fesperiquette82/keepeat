@@ -12,6 +12,7 @@ export interface BackendRecipeSuggestion {
   id: string;
   title: string;
   description?: string;
+  image?: string;
   duration_min?: number;
   dish_type?: string;
   available_count: number;
