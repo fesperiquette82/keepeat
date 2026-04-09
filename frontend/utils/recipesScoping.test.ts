@@ -79,6 +79,35 @@ test('déduplication: une recette dupliquée n apparait qu une fois dans une mê
   assert.deepEqual(deduped.map((recipe) => recipe.id), ['same', 'other']);
 });
 
+test('déduplication: même recette backend avec ids différents est fusionnée via signature sémantique', () => {
+  const recipes = [
+    {
+      id: 'variant-a',
+      title: 'Spirales crème pistache et olivade',
+      duration_min: 20,
+      dish_type: 'rapide',
+      available_ingredients: ['pistache'],
+    },
+    {
+      id: 'variant-b',
+      title: 'Spirales crème pistache et olivade',
+      duration_min: 20,
+      dish_type: 'rapide',
+      available_ingredients: ['Pistaches'],
+    },
+    {
+      id: 'other',
+      title: 'Salade fraîche',
+      duration_min: 10,
+      dish_type: 'salade',
+      available_ingredients: ['oeuf'],
+    },
+  ];
+
+  const deduped = scopeAndDedupeRecipes(recipes, new Set(['pistache', 'oeuf']));
+  assert.deepEqual(deduped.map((recipe) => recipe.id), ['variant-a', 'other']);
+});
+
 test('cohérence anti-gaspi / liste principale: top suggestions restent un sous-ensemble de la liste filtrée', () => {
   const recipes = [
     { id: 'r1', available_ingredients: ['oeuf'] },
