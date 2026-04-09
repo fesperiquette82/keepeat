@@ -198,7 +198,7 @@ export default function HomeDashboardScreen() {
 }
 
 const createStyles = (C: ReturnType<typeof getThemeColors>, T: ReturnType<typeof getThemeText>) => StyleSheet.create({
-  container: { flex: 1, backgroundColor: C.bg },
+  container: { flex: 1, backgroundColor: 'transparent' },
   scroll: { flex: 1 },
   content: { padding: 16, gap: 12, paddingBottom: 28 },
   headerRow: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center' },

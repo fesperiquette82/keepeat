@@ -333,7 +333,7 @@ export default function StatsScreen() {
 }
 
 const createStyles = (C: ReturnType<typeof getThemeColors>, T: ReturnType<typeof getThemeText>) => StyleSheet.create({
-  container: { flex: 1, backgroundColor: '#F7F5F2' },
+  container: { flex: 1, backgroundColor: 'transparent' },
 
   // ── Header ──
   header: {

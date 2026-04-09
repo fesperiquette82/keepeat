@@ -264,7 +264,7 @@ export default function StockScreen() {
 }
 
 const createStyles = (C: ReturnType<typeof getThemeColors>, T: ReturnType<typeof getThemeText>) => StyleSheet.create({
-  container: { flex: 1, backgroundColor: C.bg },
+  container: { flex: 1, backgroundColor: 'transparent' },
   header: { paddingHorizontal: 16, paddingTop: 8, paddingBottom: 10 },
   title: { fontSize: 26, fontWeight: '800', color: C.text },
   subtitle: { marginTop: 4, ...T.secondary },
