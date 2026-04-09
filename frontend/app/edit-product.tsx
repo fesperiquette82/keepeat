@@ -32,7 +32,7 @@ export default function EditProductScreen() {
   const [permission, requestPermission] = useCameraPermissions();
   const themeMode = useAppSettingsStore((state) => state.themeMode);
   const C = getThemeColors(themeMode);
-  const styles = useMemo(() => createStyles(C, themeMode), [C, themeMode]);
+  const styles = useMemo(() => createStyles(C), [C]);
 
   const [item, setItem] = useState<any>(null);
   const [name, setName] = useState('');
@@ -129,7 +129,7 @@ export default function EditProductScreen() {
     <SafeAreaView style={styles.container}>
       <View style={styles.header}>
         <TouchableOpacity style={styles.backButton} onPress={() => router.back()}>
-          <Ionicons name="arrow-back" size={24} color="#fff" />
+          <Ionicons name="arrow-back" size={24} color={C.text} />
         </TouchableOpacity>
         <Text style={styles.headerTitle}>
           {t('editProduct')}
@@ -146,7 +146,7 @@ export default function EditProductScreen() {
               value={name}
               onChangeText={setName}
               placeholder={t('productName')}
-              placeholderTextColor="#666"
+              placeholderTextColor={C.textMid}
             />
           </View>
 
@@ -157,7 +157,7 @@ export default function EditProductScreen() {
               value={brand}
               onChangeText={setBrand}
               placeholder={t('brand')}
-              placeholderTextColor="#666"
+              placeholderTextColor={C.textMid}
             />
           </View>
 
@@ -168,7 +168,7 @@ export default function EditProductScreen() {
               value={quantity}
               onChangeText={setQuantity}
               placeholder={t('exampleQuantity')}
-              placeholderTextColor="#666"
+              placeholderTextColor={C.textMid}
             />
           </View>
 
@@ -180,7 +180,7 @@ export default function EditProductScreen() {
                 style={[styles.modeBtn, dateInputMode === 'duration' && styles.modeBtnActive]}
                 onPress={() => setDateInputMode('duration')}
               >
-                <Ionicons name="time-outline" size={18} color={dateInputMode === 'duration' ? '#fff' : '#888'} />
+                <Ionicons name="time-outline" size={18} color={dateInputMode === 'duration' ? '#fff' : C.textMid} />
                 <Text style={[styles.modeBtnText, dateInputMode === 'duration' && styles.modeBtnTextActive]}>
                   {t('dateModeDuration')}
                 </Text>
@@ -190,7 +190,7 @@ export default function EditProductScreen() {
                 style={[styles.modeBtn, dateInputMode === 'date' && styles.modeBtnActive]}
                 onPress={() => setDateInputMode('date')}
               >
-                <Ionicons name="calendar-outline" size={18} color={dateInputMode === 'date' ? '#fff' : '#888'} />
+                <Ionicons name="calendar-outline" size={18} color={dateInputMode === 'date' ? '#fff' : C.textMid} />
                 <Text style={[styles.modeBtnText, dateInputMode === 'date' && styles.modeBtnTextActive]}>
                   {t('dateModeDate')}
                 </Text>
@@ -200,7 +200,7 @@ export default function EditProductScreen() {
                 style={[styles.modeBtn, dateInputMode === 'camera' && styles.modeBtnActive]}
                 onPress={() => { setDateInputMode('camera'); setShowCameraModal(true); }}
               >
-                <Ionicons name="camera-outline" size={18} color={dateInputMode === 'camera' ? '#fff' : '#888'} />
+                <Ionicons name="camera-outline" size={18} color={dateInputMode === 'camera' ? '#fff' : C.textMid} />
                 <Text style={[styles.modeBtnText, dateInputMode === 'camera' && styles.modeBtnTextActive]}>
                   {t('dateModeScan')}
                 </Text>
@@ -214,7 +214,7 @@ export default function EditProductScreen() {
                   value={durationDays}
                   onChangeText={setDurationDays}
                   placeholder={t('durationPlaceholder')}
-                  placeholderTextColor="#666"
+                  placeholderTextColor={C.textMid}
                   keyboardType="numeric"
                 />
                 <TouchableOpacity
@@ -258,7 +258,7 @@ export default function EditProductScreen() {
               value={notes}
               onChangeText={setNotes}
               placeholder={t('optionalNotesPlaceholder')}
-              placeholderTextColor="#666"
+              placeholderTextColor={C.textMid}
               multiline
               numberOfLines={3}
             />
@@ -315,60 +315,60 @@ export default function EditProductScreen() {
   );
 }
 
-const createStyles = (C: ReturnType<typeof getThemeColors>, themeMode: 'light' | 'dark') => StyleSheet.create({
-  container: { flex: 1, backgroundColor: '#0a0a0a' },
+const createStyles = (C: ReturnType<typeof getThemeColors>) => StyleSheet.create({
+  container: { flex: 1, backgroundColor: C.bg },
   header: {
     flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between',
     paddingHorizontal: 16, paddingVertical: 12,
   },
-  backButton: { padding: 8, backgroundColor: '#1a1a1a', borderRadius: 10 },
-  headerTitle: { fontSize: 18, fontWeight: '600', color: '#fff' },
+  backButton: { padding: 8, backgroundColor: C.surfaceMuted, borderRadius: 10 },
+  headerTitle: { fontSize: 18, fontWeight: '600', color: C.text },
 
   scrollView: { flex: 1 },
   scrollContent: { padding: 20, paddingBottom: 100 },
   form: { gap: 20 },
 
   inputGroup: { gap: 8 },
-  label: { fontSize: 14, fontWeight: '500', color: '#888' },
-  input: { backgroundColor: '#1a1a1a', borderRadius: 10, padding: 14, fontSize: 16, color: '#fff' },
+  label: { fontSize: 14, fontWeight: '500', color: C.textMid },
+  input: { backgroundColor: C.surfaceMuted, borderRadius: 10, padding: 14, fontSize: 16, color: C.text },
   notesInput: { height: 80, textAlignVertical: 'top' },
 
   modeSelector: {
-    flexDirection: 'row', backgroundColor: '#1a1a1a',
+    flexDirection: 'row', backgroundColor: C.surfaceMuted,
     borderRadius: 10, padding: 4, marginBottom: 12,
   },
   modeBtn: {
     flex: 1, flexDirection: 'row', alignItems: 'center', justifyContent: 'center',
     paddingVertical: 10, borderRadius: 8, gap: 6,
   },
-  modeBtnActive: { backgroundColor: '#22c55e' },
-  modeBtnText: { fontSize: 13, color: '#888', fontWeight: '500' },
+  modeBtnActive: { backgroundColor: C.primary },
+  modeBtnText: { fontSize: 13, color: C.textMid, fontWeight: '500' },
   modeBtnTextActive: { color: '#fff' },
 
   durationInput: { flexDirection: 'row', gap: 10 },
-  durationField: { flex: 1, backgroundColor: '#1a1a1a', borderRadius: 10, padding: 14, fontSize: 16, color: '#fff' },
-  applyBtn: { backgroundColor: '#22c55e', borderRadius: 10, paddingHorizontal: 20, justifyContent: 'center' },
-  applyBtnDisabled: { backgroundColor: '#333' },
+  durationField: { flex: 1, backgroundColor: C.surfaceMuted, borderRadius: 10, padding: 14, fontSize: 16, color: C.text },
+  applyBtn: { backgroundColor: C.primary, borderRadius: 10, paddingHorizontal: 20, justifyContent: 'center' },
+  applyBtnDisabled: { backgroundColor: C.border },
   applyBtnText: { color: '#fff', fontWeight: '600' },
 
   dateButton: {
     flexDirection: 'row', alignItems: 'center',
-    backgroundColor: '#1a1a1a', borderRadius: 10, padding: 14, gap: 10,
+    backgroundColor: C.surfaceMuted, borderRadius: 10, padding: 14, gap: 10,
   },
-  dateButtonText: { flex: 1, fontSize: 16, color: '#fff' },
+  dateButtonText: { flex: 1, fontSize: 16, color: C.text },
 
   currentDateBox: {
     flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between',
-    backgroundColor: '#22c55e15', borderRadius: 10, padding: 14, marginTop: 8,
+    backgroundColor: C.primaryLight, borderRadius: 10, padding: 14, marginTop: 8,
   },
   currentDateContent: { flexDirection: 'row', alignItems: 'center', gap: 10 },
-  currentDateText: { fontSize: 15, color: '#22c55e', fontWeight: '500' },
+  currentDateText: { fontSize: 15, color: C.primary, fontWeight: '500' },
 
   footer: { padding: 20, paddingBottom: 30 },
   saveButton: {
     flexDirection: 'row', alignItems: 'center', justifyContent: 'center',
-    backgroundColor: '#22c55e', borderRadius: 12, padding: 16, gap: 8,
+    backgroundColor: C.primary, borderRadius: 12, padding: 16, gap: 8,
   },
-  saveButtonDisabled: { backgroundColor: '#333' },
+  saveButtonDisabled: { backgroundColor: C.border },
   saveButtonText: { color: '#fff', fontSize: 18, fontWeight: '600' },
 });

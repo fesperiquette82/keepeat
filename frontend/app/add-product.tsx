@@ -59,7 +59,7 @@ export default function AddProductScreen() {
   const [permission, requestPermission] = useCameraPermissions();
   const themeMode = useAppSettingsStore((state) => state.themeMode);
   const C = getThemeColors(themeMode);
-  const styles = useMemo(() => createStyles(C, themeMode), [C, themeMode]);
+  const styles = useMemo(() => createStyles(C), [C]);
 
   // Form fields
   const [name, setName] = useState(paramToString(params.name));
@@ -258,7 +258,7 @@ export default function AddProductScreen() {
     <SafeAreaView style={styles.container}>
       <View style={styles.header}>
         <TouchableOpacity style={styles.backButton} onPress={() => router.back()}>
-          <Ionicons name="arrow-back" size={24} color="#fff" />
+          <Ionicons name="arrow-back" size={24} color={C.text} />
         </TouchableOpacity>
         <Text style={styles.headerTitle}>{t('addProduct')}</Text>
         <View style={{ width: 40 }} />
@@ -292,7 +292,7 @@ export default function AddProductScreen() {
             <TextInput
               style={styles.input} value={name} onChangeText={setName}
               placeholder={t('exampleProductName')}
-              placeholderTextColor="#666" autoFocus={!productFound && !lookupLoading}
+              placeholderTextColor={C.textMid} autoFocus={!productFound && !lookupLoading}
             />
           )}
         </View>
@@ -302,7 +302,7 @@ export default function AddProductScreen() {
           <TextInput
             style={styles.input} value={brand} onChangeText={setBrand}
             placeholder={t('exampleBrand')}
-            placeholderTextColor="#666"
+            placeholderTextColor={C.textMid}
           />
         </View>
 
@@ -310,7 +310,7 @@ export default function AddProductScreen() {
           <Text style={styles.label}>{t('quantity')}</Text>
           <TextInput
             style={styles.input} value={quantity} onChangeText={setQuantity}
-            placeholder={t('exampleQuantity')} placeholderTextColor="#666"
+            placeholder={t('exampleQuantity')} placeholderTextColor={C.textMid}
           />
         </View>
 
@@ -323,7 +323,7 @@ export default function AddProductScreen() {
                 style={[styles.modeBtn, dateInputMode === 'auto' && styles.modeBtnActive]}
                 onPress={() => setDateInputMode('auto')}
               >
-                <Ionicons name="flash" size={16} color={dateInputMode === 'auto' ? '#fff' : '#888'} />
+                <Ionicons name="flash" size={16} color={dateInputMode === 'auto' ? C.primary : C.textMid} />
                 <Text style={[styles.modeBtnText, dateInputMode === 'auto' && styles.modeBtnTextActive]}>{t('dateModeAuto')}</Text>
               </TouchableOpacity>
             )}
@@ -331,7 +331,7 @@ export default function AddProductScreen() {
               style={[styles.modeBtn, dateInputMode === 'duration' && styles.modeBtnActive]}
               onPress={() => setDateInputMode('duration')}
             >
-              <Ionicons name="time-outline" size={16} color={dateInputMode === 'duration' ? '#fff' : '#888'} />
+              <Ionicons name="time-outline" size={16} color={dateInputMode === 'duration' ? C.primary : C.textMid} />
               <Text style={[styles.modeBtnText, dateInputMode === 'duration' && styles.modeBtnTextActive]}>
                 {t('dateModeDuration')}
               </Text>
@@ -340,14 +340,14 @@ export default function AddProductScreen() {
               style={[styles.modeBtn, dateInputMode === 'date' && styles.modeBtnActive]}
               onPress={() => setDateInputMode('date')}
             >
-              <Ionicons name="calendar-outline" size={16} color={dateInputMode === 'date' ? '#fff' : '#888'} />
+              <Ionicons name="calendar-outline" size={16} color={dateInputMode === 'date' ? C.primary : C.textMid} />
               <Text style={[styles.modeBtnText, dateInputMode === 'date' && styles.modeBtnTextActive]}>{t('dateModeDate')}</Text>
             </TouchableOpacity>
             <TouchableOpacity
               style={[styles.modeBtn, dateInputMode === 'camera' && styles.modeBtnActive]}
               onPress={() => { setDateInputMode('camera'); setShowCameraModal(true); }}
             >
-              <Ionicons name="camera-outline" size={16} color={dateInputMode === 'camera' ? '#fff' : '#888'} />
+              <Ionicons name="camera-outline" size={16} color={dateInputMode === 'camera' ? C.primary : C.textMid} />
               <Text style={[styles.modeBtnText, dateInputMode === 'camera' && styles.modeBtnTextActive]}>{t('dateModeScan')}</Text>
             </TouchableOpacity>
           </View>
@@ -378,7 +378,7 @@ export default function AddProductScreen() {
                         → {format(addDays(new Date(), s.days), 'dd MMM yyyy', { locale: language === 'fr' ? fr : enUS })}
                       </Text>
                     </View>
-                    <Ionicons name="chevron-forward" size={20} color="#666" />
+                    <Ionicons name="chevron-forward" size={20} color={C.textMid} />
                   </TouchableOpacity>
                 ))}
               </View>
@@ -393,7 +393,7 @@ export default function AddProductScreen() {
                   style={styles.durationInput}
                   value={durationDays} onChangeText={setDurationDays}
                   placeholder={t('durationPlaceholder')}
-                  placeholderTextColor="#666" keyboardType="numeric"
+                  placeholderTextColor={C.textMid} keyboardType="numeric"
                 />
                 <TouchableOpacity style={styles.applyBtn} onPress={handleDurationApply}>
                   <Text style={styles.applyBtnText}>{t('apply')}</Text>
@@ -434,7 +434,7 @@ export default function AddProductScreen() {
             style={[styles.input, styles.notesInput]}
             value={notes} onChangeText={setNotes}
             placeholder={t('additionalNotesPlaceholder')}
-            placeholderTextColor="#666" multiline
+            placeholderTextColor={C.textMid} multiline
           />
         </View>
 
@@ -499,15 +499,15 @@ export default function AddProductScreen() {
   );
 }
 
-const createStyles = (C: ReturnType<typeof getThemeColors>, themeMode: 'light' | 'dark') => StyleSheet.create({
-  container: { flex: 1, backgroundColor: '#0a0a0a' },
+const createStyles = (C: ReturnType<typeof getThemeColors>) => StyleSheet.create({
+  container: { flex: 1, backgroundColor: C.bg },
   header: {
     flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between',
     paddingHorizontal: 16, paddingVertical: 12,
-    borderBottomWidth: 1, borderBottomColor: '#1f1f1f',
+    borderBottomWidth: 1, borderBottomColor: C.border,
   },
   backButton: { width: 40, height: 40, alignItems: 'center', justifyContent: 'center' },
-  headerTitle: { color: '#fff', fontSize: 18, fontWeight: '700' },
+  headerTitle: { color: C.text, fontSize: 18, fontWeight: '700' },
 
   scrollView: { flex: 1 },
   scrollContent: { padding: 16, paddingBottom: 32 },
@@ -516,15 +516,15 @@ const createStyles = (C: ReturnType<typeof getThemeColors>, themeMode: 'light' |
     flexDirection: 'row', alignItems: 'center', gap: 8,
     borderWidth: 1, borderRadius: 12, padding: 12, marginBottom: 16,
   },
-  foundBadgeSuccess: { borderColor: '#22c55e55', backgroundColor: '#22c55e10' },
-  foundBadgeWarning: { borderColor: '#f9731655', backgroundColor: '#f9731610' },
+  foundBadgeSuccess: { borderColor: C.primary + '55', backgroundColor: C.primary + '10' },
+  foundBadgeWarning: { borderColor: C.orange + '55', backgroundColor: C.orange + '10' },
   foundBadgeText: { fontSize: 14, fontWeight: '600' },
 
   inputGroup: { marginBottom: 18 },
-  label: { color: '#ddd', marginBottom: 8, fontSize: 14, fontWeight: '600' },
+  label: { color: C.text, marginBottom: 8, fontSize: 14, fontWeight: '600' },
   input: {
-    backgroundColor: '#111', borderColor: '#2a2a2a', borderWidth: 1,
-    borderRadius: 12, color: '#fff', paddingHorizontal: 14, paddingVertical: 12, fontSize: 15,
+    backgroundColor: C.surfaceMuted, borderColor: C.border, borderWidth: 1,
+    borderRadius: 12, color: C.text, paddingHorizontal: 14, paddingVertical: 12, fontSize: 15,
   },
   inputLoading: {
     alignItems: 'center', justifyContent: 'center', height: 48,
@@ -534,65 +534,65 @@ const createStyles = (C: ReturnType<typeof getThemeColors>, themeMode: 'light' |
   modeSelector: { flexDirection: 'row', flexWrap: 'wrap', gap: 8, marginBottom: 10 },
   modeBtn: {
     flexDirection: 'row', alignItems: 'center', gap: 6,
-    borderWidth: 1, borderColor: '#333', borderRadius: 999,
-    paddingHorizontal: 12, paddingVertical: 8, backgroundColor: '#111',
+    borderWidth: 1, borderColor: C.border, borderRadius: 999,
+    paddingHorizontal: 12, paddingVertical: 8, backgroundColor: C.surfaceMuted,
   },
-  modeBtnActive: { borderColor: '#22c55e', backgroundColor: '#22c55e20' },
-  modeBtnText: { color: '#aaa', fontSize: 13, fontWeight: '600' },
-  modeBtnTextActive: { color: '#fff' },
+  modeBtnActive: { borderColor: C.primary, backgroundColor: C.primaryLight },
+  modeBtnText: { color: C.textMid, fontSize: 13, fontWeight: '600' },
+  modeBtnTextActive: { color: C.primary },
 
   autoSection: { gap: 10 },
   categoryBadge: {
     flexDirection: 'row', alignItems: 'center', gap: 6,
-    backgroundColor: '#0f2617', borderColor: '#1f5f3a', borderWidth: 1,
+    backgroundColor: C.primaryLight, borderColor: C.primary + '40', borderWidth: 1,
     borderRadius: 10, padding: 10,
   },
-  categoryText: { color: '#89f0b6', fontSize: 13, fontWeight: '500' },
+  categoryText: { color: C.primary, fontSize: 13, fontWeight: '500' },
   autoSuggestions: { gap: 8 },
   suggestionCard: {
     flexDirection: 'row', alignItems: 'center',
-    borderWidth: 1, backgroundColor: '#111', borderRadius: 12, padding: 12, gap: 12,
+    borderWidth: 1, borderColor: C.border, backgroundColor: C.card, borderRadius: 12, padding: 12, gap: 12,
   },
   suggestionIcon: { width: 40, height: 40, borderRadius: 999, alignItems: 'center', justifyContent: 'center' },
   suggestionContent: { flex: 1 },
-  suggestionLabel: { color: '#fff', fontSize: 14, fontWeight: '600' },
-  suggestionDate: { color: '#aaa', fontSize: 12, marginTop: 2 },
-  tipText: { color: '#aaa', fontSize: 12, lineHeight: 18 },
+  suggestionLabel: { color: C.text, fontSize: 14, fontWeight: '600' },
+  suggestionDate: { color: C.textMid, fontSize: 12, marginTop: 2 },
+  tipText: { color: C.textMid, fontSize: 12, lineHeight: 18 },
 
   durationSection: { marginTop: 4 },
   durationInputRow: { flexDirection: 'row', gap: 8 },
   durationInput: {
-    flex: 1, backgroundColor: '#111', borderColor: '#2a2a2a', borderWidth: 1,
-    borderRadius: 12, color: '#fff', paddingHorizontal: 14, paddingVertical: 12,
+    flex: 1, backgroundColor: C.surfaceMuted, borderColor: C.border, borderWidth: 1,
+    borderRadius: 12, color: C.text, paddingHorizontal: 14, paddingVertical: 12,
   },
   applyBtn: {
-    backgroundColor: '#22c55e', borderRadius: 12,
+    backgroundColor: C.primary, borderRadius: 12,
     paddingHorizontal: 16, alignItems: 'center', justifyContent: 'center',
   },
   applyBtnText: { color: '#fff', fontWeight: '700' },
 
   datePickerBtn: {
-    borderRadius: 12, borderWidth: 1, borderColor: '#2a2a2a',
-    backgroundColor: '#111', padding: 12, flexDirection: 'row', alignItems: 'center', gap: 8,
+    borderRadius: 12, borderWidth: 1, borderColor: C.border,
+    backgroundColor: C.surfaceMuted, padding: 12, flexDirection: 'row', alignItems: 'center', gap: 8,
   },
-  datePickerBtnText: { color: '#e6e6e6', fontSize: 14 },
+  datePickerBtnText: { color: C.text, fontSize: 14 },
 
   selectedDateBadge: {
     marginTop: 10, flexDirection: 'row', alignItems: 'center', gap: 8,
-    borderWidth: 1, borderColor: '#22c55e55', backgroundColor: '#22c55e15',
+    borderWidth: 1, borderColor: C.primary + '55', backgroundColor: C.primaryLight,
     borderRadius: 10, paddingHorizontal: 10, paddingVertical: 8,
   },
-  selectedDateText: { color: '#9bf2bd', fontSize: 13, fontWeight: '600' },
+  selectedDateText: { color: C.primary, fontSize: 13, fontWeight: '600' },
 
   quickSaveBtn: {
     marginTop: 4, marginBottom: 10, borderRadius: 12,
-    borderWidth: 1, borderColor: '#f59e0b55', backgroundColor: '#f59e0b15',
+    borderWidth: 1, borderColor: C.yellow + '55', backgroundColor: C.yellowLight,
     height: 46, alignItems: 'center', justifyContent: 'center', flexDirection: 'row', gap: 8,
   },
-  quickSaveBtnText: { color: '#f59e0b', fontWeight: '700', fontSize: 14 },
+  quickSaveBtnText: { color: C.yellow, fontWeight: '700', fontSize: 14 },
 
   saveBtn: {
-    marginTop: 10, borderRadius: 12, backgroundColor: '#22c55e',
+    marginTop: 10, borderRadius: 12, backgroundColor: C.primary,
     height: 50, alignItems: 'center', justifyContent: 'center', flexDirection: 'row', gap: 8,
   },
   saveBtnDisabled: { opacity: 0.6 },
