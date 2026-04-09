@@ -4,6 +4,7 @@ import {
   Text,
   StyleSheet,
   Image,
+  ImageBackground,
   TextInput,
   TouchableOpacity,
   ActivityIndicator,
@@ -105,6 +106,11 @@ export default function RegisterScreen() {
       };
 
   return (
+    <ImageBackground
+      source={require('../assets/images/auth-background.jpg')}
+      style={styles.bgImage}
+      resizeMode="cover"
+    >
     <SafeAreaView style={styles.container}>
       <KeyboardAvoidingView
         style={styles.flex}
@@ -236,11 +242,13 @@ export default function RegisterScreen() {
         </ScrollView>
       </KeyboardAvoidingView>
     </SafeAreaView>
+    </ImageBackground>
   );
 }
 
 const styles = StyleSheet.create({
-  container: { flex: 1, backgroundColor: '#0a0a0a' },
+  bgImage: { flex: 1 },
+  container: { flex: 1, backgroundColor: 'transparent' },
   flex: { flex: 1 },
   scroll: { flexGrow: 1, justifyContent: 'center', padding: 24 },
 
