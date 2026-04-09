@@ -1,11 +1,15 @@
 # backend/server.py
 from __future__ import annotations
 
+import os
+
+from dotenv import load_dotenv
+load_dotenv()
+
 import asyncio
 import base64
 import difflib
 import json
-import os
 import re
 import secrets
 import subprocess
@@ -21,7 +25,6 @@ import aiosmtplib
 import httpx
 from bson import ObjectId
 from pymongo.errors import DuplicateKeyError
-from dotenv import load_dotenv
 from fastapi import APIRouter, Depends, FastAPI, Header, HTTPException, Query, Request, Response, status
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import HTMLResponse
@@ -115,8 +118,6 @@ from recipes_service import (
     suggest_recipe_groups_from_catalog,
     suggest_recipes_from_catalog,
 )
-
-load_dotenv()
 
 MONGO_URL = os.getenv("MONGO_URL")
 if not MONGO_URL:

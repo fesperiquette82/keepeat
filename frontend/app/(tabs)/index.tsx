@@ -113,7 +113,12 @@ export default function HomeDashboardScreen() {
 
         <View style={styles.sectionCard}>
           <View style={styles.sectionHeader}>
-            <Text style={styles.sectionTitle}>À consommer bientôt</Text>
+            <View style={styles.sectionTitleRow}>
+              <Text style={styles.sectionTitle}>Vos produits à consommer prochainement</Text>
+              {expiringSoon.length > 0 && (
+                <View style={[styles.sectionDot, { backgroundColor: expiryColor(daysUntil(expiringSoon[0].expiry_date)) }]} />
+              )}
+            </View>
             <TouchableOpacity onPress={() => router.push('/(tabs)/stock')}>
               <Text style={styles.linkText}>{UI_LABELS.fr.actions.viewStock}</Text>
             </TouchableOpacity>
@@ -151,7 +156,7 @@ export default function HomeDashboardScreen() {
 
         <View style={styles.recipesCard}>
           <View style={styles.sectionHeader}>
-            <Text style={styles.sectionTitle}>Recettes</Text>
+            <Text style={styles.sectionTitle}>Vos recettes à venir</Text>
             <TouchableOpacity onPress={() => router.push('/(tabs)/recipes')}>
               <Text style={styles.linkText}>{UI_LABELS.fr.actions.viewRecipes}</Text>
             </TouchableOpacity>
@@ -216,6 +221,8 @@ const createStyles = (C: ReturnType<typeof getThemeColors>, T: ReturnType<typeof
   sectionCard: { backgroundColor: '#fff', borderRadius: 14, padding: 13, gap: 8, ...shadowSm },
   recipesCard: { backgroundColor: '#fff', borderRadius: 14, padding: 13, gap: 8 },
   sectionHeader: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between' },
+  sectionTitleRow: { flexDirection: 'row', alignItems: 'center', gap: 8 },
+  sectionDot: { width: 10, height: 10, borderRadius: 5 },
   sectionTitle: { fontSize: 17, fontWeight: '700', color: C.text },
   linkText: { color: '#166534', fontWeight: '700', fontSize: 13 },
   emptyText: { ...T.secondary, paddingVertical: 8 },
