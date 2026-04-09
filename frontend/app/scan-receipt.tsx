@@ -55,6 +55,14 @@ function defaultZone(p: ReceiptProduct): StorageZone {
   return 'pantry';
 }
 
+function shelfHint(p: ReceiptProduct, fr: boolean): string {
+  const parts: string[] = [];
+  if (p.shelf_life_fridge) parts.push(fr ? `${p.shelf_life_fridge}j frigo` : `${p.shelf_life_fridge}d fridge`);
+  if (p.shelf_life_pantry) parts.push(fr ? `${p.shelf_life_pantry}j placard` : `${p.shelf_life_pantry}d pantry`);
+  if (p.shelf_life_freezer) parts.push(fr ? `${p.shelf_life_freezer}j congélo` : `${p.shelf_life_freezer}d frozen`);
+  return parts.join(' · ');
+}
+
 function computeExpiry(p: ReceiptProduct, zone: StorageZone): string | undefined {
   const days = zone === 'fridge' ? p.shelf_life_fridge : zone === 'pantry' ? p.shelf_life_pantry : p.shelf_life_freezer;
   if (!days) return undefined;
