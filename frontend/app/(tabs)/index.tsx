@@ -15,7 +15,7 @@ import { logger } from '../../utils/logger';
 function expiryText(days: number | null): string {
   if (days === null) return ‘Date non renseignée’;
   if (days < 0) return `Périmé depuis ${Math.abs(days)} j`;
-  if (days === 0) return ‘Expire aujourd’hui’;
+  if (days === 0) return "Expire aujourd’hui";
   if (days === 1) return ‘Expire demain’;
   return `Expire dans ${days} j`;
 }
