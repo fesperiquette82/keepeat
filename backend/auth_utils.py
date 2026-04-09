@@ -13,9 +13,17 @@ from passlib.context import CryptContext
 
 from app_core import serialize_mongo, utc_now
 
-JWT_SECRET_KEY = os.getenv("JWT_SECRET_KEY")
-if not JWT_SECRET_KEY:
-    raise RuntimeError("JWT_SECRET_KEY is required. Set it in Render > Environment Variables.")
+
+def get_jwt_secret_key() -> str:
+    jwt_secret = os.getenv("JWT_SECRET_KEY") or os.getenv("SECRET_KEY")
+    if not jwt_secret:
+        raise RuntimeError(
+            "JWT_SECRET_KEY is required (fallback accepted: SECRET_KEY). "
+            "Set it in Render > Environment Variables."
+        )
+    return jwt_secret
+
+
 JWT_ALGORITHM = "HS256"
 JWT_EXPIRE_DAYS = 30
 
@@ -49,7 +57,7 @@ def validate_password(password: str) -> None:
 
 def create_token(user_id: str) -> str:
     expire = utc_now() + timedelta(days=JWT_EXPIRE_DAYS)
-    return jwt.encode({"sub": user_id, "exp": expire}, JWT_SECRET_KEY, algorithm=JWT_ALGORITHM)
+    return jwt.encode({"sub": user_id, "exp": expire}, get_jwt_secret_key(), algorithm=JWT_ALGORITHM)
 
 
 async def get_current_user(
@@ -59,7 +67,7 @@ async def get_current_user(
     if not credentials or not credentials.credentials:
         raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="Not authenticated")
     try:
-        payload = jwt.decode(credentials.credentials, JWT_SECRET_KEY, algorithms=[JWT_ALGORITHM])
+        payload = jwt.decode(credentials.credentials, get_jwt_secret_key(), algorithms=[JWT_ALGORITHM])
         user_id: str = payload.get("sub")
         if not user_id:
             raise ValueError("missing sub")
