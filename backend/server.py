@@ -2703,7 +2703,7 @@ async def list_receipt_tickets(
     status: str = Query(default="pending"),
     limit: int = Query(default=20, ge=1, le=100),
     skip: int = Query(default=0, ge=0),
-    _admin_user: Dict[str, Any] = Depends(_require_admin),
+    _admin_user: Dict[str, Any] = Depends(_require_admin_user),
 ):
     """Liste les tickets de caisse (admin uniquement)."""
     query: Dict[str, Any] = {}
@@ -2723,7 +2723,7 @@ async def list_receipt_tickets(
 @api_router.get("/admin/receipt-tickets/{ticket_id}")
 async def get_receipt_ticket(
     ticket_id: str,
-    _admin_user: Dict[str, Any] = Depends(_require_admin),
+    _admin_user: Dict[str, Any] = Depends(_require_admin_user),
 ):
     """Récupère un ticket de caisse avec son image (admin uniquement)."""
     try:
@@ -2752,7 +2752,7 @@ class ProcessReceiptTicketBody(BaseModel):
 async def process_receipt_ticket(
     ticket_id: str,
     body: ProcessReceiptTicketBody,
-    _admin_user: Dict[str, Any] = Depends(_require_admin),
+    _admin_user: Dict[str, Any] = Depends(_require_admin_user),
 ):
     """Ajoute manuellement des produits au stock de l'utilisateur et clôture le ticket (admin uniquement)."""
     try:
@@ -2810,7 +2810,7 @@ async def process_receipt_ticket(
 @api_router.post("/admin/receipt-tickets/{ticket_id}/dismiss")
 async def dismiss_receipt_ticket(
     ticket_id: str,
-    _admin_user: Dict[str, Any] = Depends(_require_admin),
+    _admin_user: Dict[str, Any] = Depends(_require_admin_user),
 ):
     """Marque un ticket comme ignoré (admin uniquement)."""
     try:
