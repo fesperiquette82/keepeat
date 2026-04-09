@@ -12,6 +12,7 @@ import { restorePremiumPurchase } from '../utils/billingService';
 import { isAdminUser } from '../utils/adminAccess';
 import { logger } from '../utils/logger';
 import { resolvePremiumStatus } from '../utils/premiumStatus';
+import { buildLogoutConfirmationCopy } from '../utils/settingsLogout';
 
 function formatLastUpdate(value: string | null, language: 'fr' | 'en', fallbackText: string): string {
   if (!value) return fallbackText;
@@ -63,6 +64,7 @@ export default function SettingsScreen() {
   const token = useAuthStore((state) => state.token);
   const user = useAuthStore((state) => state.user);
   const refreshEntitlements = useAuthStore((state) => state.refreshEntitlements);
+  const logout = useAuthStore((state) => state.logout);
   const entitlements = useAuthStore((state) => state.entitlements);
   const plan = useAuthStore((state) => state.plan);
   const authError = useAuthStore((state) => state.error);
@@ -89,6 +91,25 @@ export default function SettingsScreen() {
       : t('premiumExpiresOn');
     return `${label} ${formatPremiumDate(premiumStatus.premiumDate, language)}`;
   }, [language, premiumStatus.premiumDate, premiumStatus.premiumDateKind, t]);
+  const logoutConfirmation = useMemo(() => buildLogoutConfirmationCopy(t), [t]);
+  const onPressLogout = useCallback(() => {
+    Alert.alert(
+      logoutConfirmation.title,
+      logoutConfirmation.message,
+      [
+        { text: logoutConfirmation.cancelLabel, style: 'cancel' },
+        {
+          text: logoutConfirmation.confirmLabel,
+          style: 'destructive',
+          onPress: () => {
+            void logout().catch(() => {
+              Alert.alert(t('errorTitle'), t('logoutErrorMessage'));
+            });
+          },
+        },
+      ],
+    );
+  }, [logout, logoutConfirmation, t]);
 
   return (
     <SafeAreaView style={styles.container}>
@@ -243,6 +264,14 @@ export default function SettingsScreen() {
             </TouchableOpacity>
           </View>
         )}
+
+        <View style={styles.card}>
+          <Text style={styles.sectionTitle}>{t('accountSection')}</Text>
+          <TouchableOpacity style={styles.logoutButton} onPress={onPressLogout}>
+            <Ionicons name="log-out-outline" size={16} color="#FFFFFF" />
+            <Text style={styles.refreshButtonText}>{t('logoutButton')}</Text>
+          </TouchableOpacity>
+        </View>
       </View>
     </SafeAreaView>
   );
@@ -284,6 +313,17 @@ const createStyles = (C: ReturnType<typeof getThemeColors>, T: ReturnType<typeof
   refreshButtonText: { color: '#FFFFFF', fontWeight: '700', fontSize: 14 },
   restoreButton: { borderWidth: 1, borderColor: '#16A34A', borderRadius: 10, minHeight: 40, alignItems: 'center', justifyContent: 'center' },
   loadingRow: { flexDirection: 'row', alignItems: 'center', gap: 8 },
+  logoutButton: {
+    marginTop: 4,
+    backgroundColor: C.danger,
+    borderRadius: 10,
+    minHeight: 40,
+    paddingHorizontal: 14,
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    gap: 8,
+  },
   restoreButtonText: { color: '#166534', fontWeight: '700', fontSize: 14 },
   successText: { color: '#166534', fontSize: 12, fontWeight: '500' },
   errorText: { color: '#B91C1C', fontSize: 12, fontWeight: '500' },
