@@ -247,7 +247,7 @@ export default function AdminReceiptTicketsScreen() {
                 />
               ) : (
                 <View style={styles.receiptImagePlaceholder}>
-                  <Text style={{ color: C.textLight }}>Pas d'image</Text>
+                  <Text style={{ color: C.textLight }}>Pas d&apos;image</Text>
                 </View>
               )}
 

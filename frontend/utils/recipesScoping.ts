@@ -34,8 +34,18 @@ export function dedupeRecipesById(recipes: any[]): any[] {
   const seen = new Set<string>();
   return recipes.filter((recipe) => {
     const id = String(recipe?.id ?? '').trim();
-    if (!id || seen.has(id)) return false;
-    seen.add(id);
+    const title = String(recipe?.title ?? '').trim().toLowerCase();
+    const duration = String(recipe?.duration_min ?? recipe?.timeMinutes ?? '').trim();
+    const dishType = String(recipe?.dish_type ?? recipe?.type ?? '').trim().toLowerCase();
+    const availableIngredients = getRecipeAvailableIngredients(recipe)
+      .map((ingredient) => normalizeIngredientName(String(ingredient ?? '')))
+      .filter(Boolean)
+      .sort()
+      .join('|');
+    const semanticKey = [title, duration, dishType, availableIngredients].join('#');
+    const dedupeKey = id || semanticKey;
+    if (!dedupeKey || seen.has(dedupeKey)) return false;
+    seen.add(dedupeKey);
     return true;
   });
 }
