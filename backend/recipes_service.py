@@ -152,25 +152,30 @@ def fr_to_en_ingredient(name: str, category: str = "autres") -> str:
     return _CATEGORY_TO_EN.get(category, "chicken")
 
 
-async def _generate_ai_recipe(stock_names: list[str], openai_key: str) -> dict | None:
-    """Appelle GPT-4o-mini pour générer 1 recette française depuis les ingrédients du stock.
-    Retourne None en cas d'échec ou si KEEPEAT_OPENAI_TOKEN n'est pas configuré.
+async def _generate_ai_recipe(stock_names: list[str], gemini_key: str) -> dict | None:
+    """Appelle Gemini pour générer 1 recette française depuis les ingrédients du stock.
+    Retourne None en cas d'échec ou si GEMINI_RECIPES_API_KEY n'est pas configuré.
     """
     prompt = _AI_SUGGEST_PROMPT.format(ingredients="\n".join(f"- {n}" for n in stock_names))
     try:
         async with httpx.AsyncClient(timeout=20) as http:
             r = await http.post(
-                "https://api.openai.com/v1/chat/completions",
-                headers={"Authorization": f"Bearer {openai_key}", "Content-Type": "application/json"},
-                json={"model": "gpt-4o-mini", "max_tokens": 350,
-                      "messages": [{"role": "user", "content": prompt}]},
+                f"https://generativelanguage.googleapis.com/v1beta/models/gemini-1.5-flash:generateContent?key={gemini_key}",
+                headers={"Content-Type": "application/json"},
+                json={
+                    "contents": [{"parts": [{"text": prompt}]}],
+                    "generationConfig": {
+                        "maxOutputTokens": 350,
+                        "responseMimeType": "application/json",
+                    },
+                },
             )
             if r.status_code != 200:
-                logger.warning("OpenAI suggest recipe error %s: %s", r.status_code, r.text[:200])
+                logger.warning("Gemini suggest recipe error %s: %s", r.status_code, r.text[:200])
                 return None
-            text = r.json()["choices"][0]["message"]["content"].strip()
+            text = r.json()["candidates"][0]["content"]["parts"][0]["text"].strip()
     except Exception as exc:
-        logger.warning("OpenAI suggest recipe failed: %s", exc)
+        logger.warning("Gemini suggest recipe failed: %s", exc)
         return None
 
     if "```" in text:
@@ -183,11 +188,11 @@ async def _generate_ai_recipe(stock_names: list[str], openai_key: str) -> dict |
     try:
         data = json.loads(text)
         if not isinstance(data.get("title"), str) or not isinstance(data.get("ingredients_keywords"), list):
-            logger.warning("OpenAI suggest recipe invalid structure: %s", text[:200])
+            logger.warning("Gemini suggest recipe invalid structure: %s", text[:200])
             return None
         return data
     except Exception:
-        logger.warning("OpenAI suggest recipe invalid JSON: %s", text[:200])
+        logger.warning("Gemini suggest recipe invalid JSON: %s", text[:200])
         return None
 
 

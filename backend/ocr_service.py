@@ -10,7 +10,7 @@ from fastapi import HTTPException, Request
 from app_core import logger
 
 class OcrApiError(RuntimeError):
-    """Levée quand l'appel OpenAI échoue (HTTP error, timeout, JSON invalide, clé absente)."""
+    """Levée quand l'appel Gemini échoue (HTTP error, timeout, JSON invalide, clé absente)."""
 
 
 SHELF_BY_CATEGORY: dict[str, dict[str, int | None]] = {
@@ -37,9 +37,9 @@ Ignore les articles non alimentaires (ménager, hygiène, etc.)."""
 
 
 async def ocr_receipt(request: Request, current_user: dict[str, Any]) -> list[dict[str, Any]]:
-    openai_key = os.environ.get("KEEPEAT_OPENAI_TOKEN", "")
-    if not openai_key:
-        logger.warning("KEEPEAT_OPENAI_TOKEN non configuré — scan ticket désactivé")
+    gemini_key = os.environ.get("GEMINI_OCR_API_KEY", "")
+    if not gemini_key:
+        logger.warning("GEMINI_OCR_API_KEY non configuré — scan ticket désactivé")
         raise OcrApiError("Service OCR non configuré sur ce serveur")
 
     body = await request.json()
@@ -54,34 +54,29 @@ async def ocr_receipt(request: Request, current_user: dict[str, Any]) -> list[di
     try:
         async with httpx.AsyncClient(timeout=30) as http_client:
             response = await http_client.post(
-                "https://api.openai.com/v1/chat/completions",
-                headers={
-                    "Authorization": f"Bearer {openai_key}",
-                    "Content-Type": "application/json",
-                },
+                f"https://generativelanguage.googleapis.com/v1beta/models/gemini-1.5-flash:generateContent?key={gemini_key}",
+                headers={"Content-Type": "application/json"},
                 json={
-                    "model": "gpt-4o-mini",
-                    "max_tokens": 1024,
-                    "messages": [{
-                        "role": "user",
-                        "content": [
-                            {"type": "text", "text": RECEIPT_PROMPT},
-                            {"type": "image_url", "image_url": {
-                                "url": f"data:image/jpeg;base64,{image_b64}",
-                                "detail": "low",
-                            }},
+                    "contents": [{
+                        "parts": [
+                            {"text": RECEIPT_PROMPT},
+                            {"inline_data": {"mime_type": "image/jpeg", "data": image_b64}},
                         ],
                     }],
+                    "generationConfig": {
+                        "maxOutputTokens": 1024,
+                        "responseMimeType": "application/json",
+                    },
                 },
             )
             if response.status_code != 200:
-                logger.warning("OpenAI receipt OCR error %s: %s", response.status_code, response.text[:200])
-                raise OcrApiError(f"OpenAI a retourné une erreur HTTP {response.status_code}")
-            text = response.json()["choices"][0]["message"]["content"].strip()
+                logger.warning("Gemini receipt OCR error %s: %s", response.status_code, response.text[:200])
+                raise OcrApiError(f"Gemini a retourné une erreur HTTP {response.status_code}")
+            text = response.json()["candidates"][0]["content"]["parts"][0]["text"].strip()
     except OcrApiError:
         raise
     except Exception as exc:
-        logger.warning("OpenAI request failed: %s", exc)
+        logger.warning("Gemini request failed: %s", exc)
         raise OcrApiError(f"Impossible de contacter le service OCR : {exc}") from exc
 
     if "```" in text:

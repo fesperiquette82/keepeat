@@ -138,6 +138,7 @@ api_request_logs_col = db["api_request_logs"]
 business_events_col = db["business_events"]
 service_usage_logs_col = db["service_usage_logs"]
 daily_metrics_col = db["daily_metrics"]
+receipt_tickets_col = db["receipt_tickets"]
 
 _BACKEND_URL = os.getenv("BACKEND_URL", "https://keepeat-backend.onrender.com")
 _GOOGLE_ANDROID_PACKAGE = os.getenv("GOOGLE_ANDROID_PACKAGE", "com.fesperiquette.keepeat")
@@ -382,29 +383,25 @@ def _build_openai_recipes_prompt(*, stock_snapshot: list[dict[str, Any]], active
 
 async def _fetch_gpt_recipes(
     *,
-    openai_key: str,
-    openai_model: str,
+    gemini_key: str,
     stock_snapshot: list[dict[str, Any]],
     active_filter: str,
 ) -> list[_GptRecipePayload]:
     prompt = _build_openai_recipes_prompt(stock_snapshot=stock_snapshot, active_filter=active_filter)
+    system_text = "Tu es un assistant culinaire anti-gaspi strict."
     try:
         async with httpx.AsyncClient(timeout=12.0) as http:
             response = await http.post(
-                "https://api.openai.com/v1/chat/completions",
-                headers={
-                    "Authorization": f"Bearer {openai_key}",
-                    "Content-Type": "application/json",
-                },
+                f"https://generativelanguage.googleapis.com/v1beta/models/gemini-1.5-flash:generateContent?key={gemini_key}",
+                headers={"Content-Type": "application/json"},
                 json={
-                    "model": openai_model,
-                    "temperature": 0.2,
-                    "max_tokens": 1200,
-                    "response_format": {"type": "json_object"},
-                    "messages": [
-                        {"role": "system", "content": "Tu es un assistant culinaire anti-gaspi strict."},
-                        {"role": "user", "content": prompt},
-                    ],
+                    "systemInstruction": {"parts": [{"text": system_text}]},
+                    "contents": [{"parts": [{"text": prompt}]}],
+                    "generationConfig": {
+                        "temperature": 0.2,
+                        "maxOutputTokens": 1200,
+                        "responseMimeType": "application/json",
+                    },
                 },
             )
     except Exception as exc:
@@ -416,7 +413,7 @@ async def _fetch_gpt_recipes(
         return []
 
     try:
-        raw_content = response.json()["choices"][0]["message"]["content"].strip()
+        raw_content = response.json()["candidates"][0]["content"]["parts"][0]["text"].strip()
         parsed = _GptRecipesEnvelope.model_validate_json(raw_content)
         return parsed.recipes[:3]
     except (KeyError, ValidationError, json.JSONDecodeError, ValueError) as exc:
@@ -544,6 +541,8 @@ async def lifespan(app: FastAPI):
     await users_col.create_index("email", unique=True)
     await users_col.create_index("verification_token", sparse=True)
     await users_col.create_index("reset_token", sparse=True)
+    await receipt_tickets_col.create_index([("status", 1), ("created_at", -1)])
+    await receipt_tickets_col.create_index([("user_id", 1), ("created_at", -1)])
     await _seed_shared_recipes_collection_if_needed()
 
     deps = AlertDependencies(
@@ -2316,11 +2315,11 @@ async def get_recipe_suggestions(
     gap_logged = False
     suggest_later = False
     if not relevant:
-        openai_key = os.environ.get("KEEPEAT_OPENAI_TOKEN", "")
-        if openai_key and stock_names:
+        gemini_key = os.environ.get("GEMINI_RECIPES_API_KEY", "")
+        if gemini_key and stock_names:
             try:
                 ai_raw = await asyncio.wait_for(
-                    _ai_gap_fill(stock_names, openai_key),
+                    _ai_gap_fill(stock_names, gemini_key),
                     timeout=10.0,
                 )
                 if ai_raw:
@@ -2658,6 +2657,175 @@ async def ocr_receipt_route(
     return result
 
 
+@api_router.post("/ocr/receipt/report")
+async def report_receipt_ticket(
+    request: Request,
+    current_user: Dict[str, Any] = Depends(_get_current_user),
+):
+    """Sauvegarde un ticket de caisse non reconnu et notifie l'équipe par email (premium uniquement)."""
+    await _enforce_feature_access(current_user=current_user, feature=FEATURE_OCR, consume_quota=False)
+
+    body = await request.json()
+    image_b64: str = body.get("image", "")
+    if not image_b64:
+        raise HTTPException(status_code=400, detail="Champ 'image' manquant")
+    _MAX_IMAGE_B64_LEN = 5_500_000
+    if len(image_b64) > _MAX_IMAGE_B64_LEN:
+        raise HTTPException(status_code=413, detail="Image trop grande (max 4 MB)")
+
+    ticket_doc = {
+        "user_id": current_user["id"],
+        "user_email": current_user.get("email", ""),
+        "image_b64": image_b64,
+        "created_at": utc_now().isoformat(),
+        "status": "pending",
+        "note": "",
+        "items_added": [],
+    }
+    res = await receipt_tickets_col.insert_one(ticket_doc)
+    ticket_id = str(res.inserted_id)
+
+    html_body = f"""
+    <h2>Nouveau ticket de caisse à traiter — KeepEat</h2>
+    <p><strong>Utilisateur :</strong> {current_user.get('email', current_user['id'])}</p>
+    <p><strong>ID ticket :</strong> {ticket_id}</p>
+    <p><strong>Date :</strong> {utc_now().strftime('%d/%m/%Y %H:%M')} UTC</p>
+    <p>L'OCR n'a pas pu identifier les produits. Rendez-vous sur l'interface admin pour traiter ce ticket.</p>
+    """
+    await _send_email("keepeatfe@gmail.com", f"Ticket caisse à traiter — {current_user.get('email', ticket_id)}", html_body)
+
+    logger.info("Receipt ticket reported user=%s ticket_id=%s", current_user["id"], ticket_id)
+    return {"ok": True, "ticket_id": ticket_id}
+
+
+@api_router.get("/admin/receipt-tickets")
+async def list_receipt_tickets(
+    status: str = Query(default="pending"),
+    limit: int = Query(default=20, ge=1, le=100),
+    skip: int = Query(default=0, ge=0),
+    _admin_user: Dict[str, Any] = Depends(_require_admin),
+):
+    """Liste les tickets de caisse (admin uniquement)."""
+    query: Dict[str, Any] = {}
+    if status != "all":
+        query["status"] = status
+    cursor = receipt_tickets_col.find(query, {"image_b64": 0}).sort("created_at", -1).skip(skip).limit(limit)
+    docs = await cursor.to_list(length=limit)
+    total = await receipt_tickets_col.count_documents(query)
+    return {
+        "tickets": [serialize_mongo(d) for d in docs],
+        "total": total,
+        "skip": skip,
+        "limit": limit,
+    }
+
+
+@api_router.get("/admin/receipt-tickets/{ticket_id}")
+async def get_receipt_ticket(
+    ticket_id: str,
+    _admin_user: Dict[str, Any] = Depends(_require_admin),
+):
+    """Récupère un ticket de caisse avec son image (admin uniquement)."""
+    try:
+        oid = ObjectId(ticket_id)
+    except Exception:
+        raise HTTPException(status_code=400, detail="ID invalide")
+    doc = await receipt_tickets_col.find_one({"_id": oid})
+    if not doc:
+        raise HTTPException(status_code=404, detail="Ticket non trouvé")
+    return serialize_mongo(doc)
+
+
+class ReceiptTicketItem(BaseModel):
+    name: str
+    category: str = "autres"
+    expiry_date: Optional[str] = None
+    storageZone: Optional[str] = None
+
+
+class ProcessReceiptTicketBody(BaseModel):
+    items: List[ReceiptTicketItem]
+    note: str = ""
+
+
+@api_router.post("/admin/receipt-tickets/{ticket_id}/process")
+async def process_receipt_ticket(
+    ticket_id: str,
+    body: ProcessReceiptTicketBody,
+    _admin_user: Dict[str, Any] = Depends(_require_admin),
+):
+    """Ajoute manuellement des produits au stock de l'utilisateur et clôture le ticket (admin uniquement)."""
+    try:
+        oid = ObjectId(ticket_id)
+    except Exception:
+        raise HTTPException(status_code=400, detail="ID invalide")
+    doc = await receipt_tickets_col.find_one({"_id": oid})
+    if not doc:
+        raise HTTPException(status_code=404, detail="Ticket non trouvé")
+
+    user_id = doc["user_id"]
+    added_items = []
+    now_iso = utc_now().isoformat()
+
+    for item in body.items:
+        food_cat = item.category if item.category in _SHELF_BY_CATEGORY else "autres"
+        stock_doc = {
+            "user_id": user_id,
+            "name": item.name,
+            "category": item.category,
+            "food_category": food_cat,
+            "expiry_date": item.expiry_date,
+            "quantity": None,
+            "barcode": None,
+            "brand": None,
+            "image_url": None,
+            "notes": None,
+            "storageZone": item.storageZone,
+            "added_date": now_iso,
+            "status": "active",
+            "consumed_date": None,
+            "thrown_date": None,
+        }
+        res = await stock_col.insert_one(stock_doc)
+        added_items.append({"id": str(res.inserted_id), "name": item.name})
+
+    await receipt_tickets_col.update_one(
+        {"_id": oid},
+        {"$set": {
+            "status": "processed",
+            "processed_at": now_iso,
+            "processed_by": _admin_user.get("email", "admin"),
+            "note": body.note,
+            "items_added": [{"name": i.name, "category": i.category} for i in body.items],
+        }},
+    )
+
+    logger.info(
+        "Receipt ticket processed ticket_id=%s user_id=%s items=%d by=%s",
+        ticket_id, user_id, len(added_items), _admin_user.get("email", "admin"),
+    )
+    return {"ok": True, "ticket_id": ticket_id, "items_added": len(added_items)}
+
+
+@api_router.post("/admin/receipt-tickets/{ticket_id}/dismiss")
+async def dismiss_receipt_ticket(
+    ticket_id: str,
+    _admin_user: Dict[str, Any] = Depends(_require_admin),
+):
+    """Marque un ticket comme ignoré (admin uniquement)."""
+    try:
+        oid = ObjectId(ticket_id)
+    except Exception:
+        raise HTTPException(status_code=400, detail="ID invalide")
+    res = await receipt_tickets_col.update_one(
+        {"_id": oid},
+        {"$set": {"status": "dismissed", "dismissed_at": utc_now().isoformat(), "dismissed_by": _admin_user.get("email", "admin")}},
+    )
+    if res.matched_count == 0:
+        raise HTTPException(status_code=404, detail="Ticket non trouvé")
+    return {"ok": True}
+
+
 # -----------------------------------------------------------------------------
 # Stats mensuelles (score anti-gaspillage)
 # -----------------------------------------------------------------------------
@@ -2821,8 +2989,8 @@ async def get_gamification(
 
 # ── Gap-fill IA : génération automatique quand le catalogue est vide ──────────
 
-async def _ai_gap_fill(stock_names: list[str], openai_key: str) -> dict | None:
-    """Appelle OpenAI pour générer une recette française à partir des articles en stock.
+async def _ai_gap_fill(stock_names: list[str], gemini_key: str) -> dict | None:
+    """Appelle Gemini pour générer une recette française à partir des articles en stock.
     Retourne le premier dict recette valide, ou None en cas d'échec.
     Timeout géré par l'appelant via asyncio.wait_for.
     """
@@ -2831,21 +2999,18 @@ async def _ai_gap_fill(stock_names: list[str], openai_key: str) -> dict | None:
     try:
         async with httpx.AsyncClient(timeout=12) as http:
             r = await http.post(
-                "https://api.openai.com/v1/chat/completions",
-                headers={"Authorization": f"Bearer {openai_key}", "Content-Type": "application/json"},
+                f"https://generativelanguage.googleapis.com/v1beta/models/gemini-1.5-flash:generateContent?key={gemini_key}",
+                headers={"Content-Type": "application/json"},
                 json={
-                    "model": "gpt-4o-mini",
-                    "max_tokens": 600,
-                    "messages": [
-                        {"role": "system", "content": _AI_RECIPE_SYSTEM},
-                        {"role": "user", "content": prompt},
-                    ],
+                    "systemInstruction": {"parts": [{"text": _AI_RECIPE_SYSTEM}]},
+                    "contents": [{"parts": [{"text": prompt}]}],
+                    "generationConfig": {"maxOutputTokens": 600},
                 },
             )
             if r.status_code != 200:
-                logger.warning("AI gap fill OpenAI HTTP %s: %s", r.status_code, r.text[:200])
+                logger.warning("AI gap fill Gemini HTTP %s: %s", r.status_code, r.text[:200])
                 return None
-            text = r.json()["choices"][0]["message"]["content"].strip()
+            text = r.json()["candidates"][0]["content"]["parts"][0]["text"].strip()
     except Exception as exc:
         logger.warning("AI gap fill request failed: %s", exc)
         return None
@@ -3036,8 +3201,8 @@ async def get_ai_recipes(
     resolved_suggestion_style = resolve_suggestion_style(suggestion_style)
     include_meta_enabled = include_meta is True or str(include_meta).lower() in {"1", "true", "yes"}
     logger.debug("RECIPES_DEBUG ai called — user=%s", uid)
-    openai_key = os.environ.get("KEEPEAT_OPENAI_TOKEN", "")
-    if not openai_key:
+    gemini_key = os.environ.get("GEMINI_RECIPES_API_KEY", "")
+    if not gemini_key:
         raise HTTPException(status_code=503, detail="IA non configurée")
 
     # Cache 1h par utilisateur
@@ -3092,28 +3257,22 @@ async def get_ai_recipes(
     try:
         async with httpx.AsyncClient(timeout=30) as http:
             r = await http.post(
-                "https://api.openai.com/v1/chat/completions",
-                headers={
-                    "Authorization": f"Bearer {openai_key}",
-                    "Content-Type": "application/json",
-                },
+                f"https://generativelanguage.googleapis.com/v1beta/models/gemini-1.5-flash:generateContent?key={gemini_key}",
+                headers={"Content-Type": "application/json"},
                 json={
-                    "model": "gpt-4o-mini",
-                    "max_tokens": 800,
-                    "messages": [
-                        {"role": "system", "content": _AI_RECIPE_SYSTEM},
-                        {"role": "user", "content": prompt},
-                    ],
+                    "systemInstruction": {"parts": [{"text": _AI_RECIPE_SYSTEM}]},
+                    "contents": [{"parts": [{"text": prompt}]}],
+                    "generationConfig": {"maxOutputTokens": 800},
                 },
             )
             if r.status_code != 200:
-                logger.warning("OpenAI recipes/ai error %s: %s", r.status_code, r.text[:200])
+                logger.warning("Gemini recipes/ai error %s: %s", r.status_code, r.text[:200])
                 raise HTTPException(status_code=502, detail="Erreur IA externe")
-            text = r.json()["choices"][0]["message"]["content"].strip()
+            text = r.json()["candidates"][0]["content"]["parts"][0]["text"].strip()
     except HTTPException:
         raise
     except Exception as exc:
-        logger.warning("OpenAI recipes/ai request failed: %s", exc)
+        logger.warning("Gemini recipes/ai request failed: %s", exc)
         raise HTTPException(status_code=502, detail="Erreur réseau IA")
 
     # Nettoyage du bloc markdown éventuel
@@ -3127,7 +3286,7 @@ async def get_ai_recipes(
     try:
         recipes = json.loads(text)
     except Exception:
-        logger.warning("OpenAI recipes/ai invalid JSON: %s", text[:200])
+        logger.warning("Gemini recipes/ai invalid JSON: %s", text[:200])
         raise HTTPException(status_code=502, detail="Réponse IA invalide")
 
     for recipe in recipes:
@@ -3302,7 +3461,8 @@ async def admin_monitoring_health(
         db_ok = False
 
     external_status = {
-        "openai_configured": bool(os.getenv("KEEPEAT_OPENAI_TOKEN")),
+        "gemini_ocr_configured": bool(os.getenv("GEMINI_OCR_API_KEY")),
+        "gemini_recipes_configured": bool(os.getenv("GEMINI_RECIPES_API_KEY")),
         "brevo_configured": bool(os.getenv("BREVO_API_KEY")),
         "openfoodfacts_configured": bool(os.getenv("OPENFOODFACTS_USER_AGENT", "KeepEat/1.0")),
     }
@@ -3919,6 +4079,442 @@ document.getElementById('password').addEventListener('keydown', e => { if(e.key=
 async def admin_recipes_page():
     """Page web d'import de recettes pour les administrateurs KeepEat."""
     return HTMLResponse(content=_ADMIN_RECIPES_HTML)
+
+
+# ── Page admin : traitement tickets de caisse ─────────────────────────────────
+
+_ADMIN_TICKETS_HTML = """<!DOCTYPE html>
+<html lang="fr">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>KeepEat — Tickets de caisse</title>
+<style>
+  *{box-sizing:border-box;margin:0;padding:0}
+  body{font-family:system-ui,sans-serif;background:#f0fdf4;color:#1a1a1a;min-height:100vh}
+  .header{background:#16a34a;color:#fff;padding:16px 24px;display:flex;align-items:center;gap:12px}
+  .header h1{font-size:18px;font-weight:700}
+  .header nav{display:flex;gap:8px;margin-left:auto;align-items:center}
+  .header nav a{color:#fff;font-size:13px;opacity:.8;text-decoration:none;padding:4px 10px;border-radius:6px;border:1px solid rgba(255,255,255,.3)}
+  .header nav a:hover{opacity:1;background:rgba(255,255,255,.15)}
+  .logged-as{font-size:12px;color:rgba(255,255,255,.75);margin-right:4px}
+  a.logout{font-size:12px;color:#fca5a5;cursor:pointer;text-decoration:underline}
+  .container{max-width:1100px;margin:28px auto;padding:0 16px;display:flex;flex-direction:column;gap:16px}
+  .card{background:#fff;border-radius:12px;border:1px solid #d1fae5;padding:24px}
+  .card h2{font-size:15px;font-weight:700;color:#166534;margin-bottom:16px}
+  label{display:block;font-size:13px;font-weight:600;color:#374151;margin-bottom:6px}
+  input[type=email],input[type=password],input[type=text]{width:100%;padding:10px 12px;border:1px solid #d1d5db;border-radius:8px;font-size:14px;outline:none}
+  input:focus{border-color:#16a34a;box-shadow:0 0 0 2px #bbf7d0}
+  .row{display:grid;grid-template-columns:1fr 1fr;gap:12px}
+  button{background:#16a34a;color:#fff;border:none;border-radius:8px;padding:10px 20px;font-size:14px;font-weight:700;cursor:pointer;transition:.15s}
+  button:hover{background:#15803d}
+  button.secondary{background:#fff;color:#374151;border:1px solid #d1d5db}
+  button.secondary:hover{background:#f9fafb}
+  button.danger{background:#ef4444}
+  button.danger:hover{background:#dc2626}
+  button:disabled{opacity:.5;cursor:not-allowed}
+  .result{border-radius:8px;padding:12px 16px;font-size:13px;line-height:1.6;margin-top:12px}
+  .result.success{background:#f0fdf4;border:1px solid #86efac;color:#166534}
+  .result.error{background:#fef2f2;border:1px solid #fca5a5;color:#dc2626}
+  .result.info{background:#eff6ff;border:1px solid #93c5fd;color:#1d4ed8}
+  /* Filters */
+  .filter-bar{display:flex;gap:8px;flex-wrap:wrap;align-items:center}
+  .filter-btn{padding:6px 14px;border-radius:999px;border:1.5px solid #d1d5db;background:#fff;font-size:13px;font-weight:700;color:#6b7280;cursor:pointer;transition:.15s}
+  .filter-btn:hover{border-color:#16a34a;color:#166534}
+  .filter-btn.active{border-color:#16a34a;background:#f0fdf4;color:#166534}
+  .filter-count{font-size:12px;color:#9ca3af;margin-left:auto}
+  /* Tickets list */
+  .tickets-grid{display:flex;flex-direction:column;gap:10px}
+  .ticket-card{background:#fff;border-radius:10px;border:1.5px solid #e5e7eb;padding:14px 16px;display:flex;align-items:center;gap:12px;cursor:pointer;transition:.15s}
+  .ticket-card:hover{border-color:#86efac;box-shadow:0 2px 8px rgba(0,0,0,.07)}
+  .ticket-dot{width:12px;height:12px;border-radius:50%;flex-shrink:0}
+  .ticket-info{flex:1;min-width:0}
+  .ticket-email{font-size:14px;font-weight:700;color:#111827;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+  .ticket-meta{font-size:12px;color:#6b7280;margin-top:2px}
+  .ticket-badge{font-size:11px;font-weight:700;padding:3px 10px;border-radius:999px;flex-shrink:0}
+  /* Modal */
+  .modal-overlay{position:fixed;inset:0;background:rgba(0,0,0,.55);display:flex;align-items:flex-start;justify-content:center;padding:32px 16px;z-index:100;overflow-y:auto}
+  .modal{background:#fff;border-radius:16px;width:100%;max-width:780px;overflow:hidden;box-shadow:0 20px 60px rgba(0,0,0,.18)}
+  .modal-header{background:#f0fdf4;padding:16px 20px;display:flex;align-items:center;gap:10px;border-bottom:1px solid #d1fae5}
+  .modal-header h3{font-size:16px;font-weight:800;color:#111827;flex:1}
+  .modal-close{background:none;border:none;font-size:22px;color:#9ca3af;cursor:pointer;padding:0 4px;line-height:1}
+  .modal-close:hover{color:#374151}
+  .modal-body{padding:20px;display:grid;grid-template-columns:1fr 1fr;gap:20px}
+  @media(max-width:640px){.modal-body{grid-template-columns:1fr}}
+  .receipt-img{width:100%;border-radius:10px;border:1px solid #e5e7eb;max-height:420px;object-fit:contain;background:#f9fafb}
+  .receipt-placeholder{width:100%;height:200px;border-radius:10px;border:1.5px dashed #d1d5db;display:flex;align-items:center;justify-content:center;color:#9ca3af;font-size:14px}
+  .form-section{display:flex;flex-direction:column;gap:12px}
+  .items-list{display:flex;flex-direction:column;gap:10px;max-height:300px;overflow-y:auto}
+  .item-row{background:#f9fafb;border-radius:8px;padding:10px;border:1px solid #e5e7eb;display:flex;flex-direction:column;gap:8px}
+  .item-row-top{display:flex;gap:8px}
+  .item-row-top input{flex:1;padding:8px 10px;border:1px solid #d1d5db;border-radius:6px;font-size:13px}
+  .remove-btn{background:#fee2e2;color:#ef4444;border:none;border-radius:6px;padding:0 10px;font-weight:700;cursor:pointer;font-size:16px}
+  .remove-btn:hover{background:#fecaca}
+  .cats{display:flex;gap:5px;flex-wrap:wrap}
+  .cat-btn{padding:3px 9px;border-radius:999px;border:1px solid #e5e7eb;background:#fff;font-size:11px;font-weight:600;color:#6b7280;cursor:pointer}
+  .cat-btn:hover{border-color:#16a34a;color:#166534}
+  .cat-btn.active{border-color:#16a34a;background:#dcfce7;color:#166534}
+  .expiry-input{width:100%;padding:7px 10px;border:1px solid #d1d5db;border-radius:6px;font-size:12px;color:#374151}
+  .add-item-btn{border:1.5px dashed #86efac;background:#f0fdf4;color:#166534;font-size:13px;font-weight:700;border-radius:8px;padding:10px;cursor:pointer;width:100%;text-align:center}
+  .add-item-btn:hover{background:#dcfce7}
+  .note-input{width:100%;padding:10px;border:1px solid #d1d5db;border-radius:8px;font-size:13px;resize:vertical;min-height:60px;outline:none}
+  .note-input:focus{border-color:#16a34a;box-shadow:0 0 0 2px #bbf7d0}
+  .action-row{display:flex;gap:10px;margin-top:4px}
+  .action-row button{flex:1}
+  /* Status colors */
+  .dot-pending{background:#f59e0b}
+  .dot-processed{background:#16a34a}
+  .dot-dismissed{background:#9ca3af}
+  .badge-pending{background:#fef3c7;color:#92400e}
+  .badge-processed{background:#dcfce7;color:#166534}
+  .badge-dismissed{background:#f3f4f6;color:#6b7280}
+  /* Processed info */
+  .processed-banner{background:#f0fdf4;border:1px solid #bbf7d0;border-radius:8px;padding:12px 14px;font-size:13px;color:#166534}
+  .items-added-list{margin-top:8px;font-size:12px;color:#374151;list-style:disc;padding-left:18px}
+  /* Loader */
+  .spinner{display:inline-block;width:18px;height:18px;border:2.5px solid rgba(255,255,255,.4);border-top-color:#fff;border-radius:50%;animation:spin .7s linear infinite;vertical-align:middle}
+  @keyframes spin{to{transform:rotate(360deg)}}
+  #login-section{display:block}
+  #tickets-section{display:none}
+</style>
+</head>
+<body>
+<div class="header">
+  <span>🧾</span>
+  <h1>KeepEat — Tickets de caisse</h1>
+  <nav>
+    <a href="/admin/recipes">Recettes</a>
+    <span id="logged-info" class="logged-as" style="display:none"></span>
+    <a id="btn-logout" class="logout" style="display:none" onclick="logout()">Déconnexion</a>
+  </nav>
+</div>
+<div class="container">
+
+  <!-- LOGIN -->
+  <div class="card" id="login-section">
+    <h2>Connexion admin</h2>
+    <div class="row" style="margin-bottom:12px">
+      <div><label>Email</label><input id="email" type="email" placeholder="admin@example.com" autocomplete="username"></div>
+      <div><label>Mot de passe</label><input id="password" type="password" placeholder="••••••••" autocomplete="current-password"></div>
+    </div>
+    <button onclick="doLogin()">Se connecter</button>
+    <div id="login-result"></div>
+  </div>
+
+  <!-- TICKETS -->
+  <div id="tickets-section">
+    <div class="card">
+      <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:14px">
+        <h2 style="margin:0">Tickets de caisse</h2>
+        <button class="secondary" onclick="loadTickets()" style="padding:7px 14px;font-size:13px">Actualiser</button>
+      </div>
+      <div class="filter-bar" style="margin-bottom:14px">
+        <button class="filter-btn active" data-status="pending"   onclick="setFilter('pending')">En attente</button>
+        <button class="filter-btn"        data-status="processed" onclick="setFilter('processed')">Traités</button>
+        <button class="filter-btn"        data-status="dismissed" onclick="setFilter('dismissed')">Ignorés</button>
+        <button class="filter-btn"        data-status="all"       onclick="setFilter('all')">Tous</button>
+        <span class="filter-count" id="filter-count"></span>
+      </div>
+      <div class="tickets-grid" id="tickets-list">
+        <div class="result info">Chargement des tickets...</div>
+      </div>
+      <div id="list-result"></div>
+    </div>
+  </div>
+
+</div>
+
+<!-- MODAL -->
+<div class="modal-overlay" id="modal-overlay" style="display:none" onclick="closeModal(event)">
+  <div class="modal" id="modal-box">
+    <div class="modal-header">
+      <h3 id="modal-title">Ticket</h3>
+      <button class="modal-close" onclick="closeModal()">×</button>
+    </div>
+    <div class="modal-body" id="modal-body">
+      <div class="result info">Chargement...</div>
+    </div>
+  </div>
+</div>
+
+<script>
+const CATS = ['frais','proteines','legumes','feculents','desserts','boissons','epicerie','autres'];
+let token = localStorage.getItem('keepeat_admin_token');
+let userEmail = localStorage.getItem('keepeat_admin_email');
+let currentFilter = 'pending';
+let currentTicketId = null;
+
+if (token) showTicketsSection();
+
+function showTicketsSection() {
+  document.getElementById('login-section').style.display = 'none';
+  document.getElementById('tickets-section').style.display = 'block';
+  const info = document.getElementById('logged-info');
+  info.textContent = userEmail || 'admin';
+  info.style.display = 'inline';
+  document.getElementById('btn-logout').style.display = 'inline';
+  loadTickets();
+}
+
+async function doLogin() {
+  const email = document.getElementById('email').value.trim();
+  const password = document.getElementById('password').value;
+  const res = document.getElementById('login-result');
+  if (!email || !password) { res.innerHTML = '<div class="result error">Email et mot de passe requis.</div>'; return; }
+  try {
+    const r = await fetch('/api/auth/login', {method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({email,password})});
+    const data = await r.json();
+    if (!r.ok) { res.innerHTML = '<div class="result error">' + (data.detail || 'Identifiants incorrects.') + '</div>'; return; }
+    token = data.access_token;
+    localStorage.setItem('keepeat_admin_token', token);
+    localStorage.setItem('keepeat_admin_email', email);
+    userEmail = email;
+    showTicketsSection();
+  } catch(e) { res.innerHTML = '<div class="result error">Erreur réseau : ' + e.message + '</div>'; }
+}
+
+function logout() {
+  localStorage.removeItem('keepeat_admin_token');
+  localStorage.removeItem('keepeat_admin_email');
+  token = null;
+  document.getElementById('login-section').style.display = 'block';
+  document.getElementById('tickets-section').style.display = 'none';
+  document.getElementById('logged-info').style.display = 'none';
+  document.getElementById('btn-logout').style.display = 'none';
+}
+
+function setFilter(status) {
+  currentFilter = status;
+  document.querySelectorAll('.filter-btn').forEach(b => {
+    b.classList.toggle('active', b.dataset.status === status);
+  });
+  loadTickets();
+}
+
+async function loadTickets() {
+  const list = document.getElementById('tickets-list');
+  list.innerHTML = '<div class="result info">Chargement...</div>';
+  document.getElementById('list-result').innerHTML = '';
+  try {
+    const r = await fetch('/api/admin/receipt-tickets?status=' + currentFilter + '&limit=50&skip=0', {
+      headers: {'Authorization':'Bearer '+token}
+    });
+    if (r.status === 401) { logout(); return; }
+    const data = await r.json();
+    document.getElementById('filter-count').textContent = data.total + ' ticket' + (data.total > 1 ? 's' : '');
+    if (data.tickets.length === 0) {
+      list.innerHTML = '<div class="result info">Aucun ticket dans cette catégorie.</div>';
+      return;
+    }
+    list.innerHTML = data.tickets.map(t => {
+      const dotClass = 'dot-' + t.status;
+      const badgeClass = 'badge-' + t.status;
+      const labels = {pending:'En attente', processed:'Traité', dismissed:'Ignoré'};
+      const date = new Date(t.created_at).toLocaleString('fr-FR');
+      const itemsInfo = t.status === 'processed' && t.items_added && t.items_added.length > 0
+        ? '<span style="font-size:11px;color:#16a34a;margin-left:8px">✓ ' + t.items_added.length + ' produit(s) ajouté(s)</span>'
+        : '';
+      return '<div class="ticket-card" onclick="openTicket(\'' + t.id + '\')">'
+        + '<div class="ticket-dot ' + dotClass + '"></div>'
+        + '<div class="ticket-info">'
+        + '<div class="ticket-email">' + escHtml(t.user_email || t.user_id) + '</div>'
+        + '<div class="ticket-meta">' + date + itemsInfo + '</div>'
+        + '</div>'
+        + '<span class="ticket-badge ' + badgeClass + '">' + (labels[t.status] || t.status) + '</span>'
+        + '</div>';
+    }).join('');
+  } catch(e) {
+    list.innerHTML = '<div class="result error">Erreur : ' + e.message + '</div>';
+  }
+}
+
+async function openTicket(ticketId) {
+  currentTicketId = ticketId;
+  const overlay = document.getElementById('modal-overlay');
+  const body = document.getElementById('modal-body');
+  const title = document.getElementById('modal-title');
+  title.textContent = 'Chargement…';
+  body.innerHTML = '<div style="padding:20px"><div class="result info">Chargement du ticket...</div></div>';
+  overlay.style.display = 'flex';
+
+  try {
+    const r = await fetch('/api/admin/receipt-tickets/' + ticketId, {
+      headers: {'Authorization':'Bearer '+token}
+    });
+    if (r.status === 401) { logout(); closeModal(); return; }
+    const ticket = await r.json();
+    title.textContent = 'Ticket — ' + (ticket.user_email || ticket.user_id);
+    renderModal(ticket);
+  } catch(e) {
+    body.innerHTML = '<div style="padding:20px"><div class="result error">Erreur : ' + e.message + '</div></div>';
+  }
+}
+
+function renderModal(ticket) {
+  const body = document.getElementById('modal-body');
+  const date = new Date(ticket.created_at).toLocaleString('fr-FR');
+  const imgHtml = ticket.image_b64
+    ? '<img class="receipt-img" src="data:image/jpeg;base64,' + ticket.image_b64 + '" alt="Ticket de caisse">'
+    : '<div class="receipt-placeholder">Pas d\'image disponible</div>';
+
+  let rightPanel = '';
+  if (ticket.status !== 'pending') {
+    // Read-only view for processed/dismissed
+    const labels = {processed:'Traité ✓', dismissed:'Ignoré'};
+    let itemsList = '';
+    if (ticket.items_added && ticket.items_added.length > 0) {
+      itemsList = '<ul class="items-added-list">' + ticket.items_added.map(i => '<li>' + escHtml(i.name) + ' <em>(' + escHtml(i.category) + ')</em></li>').join('') + '</ul>';
+    }
+    rightPanel = '<div class="form-section">'
+      + '<div class="processed-banner"><strong>' + (labels[ticket.status] || ticket.status) + '</strong>'
+      + (ticket.note ? '<br>' + escHtml(ticket.note) : '')
+      + (itemsList ? '<br>' + itemsList : '')
+      + '</div>'
+      + (ticket.status === 'processed' ? '' : '<div style="margin-top:12px"><button onclick="reopenTicket(\'' + ticket.id + '\')">Remettre en attente</button></div>')
+      + '</div>';
+  } else {
+    // Editable form
+    rightPanel = '<div class="form-section">'
+      + '<div style="font-size:13px;font-weight:700;color:#374151;margin-bottom:4px">Produits à ajouter au stock</div>'
+      + '<div class="items-list" id="items-list"><div class="item-row">' + buildItemRow(0) + '</div></div>'
+      + '<button class="add-item-btn" onclick="addItemRow()">+ Ajouter un produit</button>'
+      + '<div>'
+      + '<label style="margin-top:4px">Note admin (optionnel)</label>'
+      + '<textarea class="note-input" id="admin-note" placeholder="Commentaire interne..."></textarea>'
+      + '</div>'
+      + '<div class="action-row">'
+      + '<button id="btn-process" onclick="processTicket()">Valider et ajouter au stock</button>'
+      + '<button class="danger" onclick="dismissTicket()">Ignorer</button>'
+      + '</div>'
+      + '<div id="modal-result"></div>'
+      + '</div>';
+  }
+
+  body.innerHTML = '<div>' + imgHtml + '</div>' + rightPanel;
+  initItemRows();
+}
+
+let itemCount = 1;
+
+function buildItemRow(idx) {
+  return '<div class="item-row-top">'
+    + '<input type="text" id="item-name-' + idx + '" placeholder="Nom du produit" oninput="syncItems()">'
+    + '<button class="remove-btn" onclick="removeItemRow(' + idx + ')">×</button>'
+    + '</div>'
+    + '<div class="cats" id="cats-' + idx + '">'
+    + CATS.map(c => '<button class="cat-btn' + (c === 'autres' ? ' active' : '') + '" data-cat="' + c + '" data-idx="' + idx + '" onclick="selectCat(this)">' + c + '</button>').join('')
+    + '</div>'
+    + '<input class="expiry-input" id="item-expiry-' + idx + '" type="text" placeholder="DLC YYYY-MM-DD (optionnel)">';
+}
+
+function initItemRows() { itemCount = 1; }
+
+function addItemRow() {
+  const list = document.getElementById('items-list');
+  const div = document.createElement('div');
+  div.className = 'item-row';
+  div.id = 'item-row-' + itemCount;
+  div.innerHTML = buildItemRow(itemCount);
+  list.appendChild(div);
+  itemCount++;
+}
+
+function removeItemRow(idx) {
+  const row = document.getElementById('item-row-' + idx);
+  if (row) row.remove();
+}
+
+function selectCat(btn) {
+  const idx = btn.dataset.idx;
+  document.querySelectorAll('#cats-' + idx + ' .cat-btn').forEach(b => b.classList.remove('active'));
+  btn.classList.add('active');
+}
+
+function syncItems() {}
+
+function collectItems() {
+  const items = [];
+  for (let i = 0; i < itemCount + 10; i++) {
+    const nameEl = document.getElementById('item-name-' + i);
+    if (!nameEl) continue;
+    const name = nameEl.value.trim();
+    if (!name) continue;
+    const activeCat = document.querySelector('#cats-' + i + ' .cat-btn.active');
+    const category = activeCat ? activeCat.dataset.cat : 'autres';
+    const expiryEl = document.getElementById('item-expiry-' + i);
+    const expiry = expiryEl ? expiryEl.value.trim() : '';
+    items.push({ name, category, expiry_date: expiry || null });
+  }
+  return items;
+}
+
+async function processTicket() {
+  const items = collectItems();
+  if (items.length === 0) {
+    document.getElementById('modal-result').innerHTML = '<div class="result error">Ajoutez au moins un produit.</div>';
+    return;
+  }
+  const note = (document.getElementById('admin-note') || {}).value || '';
+  const btn = document.getElementById('btn-process');
+  btn.disabled = true;
+  btn.innerHTML = '<span class="spinner"></span> Traitement...';
+  try {
+    const r = await fetch('/api/admin/receipt-tickets/' + currentTicketId + '/process', {
+      method: 'POST',
+      headers: {'Content-Type':'application/json','Authorization':'Bearer '+token},
+      body: JSON.stringify({items, note})
+    });
+    const data = await r.json();
+    if (!r.ok) throw new Error(data.detail || JSON.stringify(data));
+    document.getElementById('modal-result').innerHTML = '<div class="result success"><strong>' + data.items_added + ' produit(s) ajouté(s) au stock.</strong></div>';
+    setTimeout(() => { closeModal(); loadTickets(); }, 1500);
+  } catch(e) {
+    document.getElementById('modal-result').innerHTML = '<div class="result error">Erreur : ' + e.message + '</div>';
+    btn.disabled = false;
+    btn.textContent = 'Valider et ajouter au stock';
+  }
+}
+
+async function dismissTicket() {
+  if (!confirm('Ignorer ce ticket ? Il sera marqué comme ignoré.')) return;
+  try {
+    const r = await fetch('/api/admin/receipt-tickets/' + currentTicketId + '/dismiss', {
+      method: 'POST',
+      headers: {'Authorization':'Bearer '+token}
+    });
+    if (!r.ok) { const d = await r.json(); throw new Error(d.detail || 'Erreur'); }
+    closeModal();
+    loadTickets();
+  } catch(e) {
+    alert('Erreur : ' + e.message);
+  }
+}
+
+async function reopenTicket(ticketId) {
+  // Remettre en "pending" via un PATCH simplifié (recharge juste la page)
+  alert('Pour remettre en attente, utilisez directement MongoDB. Fonctionnalité à implémenter si nécessaire.');
+}
+
+function closeModal(event) {
+  if (event && event.target !== document.getElementById('modal-overlay')) return;
+  document.getElementById('modal-overlay').style.display = 'none';
+  currentTicketId = null;
+}
+
+function escHtml(str) {
+  return String(str || '').replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;');
+}
+
+document.getElementById('password').addEventListener('keydown', e => { if (e.key === 'Enter') doLogin(); });
+</script>
+</body>
+</html>"""
+
+
+@app.get("/admin/tickets", response_class=HTMLResponse, include_in_schema=False)
+async def admin_tickets_page():
+    """Page web de traitement des tickets de caisse pour les administrateurs KeepEat."""
+    return HTMLResponse(content=_ADMIN_TICKETS_HTML)
 
 
 # Redirect pages (deep link fallback for email clients)
