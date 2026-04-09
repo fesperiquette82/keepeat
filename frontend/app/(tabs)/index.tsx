@@ -13,11 +13,19 @@ import { fetchRecipesSuggestions } from '../../utils/recipesApi';
 import { logger } from '../../utils/logger';
 
 function expiryText(days: number | null): string {
-  if (days === null) return 'Date non renseignée';
+  if (days === null) return ‘Date non renseignée’;
   if (days < 0) return `Périmé depuis ${Math.abs(days)} j`;
-  if (days === 0) return 'Expire aujourd’hui';
-  if (days === 1) return 'Expire demain';
+  if (days === 0) return ‘Expire aujourd’hui’;
+  if (days === 1) return ‘Expire demain’;
   return `Expire dans ${days} j`;
+}
+
+function expiryColor(days: number | null): string {
+  if (days === null) return ‘#6B7280’;
+  if (days <= 0) return ‘#EF4444’;
+  if (days <= 3) return ‘#F97316’;
+  if (days <= 7) return ‘#EAB308’;
+  return ‘#166534’;
 }
 
 export default function HomeDashboardScreen() {
@@ -128,24 +136,31 @@ export default function HomeDashboardScreen() {
           {expiringSoon.length === 0 ? (
             <Text style={styles.emptyText}>Aucun produit urgent pour le moment 🎉</Text>
           ) : (
-            expiringSoon.map((item) => (
-              <View key={item.id} style={styles.rowItem}>
-                <View style={styles.rowMain}>
-                  <View style={styles.squareThumb}>
-                    {item.image_url ? (
-                      <Image source={{ uri: item.image_url }} style={styles.squareThumbImage} />
-                    ) : (
-                      <Ionicons name="nutrition-outline" size={16} color={C.textMid} />
-                    )}
+            expiringSoon.map((item) => {
+              const days = daysUntil(item.expiry_date);
+              const urgColor = expiryColor(days);
+              return (
+                <View key={item.id} style={styles.rowItem}>
+                  <View style={styles.rowMain}>
+                    <View style={styles.squareThumb}>
+                      {item.image_url ? (
+                        <Image source={{ uri: item.image_url }} style={styles.squareThumbImage} />
+                      ) : (
+                        <Ionicons name="nutrition-outline" size={16} color={C.textMid} />
+                      )}
+                    </View>
+                    <View style={styles.rowText}>
+                      <Text style={styles.rowTitle}>{item.name}</Text>
+                      <Text style={styles.rowMeta}>{storageZoneLabel(item.storageZone)} · {item.quantity ?? UI_LABELS.fr.unknownQuantity}</Text>
+                    </View>
                   </View>
-                  <View style={styles.rowText}>
-                    <Text style={styles.rowTitle}>{item.name}</Text>
-                    <Text style={styles.rowMeta}>{storageZoneLabel(item.storageZone)} · {item.quantity ?? UI_LABELS.fr.unknownQuantity}</Text>
+                  <View style={styles.expiryBadge}>
+                    <View style={[styles.urgencyDot, { backgroundColor: urgColor }]} />
+                    <Text style={[styles.rowExpiry, { color: urgColor }]}>{expiryText(days)}</Text>
                   </View>
                 </View>
-                <Text style={styles.rowExpiry}>{expiryText(daysUntil(item.expiry_date))}</Text>
-              </View>
-            ))
+              );
+            })
           )}
         </View>
 
@@ -226,7 +241,9 @@ const createStyles = (C: ReturnType<typeof getThemeColors>, T: ReturnType<typeof
   squareThumbImage: { width: '100%', height: '100%' },
   rowTitle: { fontSize: 15, color: C.text, fontWeight: '600' },
   rowMeta: { ...T.secondarySmall, marginTop: 2 },
-  rowExpiry: { color: '#166534', fontSize: 12, fontWeight: '700' },
+  expiryBadge: { flexDirection: 'row', alignItems: 'center', gap: 5 },
+  urgencyDot: { width: 8, height: 8, borderRadius: 4 },
+  rowExpiry: { fontSize: 12, fontWeight: '700' },
   recipeRow: { paddingVertical: 5 },
   recipeMeta: { ...T.secondarySmall, marginTop: 2 },
   tipInline: { flexDirection: 'row', gap: 7, alignItems: 'center', paddingVertical: 2 },
