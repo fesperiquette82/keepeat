@@ -108,7 +108,7 @@ class PremiumGuardsV1Tests(unittest.TestCase):
                 _ = length
                 return [{"name": "oeufs", "food_category": "proteines"}]
 
-            with patch("server.app_state_col", fake_state), patch.dict("os.environ", {"KEEPEAT_OPENAI_TOKEN": "x"}, clear=False), patch("server.stock_col") as stock_mock, patch("server.httpx.AsyncClient", return_value=_FakeAsyncClient(_FakeOpenAiResponse())), patch("server.track_service_usage"), patch("server.track_business_event"):
+            with patch("server.app_state_col", fake_state), patch.dict("os.environ", {"GEMINI_RECIPES_API_KEY": "x"}, clear=False), patch("server.stock_col") as stock_mock, patch("server.httpx.AsyncClient", return_value=_FakeAsyncClient(_FakeOpenAiResponse())), patch("server.track_service_usage"), patch("server.track_business_event"):
                 stock_mock.find.return_value.sort.return_value.limit.return_value.to_list = _stock_to_list
                 for _ in range(5):
                     server._ai_recipe_cache.clear()
@@ -129,7 +129,7 @@ class PremiumGuardsV1Tests(unittest.TestCase):
                 _ = length
                 return []
 
-            with patch("server.app_state_col", fake_state), patch.dict("os.environ", {"KEEPEAT_OPENAI_TOKEN": "x"}, clear=False), patch("server.stock_col") as stock_mock:
+            with patch("server.app_state_col", fake_state), patch.dict("os.environ", {"GEMINI_RECIPES_API_KEY": "x"}, clear=False), patch("server.stock_col") as stock_mock:
                 stock_mock.find.return_value.sort.return_value.limit.return_value.to_list = _stock_to_list
                 payload = await get_ai_recipes(current_user={"id": "u1", "is_premium": False})
                 self.assertEqual(payload, [])
@@ -145,7 +145,7 @@ class PremiumGuardsV1Tests(unittest.TestCase):
                 _ = length
                 return [{"name": "oeufs", "food_category": "proteines"}]
 
-            with patch("server.app_state_col", fake_state), patch.dict("os.environ", {"KEEPEAT_OPENAI_TOKEN": "x"}, clear=False), patch("server.stock_col") as stock_mock, patch("server.httpx.AsyncClient", return_value=_FakeAsyncClient(_FakeOpenAiResponse(status_code=500, content="boom"))), patch("server.track_service_usage"), patch("server.track_business_event"):
+            with patch("server.app_state_col", fake_state), patch.dict("os.environ", {"GEMINI_RECIPES_API_KEY": "x"}, clear=False), patch("server.stock_col") as stock_mock, patch("server.httpx.AsyncClient", return_value=_FakeAsyncClient(_FakeOpenAiResponse(status_code=500, content="boom"))), patch("server.track_service_usage"), patch("server.track_business_event"):
                 stock_mock.find.return_value.sort.return_value.limit.return_value.to_list = _stock_to_list
                 with self.assertRaises(HTTPException) as cm:
                     await get_ai_recipes(current_user={"id": "u1", "is_premium": False})
