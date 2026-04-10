@@ -2,6 +2,7 @@ import assert from 'node:assert/strict';
 import test from 'node:test';
 
 import {
+  isBiometricAuthenticationCancellationError,
   parseBiometricCredentials,
   serializeBiometricCredentials,
   shouldDisplayBiometricLoginButton,
@@ -33,4 +34,22 @@ test('shouldDisplayBiometricLoginButton masque le bouton sur web', () => {
   assert.equal(shouldDisplayBiometricLoginButton(true, false, 'android'), false);
   assert.equal(shouldDisplayBiometricLoginButton(true, true, 'ios'), true);
   assert.equal(shouldDisplayBiometricLoginButton(true, true, 'android'), true);
+});
+
+test('isBiometricAuthenticationCancellationError détecte les annulations biométriques connues', () => {
+  assert.equal(
+    isBiometricAuthenticationCancellationError(
+      new Error("Could not authenticate the user: Unknown error (code: 5). Opération d'empreinte digitale annulée."),
+    ),
+    true,
+  );
+  assert.equal(
+    isBiometricAuthenticationCancellationError(new Error('Authentication canceled by the user.')),
+    true,
+  );
+  assert.equal(
+    isBiometricAuthenticationCancellationError(new Error('Invalid credentials')),
+    false,
+  );
+  assert.equal(isBiometricAuthenticationCancellationError(null), false);
 });

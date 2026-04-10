@@ -38,3 +38,23 @@ export function shouldDisplayBiometricLoginButton(
 ): boolean {
   return hasStoredCredentials && isBiometricSupported && platformOs !== 'web';
 }
+
+export function isBiometricAuthenticationCancellationError(error: unknown): boolean {
+  if (!error || typeof error !== 'object') {
+    return false;
+  }
+
+  const maybeError = error as { message?: unknown };
+  if (typeof maybeError.message !== 'string') {
+    return false;
+  }
+
+  const normalizedMessage = maybeError.message.toLowerCase();
+
+  return (
+    normalizedMessage.includes('could not authenticate the user') ||
+    normalizedMessage.includes("opération d'empreinte digitale annulée") ||
+    normalizedMessage.includes('authentication canceled') ||
+    normalizedMessage.includes('user canceled authentication')
+  );
+}

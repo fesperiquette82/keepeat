@@ -4,6 +4,7 @@ import { unregisterPushToken } from '../utils/notificationService';
 import { buildApiUrl } from '../utils/config';
 import {
   BIOMETRIC_CREDENTIALS_KEY,
+  isBiometricAuthenticationCancellationError,
   parseBiometricCredentials,
   serializeBiometricCredentials,
 } from '../utils/biometricAuth';
@@ -145,18 +146,26 @@ export const useAuthStore = create<AuthStore>((set) => ({
       await SecureStore.setItemAsync(TOKEN_KEY, access_token);
       await SecureStore.setItemAsync(USER_KEY, JSON.stringify(user));
       const isBiometricSupported = SecureStore.canUseBiometricAuthentication();
+      let hasBiometricCredentials = false;
       if (isBiometricSupported) {
-        await SecureStore.setItemAsync(
-          BIOMETRIC_CREDENTIALS_KEY,
-          serializeBiometricCredentials(email, password),
-          { requireAuthentication: true }
-        );
+        try {
+          await SecureStore.setItemAsync(
+            BIOMETRIC_CREDENTIALS_KEY,
+            serializeBiometricCredentials(email, password),
+            { requireAuthentication: true }
+          );
+          hasBiometricCredentials = true;
+        } catch (biometricError) {
+          if (!isBiometricAuthenticationCancellationError(biometricError)) {
+            throw biometricError;
+          }
+        }
       }
       set({
         token: access_token,
         user,
         plan: user.is_premium ? 'premium' : 'free',
-        hasBiometricCredentials: isBiometricSupported,
+        hasBiometricCredentials,
         isBiometricSupported,
       });
       await useAuthStore.getState().refreshEntitlements();
