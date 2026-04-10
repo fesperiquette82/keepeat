@@ -17,11 +17,20 @@ import Ionicons from '@expo/vector-icons/Ionicons';
 import { useAuthStore } from '../store/authStore';
 import { useLanguageStore } from '../store/languageStore';
 import { APP_CONFIG } from '../utils/appConfig';
+import { shouldDisplayBiometricLoginButton } from '../utils/biometricAuth';
 
 
 export default function LoginScreen() {
   const router = useRouter();
-  const { login, resendVerification, error, clearError } = useAuthStore();
+  const {
+    login,
+    loginWithBiometrics,
+    resendVerification,
+    error,
+    clearError,
+    hasBiometricCredentials,
+    isBiometricSupported,
+  } = useAuthStore();
   const { language } = useLanguageStore();
 
   const [email, setEmail] = useState('');
@@ -66,6 +75,27 @@ export default function LoginScreen() {
         setLocalError(
           err.message || (fr ? 'Email ou mot de passe incorrect.' : 'Invalid email or password.')
         );
+      }
+    } finally {
+      setIsLoading(false);
+    }
+  };
+
+  const handleBiometricLogin = async () => {
+    setLocalError(null);
+    clearError();
+    setIsLoading(true);
+    try {
+      await loginWithBiometrics();
+      // La navigation est gérée par _layout.tsx via le changement d'état user
+    } catch (err: any) {
+      if (err?.message === 'BIOMETRIC_NOT_SUPPORTED') {
+        setLocalError(fr ? 'Votre téléphone ne supporte pas la biométrie.' : 'Your phone does not support biometrics.');
+      } else
+      if (err?.message === 'BIOMETRIC_CREDENTIALS_NOT_FOUND') {
+        setLocalError(fr ? 'Aucun identifiant biométrique enregistré.' : 'No biometric credential is saved yet.');
+      } else {
+        setLocalError(fr ? 'Connexion biométrique échouée.' : 'Biometric sign-in failed.');
       }
     } finally {
       setIsLoading(false);
@@ -204,6 +234,19 @@ export default function LoginScreen() {
               )}
             </TouchableOpacity>
 
+            {shouldDisplayBiometricLoginButton(hasBiometricCredentials, isBiometricSupported, Platform.OS) && (
+              <TouchableOpacity
+                style={[styles.biometricBtn, isLoading && styles.submitBtnDisabled]}
+                onPress={handleBiometricLogin}
+                disabled={isLoading}
+              >
+                <Ionicons name="finger-print-outline" size={18} color="#22c55e" />
+                <Text style={styles.biometricBtnText}>
+                  {fr ? 'Connexion avec empreinte' : 'Sign in with fingerprint'}
+                </Text>
+              </TouchableOpacity>
+            )}
+
             <TouchableOpacity
               style={styles.switchLink}
               onPress={() => router.replace('/register')}
@@ -323,6 +366,18 @@ const styles = StyleSheet.create({
   },
   submitBtnDisabled: { opacity: 0.6 },
   submitBtnText: { color: '#fff', fontWeight: '800', fontSize: 16 },
+  biometricBtn: {
+    borderColor: '#22c55e',
+    borderWidth: 1.5,
+    borderRadius: 14,
+    height: 48,
+    alignItems: 'center',
+    justifyContent: 'center',
+    marginBottom: 20,
+    flexDirection: 'row',
+    gap: 8,
+  },
+  biometricBtnText: { color: '#166534', fontWeight: '700', fontSize: 15 },
 
   switchLink: { alignItems: 'center' },
   switchLinkText: { color: '#6B7280', fontSize: 14 },
