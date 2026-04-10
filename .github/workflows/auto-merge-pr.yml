@@ -43,7 +43,7 @@ jobs:
           fi
 
           case "$MERGE_STATE" in
-            CLEAN|HAS_HOOKS|UNSTABLE)
+            CLEAN|HAS_HOOKS)
               ;;
             *)
               echo "PR not ready for auto-merge yet. mergeStateStatus=$MERGE_STATE"
@@ -54,10 +54,12 @@ jobs:
           gh pr merge "$PR_NUMBER" --repo "$REPO" --auto --squash
 
   enable-automerge-checksuite:
-    if: github.event_name == 'check_suite'
+    if: >
+      github.event_name == 'check_suite' &&
+      github.event.check_suite.conclusion == 'success'
     runs-on: ubuntu-latest
     permissions:
-      contents: read
+      contents: write
       pull-requests: write
 
     steps:
@@ -98,7 +100,7 @@ jobs:
           fi
 
           case "$MERGE_STATE" in
-            CLEAN|HAS_HOOKS|UNSTABLE)
+            CLEAN|HAS_HOOKS)
               ;;
             *)
               echo "PR not ready for auto-merge yet. mergeStateStatus=$MERGE_STATE"
@@ -107,3 +109,4 @@ jobs:
           esac
 
           gh pr merge "$PR_NUMBER" --repo "$REPO" --auto --squash
+          
