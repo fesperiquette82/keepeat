@@ -8,7 +8,7 @@ test('buildLogoutConfirmationCopy construit les libellés de confirmation de dé
     logoutConfirmTitle: 'Déconnexion',
     logoutConfirmMessage: 'Voulez-vous vraiment vous déconnecter ?',
     cancel: 'Annuler',
-    logoutButton: 'Se déconnecter',
+    logoutButton: 'Déconnection',
   };
 
   const copy = buildLogoutConfirmationCopy((key) => dictionary[key] ?? `missing:${key}`);
@@ -17,6 +17,6 @@ test('buildLogoutConfirmationCopy construit les libellés de confirmation de dé
     title: 'Déconnexion',
     message: 'Voulez-vous vraiment vous déconnecter ?',
     cancelLabel: 'Annuler',
-    confirmLabel: 'Se déconnecter',
+    confirmLabel: 'Déconnection',
   });
 });

@@ -173,7 +173,7 @@ const translations: Translations = {
   restorePurchases: { fr: 'Restaurer mes achats', en: 'Restore purchases' },
   restoreError: { fr: 'Impossible de restaurer les achats.', en: 'Unable to restore purchases.' },
   accountSection: { fr: 'Compte', en: 'Account' },
-  logoutButton: { fr: 'Se déconnecter', en: 'Log out' },
+  logoutButton: { fr: 'Déconnection', en: 'Log out' },
   logoutConfirmTitle: { fr: 'Déconnexion', en: 'Log out' },
   logoutConfirmMessage: { fr: 'Voulez-vous vraiment vous déconnecter ?', en: 'Do you really want to log out?' },
   logoutErrorMessage: { fr: 'Impossible de vous déconnecter pour le moment.', en: 'Unable to log you out right now.' },

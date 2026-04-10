@@ -269,7 +269,7 @@ export default function SettingsScreen() {
           <Text style={styles.sectionTitle}>{t('accountSection')}</Text>
           <TouchableOpacity style={styles.logoutButton} onPress={onPressLogout}>
             <Ionicons name="log-out-outline" size={16} color="#FFFFFF" />
-            <Text style={styles.refreshButtonText}>{t('logoutButton')}</Text>
+            <Text style={styles.logoutButtonText}>{t('logoutButton')}</Text>
           </TouchableOpacity>
         </View>
       </View>
@@ -315,7 +315,7 @@ const createStyles = (C: ReturnType<typeof getThemeColors>, T: ReturnType<typeof
   loadingRow: { flexDirection: 'row', alignItems: 'center', gap: 8 },
   logoutButton: {
     marginTop: 4,
-    backgroundColor: C.danger,
+    backgroundColor: '#DC2626',
     borderRadius: 10,
     minHeight: 40,
     paddingHorizontal: 14,
@@ -324,6 +324,7 @@ const createStyles = (C: ReturnType<typeof getThemeColors>, T: ReturnType<typeof
     justifyContent: 'center',
     gap: 8,
   },
+  logoutButtonText: { color: '#FFFFFF', fontWeight: '700', fontSize: 14 },
   restoreButtonText: { color: '#166534', fontWeight: '700', fontSize: 14 },
   successText: { color: '#166534', fontSize: 12, fontWeight: '500' },
   errorText: { color: '#B91C1C', fontSize: 12, fontWeight: '500' },
