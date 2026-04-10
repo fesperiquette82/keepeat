@@ -109,4 +109,3 @@ jobs:
           esac
 
           gh pr merge "$PR_NUMBER" --repo "$REPO" --auto --squash
-          
