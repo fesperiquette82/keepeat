@@ -1572,8 +1572,8 @@
   },
   {
     "id": "fr_pancakes_agave",
-    "title": "Pancakes a l'agave",
-    "summary": "Des pancakes moelleux pour le petit-dejeuner avec un nappage leger au sirop d'agave.",
+    "title": "Pancakes à l'agave",
+    "summary": "Des pancakes moelleux pour le petit-déjeuner avec un nappage léger au sirop d'agave.",
     "ingredients_required": [
       "farine",
       "oeuf",
@@ -1586,9 +1586,9 @@
       "cranberries"
     ],
     "steps": [
-      "Melanger farine, oeuf, lait et une cuillere de sirop d'agave.",
-      "Laisser reposer la pate 5 minutes.",
-      "Cuire des petits pancakes dans une poele chaude.",
+      "Mélanger farine, œuf, lait et une cuillère de sirop d'agave.",
+      "Laisser reposer la pâte 5 minutes.",
+      "Cuire des petits pancakes dans une poêle chaude.",
       "Servir avec un filet d'agave et des cranberries."
     ],
     "prep_time_min": 8,
@@ -1625,7 +1625,7 @@
   {
     "id": "fr_porridge_coco_cranberries",
     "title": "Porridge coco cranberries",
-    "summary": "Un porridge cremeux au lait de coco, ideal pour un matin gourmand et simple.",
+    "summary": "Un porridge crémeux au lait de coco, idéal pour un matin gourmand et simple.",
     "ingredients_required": [
       "flocons d'avoine",
       "lait de coco",
@@ -1638,9 +1638,9 @@
     ],
     "steps": [
       "Chauffer le lait de coco dans une casserole.",
-      "Ajouter les flocons d'avoine et melanger jusqu'a epaississement.",
+      "Ajouter les flocons d'avoine et mélanger jusqu'à épaississement.",
       "Incorporer les cranberries.",
-      "Servir avec un filet d'agave ou une cuillere de puree d'amande."
+      "Servir avec un filet d'agave ou une cuillère de purée d'amande."
     ],
     "prep_time_min": 5,
     "cook_time_min": 8,
@@ -1676,7 +1676,7 @@
   {
     "id": "fr_energy_balls_amande_coco",
     "title": "Energy balls amande coco",
-    "summary": "Des bouchees sans cuisson a base de puree d'amande pour une collation pratique.",
+    "summary": "Des bouchées sans cuisson à base de purée d'amande pour une collation pratique.",
     "ingredients_required": [
       "puree d'amande",
       "flocons d'avoine",
@@ -1688,10 +1688,10 @@
       "cacao"
     ],
     "steps": [
-      "Melanger puree d'amande, flocons d'avoine et sirop d'agave.",
+      "Mélanger purée d'amande, flocons d'avoine et sirop d'agave.",
       "Ajouter un trait de lait de coco pour lier si besoin.",
-      "Incorporer les cranberries hachees.",
-      "Former des boules et reserver au frais."
+      "Incorporer les cranberries hachées.",
+      "Former des boules et réserver au frais."
     ],
     "prep_time_min": 10,
     "cook_time_min": 0,
@@ -1726,7 +1726,7 @@
   {
     "id": "fr_verrine_coco_cranberries",
     "title": "Verrine coco cranberries",
-    "summary": "Un dessert minute en verrine, frais et leger avec lait de coco et cranberries.",
+    "summary": "Un dessert minute en verrine, frais et léger avec lait de coco et cranberries.",
     "ingredients_required": [
       "lait de coco",
       "cranberries",
@@ -1738,10 +1738,10 @@
       "amandes"
     ],
     "steps": [
-      "Melanger le lait de coco avec le sirop d'agave.",
-      "Repartir dans des verrines.",
+      "Mélanger le lait de coco avec le sirop d'agave.",
+      "Répartir dans des verrines.",
       "Ajouter les cranberries et un topping au choix.",
-      "Laisser rafraichir 20 minutes avant de servir."
+      "Laisser rafraîchir 20 minutes avant de servir."
     ],
     "prep_time_min": 8,
     "cook_time_min": 0,
@@ -1776,8 +1776,8 @@
   },
   {
     "id": "fr_creme_dessert_vanille",
-    "title": "Creme dessert vanille rapide",
-    "summary": "Une creme dessert maison tres simple avec creme et lait de coco.",
+    "title": "Crème dessert vanille rapide",
+    "summary": "Une crème dessert maison très simple avec crème et lait de coco.",
     "ingredients_required": [
       "creme",
       "lait de coco",
@@ -1789,9 +1789,9 @@
       "cranberries"
     ],
     "steps": [
-      "Faire chauffer creme et lait de coco.",
+      "Faire chauffer crème et lait de coco.",
       "Sucrer avec le sirop d'agave.",
-      "Ajouter maizena delayee pour epaissir si disponible.",
+      "Ajouter de la maïzena délayée pour épaissir si disponible.",
       "Verser en pots et laisser prendre au frais."
     ],
     "prep_time_min": 10,
@@ -2334,7 +2334,7 @@
   {
     "id": "manual-shakshuka-aux-anchois-et-olives",
     "title": "Shakshuka aux anchois et olives",
-    "summary": "Une poêlée de tomates aux oeufs relevée par les anchois et les olives kalamata.",
+    "summary": "Une poêlée de tomates aux œufs relevée par les anchois et les olives kalamata.",
     "ingredients_required": [
       "passierte tomaten",
       "oeufs plein air bleu blanc coeur boite de 10",
@@ -2346,10 +2346,10 @@
       "creme entiere uht 30mg 3x20cl"
     ],
     "steps": [
-      "Fais chauffer l huile d olive dans une poêle et ajoute les anchois pour les faire fondre légèrement.",
+      "Fais chauffer l'huile d'olive dans une poêle et ajoute les anchois pour les faire fondre légèrement.",
       "Verse les passierte tomaten et ajoute les olives kalamata coupées en morceaux, puis laisse mijoter 10 minutes.",
-      "Creuse deux à trois petits puits dans la sauce et casse les oeufs dedans.",
-      "Couvre et laisse cuire jusqu à ce que les blancs soient pris.",
+      "Creuse deux à trois petits puits dans la sauce et casse les œufs dedans.",
+      "Couvre et laisse cuire jusqu'à ce que les blancs soient pris.",
       "Ajoute un filet de crème si souhaité avant de servir."
     ],
     "prep_time_min": 10,
@@ -2357,9 +2357,9 @@
     "difficulty": "easy",
     "tags": [
       "anti-gaspi",
-      "oeufs",
+      "œufs",
       "tomate",
-      "poelee"
+      "poêlée"
     ],
     "meal_type": [
       "lunch",
@@ -2369,7 +2369,7 @@
     "servings": 2,
     "search_terms": [
       "shakshuka",
-      "oeufs",
+      "œufs",
       "anchois",
       "olives",
       "tomates"
@@ -2389,8 +2389,8 @@
   },
   {
     "id": "manual-spaghetti-creme-tomate-mejillone",
-    "title": "Spaghetti creme tomate aux mejillone",
-    "summary": "Des spaghetti au quinoa nappes d une sauce tomate cremeuse avec des moules.",
+    "title": "Spaghetti crème tomate aux mejillone",
+    "summary": "Des spaghetti au quinoa nappés d'une sauce tomate crémeuse avec des moules.",
     "ingredients_required": [
       "spaghetti au quinoa curry curcuma",
       "passierte tomaten",
@@ -2404,18 +2404,18 @@
     ],
     "steps": [
       "Fais cuire les spaghetti selon les indications du paquet.",
-      "Pendant ce temps, fais chauffer un peu d huile d olive puis ajoute les passierte tomaten et la creme.",
-      "Ajoute les mejillone egouttés et mélange délicatement.",
-      "Incorpore quelques olives ou un peu d anchois si souhaité pour renforcer le goût.",
+      "Pendant ce temps, fais chauffer un peu d'huile d'olive puis ajoute les passierte tomaten et la crème.",
+      "Ajoute les mejillone égouttés et mélange délicatement.",
+      "Incorpore quelques olives ou un peu d'anchois si souhaité pour renforcer le goût.",
       "Égoutte les pâtes et mélange-les à la sauce avant de servir."
     ],
     "prep_time_min": 8,
     "cook_time_min": 15,
     "difficulty": "easy",
     "tags": [
-      "pates",
+      "pâtes",
       "fruits-de-mer",
-      "cremeux",
+      "crémeux",
       "rapide"
     ],
     "meal_type": [
@@ -2428,7 +2428,7 @@
       "spaghetti",
       "moules",
       "tomate",
-      "creme",
+      "crème",
       "quinoa"
     ],
     "compat": {
@@ -2460,10 +2460,10 @@
       "creme entiere uht 30mg 3x20cl"
     ],
     "steps": [
-      "Fais cuire le riz dans une casserole d eau bouillante jusqu à ce qu il soit tendre.",
-      "Dans une poêle, fais revenir les anchois dans un filet d huile d olive.",
-      "Ajoute les passierte tomaten puis une cuillère d olivade à la pistache et mélange.",
-      "Incorpore le riz cuit dans la sauce et mélange jusqu à ce qu il soit bien enrobé.",
+      "Fais cuire le riz dans une casserole d'eau bouillante jusqu'à ce qu'il soit tendre.",
+      "Dans une poêle, fais revenir les anchois dans un filet d'huile d'olive.",
+      "Ajoute les passierte tomaten puis une cuillère d'olivade à la pistache et mélange.",
+      "Incorpore le riz cuit dans la sauce et mélange jusqu'à ce qu'il soit bien enrobé.",
       "Ajoute quelques olives ou un trait de crème si souhaité avant de servir."
     ],
     "prep_time_min": 10,
@@ -2472,7 +2472,7 @@
     "tags": [
       "riz",
       "placard",
-      "mediterraneen",
+      "méditerranéen",
       "anti-gaspi"
     ],
     "meal_type": [
@@ -2502,8 +2502,8 @@
   },
   {
     "id": "manual-oeufs-brouilles-foie-de-morue-et-olives",
-    "title": "Oeufs brouilles au foie de morue et olives",
-    "summary": "Des oeufs brouilles riches et fondants garnis de foie de morue et d olives.",
+    "title": "Œufs brouillés au foie de morue et olives",
+    "summary": "Des œufs brouillés riches et fondants garnis de foie de morue et d'olives.",
     "ingredients_required": [
       "oeufs plein air bleu blanc coeur boite de 10",
       "foie de morue au naturel",
@@ -2515,11 +2515,11 @@
       "anchois entier"
     ],
     "steps": [
-      "Bats les oeufs dans un bol avec un peu de creme si souhaité.",
-      "Fais chauffer doucement une poêle avec un filet d huile d olive.",
-      "Verse les oeufs et remue sans cesse pour obtenir des oeufs brouillés moelleux.",
-      "Ajoute le foie de morue emietté en fin de cuisson.",
-      "Sers avec les olives coupées et quelques morceaux d anchois si souhaité."
+      "Bats les œufs dans un bol avec un peu de crème si souhaité.",
+      "Fais chauffer doucement une poêle avec un filet d'huile d'olive.",
+      "Verse les œufs et remue sans cesse pour obtenir des œufs brouillés moelleux.",
+      "Ajoute le foie de morue émietté en fin de cuisson.",
+      "Sers avec les olives coupées et quelques morceaux d'anchois si souhaité."
     ],
     "prep_time_min": 5,
     "cook_time_min": 8,
@@ -2538,7 +2538,7 @@
     "cuisine": "française",
     "servings": 2,
     "search_terms": [
-      "oeufs brouilles",
+      "œufs brouillés",
       "foie de morue",
       "olives"
     ],
@@ -2556,8 +2556,8 @@
   },
   {
     "id": "manual-cake-sale-rillettes-olives-et-tomate",
-    "title": "Cake sale rillettes olives et tomate",
-    "summary": "Un cake moelleux sale prepare avec des oeufs, des rillettes de canard et des olives.",
+    "title": "Cake salé rillettes olives et tomate",
+    "summary": "Un cake moelleux salé préparé avec des œufs, des rillettes de canard et des olives.",
     "ingredients_required": [
       "oeufs plein air bleu blanc coeur boite de 10",
       "poudre a lever",
@@ -2571,11 +2571,11 @@
       "huile d olive"
     ],
     "steps": [
-      "Préchauffe le four et mélange les oeufs avec la creme.",
+      "Préchauffe le four et mélange les œufs avec la crème.",
       "Ajoute une petite quantité de passierte tomaten pour parfumer la pâte et incorpore la poudre à lever.",
       "Ajoute les rillettes de canard et les olives coupées en morceaux.",
       "Verse la préparation dans un moule légèrement huilé.",
-      "Fais cuire au four jusqu à ce que le cake soit bien gonflé et doré."
+      "Fais cuire au four jusqu'à ce que le cake soit bien gonflé et doré."
     ],
     "prep_time_min": 15,
     "cook_time_min": 35,
@@ -2593,10 +2593,10 @@
     "cuisine": "française",
     "servings": 4,
     "search_terms": [
-      "cake sale",
+      "cake salé",
       "rillettes de canard",
       "olives",
-      "oeufs"
+      "œufs"
     ],
     "compat": {
       "storage_focus": [
@@ -2613,8 +2613,8 @@
   },
   {
     "id": "manual-spirales-creme-pistache-et-olivade",
-    "title": "Spirales creme pistache et olivade",
-    "summary": "Des pates courtes en sauce cremeuse à la pistache avec une touche salee d olivade.",
+    "title": "Spirales crème pistache et olivade",
+    "summary": "Des pâtes courtes en sauce crémeuse à la pistache avec une touche salée d'olivade.",
     "ingredients_required": [
       "spirale 1 2 complet",
       "creme entiere uht 30mg 3x20cl",
@@ -2627,19 +2627,19 @@
       "huile d olive"
     ],
     "steps": [
-      "Fais cuire les spirales dans une grande casserole d eau bouillante.",
-      "Dans une poêle, chauffe doucement la creme avec la crema de pistacho.",
-      "Ajoute une petite cuillère d olivade à la pistache pour apporter une note salee.",
-      "Mélange les pâtes egouttées avec la sauce.",
-      "Ajoute quelques olives ou un peu d anchois haché pour terminer si souhaité."
+      "Fais cuire les spirales dans une grande casserole d'eau bouillante.",
+      "Dans une poêle, chauffe doucement la crème avec la crema de pistacho.",
+      "Ajoute une petite cuillère d'olivade à la pistache pour apporter une note salée.",
+      "Mélange les pâtes égouttées avec la sauce.",
+      "Ajoute quelques olives ou un peu d'anchois haché pour terminer si souhaité."
     ],
     "prep_time_min": 8,
     "cook_time_min": 12,
     "difficulty": "easy",
     "tags": [
-      "pates",
+      "pâtes",
       "pistache",
-      "cremeux",
+      "crémeux",
       "original"
     ],
     "meal_type": [
@@ -2651,7 +2651,7 @@
     "search_terms": [
       "spirales",
       "pistache",
-      "creme",
+      "crème",
       "olivade"
     ],
     "compat": {
@@ -2669,8 +2669,8 @@
   },
   {
     "id": "manual-creme-dessert-pomme-poire-vanille-amande",
-    "title": "Creme dessert pomme poire vanille amande",
-    "summary": "Un dessert doux et rapide à base de compote, vanille et puree d amande.",
+    "title": "Crème dessert pomme poire vanille amande",
+    "summary": "Un dessert doux et rapide à base de compote, vanille et purée d'amande.",
     "ingredients_required": [
       "puree pomme poire sans sucres ajoutes 625g",
       "bio vanille bourbon arome naturel",
@@ -2683,11 +2683,11 @@
       "sirop d erable 250g"
     ],
     "steps": [
-      "Verse la puree pomme poire dans une casserole ou un bol.",
-      "Ajoute quelques gouttes de vanille et une cuillère de puree d amande blanche.",
-      "Sucre légèrement avec le sirop d agave selon le goût.",
-      "Ajoute un peu de creme pour une texture plus onctueuse si souhaité.",
-      "Sers frais avec du mix energie par dessus ou un filet de sirop d erable."
+      "Verse la purée pomme poire dans une casserole ou un bol.",
+      "Ajoute quelques gouttes de vanille et une cuillère de purée d'amande blanche.",
+      "Sucre légèrement avec le sirop d'agave selon le goût.",
+      "Ajoute un peu de crème pour une texture plus onctueuse si souhaité.",
+      "Sers frais avec du mix énergie par-dessus ou un filet de sirop d'érable."
     ],
     "prep_time_min": 5,
     "cook_time_min": 0,
@@ -2696,7 +2696,7 @@
       "dessert",
       "sans-cuisson",
       "fruit",
-      "gouter"
+      "goûter"
     ],
     "meal_type": [
       "snack",

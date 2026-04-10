@@ -3,6 +3,7 @@ from __future__ import annotations
 import hashlib
 import json
 import os
+import re
 import unicodedata as _ud
 from dataclasses import dataclass
 from functools import lru_cache
@@ -41,6 +42,27 @@ _EXOTIC_MARKERS = {
     "indien", "indienne", "curry", "masala", "mexicain", "mexicaine", "tacos",
     "kebab", "libanais", "coreen", "kimchi", "wok", "pho", "bo bun", "pad thai",
 }
+
+_RECIPE_TEXT_FIELDS = ("title", "summary")
+_RECIPE_LIST_TEXT_FIELDS = ("steps", "tags", "search_terms")
+_FRENCH_TEXT_REPLACEMENTS: tuple[tuple[re.Pattern[str], str], ...] = (
+    (re.compile(r"\boeufs\b", re.IGNORECASE), "œufs"),
+    (re.compile(r"\boeuf\b", re.IGNORECASE), "œuf"),
+    (re.compile(r"\bcremeuse\b", re.IGNORECASE), "crémeuse"),
+    (re.compile(r"\bcremeux\b", re.IGNORECASE), "crémeux"),
+    (re.compile(r"\bcreme\b", re.IGNORECASE), "crème"),
+    (re.compile(r"\bdejeuner\b", re.IGNORECASE), "déjeuner"),
+    (re.compile(r"\bgouter\b", re.IGNORECASE), "goûter"),
+    (re.compile(r"\bmelanger\b", re.IGNORECASE), "mélanger"),
+    (re.compile(r"\bpate\b", re.IGNORECASE), "pâte"),
+    (re.compile(r"\bcuillere\b", re.IGNORECASE), "cuillère"),
+    (re.compile(r"\bleger\b", re.IGNORECASE), "léger"),
+    (re.compile(r"\bideal\b", re.IGNORECASE), "idéal"),
+    (re.compile(r"\bbouchees\b", re.IGNORECASE), "bouchées"),
+    (re.compile(r"\brafraichir\b", re.IGNORECASE), "rafraîchir"),
+    (re.compile(r"\bmaizena\b", re.IGNORECASE), "maïzena"),
+    (re.compile(r"(?<=\s)a(?=\s|['’])"), "à"),
+)
 
 # Dictionnaire FR → EN pour les alertes quotidiennes (daily alert, _check_daily_expiry_alert)
 _FR_EN: dict[str, str] = {
@@ -143,6 +165,38 @@ class RecipeCatalogError(RuntimeError):
     """Raised when the local recipe catalog cannot be loaded or validated."""
 
 
+def _autocorrect_recipe_text(value: str) -> str:
+    corrected = value
+
+    def _replace(match: re.Match[str], replacement: str) -> str:
+        token = match.group(0)
+        if token.isupper():
+            return replacement.upper()
+        if token[:1].isupper():
+            return replacement[:1].upper() + replacement[1:]
+        return replacement
+
+    for pattern, replacement in _FRENCH_TEXT_REPLACEMENTS:
+        corrected = pattern.sub(lambda m, r=replacement: _replace(m, r), corrected)
+    return corrected
+
+
+def _autocorrect_recipe_payload(item: dict[str, Any]) -> dict[str, Any]:
+    corrected = dict(item)
+
+    for field in _RECIPE_TEXT_FIELDS:
+        raw = corrected.get(field)
+        if isinstance(raw, str):
+            corrected[field] = _autocorrect_recipe_text(raw)
+
+    for field in _RECIPE_LIST_TEXT_FIELDS:
+        raw = corrected.get(field)
+        if isinstance(raw, list):
+            corrected[field] = [_autocorrect_recipe_text(entry) if isinstance(entry, str) else entry for entry in raw]
+
+    return corrected
+
+
 def fr_to_en_ingredient(name: str, category: str = "autres") -> str:
     """Convertit un nom de produit français en ingrédient anglais (pour les alertes quotidiennes)."""
     norm = _normalize_fr(name)
@@ -218,6 +272,8 @@ def load_local_recipes(catalog_path: str | os.PathLike[str] | None = None) -> tu
     recipes: list[Recipe] = []
     seen_ids: set[str] = set()
     for index, item in enumerate(raw):
+        if isinstance(item, dict):
+            item = _autocorrect_recipe_payload(item)
         try:
             recipe = Recipe.model_validate(item)
         except ValidationError as exc:
