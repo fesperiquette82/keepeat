@@ -8,7 +8,7 @@ Scénarios couverts :
   4. Le sujet de l'email mentionne "KeepEat"
   5. Pas d'email si le seuil d'occurrences n'est pas atteint
   6. Email envoyé quand l'occurrence est un multiple du seuil
-  7. suggest_later=True quand KEEPEAT_OPENAI_TOKEN est absent
+  7. suggest_later=True quand GEMINI_RECIPES_API_KEY est absent
   8. suggest_later=True quand OpenAI ne retourne pas de recette valide
   9. suggest_later=False et recette présente quand OpenAI réussit
   10. suggest_later=True quand asyncio.TimeoutError (timeout 10 s)
@@ -40,6 +40,9 @@ def _gap_doc(occurrence_count: int = 1, **kwargs) -> dict:
         "occurrence_count": occurrence_count,
         "available_ingredients": ["poulet", "tomate", "courgette"],
         "normalized_ingredients": ["poulet", "tomate", "courgette"],
+        "uncovered_ingredients": ["tomate", "courgette"],
+        "used_ingredients_in_reference_recipe": ["poulet"],
+        "reference_recipe_title": "Poulet rôti",
         "last_seen_at": "2026-04-08T12:00:00+00:00",
         **kwargs,
     }
@@ -86,8 +89,8 @@ class SendRecipeGapEmailTests(unittest.TestCase):
         destinataire = mock_send.call_args[0][0]
         self.assertEqual(destinataire, "admin@monapp.fr")
 
-    def test_corps_contient_les_ingredients(self):
-        """Le corps HTML de l'email doit lister les ingrédients non couverts."""
+    def test_corps_contient_les_ingredients_non_couverts_uniquement(self):
+        """Le corps HTML de l'email doit lister uniquement les ingrédients non couverts."""
         async def _run():
             with patch("server._send_email", new_callable=AsyncMock) as mock_send:
                 env = {k: v for k, v in os.environ.items() if k != "RECIPE_GAP_EMAIL_TO"}
@@ -97,9 +100,9 @@ class SendRecipeGapEmailTests(unittest.TestCase):
 
         mock_send = asyncio.run(_run())
         corps_html = mock_send.call_args[0][2]
-        self.assertIn("poulet", corps_html)
-        self.assertIn("tomate", corps_html)
-        self.assertIn("courgette", corps_html)
+        self.assertIn("Ingrédients non couverts:</b> tomate, courgette", corps_html)
+        self.assertIn("Ingrédients utilisés (recette de référence):</b> poulet", corps_html)
+        self.assertIn("Poulet rôti", corps_html)
 
     def test_sujet_mentionne_keepeat(self):
         """Le sujet de l'email doit contenir 'KeepEat'."""
@@ -156,12 +159,12 @@ class SuggestLaterFlagTests(unittest.TestCase):
     """Vérifie le flag suggest_later dans la réponse de l'endpoint."""
 
     def test_suggest_later_true_quand_pas_de_cle_openai(self):
-        """suggest_later=True si KEEPEAT_OPENAI_TOKEN absent et catalogue vide."""
+        """suggest_later=True si GEMINI_RECIPES_API_KEY absent et catalogue vide."""
         async def _run():
             with patch("server.recipes_col", _EmptyRecipesCollection()):
                 with patch("server._fetch_stock_candidates", AsyncMock(return_value=[{"name": "tomate"}])):
                     with patch("server._upsert_recipe_gap", AsyncMock(return_value=True)):
-                        env = {k: v for k, v in os.environ.items() if k != "KEEPEAT_OPENAI_TOKEN"}
+                        env = {k: v for k, v in os.environ.items() if k != "GEMINI_RECIPES_API_KEY"}
                         with patch.dict(os.environ, env, clear=True):
                             return await get_recipe_suggestions(
                                 response=Response(),
@@ -181,7 +184,7 @@ class SuggestLaterFlagTests(unittest.TestCase):
                 with patch("server._fetch_stock_candidates", AsyncMock(return_value=[{"name": "tomate"}])):
                     with patch("server._upsert_recipe_gap", AsyncMock(return_value=True)):
                         with patch("server._ai_gap_fill", AsyncMock(return_value=None)):
-                            with patch.dict(os.environ, {"KEEPEAT_OPENAI_TOKEN": "sk-test"}):
+                            with patch.dict(os.environ, {"GEMINI_RECIPES_API_KEY": "sk-test"}):
                                 return await get_recipe_suggestions(
                                     response=Response(),
                                     recipe_filter="all",
@@ -210,7 +213,7 @@ class SuggestLaterFlagTests(unittest.TestCase):
                 with patch("server._fetch_stock_candidates", AsyncMock(return_value=[{"name": "tomate"}])):
                     with patch("server._ai_gap_fill", AsyncMock(return_value={"title": "Soupe de tomate"})):
                         with patch("server._save_ai_recipe_to_stores", AsyncMock(return_value=recette_ia)):
-                            with patch.dict(os.environ, {"KEEPEAT_OPENAI_TOKEN": "sk-test"}):
+                            with patch.dict(os.environ, {"GEMINI_RECIPES_API_KEY": "sk-test"}):
                                 return await get_recipe_suggestions(
                                     response=Response(),
                                     recipe_filter="all",
@@ -232,7 +235,7 @@ class SuggestLaterFlagTests(unittest.TestCase):
                         # Simule un TimeoutError levé par asyncio.wait_for
                         with patch("server.asyncio.wait_for", new_callable=AsyncMock,
                                    side_effect=asyncio.TimeoutError()):
-                            with patch.dict(os.environ, {"KEEPEAT_OPENAI_TOKEN": "sk-test"}):
+                            with patch.dict(os.environ, {"GEMINI_RECIPES_API_KEY": "sk-test"}):
                                 return await get_recipe_suggestions(
                                     response=Response(),
                                     recipe_filter="all",
@@ -251,7 +254,7 @@ class SuggestLaterFlagTests(unittest.TestCase):
                 with patch("server._fetch_stock_candidates", AsyncMock(return_value=[{"name": "tomate"}])):
                     with patch("server._ai_gap_fill", AsyncMock(return_value=None)):
                         with patch("server._upsert_recipe_gap", AsyncMock(return_value=True)) as mock_gap:
-                            with patch.dict(os.environ, {"KEEPEAT_OPENAI_TOKEN": "sk-test"}):
+                            with patch.dict(os.environ, {"GEMINI_RECIPES_API_KEY": "sk-test"}):
                                 await get_recipe_suggestions(
                                     response=Response(),
                                     recipe_filter="all",
@@ -274,7 +277,7 @@ class SuggestLaterFlagTests(unittest.TestCase):
                     with patch("server._ai_gap_fill", AsyncMock(return_value={"title": "Tarte"})):
                         with patch("server._save_ai_recipe_to_stores", AsyncMock(return_value=recette_ia)):
                             with patch("server._upsert_recipe_gap", AsyncMock(return_value=True)) as mock_gap:
-                                with patch.dict(os.environ, {"KEEPEAT_OPENAI_TOKEN": "sk-test"}):
+                                with patch.dict(os.environ, {"GEMINI_RECIPES_API_KEY": "sk-test"}):
                                     await get_recipe_suggestions(
                                         response=Response(),
                                         recipe_filter="all",

@@ -1984,8 +1984,8 @@ def _normalize_ingredient_name(raw_name: Any) -> str:
         return ""
     normalized = unicodedata.normalize("NFD", token)
     normalized = "".join(ch for ch in normalized if unicodedata.category(ch) != "Mn")
-    normalized = re.sub(r"[^a-z0-9\\s]", " ", normalized)
-    normalized = re.sub(r"\\s+", " ", normalized).strip()
+    normalized = re.sub(r"[^a-z0-9\s]", " ", normalized)
+    normalized = re.sub(r"\s+", " ", normalized).strip()
     aliases = {
         "oeufs": "oeuf",
         "tomates": "tomate",
@@ -2036,14 +2036,18 @@ async def _send_recipe_gap_email(gap_doc: dict[str, Any], *, is_new: bool) -> No
         return
     destination = os.getenv("RECIPE_GAP_EMAIL_TO", "keepeatfe@gmail.com").strip() or "keepeatfe@gmail.com"
     subject = "KeepEat - Besoin recette non couvert"
+    uncovered = gap_doc.get("uncovered_ingredients") or gap_doc.get("normalized_ingredients") or []
+    used = gap_doc.get("used_ingredients_in_reference_recipe") or []
+    reference_title = gap_doc.get("reference_recipe_title") or ""
     html_body = f"""
     <h3>Besoin recette non couvert</h3>
     <p><b>Signature:</b> {gap_doc.get('signature')}</p>
     <p><b>Filtre:</b> {gap_doc.get('filter')}</p>
     <p><b>Statut:</b> {gap_doc.get('status')}</p>
     <p><b>Occurrences:</b> {gap_doc.get('occurrence_count')}</p>
-    <p><b>Ingrédients disponibles:</b> {', '.join(gap_doc.get('available_ingredients', []))}</p>
-    <p><b>Ingrédients normalisés:</b> {', '.join(gap_doc.get('normalized_ingredients', []))}</p>
+    <p><b>Recette de référence:</b> {reference_title or 'aucune'}</p>
+    <p><b>Ingrédients utilisés (recette de référence):</b> {', '.join(used) if used else 'aucun'}</p>
+    <p><b>Ingrédients non couverts:</b> {', '.join(uncovered) if uncovered else 'aucun'}</p>
     <p><b>Dernière détection:</b> {gap_doc.get('last_seen_at')}</p>
     """
     await _send_email(destination, subject, html_body)
@@ -2056,20 +2060,24 @@ async def _mark_coverable_gaps_after_recipe_insert(recipe_doc: dict[str, Any]) -
         return
     pending_gaps = await recipe_gap_requests_col.find({"status": {"$in": ["pending", "partially_resolved"]}}).to_list(length=500)
     for gap in pending_gaps:
-        gap_ingredients = set(gap.get("normalized_ingredients", []))
+        target_uncovered = gap.get("uncovered_ingredients")
+        if target_uncovered is None:
+            target_uncovered = gap.get("normalized_ingredients", [])
+        gap_ingredients = set(target_uncovered)
         if not gap_ingredients:
             continue
         covered = gap_ingredients.intersection(normalized_recipe_ingredients)
         if not covered:
             continue
-        coverage_ratio = len(covered) / max(1, len(gap_ingredients))
-        next_status = "resolved" if coverage_ratio >= 0.8 else "partially_resolved"
+        remaining = sorted(gap_ingredients - covered)
+        next_status = "resolved" if not remaining else "partially_resolved"
         await recipe_gap_requests_col.update_one(
             {"_id": gap["_id"]},
             {
                 "$set": {
                     "status": next_status,
                     "resolved_at": utc_now().isoformat(),
+                    "uncovered_ingredients": remaining,
                 },
                 "$addToSet": {"resolved_by_recipe_ids": recipe_doc.get("id")},
             },
@@ -2207,30 +2215,42 @@ async def _upsert_recipe_gap(
     recipe_filter: str,
     stock_items: list[dict[str, Any]],
     criteria: dict[str, Any],
+    uncovered_ingredients: list[str],
+    reference_recipe: dict[str, Any] | None = None,
 ) -> bool:
-    normalized_ingredients = sorted(
+    normalized_stock = sorted(
         {
             _normalize_ingredient_name(item.get("name"))
             for item in stock_items
             if item.get("name")
         }
     )
-    normalized_ingredients = [name for name in normalized_ingredients if name]
-    if not normalized_ingredients:
-        # Pas d'ingrédients en stock : aucun gap à signaler, pas d'e-mail.
+    normalized_stock = [name for name in normalized_stock if name]
+    normalized_uncovered = sorted({_normalize_ingredient_name(name) for name in uncovered_ingredients if name})
+    normalized_uncovered = [name for name in normalized_uncovered if name]
+    if not normalized_uncovered:
+        # Aucun ingrédient non couvert : pas de gap à signaler.
         return False
     signature = _build_gap_signature(
-        normalized_ingredients=normalized_ingredients,
+        normalized_ingredients=normalized_uncovered,
         recipe_filter=recipe_filter,
         criteria=criteria,
     )
+    used_by_reference = sorted(set(normalized_stock) - set(normalized_uncovered))
     now_iso = utc_now().isoformat()
     existing = await recipe_gap_requests_col.find_one({"signature": signature})
     if existing:
         await recipe_gap_requests_col.update_one(
             {"_id": existing["_id"]},
             {
-                "$set": {"last_seen_at": now_iso, "status": "pending"},
+                "$set": {
+                    "last_seen_at": now_iso,
+                    "status": "pending",
+                    "uncovered_ingredients": normalized_uncovered,
+                    "used_ingredients_in_reference_recipe": used_by_reference,
+                    "reference_recipe_id": reference_recipe.get("id") if reference_recipe else None,
+                    "reference_recipe_title": reference_recipe.get("title") if reference_recipe else None,
+                },
                 "$inc": {"occurrence_count": 1},
             },
         )
@@ -2243,7 +2263,11 @@ async def _upsert_recipe_gap(
         "user_id": uid,
         "filter": recipe_filter,
         "available_ingredients": [item.get("name") for item in stock_items if item.get("name")],
-        "normalized_ingredients": normalized_ingredients,
+        "normalized_ingredients": normalized_stock,
+        "uncovered_ingredients": normalized_uncovered,
+        "used_ingredients_in_reference_recipe": used_by_reference,
+        "reference_recipe_id": reference_recipe.get("id") if reference_recipe else None,
+        "reference_recipe_title": reference_recipe.get("title") if reference_recipe else None,
         "criteria": criteria,
         "signature": signature,
         "status": "pending",
@@ -2315,7 +2339,7 @@ async def get_recipe_suggestions(
     gap_logged = False
     suggest_later = False
     if not relevant:
-        gemini_key = os.environ.get("GEMINI_RECIPES_API_KEY", "")
+        gemini_key = _get_recipes_ai_api_key()
         if gemini_key and stock_names:
             try:
                 ai_raw = await asyncio.wait_for(
@@ -2336,12 +2360,30 @@ async def get_recipe_suggestions(
             # correspondant au filtre actif. Un stock vide ou un filtre temporel sans
             # produits expirants ne doit pas déclencher d'e-mail.
             if stock_names:
-                gap_logged = await _upsert_recipe_gap(
-                    uid=uid,
-                    recipe_filter=effective_filter,
-                    stock_items=items,
-                    criteria={"min_score": 1, "max_missing": 3},
+                normalized_stock_names = sorted(
+                    {
+                        _normalize_ingredient_name(item.get("name"))
+                        for item in items
+                        if item.get("name")
+                    }
                 )
+                normalized_stock_names = [name for name in normalized_stock_names if name]
+                reference_recipe = scored[0] if scored else None
+                used_ingredients = set(reference_recipe.get("available_ingredients", [])) if reference_recipe else set()
+                uncovered_ingredients = [
+                    ingredient for ingredient in normalized_stock_names if ingredient not in used_ingredients
+                ]
+                try:
+                    gap_logged = await _upsert_recipe_gap(
+                        uid=uid,
+                        recipe_filter=effective_filter,
+                        stock_items=items,
+                        criteria={"min_score": 1, "max_missing": 3},
+                        uncovered_ingredients=uncovered_ingredients,
+                        reference_recipe=reference_recipe,
+                    )
+                except Exception as exc:
+                    logger.warning("Recipe gap upsert failed for user=%s: %s", uid, exc)
             suggest_later = True
 
     logger.info("Recipes suggestions: filter=%s stock=%s top5=%s", recipe_filter, stock_names[:5], [match.get("title") for match in relevant])
@@ -2504,40 +2546,6 @@ async def get_recipe_by_id(
     if not recipe_doc:
         raise HTTPException(status_code=404, detail="Recipe not found")
     return recipe_doc
-
-
-@api_router.post("/admin/recipes")
-async def admin_add_recipe(
-    body: Dict[str, Any],
-    admin_user: Dict[str, Any] = Depends(_require_admin_user),
-):
-    now_iso = utc_now().isoformat()
-    recipe_id = str(body.get("id") or "").strip()
-    if not recipe_id:
-        raise HTTPException(status_code=400, detail="id is required")
-    ingredients = body.get("ingredients") or []
-    if not isinstance(ingredients, list) or len(ingredients) == 0:
-        raise HTTPException(status_code=400, detail="ingredients must be a non-empty array")
-    doc = {
-        "id": recipe_id,
-        "title": str(body.get("title") or "").strip(),
-        "description": str(body.get("description") or "").strip(),
-        "dish_type": str(body.get("dish_type") or "Plat"),
-        "duration_min": int(body.get("duration_min") or 0),
-        "difficulty": str(body.get("difficulty") or "easy"),
-        "ingredients": ingredients,
-        "steps": body.get("steps") or [],
-        "tags": body.get("tags") or [],
-        "is_active": bool(body.get("is_active", True)),
-        "created_by": admin_user.get("id"),
-        "created_at": now_iso,
-        "updated_at": now_iso,
-        "usage_count": int(body.get("usage_count") or 0),
-        "view_count": int(body.get("view_count") or 0),
-    }
-    await recipes_col.update_one({"id": recipe_id}, {"$set": doc}, upsert=True)
-    await _mark_coverable_gaps_after_recipe_insert(doc)
-    return {"ok": True, "recipe_id": recipe_id}
 
 
 @api_router.post("/admin/recipe-gaps/{gap_id}/resolve")
@@ -3183,6 +3191,31 @@ _ai_recipe_cache: dict[str, dict] = {}
 _AI_CACHE_MAX_SIZE = 500
 
 
+def _get_recipes_ai_api_key() -> str:
+    """Retourne la clé provider IA recettes (Gemini)."""
+    return os.environ.get("GEMINI_RECIPES_API_KEY", "").strip()
+
+
+def _extract_ai_recipe_payload_text(payload: dict[str, Any]) -> str:
+    """Extrait le texte JSON de réponse IA pour les formats Gemini et legacy OpenAI."""
+    candidates = payload.get("candidates")
+    if isinstance(candidates, list) and candidates:
+        parts = candidates[0].get("content", {}).get("parts", [])
+        if isinstance(parts, list) and parts:
+            text = parts[0].get("text", "")
+            if isinstance(text, str) and text.strip():
+                return text.strip()
+
+    choices = payload.get("choices")
+    if isinstance(choices, list) and choices:
+        message = choices[0].get("message", {})
+        content = message.get("content", "")
+        if isinstance(content, str) and content.strip():
+            return content.strip()
+
+    raise KeyError("missing_ai_response_text")
+
+
 @api_router.get("/recipes/ai")
 async def get_ai_recipes(
     response: Response = None,
@@ -3201,7 +3234,7 @@ async def get_ai_recipes(
     resolved_suggestion_style = resolve_suggestion_style(suggestion_style)
     include_meta_enabled = include_meta is True or str(include_meta).lower() in {"1", "true", "yes"}
     logger.debug("RECIPES_DEBUG ai called — user=%s", uid)
-    gemini_key = os.environ.get("GEMINI_RECIPES_API_KEY", "")
+    gemini_key = _get_recipes_ai_api_key()
     if not gemini_key:
         raise HTTPException(status_code=503, detail="IA non configurée")
 
@@ -3268,7 +3301,7 @@ async def get_ai_recipes(
             if r.status_code != 200:
                 logger.warning("Gemini recipes/ai error %s: %s", r.status_code, r.text[:200])
                 raise HTTPException(status_code=502, detail="Erreur IA externe")
-            text = r.json()["candidates"][0]["content"]["parts"][0]["text"].strip()
+            text = _extract_ai_recipe_payload_text(r.json())
     except HTTPException:
         raise
     except Exception as exc:
@@ -3462,7 +3495,7 @@ async def admin_monitoring_health(
 
     external_status = {
         "gemini_ocr_configured": bool(os.getenv("GEMINI_OCR_API_KEY")),
-        "gemini_recipes_configured": bool(os.getenv("GEMINI_RECIPES_API_KEY")),
+        "gemini_recipes_configured": bool(_get_recipes_ai_api_key()),
         "brevo_configured": bool(os.getenv("BREVO_API_KEY")),
         "openfoodfacts_configured": bool(os.getenv("OPENFOODFACTS_USER_AGENT", "KeepEat/1.0")),
     }

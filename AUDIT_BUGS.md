@@ -342,3 +342,127 @@ L'endpoint `GET /api/recipes/:id` existe dans `recipesApi.ts` mais n'est pas uti
 ---
 
 *Dernière mise à jour : 2026-04-09*
+
+---
+
+## Audit ciblé du 2026-04-10 — backend (exécution + revue de code)
+
+### 🔴 CRITIQUE
+
+### BUG-2026-04-10-01 — `/api/recipes/suggestions` peut lever une 500 quand `_upsert_recipe_gap` échoue
+
+| Champ | Valeur |
+|---|---|
+| **Statut** | `OUVERT` |
+| **Fichier** | `backend/server.py` (lignes 2204-2258, 2334-2345) |
+| **Détecté** | 2026-04-10 |
+
+**Constat**
+- Quand aucune recette n'est trouvée, l'endpoint appelle `_upsert_recipe_gap(...)` sans `try/except` autour de l'accès DB.
+- En test, un accès Motor hors boucle active provoque `RuntimeError: Event loop is closed`, qui remonte et casse la requête.
+
+**Preuve de reproduction**
+- `pytest -q` échoue sur `tests/test_gap_email_notification.py::SuggestLaterFlagTests::test_suggest_later_false_et_recette_presente_quand_openai_reussit` avec stacktrace sur `recipe_gap_requests_col.find_one(...)`.
+
+**Impact**
+- Risque de 500 utilisateur sur un flux censé être "graceful fallback" (`suggest_later`).
+
+**Recommandation**
+- Isoler la persistance de gap dans un bloc résilient (`except Exception` + log structuré) pour ne jamais interrompre la réponse de suggestions.
+
+---
+
+### 🟠 MAJEUR
+
+### BUG-2026-04-10-02 — Régression contrat env var IA (`GEMINI_RECIPES_API_KEY` vs `KEEPEAT_OPENAI_TOKEN`)
+
+| Champ | Valeur |
+|---|---|
+| **Statut** | `OUVERT` |
+| **Fichier** | `backend/server.py` (2318-2323, 3204-3206), `tests/test_premium_guards_v1.py`, `tests/test_gap_email_notification.py` |
+| **Détecté** | 2026-04-10 |
+
+**Constat**
+- Le backend ne lit plus que `GEMINI_RECIPES_API_KEY`.
+- Les tests de non-régression et la documentation de test patchent encore `KEEPEAT_OPENAI_TOKEN`.
+- Résultat: des chemins métier attendus (quota, erreurs 502) ne sont plus atteignables et tombent en 503 "IA non configurée".
+
+**Preuve de reproduction**
+- `tests/test_premium_guards_v1.py::{test_ai_empty_stock_does_not_consume_quota,test_ai_openai_error_does_not_consume_quota,test_ai_quota_exceeded_returns_standard_error}` en échec.
+
+**Impact**
+- Contrat API/ops ambigu (configuration prod + tests CI), faux positifs de monitoring, régressions silencieuses.
+
+**Recommandation**
+- Soit supporter les 2 variables avec priorité claire + dépréciation, soit migrer l'ensemble des tests/docs/ops dans le même PR atomique.
+
+---
+
+### BUG-2026-04-10-03 — `_upsert_recipe_gap` appelé dans un scénario où une recette IA est attendue
+
+| Champ | Valeur |
+|---|---|
+| **Statut** | `OUVERT` |
+| **Fichier** | `backend/server.py` (2317-2345), `tests/test_gap_email_notification.py` |
+| **Détecté** | 2026-04-10 |
+
+**Constat**
+- La non-disponibilité de la clé Gemini fait basculer immédiatement vers `if not relevant:` puis `_upsert_recipe_gap(...)`.
+- Le test `test_upsert_gap_non_appele_quand_openai_reussit` attend l'inverse et échoue.
+
+**Impact**
+- Augmentation de bruit dans `recipe_gap_requests` + e-mails inutiles, même quand le flux IA devrait répondre.
+
+**Recommandation**
+- Clarifier la règle produit: "pas de gap si IA potentiellement disponible" vs "gap immédiat sans clé".
+- Aligner code + tests + documentation sur une seule sémantique.
+
+---
+
+### BUG-2026-04-10-04 — Condition de concurrence possible sur la signature de gap
+
+| Champ | Valeur |
+|---|---|
+| **Statut** | `OUVERT` |
+| **Fichier** | `backend/server.py` (527, 2228-2257) |
+| **Détecté** | 2026-04-10 |
+
+**Constat**
+- Le flux fait `find_one(signature)` puis `insert_one(doc)`.
+- Avec l'index unique sur `signature`, deux requêtes concurrentes peuvent déclencher un `DuplicateKeyError` non géré.
+
+**Impact**
+- 500 intermittentes en charge (difficiles à reproduire localement, coûteuses en prod).
+
+**Recommandation**
+- Remplacer le pattern par un `update_one(..., upsert=True)` atomique + gestion explicite du résultat.
+
+---
+
+### 🟡 MINEUR
+
+### BUG-2026-04-10-05 — Documentation interne incohérente sur le provider IA
+
+| Champ | Valeur |
+|---|---|
+| **Statut** | `OUVERT` |
+| **Fichier** | `backend/server.py` (3193) |
+| **Détecté** | 2026-04-10 |
+
+**Constat**
+- La docstring de `get_ai_recipes` mentionne "GPT-4o-mini" alors que l'implémentation appelle Gemini (`generativelanguage.googleapis.com`).
+
+**Impact**
+- Dette de maintenance, confusion incident/debug.
+
+**Recommandation**
+- Mettre à jour docstring + docs associées pour refléter le provider réel.
+
+---
+
+## Vérifications exécutées (audit 2026-04-10)
+
+- `cd frontend && npm run lint` ✅
+- `cd frontend && npm run test:ci` ✅ (54/54)
+- `pytest -q` ❌ (5 échecs backend identifiés ci-dessus)
+

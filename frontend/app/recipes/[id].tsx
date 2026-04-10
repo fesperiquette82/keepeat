@@ -8,7 +8,7 @@ import { useStockStore } from '../../store/stockStore';
 import { useAppSettingsStore } from '../../store/appSettingsStore';
 import { BackendRecipeSuggestion, useRecipesStore } from '../../store/recipesStore';
 import { ActionBanner } from '../../component/ActionBanner';
-import { C, T } from '../../utils/theme';
+import { getThemeColors, getThemeText, ThemeColors } from '../../utils/theme';
 import { matchRecipeIngredientsToStock } from '../../utils/ingredientMatching';
 import { removeStockItems, undoRemovedStockItems } from '../../utils/stockRemoval';
 import { logger } from '../../utils/logger';
@@ -70,6 +70,10 @@ export default function RecipeDetailScreen() {
 
   const { items: storeItems, fetchStock } = useStockStore();
   const householdSize = useAppSettingsStore((state) => state.householdSize);
+  const themeMode = useAppSettingsStore((state) => state.themeMode);
+  const C = getThemeColors(themeMode);
+  const T = getThemeText(C);
+  const styles = useMemo(() => createStyles(C, T), [C, T]);
   const fetchRecipeById = useRecipesStore((state) => state.fetchRecipeById);
 
   const [isScreenLoading, setIsScreenLoading] = useState(true);
@@ -354,7 +358,8 @@ export default function RecipeDetailScreen() {
   );
 }
 
-const styles = StyleSheet.create({
+function createStyles(C: ThemeColors, T: ReturnType<typeof getThemeText>) {
+  return StyleSheet.create({
   container: { flex: 1, backgroundColor: C.bg },
   headerRow: { flexDirection: 'row', alignItems: 'center', gap: 8, paddingHorizontal: 16, paddingTop: 8 },
   backIcon: { width: 32, height: 32, borderRadius: 16, backgroundColor: '#fff', alignItems: 'center', justifyContent: 'center' },
@@ -389,4 +394,5 @@ const styles = StyleSheet.create({
   errorTitle: { color: C.text, fontSize: 20, fontWeight: '800', textAlign: 'center' },
   backButton: { backgroundColor: C.primary, paddingHorizontal: 14, paddingVertical: 10, borderRadius: 10 },
   backButtonLabel: { color: '#fff', fontWeight: '700' },
-});
+  });
+}

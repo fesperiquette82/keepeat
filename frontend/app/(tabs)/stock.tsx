@@ -13,6 +13,7 @@ import { removeStockItems, undoRemovedStockItems } from '../../utils/stockRemova
 import { countLabelFr } from '../../utils/uiText';
 import { storageZoneLabel, UI_LABELS } from '../../utils/uiLabels';
 import { expiryColor } from '../../utils/expiryLabels';
+import { resolveSwipeAction } from '../../utils/stockSwipe';
 
 type StockFilter = 'tous' | 'urgents' | 'frigo' | 'placard';
 type StockSort = 'expiry' | 'alpha' | 'recent' | 'oldest';
@@ -251,11 +252,7 @@ export default function StockScreen() {
                 renderLeftActions={() => renderSwipeAction('Utilisé', '#16A34A', 'restaurant-outline')}
                 renderRightActions={() => renderSwipeAction('Jeté', '#DC2626', 'trash-outline')}
                 onSwipeableOpen={(direction) => {
-                  if (direction === 'left') {
-                    handleSwipeAction(item.id, 'thrown');
-                  } else {
-                    handleSwipeAction(item.id, 'used');
-                  }
+                  handleSwipeAction(item.id, resolveSwipeAction(direction));
                 }}
               >
                 <TouchableOpacity
