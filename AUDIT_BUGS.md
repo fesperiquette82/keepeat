@@ -22,7 +22,7 @@
 
 | Champ | Valeur |
 |---|---|
-| **Statut** | `OUVERT` |
+| **Statut** | `CORRIGÉ` |
 | **Fichier** | `frontend/app/recipes/[id].tsx` ligne 11 |
 | **Détecté** | 2026-04-09 |
 
@@ -46,7 +46,7 @@ De plus, les styles sont définis **hors du composant** (ligne ~339) avec des va
 
 | Champ | Valeur |
 |---|---|
-| **Statut** | `OUVERT` |
+| **Statut** | `CORRIGÉ` |
 | **Fichier** | `frontend/app/(tabs)/stock.tsx` ligne 252 |
 | **Détecté** | 2026-04-09 |
 
@@ -80,7 +80,7 @@ if (direction === 'left') {
 
 | Champ | Valeur |
 |---|---|
-| **Statut** | `OUVERT` |
+| **Statut** | `CORRIGÉ` |
 | **Fichier** | `backend/server.py` ~ligne 1987 |
 | **Détecté** | 2026-04-09 |
 
@@ -105,7 +105,7 @@ normalized = re.sub(r"\s+", " ", normalized).strip()
 
 | Champ | Valeur |
 |---|---|
-| **Statut** | `OUVERT` |
+| **Statut** | `CORRIGÉ` |
 | **Fichier** | `backend/server.py` ~lignes 2509 et 3657 |
 | **Détecté** | 2026-04-09 |
 
@@ -118,7 +118,7 @@ Les deux implémentations ont une sémantique différente :
 
 **Impact :** L'API admin d'ajout de recettes est instable.
 
-**Correction attendue :** Supprimer la première implémentation (ligne 2509) ou la fusionner avec la seconde.
+**Correction appliquée (2026-04-10) :** une seule route `POST /admin/recipes` est désormais enregistrée.
 
 ---
 
@@ -128,7 +128,7 @@ Les deux implémentations ont une sémantique différente :
 
 | Champ | Valeur |
 |---|---|
-| **Statut** | `OUVERT` |
+| **Statut** | `CORRIGÉ` |
 | **Fichier** | `backend/server.py` ~lignes 2263, 2377, 3188 |
 | **Détecté** | 2026-04-09 |
 
@@ -353,7 +353,7 @@ L'endpoint `GET /api/recipes/:id` existe dans `recipesApi.ts` mais n'est pas uti
 
 | Champ | Valeur |
 |---|---|
-| **Statut** | `OUVERT` |
+| **Statut** | `CORRIGÉ` |
 | **Fichier** | `backend/server.py` (lignes 2204-2258, 2334-2345) |
 | **Détecté** | 2026-04-10 |
 
@@ -367,8 +367,8 @@ L'endpoint `GET /api/recipes/:id` existe dans `recipesApi.ts` mais n'est pas uti
 **Impact**
 - Risque de 500 utilisateur sur un flux censé être "graceful fallback" (`suggest_later`).
 
-**Recommandation**
-- Isoler la persistance de gap dans un bloc résilient (`except Exception` + log structuré) pour ne jamais interrompre la réponse de suggestions.
+**Correction appliquée (2026-04-10)**
+- La persistance de gap est encapsulée pour éviter qu'une erreur DB fasse échouer `/api/recipes/suggestions`.
 
 ---
 
@@ -466,3 +466,23 @@ L'endpoint `GET /api/recipes/:id` existe dans `recipesApi.ts` mais n'est pas uti
 - `cd frontend && npm run test:ci` ✅ (54/54)
 - `pytest -q` ❌ (5 échecs backend identifiés ci-dessus)
 
+
+---
+
+## Reprise du fichier (2026-04-10)
+
+### Vérification rapide des correctifs déjà présents dans le code
+
+| ID | Ancien statut | Nouveau statut | Note de vérification |
+|---|---|---|---|
+| BUG-017 + BUG-018 | `OUVERT` | `CORRIGÉ` | `frontend/app/recipes/[id].tsx` utilise désormais `getThemeColors` / `getThemeText` et `createStyles(C, T)` via `useMemo`. |
+| BUG-021 | `OUVERT` | `CORRIGÉ` | `frontend/app/(tabs)/stock.tsx` délègue l'action swipe à `resolveSwipeAction(direction)` avant `handleSwipeAction`. |
+| BUG-001 | `OUVERT` | `CORRIGÉ` | `backend/server.py` utilise `re.sub(r"[^a-z0-9\s]", ...)` puis `re.sub(r"\s+", ...)` dans `_normalize_ingredient_name`. |
+
+### Prochain lot prioritaire conseillé
+
+1. **BUG-003** (`Response = None`) : corriger la signature FastAPI pour réactiver les headers debug.
+2. **BUG-002** (route admin dupliquée) : supprimer/fusionner la première implémentation `POST /admin/recipes`.
+3. **BUG-2026-04-10-01** (500 possible sur `_upsert_recipe_gap`) : encapsuler la persistance gap dans un bloc résilient.
+
+*Note: cette reprise met à jour le suivi d'audit, sans patch applicatif dans ce commit.*
