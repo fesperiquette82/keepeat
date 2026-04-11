@@ -13,39 +13,12 @@ import { matchRecipeIngredientsToStock } from '../../utils/ingredientMatching';
 import { removeStockItems, undoRemovedStockItems } from '../../utils/stockRemoval';
 import { logger } from '../../utils/logger';
 import { buildRecipeIngredientDisplayRows } from '../../utils/recipeIngredientDisplay';
+import {
+  formatIngredientQuantity,
+  scaleIngredients,
+} from '../../utils/recipeIngredients';
+import { resolveRecipeIngredients } from '../../utils/recipeIngredientsResolver';
 import { formatFrenchRecipeText } from '../../utils/recipeFrenchTypography';
-
-interface RecipeIngredient {
-  name: string;
-  quantity: number;
-  unit: string;
-}
-
-function formatQuantity(value: number | string | null | undefined): string {
-  if (typeof value === 'number') {
-    if (Number.isInteger(value)) return String(value);
-    return value.toFixed(1).replace(/\.0$/, '');
-  }
-  if (typeof value === 'string' && value.trim().length > 0) {
-    return value.trim();
-  }
-  return '';
-}
-
-function scaleIngredients(ingredients: RecipeIngredient[], factor: number): RecipeIngredient[] {
-  return ingredients.map((ingredient) => ({
-    ...ingredient,
-    quantity: ingredient.quantity * factor,
-  }));
-}
-
-function toIngredientList(recipe: BackendRecipeSuggestion | null): RecipeIngredient[] {
-  if (!recipe) return [];
-  const used = Array.isArray(recipe.usedIngredients) ? recipe.usedIngredients : [];
-  const missed = Array.isArray(recipe.missedIngredients) ? recipe.missedIngredients : [];
-  const unique = Array.from(new Set([...used, ...missed].map((item) => item.trim()).filter(Boolean)));
-  return unique.map((name) => ({ name: formatFrenchRecipeText(name), quantity: 1, unit: 'portion' }));
-}
 
 function resolveSteps(recipe: BackendRecipeSuggestion | null): string[] {
   if (!recipe) return [];
@@ -94,16 +67,15 @@ export default function RecipeDetailScreen() {
   );
 
   const items = useMemo(() => storeItems.filter((item) => item.status === 'active'), [storeItems]);
-  const initialServings = householdSize;
-  const [servings, setServings] = useState(initialServings);
+  const baseServings = useMemo(() => Math.max(1, baseRecipe?.servings ?? householdSize), [baseRecipe?.servings, householdSize]);
+  const [servings, setServings] = useState(baseServings);
 
   useEffect(() => {
-    setServings(initialServings);
-  }, [initialServings]);
+    setServings(baseServings);
+  }, [baseServings]);
 
-  const recipeIngredients = useMemo(() => toIngredientList(baseRecipe), [baseRecipe]);
-  const factor = useMemo(() => servings / Math.max(1, householdSize), [householdSize, servings]);
-  const scaledIngredients = useMemo(() => scaleIngredients(recipeIngredients, factor), [factor, recipeIngredients]);
+  const recipeIngredients = useMemo(() => resolveRecipeIngredients(baseRecipe, baseServings), [baseRecipe, baseServings]);
+  const scaledIngredients = useMemo(() => scaleIngredients(recipeIngredients, servings, baseServings), [baseServings, recipeIngredients, servings]);
   const ingredientRows = useMemo(() => buildRecipeIngredientDisplayRows(items, scaledIngredients), [items, scaledIngredients]);
 
   const ingredientAvailability = useMemo(() => {
@@ -274,14 +246,13 @@ export default function RecipeDetailScreen() {
               <Ionicons name="add" size={18} color={C.text} />
             </TouchableOpacity>
           </View>
-          <Text style={styles.servingsHint}>Par défaut foyer : {householdSize} personnes</Text>
+          <Text style={styles.servingsHint}>Base recette : {baseServings} personnes · Foyer : {householdSize}</Text>
         </View>
 
         <View style={styles.card}>
           <Text style={styles.sectionTitle}>Ingrédients</Text>
           {ingredientRows.map((row, index) => {
             const { ingredient, isAvailable } = row;
-            const formattedQuantity = formatQuantity(ingredient.quantity);
             const rowKey = `${ingredient.name}-${index}`;
             const hasImage = !!row.imageUrl && !imageErrors[rowKey];
             const canNavigate = !!row.matchedStockItemId;
@@ -300,11 +271,7 @@ export default function RecipeDetailScreen() {
                 </View>
                 <View style={styles.ingredientTextWrap}>
                   <Text style={styles.ingredientName}>{ingredient.name}</Text>
-                  <Text style={styles.ingredientQuantity}>
-                    {formattedQuantity}
-                    {formattedQuantity ? ' ' : ''}
-                    {ingredient.unit}
-                  </Text>
+                  <Text style={styles.ingredientQuantity}>{formatIngredientQuantity(ingredient, { ingredientName: ingredient.name })}</Text>
                 </View>
                 <Text style={[styles.stockBadge, isAvailable ? styles.badgeOk : styles.badgeMissing]}>
                   {isAvailable ? 'Disponible' : 'Manquant'}

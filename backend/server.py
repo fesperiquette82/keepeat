@@ -2154,8 +2154,115 @@ async def _fetch_recipe_image_url(client: httpx.AsyncClient, title: str) -> str:
 
 
 def _score_recipe_match(recipe_doc: dict[str, Any], stock_items: list[dict[str, Any]]) -> dict[str, Any]:
+    normalized_units = {
+        "piece", "g", "kg", "ml", "cl", "l", "tsp", "tbsp", "pinch", "pot", "jar", "can", "slice",
+    }
+    display_unit_labels = {
+        "piece": "pièce",
+        "g": "g",
+        "kg": "kg",
+        "ml": "ml",
+        "cl": "cl",
+        "l": "l",
+        "tsp": "c. à café",
+        "tbsp": "c. à soupe",
+        "pinch": "pincée",
+        "pot": "pot",
+        "jar": "bocal",
+        "can": "boîte",
+        "slice": "tranche",
+    }
+
+    unit_aliases = {
+        "g": "g",
+        "gr": "g",
+        "gramme": "g",
+        "grammes": "g",
+        "kg": "kg",
+        "kilogramme": "kg",
+        "kilogrammes": "kg",
+        "ml": "ml",
+        "cl": "cl",
+        "l": "l",
+        "litre": "l",
+        "litres": "l",
+        "cac": "tsp",
+        "cuillere a cafe": "tsp",
+        "cuillère a cafe": "tsp",
+        "cuillere a soupe": "tbsp",
+        "cuillère a soupe": "tbsp",
+        "cas": "tbsp",
+        "pincee": "pinch",
+        "pot": "pot",
+        "bocal": "jar",
+        "boite": "can",
+        "tranche": "slice",
+        "tranches": "slice",
+        "piece": "piece",
+        "pieces": "piece",
+        "pièce": "piece",
+        "pièces": "piece",
+    }
+
+    per_serving_inference: list[tuple[list[str], float, str, str]] = [
+        (["oeuf", "œuf"], 0.5, "piece", "œuf"),
+        (["riz", "pate", "pâtes", "semoule", "quinoa"], 75, "g", "g"),
+        (["creme", "crème", "lait", "bouillon"], 50, "ml", "ml"),
+        (["huile"], 0.5, "tbsp", "c. à soupe"),
+        (["olive"], 3, "piece", "olive"),
+    ]
+
+    def _format_quantity_label(quantity: float | None, unit: str | None, display_unit: str | None) -> str | None:
+        if quantity is None or not unit:
+            return "Quantité à ajuster"
+        quantity_label = str(int(quantity)) if float(quantity).is_integer() else f"{quantity:.1f}".rstrip("0").rstrip(".")
+        label_unit = display_unit or display_unit_labels.get(unit, unit)
+        return f"{quantity_label} {label_unit}".strip()
+
+    def _parse_quantity_and_unit(quantity_raw: Any) -> tuple[float | None, str | None]:
+        if isinstance(quantity_raw, (int, float)):
+            return float(quantity_raw), "piece"
+        if not isinstance(quantity_raw, str):
+            return None, None
+        raw = quantity_raw.strip().lower()
+        if not raw:
+            return None, None
+        normalized = unicodedata.normalize("NFD", raw)
+        normalized = "".join(ch for ch in normalized if unicodedata.category(ch) != "Mn")
+        normalized = re.sub(r"[^a-z0-9\s\.,]", " ", normalized)
+        normalized = re.sub(r"\s+", " ", normalized).strip()
+        match = re.match(r"^([0-9]+(?:[\.,][0-9]+)?)\s*([a-zàâäéèêëîïôöùûüç\s]+)?$", normalized)
+        if not match:
+            return None, None
+        quantity = float(match.group(1).replace(",", "."))
+        raw_unit = (match.group(2) or "").strip()
+        if not raw_unit:
+            return quantity, "piece"
+        mapped = unit_aliases.get(raw_unit, raw_unit)
+        if mapped in normalized_units:
+            return quantity, mapped
+        return quantity, None
+
+    def _infer_quantity_and_unit(name: str, servings: int) -> tuple[float | None, str | None, str | None, bool]:
+        normalized_name = _normalize_ingredient_name(name)
+        for keywords, quantity_per_serving, unit, display_unit in per_serving_inference:
+            if any(keyword in normalized_name for keyword in keywords):
+                estimated_quantity = quantity_per_serving * max(1, servings)
+                if estimated_quantity >= 10:
+                    estimated_quantity = round(estimated_quantity)
+                else:
+                    estimated_quantity = round(estimated_quantity * 2) / 2
+                return float(estimated_quantity), unit, display_unit, True
+        return None, None, None, True
+
     normalized_stock_names = [_normalize_ingredient_name(i.get("name")) for i in stock_items if i.get("name")]
     stock_set = set(name for name in normalized_stock_names if name)
+    stock_id_map: dict[str, list[str]] = {}
+    for item in stock_items:
+        normalized_name = _normalize_ingredient_name(item.get("name"))
+        stock_id = str(item.get("_id") or item.get("id") or "").strip()
+        if normalized_name and stock_id:
+            stock_id_map.setdefault(normalized_name, []).append(stock_id)
     urgents = {
         _normalize_ingredient_name(item.get("name"))
         for item in stock_items
@@ -2164,19 +2271,53 @@ def _score_recipe_match(recipe_doc: dict[str, Any], stock_items: list[dict[str, 
 
     ingredients = recipe_doc.get("ingredients", []) or []
     required_ingredients = [i for i in ingredients if not bool(i.get("optional"))]
+    servings = int(recipe_doc.get("servings") or 2)
+    structured_ingredients: list[dict[str, Any]] = []
     available: list[str] = []
     missing: list[str] = []
     urgent_hits = 0
-    for ingredient in required_ingredients:
+    for ingredient in ingredients:
         normalized_name = _normalize_ingredient_name(ingredient.get("name"))
         if not normalized_name:
             continue
-        if normalized_name in stock_set:
+        is_optional = bool(ingredient.get("optional"))
+        is_available = normalized_name in stock_set
+        if not is_optional and is_available:
             available.append(normalized_name)
             if normalized_name in urgents:
                 urgent_hits += 1
-        else:
+        elif not is_optional:
             missing.append(normalized_name)
+
+        quantity, unit = _parse_quantity_and_unit(ingredient.get("quantity"))
+        display_unit = display_unit_labels.get(unit) if unit else None
+        is_estimated = False
+        if unit and unit not in normalized_units:
+            unit = None
+        if quantity is None or unit is None:
+            inferred_quantity, inferred_unit, inferred_display, estimated = _infer_quantity_and_unit(
+                ingredient.get("name", ""),
+                servings,
+            )
+            quantity = inferred_quantity if quantity is None else quantity
+            unit = inferred_unit if unit is None else unit
+            display_unit = inferred_display if display_unit is None else display_unit
+            is_estimated = estimated
+        matched_ids = stock_id_map.get(normalized_name, [])
+        structured_ingredients.append(
+            {
+                "name": ingredient.get("name", ""),
+                "quantity": quantity,
+                "unit": unit,
+                "display_unit": display_unit,
+                "display_label": _format_quantity_label(quantity, unit, display_unit),
+                "optional": is_optional,
+                "available": is_available,
+                "matched_stock_item_ids": matched_ids,
+                "missing_quantity": None if is_available else quantity,
+                "is_estimated": is_estimated,
+            }
+        )
 
     available_count = len(available)
     missing_count = len(missing)
@@ -2196,8 +2337,11 @@ def _score_recipe_match(recipe_doc: dict[str, Any], stock_items: list[dict[str, 
     return {
         "id": recipe_doc.get("id"),
         "title": recipe_doc.get("title"),
+        "summary": recipe_doc.get("description", ""),
         "instructions_summary": recipe_doc.get("description", ""),
         "image": recipe_doc.get("image", ""),
+        "servings": servings,
+        "ingredients": structured_ingredients,
         "duration_min": duration,
         "dish_type": recipe_doc.get("dish_type", "Plat"),
         "available_count": available_count,
@@ -3115,10 +3259,29 @@ async def _save_ai_recipe_to_stores(ai_recipe: dict, *, stock_names: list[str]) 
     except Exception as exc:
         logger.warning("AI gap fill: marquage gaps échoué: %s", exc)
 
+    structured_ingredients = [
+        {
+            "name": ingredient,
+            "quantity": None,
+            "unit": None,
+            "display_unit": None,
+            "display_label": "Quantité à ajuster",
+            "optional": False,
+            "available": True,
+            "matched_stock_item_ids": [],
+            "missing_quantity": None,
+            "is_estimated": True,
+        }
+        for ingredient in ingredients_used
+    ]
+
     return {
         "id": recipe_id,
         "title": title,
+        "summary": summary,
         "description": summary,
+        "servings": 2,
+        "ingredients": structured_ingredients,
         "duration_min": prep_time,
         "dish_type": "plat",
         "available_count": len(ingredients_used),

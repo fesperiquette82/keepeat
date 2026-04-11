@@ -14,7 +14,7 @@ import httpx
 from pydantic import ValidationError
 
 from app_core import logger
-from models import Recipe, RecipeDifficulty, RecipeGroupedSuggestion, RecipeMealType, RecipeSuggestion
+from models import Recipe, RecipeDifficulty, RecipeGroupedSuggestion, RecipeMealType, RecipeSuggestion, RecipeSuggestionIngredient
 
 _FRIGO_CATS = ["frais", "proteines", "legumes", "boissons"]
 _PLACARD_CATS = ["feculents", "desserts", "epicerie", "autres"]
@@ -913,13 +913,29 @@ def recipe_to_legacy_candidate(recipe: Recipe) -> dict:
 
 def recipe_match_to_suggestion(match: RecipeMatch) -> RecipeSuggestion:
     recipe = match.recipe
+    structured_ingredients = [
+        RecipeSuggestionIngredient(
+            name=ingredient,
+            quantity=None,
+            unit=None,
+            display_label="Quantité à ajuster",
+            optional=False,
+            available=ingredient in match.used_required,
+            matched_stock_item_ids=[],
+            missing_quantity=None if ingredient in match.used_required else None,
+            is_estimated=True,
+        )
+        for ingredient in recipe.ingredients_required
+    ]
     return RecipeSuggestion(
         id=recipe.id,
         title=recipe.title,
+        summary=recipe.summary,
         image="",
         usedIngredients=match.used_required,
         missedIngredients=match.missing_required,
         optionalIngredientsUsed=match.optional_used,
+        ingredients=structured_ingredients,
         sourceUrl="https://www.marmiton.org/recettes/recherche.aspx?aqt=" + recipe.title.replace(" ", "+"),
         is_fallback=not match.used_required,
         instructions_summary=recipe.summary,
