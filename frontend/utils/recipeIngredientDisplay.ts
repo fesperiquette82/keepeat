@@ -3,8 +3,8 @@ import { mapRecipeIngredientsToStock } from './ingredientMatching';
 
 export interface RecipeIngredientDisplayInput {
   name: string;
-  quantity: number;
-  unit: string;
+  quantity: number | null;
+  unit: string | null;
 }
 
 export interface RecipeIngredientDisplayRow {

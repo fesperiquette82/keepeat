@@ -21,7 +21,7 @@ function stockItem(input: Partial<StockItem> & Pick<StockItem, 'id' | 'name'>): 
 test('un ingrédient lié à un article stock avec image expose la vignette', () => {
   const rows = buildRecipeIngredientDisplayRows(
     [stockItem({ id: 's1', name: 'Tomates concassées', image_url: 'https://cdn/img/tomate.jpg' })],
-    [{ name: 'tomato puree', quantity: 1, unit: 'portion' }],
+    [{ name: 'tomato puree', quantity: 120, unit: 'g' }],
   );
 
   assert.equal(rows[0]?.isAvailable, true);

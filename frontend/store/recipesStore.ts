@@ -10,14 +10,28 @@ export type RecipesFilter = 'stock' | 'expiryDay' | 'expiryWeek' | 'expiryMonth'
 export interface BackendRecipeSuggestion {
   id: string;
   title: string;
+  summary?: string;
   image?: string;
   usedIngredients?: string[];
   missedIngredients?: string[];
+  ingredients?: Array<{
+    name: string;
+    quantity: number | null;
+    unit: string | null;
+    display_unit?: string | null;
+    display_label?: string | null;
+    optional?: boolean;
+    available?: boolean;
+    matched_stock_item_ids?: string[];
+    missing_quantity?: number | null;
+    is_estimated?: boolean;
+  }>;
   instructions_summary?: string;
   prep_time_min?: number | null;
   cook_time_min?: number | null;
   score?: number;
   debug?: Record<string, unknown>;
+  servings?: number;
 }
 
 interface RecipesStoreState {
@@ -66,17 +80,40 @@ export function sanitizeRecipe(raw: any, fallbackIndex: number): BackendRecipeSu
     .map((step: string) => formatFrenchRecipeText(step));
   const debug = { ...existingDebug, steps: debugSteps };
 
+  const ingredients = Array.isArray(raw?.ingredients)
+    ? raw.ingredients
+      .filter((item: unknown) => typeof item === 'object' && item !== null)
+      .map((item: any) => ({
+        name: formatFrenchRecipeText(typeof item.name === 'string' ? item.name : ''),
+        quantity: typeof item.quantity === 'number' ? item.quantity : null,
+        unit: typeof item.unit === 'string' ? item.unit : null,
+        display_unit: typeof item.display_unit === 'string' ? item.display_unit : null,
+        display_label: typeof item.display_label === 'string' ? item.display_label : null,
+        optional: item.optional === true,
+        available: item.available === true,
+        matched_stock_item_ids: Array.isArray(item.matched_stock_item_ids)
+          ? item.matched_stock_item_ids.filter((id: unknown) => typeof id === 'string')
+          : [],
+        missing_quantity: typeof item.missing_quantity === 'number' ? item.missing_quantity : null,
+        is_estimated: item.is_estimated === true,
+      }))
+      .filter((item: { name: string }) => item.name.length > 0)
+    : [];
+
   return {
     id: typeof raw?.id === 'string' && raw.id.trim() ? raw.id : `recipe-${fallbackIndex}`,
     title: formatFrenchRecipeText(typeof raw?.title === 'string' ? raw.title : `Recette ${fallbackIndex + 1}`),
     image: typeof raw?.image === 'string' ? raw.image : '',
+    summary: formatFrenchRecipeText(typeof raw?.summary === 'string' ? raw.summary : ''),
     usedIngredients,
     missedIngredients,
+    ingredients,
     instructions_summary: formatFrenchRecipeText(typeof raw?.instructions_summary === 'string' ? raw.instructions_summary : ''),
     prep_time_min: prep,
     cook_time_min: cook,
     score: typeof raw?.score === 'number' ? raw.score : 0,
     debug,
+    servings: typeof raw?.servings === 'number' && raw.servings > 0 ? raw.servings : 2,
   };
 }
 
