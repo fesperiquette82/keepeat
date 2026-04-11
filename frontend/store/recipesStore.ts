@@ -3,6 +3,7 @@ import axios from 'axios';
 import { buildApiUrl } from '../utils/config';
 import { useAuthStore } from './authStore';
 import { logger } from '../utils/logger';
+import { formatFrenchRecipeText } from '../utils/recipeFrenchTypography';
 
 export type RecipesFilter = 'stock' | 'expiryDay' | 'expiryWeek' | 'expiryMonth';
 
@@ -41,34 +42,37 @@ function authHeaders() {
   return token ? { Authorization: `Bearer ${token}` } : {};
 }
 
-function sanitizeRecipe(raw: any, fallbackIndex: number): BackendRecipeSuggestion {
+export function sanitizeRecipe(raw: any, fallbackIndex: number): BackendRecipeSuggestion {
   const prep = typeof raw?.prep_time_min === 'number' ? raw.prep_time_min : null;
   const cook = typeof raw?.cook_time_min === 'number' ? raw.cook_time_min : null;
 
   const usedIngredients = Array.isArray(raw?.usedIngredients)
-    ? raw.usedIngredients.filter((item: unknown) => typeof item === 'string')
+    ? raw.usedIngredients.filter((item: unknown) => typeof item === 'string').map((item: string) => formatFrenchRecipeText(item))
     : Array.isArray(raw?.available_ingredients)
-      ? raw.available_ingredients.filter((item: unknown) => typeof item === 'string')
+      ? raw.available_ingredients.filter((item: unknown) => typeof item === 'string').map((item: string) => formatFrenchRecipeText(item))
       : [];
 
   const missedIngredients = Array.isArray(raw?.missedIngredients)
-    ? raw.missedIngredients.filter((item: unknown) => typeof item === 'string')
+    ? raw.missedIngredients.filter((item: unknown) => typeof item === 'string').map((item: string) => formatFrenchRecipeText(item))
     : Array.isArray(raw?.missing_ingredients)
-      ? raw.missing_ingredients.filter((item: unknown) => typeof item === 'string')
+      ? raw.missing_ingredients.filter((item: unknown) => typeof item === 'string').map((item: string) => formatFrenchRecipeText(item))
       : [];
 
   const existingDebug = typeof raw?.debug === 'object' && raw?.debug ? raw.debug : {};
   const topLevelSteps = Array.isArray(raw?.steps) ? raw.steps.filter((s: unknown) => typeof s === 'string') : [];
-  const debugSteps = Array.isArray(existingDebug.steps) ? existingDebug.steps : topLevelSteps;
+  const debugStepsRaw = Array.isArray(existingDebug.steps) ? existingDebug.steps : topLevelSteps;
+  const debugSteps = debugStepsRaw
+    .filter((step: unknown): step is string => typeof step === 'string')
+    .map((step: string) => formatFrenchRecipeText(step));
   const debug = { ...existingDebug, steps: debugSteps };
 
   return {
     id: typeof raw?.id === 'string' && raw.id.trim() ? raw.id : `recipe-${fallbackIndex}`,
-    title: typeof raw?.title === 'string' ? raw.title : `Recette ${fallbackIndex + 1}`,
+    title: formatFrenchRecipeText(typeof raw?.title === 'string' ? raw.title : `Recette ${fallbackIndex + 1}`),
     image: typeof raw?.image === 'string' ? raw.image : '',
     usedIngredients,
     missedIngredients,
-    instructions_summary: typeof raw?.instructions_summary === 'string' ? raw.instructions_summary : '',
+    instructions_summary: formatFrenchRecipeText(typeof raw?.instructions_summary === 'string' ? raw.instructions_summary : ''),
     prep_time_min: prep,
     cook_time_min: cook,
     score: typeof raw?.score === 'number' ? raw.score : 0,
