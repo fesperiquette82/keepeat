@@ -13,6 +13,7 @@ import { matchRecipeIngredientsToStock } from '../../utils/ingredientMatching';
 import { removeStockItems, undoRemovedStockItems } from '../../utils/stockRemoval';
 import { logger } from '../../utils/logger';
 import { buildRecipeIngredientDisplayRows } from '../../utils/recipeIngredientDisplay';
+import { formatFrenchRecipeText } from '../../utils/recipeFrenchTypography';
 
 interface RecipeIngredient {
   name: string;
@@ -43,7 +44,7 @@ function toIngredientList(recipe: BackendRecipeSuggestion | null): RecipeIngredi
   const used = Array.isArray(recipe.usedIngredients) ? recipe.usedIngredients : [];
   const missed = Array.isArray(recipe.missedIngredients) ? recipe.missedIngredients : [];
   const unique = Array.from(new Set([...used, ...missed].map((item) => item.trim()).filter(Boolean)));
-  return unique.map((name) => ({ name, quantity: 1, unit: 'portion' }));
+  return unique.map((name) => ({ name: formatFrenchRecipeText(name), quantity: 1, unit: 'portion' }));
 }
 
 function resolveSteps(recipe: BackendRecipeSuggestion | null): string[] {
@@ -51,14 +52,14 @@ function resolveSteps(recipe: BackendRecipeSuggestion | null): string[] {
   const steps = (recipe.debug as { steps?: unknown } | undefined)?.steps;
   if (Array.isArray(steps)) {
     const safeSteps = steps.filter((step): step is string => typeof step === 'string' && step.trim().length > 0);
-    if (safeSteps.length > 0) return safeSteps;
+    if (safeSteps.length > 0) return safeSteps.map((step) => formatFrenchRecipeText(step));
   }
   if (recipe.instructions_summary) {
     const fallback = recipe.instructions_summary
       .split('.')
       .map((part) => part.trim())
       .filter(Boolean);
-    if (fallback.length > 0) return fallback;
+    if (fallback.length > 0) return fallback.map((step) => formatFrenchRecipeText(step));
   }
   return ['Préparez les ingrédients.', 'Cuisinez la recette simplement.', 'Servez aussitôt.'];
 }
@@ -259,7 +260,7 @@ export default function RecipeDetailScreen() {
         {!!baseRecipe.image && (
           <Image source={{ uri: baseRecipe.image }} style={styles.heroImage} resizeMode="cover" />
         )}
-        <Text style={styles.title}>{baseRecipe.title}</Text>
+        <Text style={styles.title}>{formatFrenchRecipeText(baseRecipe.title)}</Text>
         <Text style={styles.meta}>{totalTime} min · Idée simple</Text>
 
         <View style={styles.servingsCard}>
