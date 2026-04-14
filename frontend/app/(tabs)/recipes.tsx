@@ -73,6 +73,7 @@ export default function RecipesScreen() {
 
   const activeStockCount = activeItems.length;
   const targetIngredientNames = useMemo(() => buildTargetIngredientNames(targetItems), [targetItems]);
+  const targetIngredientNamesKey = useMemo(() => [...targetIngredientNames].sort().join(','), [targetIngredientNames]);
   const classicSuggestions = useMemo(
     () =>
       recipes.map((recipe) => ({
@@ -133,7 +134,7 @@ export default function RecipesScreen() {
     return () => {
       cancelled = true;
     };
-  }, [activeFilter, activeItems.length, activeStockCount, items.length, storeItems.length, targetIngredientNames, targetItems]);
+  }, [activeFilter, activeItems.length, activeStockCount, items.length, storeItems.length, targetIngredientNamesKey, targetItems]);
 
   const filters = useMemo(
     () =>

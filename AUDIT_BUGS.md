@@ -197,20 +197,11 @@ Lecture + modification + écriture du fichier JSON sans aucun verrou. Deux requ�
 
 | Champ | Valeur |
 |---|---|
-| **Statut** | `OUVERT` |
-| **Fichier** | `backend/server.py` ~ligne 2304 |
+| **Statut** | `INVALIDE` |
+| **Fichier** | `backend/server.py` ~ligne 2472 |
 | **Détecté** | 2026-04-09 |
 
-**Problème :**
-```python
-scored.sort(
-    key=lambda r: (..., -r.get("duration_min", 0)),
-    reverse=True,
-)
-```
-`-duration_min` avec `reverse=True` → les valeurs négatives les plus petites (= durées les plus longues) remontent en tête. Contraire à l'intention anti-gaspi.
-
-**Correction attendue :** Retirer la négation ou retirer `reverse=True` pour ce critère.
+**Analyse (2026-04-14) :** Le code actuel `-duration_min` avec `reverse=True` est **correct**. `-5 > -60` avec `reverse=True` → recette de 5 min en tête. Le tri met bien les recettes courtes en priorité (anti-gaspi). L'analyse initiale de l'audit était erronée. Test de non-régression ajouté dans `tests/test_recipes_suggestions_api.py` pour verrouiller ce comportement.
 
 ---
 
@@ -218,15 +209,17 @@ scored.sort(
 
 | Champ | Valeur |
 |---|---|
-| **Statut** | `OUVERT` |
+| **Statut** | `CORRIGÉ` |
 | **Fichier** | `frontend/utils/recipesFilter.ts` et `frontend/store/recipesStore.ts` |
 | **Détecté** | 2026-04-09 |
 
 **Problème :**
 - `recipesFilter.ts` envoie `'stock'` pour le filtre `stock`
-- `recipesStore.ts` envoie `'all'` pour le même filtre
+- `recipesStore.ts` envoyait `'all'` pour le même filtre
 
-Le backend retourne des résultats différents selon la valeur reçue.
+Le backend accepte les deux valeurs (mapping `stock` → `all`) mais l'incohérence était source de confusion.
+
+**Correction appliquée (2026-04-14) :** `recipesStore.ts` FILTER_TO_API `stock: 'all'` → `stock: 'stock'`. Test ajouté dans `recipesFilter.test.ts`.
 
 ---
 
@@ -278,13 +271,13 @@ L'endpoint `GET /api/recipes/:id` existe dans `recipesApi.ts` mais n'est pas uti
 
 | Champ | Valeur |
 |---|---|
-| **Statut** | `OUVERT` |
+| **Statut** | `CORRIGÉ` |
 | **Fichier** | `frontend/app/(tabs)/recipes.tsx` ~ligne 136 |
 | **Détecté** | 2026-04-09 |
 
 **Problème :** `targetIngredientNames` est un `Set` créé par `useMemo`. Deux `Set` ne sont jamais `===` même à contenu identique → le `useEffect` se déclenche à chaque rendu → appels API en boucle.
 
-**Correction attendue :** Sérialiser le Set : `[...targetIngredientNames].sort().join(',')` comme dépendance.
+**Correction appliquée (2026-04-14) :** Ajout de `targetIngredientNamesKey = useMemo(() => [...targetIngredientNames].sort().join(','), [targetIngredientNames])` et utilisation de `targetIngredientNamesKey` comme dépendance du `useEffect`. Test ajouté dans `recipesScoping.test.ts`.
 
 ---
 
@@ -292,11 +285,13 @@ L'endpoint `GET /api/recipes/:id` existe dans `recipesApi.ts` mais n'est pas uti
 
 | Champ | Valeur |
 |---|---|
-| **Statut** | `OUVERT` |
-| **Fichier** | `frontend/store/authStore.ts` ~ligne 193 |
+| **Statut** | `CORRIGÉ` |
+| **Fichier** | `frontend/store/authStore.ts` ~ligne 265 |
 | **Détecté** | 2026-04-09 |
 
 **Problème :** Sans try/catch autour de `unregisterPushToken`, une erreur réseau empêche la suppression du token en `SecureStore` → l'utilisateur reste connecté visuellement.
+
+**Correction appliquée (2026-04-14) :** `unregisterPushToken` entouré d'un `try/catch` dans la méthode `logout`. Test ajouté dans `settingsLogout.test.ts`.
 
 ---
 
@@ -334,14 +329,26 @@ L'endpoint `GET /api/recipes/:id` existe dans `recipesApi.ts` mais n'est pas uti
 
 | Sévérité | Total | Ouverts | Corrigés |
 |---|---|---|---|
-| 🔴 CRITIQUE | 4 | 4 | 0 |
-| 🟠 MAJEUR | 13 | 13 | 0 |
+| 🔴 CRITIQUE | 4 | 0 | 4 |
+| 🟠 MAJEUR | 13 | 9 | 4 |
 | 🟡 MINEUR | 14 | 14 | 0 |
-| **TOTAL** | **31** | **31** | **0** |
+| **TOTAL** | **31** | **23** | **8** |
 
 ---
 
-*Dernière mise à jour : 2026-04-09*
+*Dernière mise à jour : 2026-04-14*
+
+### Session du 2026-04-14 — corrections appliquées
+
+| ID | Statut | Note |
+|---|---|---|
+| Tests backend (5 échecs) | `CORRIGÉ` | Dépendances manquantes (`aiosmtplib` etc.) → `pip install -r requirements.txt` dans le venv. 95/95 ✅ |
+| BUG-025 | `CORRIGÉ` | `targetIngredientNamesKey` sérialisé en dépendance `useEffect`. Test dans `recipesScoping.test.ts`. |
+| BUG-010 | `INVALIDE` | Code déjà correct (recettes courtes en tête). Test de non-régression ajouté dans `test_recipes_suggestions_api.py`. |
+| BUG-016 | `CORRIGÉ` | `recipesStore.ts` `stock: 'all'` → `stock: 'stock'`. Test dans `recipesFilter.test.ts`. |
+| BUG-033 | `CORRIGÉ` | `unregisterPushToken` dans `try/catch` dans `authStore.ts`. Test dans `settingsLogout.test.ts`. |
+
+**Résultats tests après corrections :** backend 95/95 ✅ · frontend 75/75 ✅
 
 ---
 

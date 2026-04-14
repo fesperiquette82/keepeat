@@ -180,6 +180,46 @@ class RecipeSuggestionsEndpointTests(unittest.TestCase):
         self.assertEqual(mocked_gap.await_args.kwargs["reference_recipe"]["id"], "recipe_ref")
         self.assertEqual(mocked_gap.await_args.kwargs["uncovered_ingredients"], ["courgette"])
 
+    def test_tri_suggestions_recettes_courtes_avant_longues_bug010(self):
+        """BUG-010 : les recettes courtes doivent être proposées avant les longues (anti-gaspi)."""
+        fake_recipes = _FakeCollection(
+            [
+                {
+                    "id": "recipe_long",
+                    "title": "Plat long",
+                    "ingredients": [{"name": "courgette", "optional": False}],
+                    "steps": ["Cuire longtemps"],
+                    "duration_min": 60,
+                    "is_active": True,
+                },
+                {
+                    "id": "recipe_short",
+                    "title": "Plat court",
+                    "ingredients": [{"name": "courgette", "optional": False}],
+                    "steps": ["Cuire vite"],
+                    "duration_min": 10,
+                    "is_active": True,
+                },
+            ]
+        )
+        fake_stock = [{"name": "courgette"}]
+
+        async def _run():
+            with patch("server.recipes_col", fake_recipes):
+                with patch("server._fetch_stock_candidates", AsyncMock(return_value=fake_stock)):
+                    return await get_recipe_suggestions(
+                        response=Response(),
+                        recipe_filter="all",
+                        include_meta=True,
+                        current_user={"id": "u1"},
+                    )
+
+        payload = asyncio.run(_run())
+        ids = [r["id"] for r in payload["recipes"]]
+        self.assertIn("recipe_short", ids)
+        self.assertIn("recipe_long", ids)
+        self.assertLess(ids.index("recipe_short"), ids.index("recipe_long"), "recette courte doit précéder la longue")
+
     def test_include_meta_false_returns_recipe_list(self):
         fake_recipes = _FakeCollection(
             [

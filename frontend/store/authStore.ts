@@ -265,7 +265,11 @@ export const useAuthStore = create<AuthStore>((set) => ({
   logout: async () => {
     const { token } = useAuthStore.getState();
     if (token) {
-      await unregisterPushToken(token);
+      try {
+        await unregisterPushToken(token);
+      } catch {
+        // Erreur réseau : on continue le logout même si la désinscription échoue
+      }
     }
     await SecureStore.deleteItemAsync(TOKEN_KEY);
     await SecureStore.deleteItemAsync(USER_KEY);

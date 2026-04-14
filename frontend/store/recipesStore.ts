@@ -48,7 +48,7 @@ const FILTER_TO_API: Record<RecipesFilter, string> = {
   expiryDay: 'expiryDay',
   expiryWeek: 'expiryWeek',
   expiryMonth: 'expiryMonth',
-  stock: 'all',
+  stock: 'stock',
 };
 
 function authHeaders() {

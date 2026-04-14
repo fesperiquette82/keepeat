@@ -137,6 +137,18 @@ test('déduplication: même titre + durée + type reste unique même si les ingr
   assert.deepEqual(deduped.map((recipe) => recipe.id), ['variant-a', 'other']);
 });
 
+test('buildTargetIngredientNames: deux appels avec les mêmes items produisent des clés sérialisées identiques (BUG-025)', () => {
+  const items = [{ name: 'Tomate' }, { name: 'oeuf' }, { name: 'courgette' }];
+  const set1 = buildTargetIngredientNames(items);
+  const set2 = buildTargetIngredientNames(items);
+  // Deux instances distinctes (références différentes, == ne suffit pas comme dépendance React)
+  assert.notEqual(set1 === set2, true);
+  // Mais les clés sérialisées sont identiques → stable comme dépendance useEffect
+  const key1 = [...set1].sort().join(',');
+  const key2 = [...set2].sort().join(',');
+  assert.equal(key1, key2);
+});
+
 test('cohérence anti-gaspi / liste principale: top suggestions restent un sous-ensemble de la liste filtrée', () => {
   const recipes = [
     { id: 'r1', available_ingredients: ['oeuf'] },
