@@ -13,6 +13,7 @@ Une tâche est considérée comme **INCOMPLÈTE** tant que :
 - [ ] L'implémentation n'est pas terminée
 - [ ] Le test de non-régression n'a pas été écrit
 - [ ] Le test ne passe pas
+- [ ] **Pour toute nouvelle fonctionnalité côté application : sa vérification n'a pas été intégrée dans le dashboard admin** (monitoring, ticket, indicateur ou page dédiée selon la nature de la fonctionnalité)
 
 **Aucune exception n'est acceptée** sauf raison technique explicitement documentée dans le commit.
 
