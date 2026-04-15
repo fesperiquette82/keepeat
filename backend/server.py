@@ -2978,6 +2978,26 @@ async def dismiss_receipt_ticket(
     return {"ok": True}
 
 
+@api_router.post("/admin/receipt-tickets/{ticket_id}/reopen")
+async def reopen_receipt_ticket(
+    ticket_id: str,
+    _admin_user: Dict[str, Any] = Depends(_require_admin_user),
+):
+    """Remet un ticket en attente (annule traitement ou ignoré)."""
+    try:
+        oid = ObjectId(ticket_id)
+    except Exception:
+        raise HTTPException(status_code=400, detail="ID invalide")
+    res = await receipt_tickets_col.update_one(
+        {"_id": oid},
+        {"$set": {"status": "pending"}, "$unset": {"processed_at": "", "dismissed_at": "", "items_added": ""}},
+    )
+    if res.matched_count == 0:
+        raise HTTPException(status_code=404, detail="Ticket non trouvé")
+    logger.info("Receipt ticket reopened ticket_id=%s by=%s", ticket_id, _admin_user.get("email", "admin"))
+    return {"ok": True}
+
+
 # -----------------------------------------------------------------------------
 # Stats mensuelles (score anti-gaspillage)
 # -----------------------------------------------------------------------------
@@ -4141,6 +4161,10 @@ _ADMIN_RECIPES_HTML = """<!DOCTYPE html>
 <div class="header">
   <span>🥗</span>
   <h1>KeepEat — Import de recettes</h1>
+  <nav style="display:flex;gap:8px;margin-left:auto;align-items:center">
+    <a href="/admin/dashboard" style="color:#fff;font-size:13px;opacity:.8;text-decoration:none;padding:4px 10px;border-radius:6px;border:1px solid rgba(255,255,255,.3)">Dashboard</a>
+    <a href="/admin/tickets" style="color:#fff;font-size:13px;opacity:.8;text-decoration:none;padding:4px 10px;border-radius:6px;border:1px solid rgba(255,255,255,.3)">Tickets</a>
+  </nav>
   <span id="logged-info" class="logged-as" style="display:none"></span>
   <a id="btn-logout" class="logout" style="display:none" onclick="logout()">Deconnexion</a>
 </div>
@@ -4379,6 +4403,7 @@ _ADMIN_TICKETS_HTML = """<!DOCTYPE html>
   <span>🧾</span>
   <h1>KeepEat — Tickets de caisse</h1>
   <nav>
+    <a href="/admin/dashboard">Dashboard</a>
     <a href="/admin/recipes">Recettes</a>
     <span id="logged-info" class="logged-as" style="display:none"></span>
     <a id="btn-logout" class="logout" style="display:none" onclick="logout()">Déconnexion</a>
@@ -4592,6 +4617,8 @@ function renderModal(ticket) {
 
 let itemCount = 1;
 
+const ZONES = [{k:'frigo',l:'❄️ Frigo'},{k:'placard',l:'🏠 Placard'},{k:'congelateur',l:'🧊 Congélo'}];
+
 function buildItemRow(idx) {
   return '<div class="item-row-top">'
     + '<input type="text" id="item-name-' + idx + '" placeholder="Nom du produit" oninput="syncItems()">'
@@ -4599,6 +4626,9 @@ function buildItemRow(idx) {
     + '</div>'
     + '<div class="cats" id="cats-' + idx + '">'
     + CATS.map(c => '<button class="cat-btn' + (c === 'autres' ? ' active' : '') + '" data-cat="' + c + '" data-idx="' + idx + '" onclick="selectCat(this)">' + c + '</button>').join('')
+    + '</div>'
+    + '<div class="cats" id="zones-' + idx + '" style="margin-top:4px">'
+    + ZONES.map((z,i) => '<button class="cat-btn' + (i===0?' active':'') + '" data-zone="' + z.k + '" data-idx="' + idx + '" onclick="selectZone(this)">' + z.l + '</button>').join('')
     + '</div>'
     + '<input class="expiry-input" id="item-expiry-' + idx + '" type="text" placeholder="DLC YYYY-MM-DD (optionnel)">';
 }
@@ -4626,6 +4656,12 @@ function selectCat(btn) {
   btn.classList.add('active');
 }
 
+function selectZone(btn) {
+  const idx = btn.dataset.idx;
+  document.querySelectorAll('#zones-' + idx + ' .cat-btn').forEach(b => b.classList.remove('active'));
+  btn.classList.add('active');
+}
+
 function syncItems() {}
 
 function collectItems() {
@@ -4637,9 +4673,11 @@ function collectItems() {
     if (!name) continue;
     const activeCat = document.querySelector('#cats-' + i + ' .cat-btn.active');
     const category = activeCat ? activeCat.dataset.cat : 'autres';
+    const activeZone = document.querySelector('#zones-' + i + ' .cat-btn.active');
+    const storageZone = activeZone ? activeZone.dataset.zone : 'frigo';
     const expiryEl = document.getElementById('item-expiry-' + i);
     const expiry = expiryEl ? expiryEl.value.trim() : '';
-    items.push({ name, category, expiry_date: expiry || null });
+    items.push({ name, category, storageZone, expiry_date: expiry || null });
   }
   return items;
 }
@@ -4687,8 +4725,18 @@ async function dismissTicket() {
 }
 
 async function reopenTicket(ticketId) {
-  // Remettre en "pending" via un PATCH simplifié (recharge juste la page)
-  alert('Pour remettre en attente, utilisez directement MongoDB. Fonctionnalité à implémenter si nécessaire.');
+  if (!confirm('Remettre ce ticket en attente ?')) return;
+  try {
+    const r = await fetch('/api/admin/receipt-tickets/' + ticketId + '/reopen', {
+      method: 'POST',
+      headers: {'Authorization':'Bearer '+token}
+    });
+    if (!r.ok) { const d = await r.json(); throw new Error(d.detail || 'Erreur'); }
+    closeModal();
+    loadTickets();
+  } catch(e) {
+    alert('Erreur : ' + e.message);
+  }
 }
 
 function closeModal(event) {
@@ -4711,6 +4759,305 @@ document.getElementById('password').addEventListener('keydown', e => { if (e.key
 async def admin_tickets_page():
     """Page web de traitement des tickets de caisse pour les administrateurs KeepEat."""
     return HTMLResponse(content=_ADMIN_TICKETS_HTML)
+
+
+# ── Page admin : dashboard Vue d'ensemble / Santé système ─────────────────────
+
+_ADMIN_DASHBOARD_HTML = """<!DOCTYPE html>
+<html lang="fr">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>KeepEat — Dashboard</title>
+<style>
+  *{box-sizing:border-box;margin:0;padding:0}
+  body{font-family:system-ui,sans-serif;background:#f0fdf4;color:#1a1a1a;min-height:100vh}
+  .header{background:#16a34a;color:#fff;padding:16px 24px;display:flex;align-items:center;gap:12px}
+  .header h1{font-size:18px;font-weight:700}
+  .header nav{display:flex;gap:8px;margin-left:auto;align-items:center}
+  .header nav a{color:#fff;font-size:13px;opacity:.8;text-decoration:none;padding:4px 10px;border-radius:6px;border:1px solid rgba(255,255,255,.3)}
+  .header nav a:hover{opacity:1;background:rgba(255,255,255,.15)}
+  .logged-as{font-size:12px;color:rgba(255,255,255,.75);margin-right:4px}
+  a.logout{font-size:12px;color:#fca5a5;cursor:pointer;text-decoration:underline}
+  .container{max-width:1100px;margin:28px auto;padding:0 16px;display:flex;flex-direction:column;gap:16px}
+  .card{background:#fff;border-radius:12px;border:1px solid #d1fae5;padding:24px}
+  .card-title{font-size:15px;font-weight:700;color:#166534;margin-bottom:14px}
+  label{display:block;font-size:13px;font-weight:600;color:#374151;margin-bottom:6px}
+  input[type=email],input[type=password]{width:100%;padding:10px 12px;border:1px solid #d1d5db;border-radius:8px;font-size:14px;outline:none}
+  input:focus{border-color:#16a34a;box-shadow:0 0 0 2px #bbf7d0}
+  .row{display:grid;grid-template-columns:1fr 1fr;gap:12px}
+  button{background:#16a34a;color:#fff;border:none;border-radius:8px;padding:10px 20px;font-size:14px;font-weight:700;cursor:pointer;transition:.15s}
+  button:hover{background:#15803d}
+  button.secondary{background:#fff;color:#374151;border:1px solid #d1d5db}
+  button.secondary:hover{background:#f9fafb}
+  .result{border-radius:8px;padding:12px 16px;font-size:13px;line-height:1.6;margin-top:12px}
+  .result.error{background:#fef2f2;border:1px solid #fca5a5;color:#dc2626}
+  .stats-grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(155px,1fr));gap:10px;margin-bottom:4px}
+  .stat{background:#f0fdf4;border-radius:10px;border:1px solid #bbf7d0;padding:12px 14px}
+  .stat-label{font-size:11px;color:#6b7280;text-transform:uppercase;letter-spacing:.03em;margin-bottom:3px}
+  .stat-value{font-size:20px;font-weight:800;color:#111827;line-height:1.2}
+  .stat-sub{font-size:11px;color:#9ca3af;margin-top:2px}
+  .health-grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(190px,1fr));gap:8px}
+  .health-item{display:flex;align-items:center;gap:8px;padding:9px 12px;border-radius:8px;border:1px solid #e5e7eb;background:#fafafa;font-size:13px}
+  .dot{width:10px;height:10px;border-radius:50%;flex-shrink:0}
+  .ok{background:#16a34a}
+  .warn{background:#f59e0b}
+  .err{background:#ef4444}
+  .uptime-bar{background:#f0fdf4;border:1px solid #bbf7d0;border-radius:8px;padding:9px 14px;font-size:13px;color:#166534;display:flex;gap:20px;flex-wrap:wrap;margin-top:10px}
+  .error-banner{background:#fef2f2;border:1px solid #fca5a5;border-radius:8px;padding:9px 14px;font-size:12px;color:#dc2626;margin-top:8px}
+  .api-table{width:100%;border-collapse:collapse;font-size:12px}
+  .api-table th{text-align:left;padding:7px 10px;background:#f0fdf4;color:#166534;font-weight:700;border-bottom:1px solid #d1fae5}
+  .api-table td{padding:6px 10px;border-bottom:1px solid #f3f4f6;color:#374151;word-break:break-all}
+  .api-table tr:last-child td{border-bottom:none}
+  .api-table tr:hover td{background:#f9fafb}
+  .rate-high{color:#ef4444;font-weight:700}
+  .rate-med{color:#f59e0b;font-weight:700}
+  .rate-ok{color:#16a34a}
+  .svc-row{display:flex;align-items:center;gap:10px;padding:7px 0;border-bottom:1px solid #f3f4f6;font-size:13px}
+  .svc-row:last-child{border-bottom:none}
+  .svc-name{flex:1;font-weight:600;color:#374151}
+  .svc-units{color:#6b7280;font-size:12px}
+  .svc-cost{font-weight:700;color:#166534;min-width:60px;text-align:right}
+  .two-col{display:grid;grid-template-columns:1fr 1fr;gap:16px}
+  @media(max-width:680px){.two-col{grid-template-columns:1fr}.stats-grid{grid-template-columns:repeat(2,1fr)}}
+  .refresh-note{font-size:11px;color:#9ca3af;text-align:right}
+  #login-section{display:block}
+  #dashboard-section{display:none}
+</style>
+</head>
+<body>
+<div class="header">
+  <span>📊</span>
+  <h1>KeepEat — Dashboard</h1>
+  <nav>
+    <a href="/admin/tickets">Tickets</a>
+    <a href="/admin/recipes">Recettes</a>
+    <span id="logged-info" class="logged-as" style="display:none"></span>
+    <a id="btn-logout" class="logout" style="display:none" onclick="logout()">Déconnexion</a>
+  </nav>
+</div>
+<div class="container">
+
+  <!-- LOGIN -->
+  <div class="card" id="login-section">
+    <h2 style="font-size:15px;font-weight:700;color:#166534;margin-bottom:16px">Connexion admin</h2>
+    <div class="row" style="margin-bottom:12px">
+      <div><label>Email</label><input id="email" type="email" placeholder="admin@example.com" autocomplete="username"></div>
+      <div><label>Mot de passe</label><input id="password" type="password" placeholder="••••••••" autocomplete="current-password"></div>
+    </div>
+    <button onclick="doLogin()">Se connecter</button>
+    <div id="login-result"></div>
+  </div>
+
+  <!-- DASHBOARD -->
+  <div id="dashboard-section">
+
+    <!-- Santé système -->
+    <div class="card">
+      <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:14px">
+        <div class="card-title" style="margin:0">🔍 Santé système</div>
+        <button class="secondary" onclick="loadAll()" style="padding:7px 14px;font-size:13px">Actualiser</button>
+      </div>
+      <div id="health-content"><div style="color:#9ca3af;font-size:13px">Chargement...</div></div>
+    </div>
+
+    <!-- KPIs utilisateurs + abonnements -->
+    <div class="two-col">
+      <div class="card">
+        <div class="card-title">👥 Utilisateurs</div>
+        <div id="users-content"><div style="color:#9ca3af;font-size:13px">Chargement...</div></div>
+      </div>
+      <div class="card">
+        <div class="card-title">💳 Abonnements</div>
+        <div id="subscriptions-content"><div style="color:#9ca3af;font-size:13px">Chargement...</div></div>
+      </div>
+    </div>
+
+    <!-- Top issues API + coûts services -->
+    <div class="two-col">
+      <div class="card">
+        <div class="card-title">⚠️ Top endpoints en erreur <small style="font-weight:400;color:#9ca3af;font-size:11px">(7j)</small></div>
+        <div id="api-issues-content"><div style="color:#9ca3af;font-size:13px">Chargement...</div></div>
+      </div>
+      <div class="card">
+        <div class="card-title">💰 Coûts services <small style="font-weight:400;color:#9ca3af;font-size:11px">(30j)</small></div>
+        <div id="services-content"><div style="color:#9ca3af;font-size:13px">Chargement...</div></div>
+      </div>
+    </div>
+
+    <div class="refresh-note" id="last-updated"></div>
+  </div>
+</div>
+
+<script>
+let token = localStorage.getItem('keepeat_admin_token');
+let userEmail = localStorage.getItem('keepeat_admin_email');
+let refreshTimer = null;
+
+if (token) showDashboardSection();
+
+function showDashboardSection() {
+  document.getElementById('login-section').style.display = 'none';
+  document.getElementById('dashboard-section').style.display = 'block';
+  const info = document.getElementById('logged-info');
+  info.textContent = userEmail || 'admin';
+  info.style.display = 'inline';
+  document.getElementById('btn-logout').style.display = 'inline';
+  loadAll();
+  if (!refreshTimer) refreshTimer = setInterval(loadAll, 60000);
+}
+
+async function doLogin() {
+  const email = document.getElementById('email').value.trim();
+  const password = document.getElementById('password').value;
+  const res = document.getElementById('login-result');
+  if (!email || !password) { res.innerHTML = '<div class="result error">Email et mot de passe requis.</div>'; return; }
+  try {
+    const r = await fetch('/api/auth/login', {method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({email,password})});
+    const data = await r.json();
+    if (!r.ok) { res.innerHTML = '<div class="result error">' + (data.detail || 'Identifiants incorrects.') + '</div>'; return; }
+    token = data.access_token;
+    localStorage.setItem('keepeat_admin_token', token);
+    localStorage.setItem('keepeat_admin_email', email);
+    userEmail = email;
+    showDashboardSection();
+  } catch(e) { res.innerHTML = '<div class="result error">Erreur réseau : ' + e.message + '</div>'; }
+}
+
+function logout() {
+  clearInterval(refreshTimer); refreshTimer = null;
+  localStorage.removeItem('keepeat_admin_token');
+  localStorage.removeItem('keepeat_admin_email');
+  token = null;
+  document.getElementById('login-section').style.display = 'block';
+  document.getElementById('dashboard-section').style.display = 'none';
+  document.getElementById('logged-info').style.display = 'none';
+  document.getElementById('btn-logout').style.display = 'none';
+}
+
+async function apiFetch(path) {
+  const r = await fetch(path, {headers:{'Authorization':'Bearer '+token}});
+  if (r.status === 401) { logout(); return null; }
+  return r.json();
+}
+
+async function loadAll() {
+  const [health, dash] = await Promise.all([
+    apiFetch('/api/admin/monitoring/health'),
+    apiFetch('/api/admin/monitoring/dashboard'),
+  ]);
+  if (health) renderHealth(health);
+  if (dash) {
+    renderUsers(dash.users);
+    renderSubscriptions(dash.subscriptions, dash.estimated_cost_summary);
+    renderApiIssues(dash.top_api_issues || []);
+    renderServices(dash.top_service_usage || []);
+  }
+  document.getElementById('last-updated').textContent = 'Mis à jour : ' + new Date().toLocaleTimeString('fr-FR');
+}
+
+function fmtUptime(s) {
+  if (s < 60) return s + 's';
+  if (s < 3600) return Math.floor(s/60) + 'min ' + (s%60) + 's';
+  return Math.floor(s/3600) + 'h ' + Math.floor((s%3600)/60) + 'min';
+}
+
+function renderHealth(h) {
+  const svcLabels = {
+    gemini_ocr_configured: 'Gemini OCR',
+    gemini_recipes_configured: 'Gemini Recettes',
+    brevo_configured: 'Brevo (email)',
+    openfoodfacts_configured: 'OpenFoodFacts',
+  };
+  let html = '<div class="health-grid">';
+  html += '<div class="health-item"><span class="dot ' + (h.db.ok ? 'ok' : 'err') + '"></span>MongoDB : ' + (h.db.ok ? 'OK' : 'ERREUR') + '</div>';
+  for (const [k, lbl] of Object.entries(svcLabels)) {
+    const on = h.external_services[k];
+    html += '<div class="health-item"><span class="dot ' + (on ? 'ok' : 'warn') + '"></span>' + lbl + ' : ' + (on ? 'Configuré' : 'Non configuré') + '</div>';
+  }
+  html += '</div>';
+  html += '<div class="uptime-bar"><span>⏱ Uptime : <strong>' + fmtUptime(h.uptime_seconds) + '</strong></span>';
+  html += '<span>Statut : <strong style="color:' + (h.status === 'ok' ? '#16a34a' : '#ef4444') + '">' + (h.status === 'ok' ? '✓ OK' : '⚠ DÉGRADÉ') + '</strong></span></div>';
+  if (h.last_critical_error) {
+    const e = h.last_critical_error;
+    html += '<div class="error-banner">⛔ Dernière erreur critique : <strong>' + escHtml((e.method||'') + ' ' + (e.path||'')) + '</strong> → HTTP ' + (e.status_code||'') + ' — ' + escHtml(e.error_type||'') + ' (' + escHtml((e.created_at||'').replace('T',' ').slice(0,19)) + ')</div>';
+  }
+  document.getElementById('health-content').innerHTML = html;
+}
+
+function statCard(label, value, sub) {
+  return '<div class="stat"><div class="stat-label">' + escHtml(String(label)) + '</div><div class="stat-value">' + escHtml(String(value)) + '</div>' + (sub ? '<div class="stat-sub">' + escHtml(sub) + '</div>' : '') + '</div>';
+}
+
+function renderUsers(u) {
+  if (!u) return;
+  document.getElementById('users-content').innerHTML =
+    '<div class="stats-grid">'
+    + statCard('Total', u.total, '')
+    + statCard('Nouveaux 24h', u.new_today, '')
+    + statCard('Nouveaux 7j', u.new_7d, '')
+    + statCard('Nouveaux 30j', u.new_30d, '')
+    + statCard('DAU', u.dau, 'actifs/j')
+    + statCard('WAU', u.wau, 'actifs/sem')
+    + statCard('Premium', u.premium, '')
+    + '</div>';
+}
+
+function renderSubscriptions(s, cost) {
+  if (!s) return;
+  const costVal = cost ? cost.services_30d_estimated_cost_eur : null;
+  document.getElementById('subscriptions-content').innerHTML =
+    '<div class="stats-grid">'
+    + statCard('Actifs', s.active, '')
+    + statCard('MRR', (s.estimated_mrr_eur||0).toFixed(2) + '\u00a0€', '')
+    + statCard('ARR', (s.estimated_arr_eur||0).toFixed(2) + '\u00a0€', '')
+    + (costVal !== null ? statCard('Coûts 30j', costVal.toFixed(4) + '\u00a0€', 'estimé') : '')
+    + '</div>'
+    + '<div style="font-size:12px;color:#6b7280;margin-top:8px">Mensuel : ' + (s.by_plan.premium_monthly||0) + ' · Autre : ' + (s.by_plan.premium_other||0) + '</div>';
+}
+
+function renderApiIssues(issues) {
+  if (!issues.length) {
+    document.getElementById('api-issues-content').innerHTML = '<div style="color:#16a34a;font-size:13px">Aucun problème détecté 🎉</div>';
+    return;
+  }
+  let html = '<table class="api-table"><thead><tr><th>Endpoint</th><th>Appels</th><th>Erreurs</th><th>Lat. moy.</th></tr></thead><tbody>';
+  for (const row of issues) {
+    const rate = row.error_rate || 0;
+    const cls = rate >= 0.3 ? 'rate-high' : rate >= 0.1 ? 'rate-med' : 'rate-ok';
+    html += '<tr><td>' + escHtml(row.endpoint_key||'') + '</td><td>' + (row.count||0) + '</td><td class="' + cls + '">' + (rate*100).toFixed(1) + '%</td><td>' + (row.avg_latency_ms ? Math.round(row.avg_latency_ms) + 'ms' : '—') + '</td></tr>';
+  }
+  html += '</tbody></table>';
+  document.getElementById('api-issues-content').innerHTML = html;
+}
+
+function renderServices(svcs) {
+  if (!svcs.length) {
+    document.getElementById('services-content').innerHTML = '<div style="color:#9ca3af;font-size:13px">Aucune donnée.</div>';
+    return;
+  }
+  let html = '<div>';
+  for (const s of svcs) {
+    html += '<div class="svc-row"><span class="svc-name">' + escHtml(s.service_name||'—') + '</span><span class="svc-units">' + Number(s.units||0).toFixed(0) + ' unités</span><span class="svc-cost">' + Number(s.estimated_cost||0).toFixed(4) + '\u00a0€</span></div>';
+  }
+  html += '</div>';
+  document.getElementById('services-content').innerHTML = html;
+}
+
+function escHtml(str) {
+  return String(str||'').replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;');
+}
+
+document.getElementById('password').addEventListener('keydown', e => { if (e.key==='Enter') doLogin(); });
+</script>
+</body>
+</html>"""
+
+
+@app.get("/admin/dashboard", response_class=HTMLResponse, include_in_schema=False)
+async def admin_dashboard_page():
+    """Page web de dashboard Vue d'ensemble / Santé système pour les administrateurs KeepEat."""
+    return HTMLResponse(content=_ADMIN_DASHBOARD_HTML)
 
 
 # Redirect pages (deep link fallback for email clients)
