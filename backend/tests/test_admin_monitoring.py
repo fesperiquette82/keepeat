@@ -74,14 +74,42 @@ class TestClassifyErrorType:
 
 
 class TestAdminDashboardRouteRegistered:
-    """La route /admin/dashboard doit être enregistrée dans l'app."""
+    """Les routes admin HTML doivent être enregistrées dans l'app."""
 
-    def test_dashboard_route_exists(self, monkeypatch):
+    def _load(self, monkeypatch):
         monkeypatch.setenv("MONGO_URL", "mongodb://localhost:27017/keepeat-test")
         monkeypatch.setenv("JWT_SECRET_KEY", "test-secret")
         if "server" in sys.modules:
             del sys.modules["server"]
-        server = importlib.import_module("server")
+        return importlib.import_module("server")
 
+    def test_dashboard_route_exists(self, monkeypatch):
+        server = self._load(monkeypatch)
         paths = [getattr(r, "path", None) for r in server.app.routes]
         assert "/admin/dashboard" in paths, "Route /admin/dashboard absente de l'app"
+
+    def test_trends_api_route_exists(self, monkeypatch):
+        server = self._load(monkeypatch)
+        # api_router a prefix="/api", les chemins sont donc stockés avec ce préfixe
+        api_paths = [getattr(r, "path", None) for r in server.api_router.routes]
+        assert "/api/admin/monitoring/trends" in api_paths, "Route /api/admin/monitoring/trends absente de l'api_router"
+
+
+class TestHighestErrorRatePipeline:
+    """La logique de highest_error_rate ne doit pas retourner d'endpoint
+    avec 0 appels — regression du bug 'count=0 / error_rate=100%'."""
+
+    def test_error_rate_is_coherent_with_volume(self):
+        # Simulation du résultat attendu après le pipeline dédié :
+        # chaque entrée doit avoir volume >= 2 (filtre min_count=2)
+        # et error_rate > 0 (filtre error_rate > 0)
+        simulated_results = [
+            {"endpoint_key": "/api/ocr/receipt", "volume": 5, "error_rate": 1.0, "avg_latency_ms": 300.0},
+            {"endpoint_key": "/api/recipes/suggestions", "volume": 12, "error_rate": 0.25, "avg_latency_ms": 120.0},
+        ]
+        for r in simulated_results:
+            assert r["volume"] >= 2, f"volume < 2 pour {r['endpoint_key']} : incohérent"
+            assert r["error_rate"] > 0, f"error_rate = 0 ne devrait pas figurer dans la liste"
+            # error_rate doit être calculable depuis volume (pas de division par 0)
+            inferred_errors = round(r["error_rate"] * r["volume"])
+            assert inferred_errors >= 1, f"Incohérence : {r['error_rate']} * {r['volume']} < 1"

@@ -269,9 +269,45 @@ async def summarize_api_metrics(*, api_request_logs_col, start_iso: str, end_iso
             }
         )
 
-    worst_error = sorted(formatted, key=lambda x: x["error_rate"], reverse=True)[:5]
+    # Pipeline dédié pour le taux d'erreur le plus élevé.
+    # Contrairement au tri en mémoire sur le top-N par volume, ce pipeline
+    # interroge toute la période, filtre les endpoints avec au moins 2 appels
+    # (évite les faux positifs "1 appel / 1 erreur = 100%") et trie par
+    # error_rate décroissant directement dans MongoDB.
+    error_pipeline = [
+        {"$match": match},
+        {
+            "$group": {
+                "_id": "$endpoint_key",
+                "count": {"$sum": 1},
+                "errors": {"$sum": {"$cond": [{"$gte": ["$status_code", 400]}, 1, 0]}},
+                "avg_latency_ms": {"$avg": "$duration_ms"},
+            }
+        },
+        {"$match": {"count": {"$gte": 2}}},
+        {
+            "$addFields": {
+                "error_rate": {
+                    "$cond": [{"$gt": ["$count", 0]}, {"$divide": ["$errors", "$count"]}, 0.0]
+                }
+            }
+        },
+        {"$match": {"error_rate": {"$gt": 0}}},
+        {"$sort": {"error_rate": -1, "count": -1}},
+        {"$limit": 10},
+    ]
+    error_rows = await api_request_logs_col.aggregate(error_pipeline).to_list(length=10)
+    highest_error_rate = [
+        {
+            "endpoint_key": r["_id"],
+            "volume": int(r["count"]),
+            "error_rate": round(float(r.get("error_rate", 0)), 4),
+            "avg_latency_ms": round(float(r.get("avg_latency_ms") or 0.0), 2),
+        }
+        for r in error_rows
+    ]
     worst_latency = sorted(formatted, key=lambda x: x["p95_latency_ms"], reverse=True)[:5]
-    return {"volume": volume, "top_endpoints": formatted, "highest_error_rate": worst_error, "highest_latency": worst_latency}
+    return {"volume": volume, "top_endpoints": formatted, "highest_error_rate": highest_error_rate, "highest_latency": worst_latency}
 
 
 async def summarize_services_usage(*, service_usage_logs_col, start_iso: str, end_iso: str) -> dict[str, Any]:

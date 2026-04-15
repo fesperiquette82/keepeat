@@ -3854,6 +3854,57 @@ async def admin_monitoring_events(
     }
 
 
+@api_router.get("/admin/monitoring/trends")
+async def admin_monitoring_trends(
+    _admin_user: Dict[str, Any] = Depends(_require_admin_user),
+):
+    """Séries temporelles pour les graphiques du dashboard admin."""
+    now = utc_now()
+    iso_30d = (now - timedelta(days=30)).isoformat()
+    iso_7d = (now - timedelta(days=7)).isoformat()
+
+    # DAU quotidiens sur 30j (utilisateurs distincts par jour)
+    dau_pipeline = [
+        {"$match": {"created_at": {"$gte": iso_30d}, "user_id": {"$nin": [None, ""]}}},
+        {"$group": {"_id": {"$substr": ["$created_at", 0, 10]}, "users": {"$addToSet": "$user_id"}}},
+        {"$project": {"date": "$_id", "count": {"$size": "$users"}}},
+        {"$sort": {"date": 1}},
+    ]
+    dau_rows = await api_request_logs_col.aggregate(dau_pipeline).to_list(length=31)
+
+    # Nouveaux utilisateurs par jour sur 30j
+    new_users_pipeline = [
+        {"$match": {"created_at": {"$gte": iso_30d}}},
+        {"$group": {"_id": {"$substr": ["$created_at", 0, 10]}, "count": {"$sum": 1}}},
+        {"$sort": {"_id": 1}},
+    ]
+    new_users_rows = await users_col.aggregate(new_users_pipeline).to_list(length=31)
+
+    # Erreurs API par jour sur 7j
+    errors_pipeline = [
+        {"$match": {"created_at": {"$gte": iso_7d}, "status_code": {"$gte": 400}}},
+        {"$group": {"_id": {"$substr": ["$created_at", 0, 10]}, "count": {"$sum": 1}}},
+        {"$sort": {"_id": 1}},
+    ]
+    errors_rows = await api_request_logs_col.aggregate(errors_pipeline).to_list(length=8)
+
+    # Coûts services par jour sur 30j
+    costs_pipeline = [
+        {"$match": {"created_at": {"$gte": iso_30d}}},
+        {"$group": {"_id": {"$substr": ["$created_at", 0, 10]}, "cost": {"$sum": "$estimated_cost"}}},
+        {"$sort": {"_id": 1}},
+    ]
+    costs_rows = await service_usage_logs_col.aggregate(costs_pipeline).to_list(length=31)
+
+    return {
+        "generated_at": now.isoformat(),
+        "dau_30d": [{"date": r["date"], "count": r["count"]} for r in dau_rows],
+        "new_users_30d": [{"date": r["_id"], "count": r["count"]} for r in new_users_rows],
+        "errors_7d": [{"date": r["_id"], "count": r["count"]} for r in errors_rows],
+        "costs_30d": [{"date": r["_id"], "cost": round(float(r["cost"]), 6)} for r in costs_rows],
+    }
+
+
 # ── Endpoint admin : ajout manuel d'une recette dans les deux stores ──────────
 
 class AdminRecipePayload(BaseModel):
@@ -4823,6 +4874,8 @@ _ADMIN_DASHBOARD_HTML = """<!DOCTYPE html>
   .refresh-note{font-size:11px;color:#9ca3af;text-align:right}
   #login-section{display:block}
   #dashboard-section{display:none}
+  .chart-card{background:#fff;border-radius:12px;border:1px solid #d1fae5;padding:20px}
+  .chart-card .card-title{font-size:14px;font-weight:700;color:#166534;margin-bottom:12px}
 </style>
 </head>
 <body>
@@ -4885,14 +4938,38 @@ _ADMIN_DASHBOARD_HTML = """<!DOCTYPE html>
       </div>
     </div>
 
+    <!-- Graphiques de tendance -->
+    <div class="two-col">
+      <div class="chart-card">
+        <div class="card-title">📈 Utilisateurs actifs / jour <small style="font-weight:400;color:#9ca3af;font-size:11px">(30j)</small></div>
+        <canvas id="chart-dau" height="140"></canvas>
+      </div>
+      <div class="chart-card">
+        <div class="card-title">🆕 Nouveaux utilisateurs / jour <small style="font-weight:400;color:#9ca3af;font-size:11px">(30j)</small></div>
+        <canvas id="chart-new-users" height="140"></canvas>
+      </div>
+    </div>
+    <div class="two-col">
+      <div class="chart-card">
+        <div class="card-title">⚠️ Erreurs API / jour <small style="font-weight:400;color:#9ca3af;font-size:11px">(7j)</small></div>
+        <canvas id="chart-errors" height="140"></canvas>
+      </div>
+      <div class="chart-card">
+        <div class="card-title">💰 Coûts services / jour <small style="font-weight:400;color:#9ca3af;font-size:11px">(30j)</small></div>
+        <canvas id="chart-costs" height="140"></canvas>
+      </div>
+    </div>
+
     <div class="refresh-note" id="last-updated"></div>
   </div>
 </div>
 
+<script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.3/dist/chart.umd.min.js"></script>
 <script>
 let token = localStorage.getItem('keepeat_admin_token');
 let userEmail = localStorage.getItem('keepeat_admin_email');
 let refreshTimer = null;
+let _charts = {};
 
 if (token) showDashboardSection();
 
@@ -4953,7 +5030,49 @@ async function loadAll() {
     renderApiIssues(dash.top_api_issues || []);
     renderServices(dash.top_service_usage || []);
   }
+  loadTrends();
   document.getElementById('last-updated').textContent = 'Mis à jour : ' + new Date().toLocaleTimeString('fr-FR');
+}
+
+async function loadTrends() {
+  const data = await apiFetch('/api/admin/monitoring/trends');
+  if (!data) return;
+  renderChart('chart-dau',       'line', data.dau_30d,       r => r.date, r => r.count, 'Actifs/j',    '#16a34a');
+  renderChart('chart-new-users', 'bar',  data.new_users_30d, r => r.date, r => r.count, 'Nouveaux/j',  '#3b82f6');
+  renderChart('chart-errors',    'bar',  data.errors_7d,     r => r.date, r => r.count, 'Erreurs/j',   '#ef4444');
+  renderChart('chart-costs',     'line', data.costs_30d,     r => r.date, r => r.cost,  'Coût €/j',    '#f59e0b');
+}
+
+function renderChart(id, type, rows, getLabel, getValue, label, color) {
+  const labels = (rows || []).map(getLabel);
+  const values = (rows || []).map(getValue);
+  if (_charts[id]) { _charts[id].destroy(); delete _charts[id]; }
+  const ctx = document.getElementById(id);
+  if (!ctx) return;
+  _charts[id] = new Chart(ctx, {
+    type,
+    data: {
+      labels,
+      datasets: [{
+        label,
+        data: values,
+        borderColor: color,
+        backgroundColor: type === 'bar' ? color + 'bb' : color + '22',
+        borderWidth: 2,
+        tension: 0.3,
+        fill: type === 'line',
+        pointRadius: labels.length > 20 ? 2 : 3,
+      }]
+    },
+    options: {
+      responsive: true,
+      plugins: { legend: { display: false } },
+      scales: {
+        x: { ticks: { font: { size: 10 }, maxTicksLimit: 8 }, grid: { display: false } },
+        y: { ticks: { font: { size: 10 } }, beginAtZero: true }
+      }
+    }
+  });
 }
 
 function fmtUptime(s) {
@@ -5025,7 +5144,7 @@ function renderApiIssues(issues) {
   for (const row of issues) {
     const rate = row.error_rate || 0;
     const cls = rate >= 0.3 ? 'rate-high' : rate >= 0.1 ? 'rate-med' : 'rate-ok';
-    html += '<tr><td>' + escHtml(row.endpoint_key||'') + '</td><td>' + (row.count||0) + '</td><td class="' + cls + '">' + (rate*100).toFixed(1) + '%</td><td>' + (row.avg_latency_ms ? Math.round(row.avg_latency_ms) + 'ms' : '—') + '</td></tr>';
+    html += '<tr><td>' + escHtml(row.endpoint_key||'') + '</td><td>' + (row.volume||0) + '</td><td class="' + cls + '">' + (rate*100).toFixed(1) + '%</td><td>' + (row.avg_latency_ms ? Math.round(row.avg_latency_ms) + 'ms' : '—') + '</td></tr>';
   }
   html += '</tbody></table>';
   document.getElementById('api-issues-content').innerHTML = html;
