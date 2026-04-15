@@ -94,6 +94,11 @@ class TestAdminDashboardRouteRegistered:
         api_paths = [getattr(r, "path", None) for r in server.api_router.routes]
         assert "/api/admin/monitoring/trends" in api_paths, "Route /api/admin/monitoring/trends absente de l'api_router"
 
+    def test_api_drill_route_exists(self, monkeypatch):
+        server = self._load(monkeypatch)
+        api_paths = [getattr(r, "path", None) for r in server.api_router.routes]
+        assert "/api/admin/monitoring/api-drill" in api_paths, "Route /api/admin/monitoring/api-drill absente de l'api_router"
+
 
 class TestHighestErrorRatePipeline:
     """La logique de highest_error_rate ne doit pas retourner d'endpoint

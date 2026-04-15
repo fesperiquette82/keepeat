@@ -3701,6 +3701,7 @@ async def admin_monitoring_health(
 
 @api_router.get("/admin/monitoring/dashboard")
 async def admin_monitoring_dashboard(
+    days: int = Query(7, ge=1, le=90),
     _admin_user: Dict[str, Any] = Depends(_require_admin_user),
 ):
     kpis = await build_monitoring_kpis(
@@ -3710,12 +3711,13 @@ async def admin_monitoring_dashboard(
     )
     apis = await summarize_api_metrics(
         api_request_logs_col=api_request_logs_col,
-        start_iso=(utc_now() - timedelta(days=7)).isoformat(),
+        start_iso=(utc_now() - timedelta(days=days)).isoformat(),
         end_iso=utc_now().isoformat(),
         limit=10,
     )
     return {
         "generated_at": utc_now().isoformat(),
+        "days": days,
         "users": kpis["users"],
         "subscriptions": kpis["subscriptions"],
         "top_api_issues": apis["highest_error_rate"][:5],
@@ -3856,52 +3858,94 @@ async def admin_monitoring_events(
 
 @api_router.get("/admin/monitoring/trends")
 async def admin_monitoring_trends(
+    days: int = Query(30, ge=1, le=90),
     _admin_user: Dict[str, Any] = Depends(_require_admin_user),
 ):
     """Séries temporelles pour les graphiques du dashboard admin."""
     now = utc_now()
-    iso_30d = (now - timedelta(days=30)).isoformat()
-    iso_7d = (now - timedelta(days=7)).isoformat()
+    iso_start = (now - timedelta(days=days)).isoformat()
+    max_points = days + 1
 
-    # DAU quotidiens sur 30j (utilisateurs distincts par jour)
+    # DAU quotidiens (utilisateurs distincts par jour)
     dau_pipeline = [
-        {"$match": {"created_at": {"$gte": iso_30d}, "user_id": {"$nin": [None, ""]}}},
+        {"$match": {"created_at": {"$gte": iso_start}, "user_id": {"$nin": [None, ""]}}},
         {"$group": {"_id": {"$substr": ["$created_at", 0, 10]}, "users": {"$addToSet": "$user_id"}}},
         {"$project": {"date": "$_id", "count": {"$size": "$users"}}},
         {"$sort": {"date": 1}},
     ]
-    dau_rows = await api_request_logs_col.aggregate(dau_pipeline).to_list(length=31)
+    dau_rows = await api_request_logs_col.aggregate(dau_pipeline).to_list(length=max_points)
 
-    # Nouveaux utilisateurs par jour sur 30j
+    # Nouveaux utilisateurs par jour
     new_users_pipeline = [
-        {"$match": {"created_at": {"$gte": iso_30d}}},
+        {"$match": {"created_at": {"$gte": iso_start}}},
         {"$group": {"_id": {"$substr": ["$created_at", 0, 10]}, "count": {"$sum": 1}}},
         {"$sort": {"_id": 1}},
     ]
-    new_users_rows = await users_col.aggregate(new_users_pipeline).to_list(length=31)
+    new_users_rows = await users_col.aggregate(new_users_pipeline).to_list(length=max_points)
 
-    # Erreurs API par jour sur 7j
+    # Erreurs API par jour
     errors_pipeline = [
-        {"$match": {"created_at": {"$gte": iso_7d}, "status_code": {"$gte": 400}}},
+        {"$match": {"created_at": {"$gte": iso_start}, "status_code": {"$gte": 400}}},
         {"$group": {"_id": {"$substr": ["$created_at", 0, 10]}, "count": {"$sum": 1}}},
         {"$sort": {"_id": 1}},
     ]
-    errors_rows = await api_request_logs_col.aggregate(errors_pipeline).to_list(length=8)
+    errors_rows = await api_request_logs_col.aggregate(errors_pipeline).to_list(length=max_points)
 
-    # Coûts services par jour sur 30j
+    # Coûts services par jour
     costs_pipeline = [
-        {"$match": {"created_at": {"$gte": iso_30d}}},
+        {"$match": {"created_at": {"$gte": iso_start}}},
         {"$group": {"_id": {"$substr": ["$created_at", 0, 10]}, "cost": {"$sum": "$estimated_cost"}}},
         {"$sort": {"_id": 1}},
     ]
-    costs_rows = await service_usage_logs_col.aggregate(costs_pipeline).to_list(length=31)
+    costs_rows = await service_usage_logs_col.aggregate(costs_pipeline).to_list(length=max_points)
 
     return {
         "generated_at": now.isoformat(),
-        "dau_30d": [{"date": r["date"], "count": r["count"]} for r in dau_rows],
-        "new_users_30d": [{"date": r["_id"], "count": r["count"]} for r in new_users_rows],
-        "errors_7d": [{"date": r["_id"], "count": r["count"]} for r in errors_rows],
-        "costs_30d": [{"date": r["_id"], "cost": round(float(r["cost"]), 6)} for r in costs_rows],
+        "days": days,
+        "dau": [{"date": r["date"], "count": r["count"]} for r in dau_rows],
+        "new_users": [{"date": r["_id"], "count": r["count"]} for r in new_users_rows],
+        "errors": [{"date": r["_id"], "count": r["count"]} for r in errors_rows],
+        "costs": [{"date": r["_id"], "cost": round(float(r["cost"]), 6)} for r in costs_rows],
+    }
+
+
+@api_router.get("/admin/monitoring/api-drill")
+async def admin_monitoring_api_drill(
+    endpoint_key: str = Query(...),
+    days: int = Query(7, ge=1, le=90),
+    _admin_user: Dict[str, Any] = Depends(_require_admin_user),
+):
+    """Détail d'un endpoint : breakdown par status code + dernières erreurs."""
+    start_iso = (utc_now() - timedelta(days=days)).isoformat()
+    match = {"endpoint_key": endpoint_key, "created_at": {"$gte": start_iso}}
+
+    status_pipeline = [
+        {"$match": match},
+        {"$group": {
+            "_id": "$status_code",
+            "count": {"$sum": 1},
+            "avg_ms": {"$avg": "$duration_ms"},
+        }},
+        {"$sort": {"count": -1}},
+        {"$limit": 10},
+    ]
+    status_rows = await api_request_logs_col.aggregate(status_pipeline).to_list(length=10)
+
+    last_errors = await api_request_logs_col.find(
+        {**match, "status_code": {"$gte": 400}},
+        projection={"method": 1, "path": 1, "status_code": 1, "duration_ms": 1, "error_type": 1, "created_at": 1},
+    ).sort("created_at", -1).limit(5).to_list(length=5)
+
+    total = await api_request_logs_col.count_documents(match)
+    return {
+        "endpoint_key": endpoint_key,
+        "days": days,
+        "total_calls": total,
+        "by_status": [
+            {"status_code": r["_id"], "count": r["count"], "avg_ms": round(float(r.get("avg_ms") or 0), 1)}
+            for r in status_rows
+        ],
+        "last_errors": [serialize_mongo(e) for e in last_errors],
     }
 
 
@@ -4876,6 +4920,15 @@ _ADMIN_DASHBOARD_HTML = """<!DOCTYPE html>
   #dashboard-section{display:none}
   .chart-card{background:#fff;border-radius:12px;border:1px solid #d1fae5;padding:20px}
   .chart-card .card-title{font-size:14px;font-weight:700;color:#166534;margin-bottom:12px}
+  .period-bar{display:flex;align-items:center;gap:6px;margin-bottom:16px;flex-wrap:wrap}
+  .period-btn{padding:4px 14px;border-radius:999px;border:1.5px solid #d1d5db;background:#fff;font-size:12px;font-weight:700;color:#6b7280;cursor:pointer;transition:.15s}
+  .period-btn:hover{border-color:#16a34a;color:#166534}
+  .period-btn.active{border-color:#16a34a;background:#f0fdf4;color:#166534}
+  .drill-overlay{display:none;position:fixed;inset:0;background:rgba(0,0,0,.5);z-index:200;align-items:center;justify-content:center;padding:24px}
+  .drill-box{background:#fff;border-radius:16px;width:100%;max-width:600px;overflow:hidden;box-shadow:0 20px 60px rgba(0,0,0,.18)}
+  .drill-header{background:#f0fdf4;padding:14px 20px;display:flex;align-items:center;gap:10px;border-bottom:1px solid #d1fae5}
+  .drill-title{font-size:12px;font-weight:800;color:#111827;flex:1;font-family:monospace;word-break:break-all}
+  .drill-body{padding:20px;max-height:400px;overflow-y:auto}
 </style>
 </head>
 <body>
@@ -4904,6 +4957,15 @@ _ADMIN_DASHBOARD_HTML = """<!DOCTYPE html>
 
   <!-- DASHBOARD -->
   <div id="dashboard-section">
+
+    <!-- Filtre période -->
+    <div class="period-bar">
+      <span style="font-size:12px;color:#6b7280;font-weight:600">Période :</span>
+      <button class="period-btn" data-days="1"  onclick="setDays(1)">24h</button>
+      <button class="period-btn active" data-days="7"  onclick="setDays(7)">7j</button>
+      <button class="period-btn" data-days="30" onclick="setDays(30)">30j</button>
+      <button class="period-btn" data-days="90" onclick="setDays(90)">90j</button>
+    </div>
 
     <!-- Santé système -->
     <div class="card">
@@ -4964,12 +5026,35 @@ _ADMIN_DASHBOARD_HTML = """<!DOCTYPE html>
   </div>
 </div>
 
+<!-- DRILL-DOWN MODAL -->
+<div class="drill-overlay" id="drill-overlay" onclick="closeDrill(event)">
+  <div class="drill-box">
+    <div class="drill-header">
+      <span class="drill-title" id="drill-title"></span>
+      <button onclick="closeDrill()" style="background:none;border:none;font-size:22px;color:#9ca3af;cursor:pointer;line-height:1;padding:0 2px">×</button>
+    </div>
+    <div class="drill-body" id="drill-body">
+      <div style="color:#9ca3af;font-size:13px">Chargement...</div>
+    </div>
+  </div>
+</div>
+
 <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.3/dist/chart.umd.min.js"></script>
 <script>
 let token = localStorage.getItem('keepeat_admin_token');
 let userEmail = localStorage.getItem('keepeat_admin_email');
 let refreshTimer = null;
 let _charts = {};
+let selectedDays = 7;
+let _apiIssueKeys = [];
+
+function setDays(d) {
+  selectedDays = d;
+  document.querySelectorAll('.period-btn').forEach(b => {
+    b.classList.toggle('active', parseInt(b.dataset.days) === d);
+  });
+  loadAll();
+}
 
 if (token) showDashboardSection();
 
@@ -5021,7 +5106,7 @@ async function apiFetch(path) {
 async function loadAll() {
   const [health, dash] = await Promise.all([
     apiFetch('/api/admin/monitoring/health'),
-    apiFetch('/api/admin/monitoring/dashboard'),
+    apiFetch('/api/admin/monitoring/dashboard?days=' + selectedDays),
   ]);
   if (health) renderHealth(health);
   if (dash) {
@@ -5031,16 +5116,16 @@ async function loadAll() {
     renderServices(dash.top_service_usage || []);
   }
   loadTrends();
-  document.getElementById('last-updated').textContent = 'Mis à jour : ' + new Date().toLocaleTimeString('fr-FR');
+  document.getElementById('last-updated').textContent = 'Mis à jour : ' + new Date().toLocaleTimeString('fr-FR') + ' (' + selectedDays + 'j)';
 }
 
 async function loadTrends() {
-  const data = await apiFetch('/api/admin/monitoring/trends');
+  const data = await apiFetch('/api/admin/monitoring/trends?days=' + selectedDays);
   if (!data) return;
-  renderChart('chart-dau',       'line', data.dau_30d,       r => r.date, r => r.count, 'Actifs/j',    '#16a34a');
-  renderChart('chart-new-users', 'bar',  data.new_users_30d, r => r.date, r => r.count, 'Nouveaux/j',  '#3b82f6');
-  renderChart('chart-errors',    'bar',  data.errors_7d,     r => r.date, r => r.count, 'Erreurs/j',   '#ef4444');
-  renderChart('chart-costs',     'line', data.costs_30d,     r => r.date, r => r.cost,  'Coût €/j',    '#f59e0b');
+  renderChart('chart-dau',       'line', data.dau,       r => r.date, r => r.count, 'Actifs/j',   '#16a34a');
+  renderChart('chart-new-users', 'bar',  data.new_users, r => r.date, r => r.count, 'Nouveaux/j', '#3b82f6');
+  renderChart('chart-errors',    'bar',  data.errors,    r => r.date, r => r.count, 'Erreurs/j',  '#ef4444');
+  renderChart('chart-costs',     'line', data.costs,     r => r.date, r => r.cost,  'Coût €/j',   '#f59e0b');
 }
 
 function renderChart(id, type, rows, getLabel, getValue, label, color) {
@@ -5136,18 +5221,60 @@ function renderSubscriptions(s, cost) {
 }
 
 function renderApiIssues(issues) {
+  _apiIssueKeys = (issues || []).map(r => r.endpoint_key || '');
   if (!issues.length) {
     document.getElementById('api-issues-content').innerHTML = '<div style="color:#16a34a;font-size:13px">Aucun problème détecté 🎉</div>';
     return;
   }
   let html = '<table class="api-table"><thead><tr><th>Endpoint</th><th>Appels</th><th>Erreurs</th><th>Lat. moy.</th></tr></thead><tbody>';
-  for (const row of issues) {
+  for (let i = 0; i < issues.length; i++) {
+    const row = issues[i];
     const rate = row.error_rate || 0;
     const cls = rate >= 0.3 ? 'rate-high' : rate >= 0.1 ? 'rate-med' : 'rate-ok';
-    html += '<tr><td>' + escHtml(row.endpoint_key||'') + '</td><td>' + (row.volume||0) + '</td><td class="' + cls + '">' + (rate*100).toFixed(1) + '%</td><td>' + (row.avg_latency_ms ? Math.round(row.avg_latency_ms) + 'ms' : '—') + '</td></tr>';
+    html += '<tr style="cursor:pointer" title="Cliquer pour détails" onclick="drillDown(' + i + ')">';
+    html += '<td>' + escHtml(row.endpoint_key||'') + '</td><td>' + (row.volume||0) + '</td><td class="' + cls + '">' + (rate*100).toFixed(1) + '%</td><td>' + (row.avg_latency_ms ? Math.round(row.avg_latency_ms) + 'ms' : '—') + '</td></tr>';
+  }
+  html += '</tbody></table><div style="font-size:11px;color:#9ca3af;margin-top:4px">Cliquer sur une ligne pour le détail</div>';
+  document.getElementById('api-issues-content').innerHTML = html;
+}
+
+async function drillDown(idx) {
+  const endpointKey = _apiIssueKeys[idx] || '';
+  if (!endpointKey) return;
+  const overlay = document.getElementById('drill-overlay');
+  overlay.style.display = 'flex';
+  document.getElementById('drill-title').textContent = endpointKey;
+  document.getElementById('drill-body').innerHTML = '<div style="color:#9ca3af;font-size:13px">Chargement...</div>';
+  const data = await apiFetch('/api/admin/monitoring/api-drill?endpoint_key=' + encodeURIComponent(endpointKey) + '&days=' + selectedDays);
+  if (!data) { closeDrill(); return; }
+  let html = '<div style="font-size:13px;color:#374151;margin-bottom:14px"><strong>' + data.total_calls + '</strong> appel(s) sur ' + data.days + 'j</div>';
+  html += '<div style="font-size:12px;font-weight:700;color:#166534;margin-bottom:6px">Par code HTTP</div>';
+  html += '<table class="api-table" style="margin-bottom:16px"><thead><tr><th>Status</th><th>Appels</th><th>Lat. moy.</th></tr></thead><tbody>';
+  for (const r of data.by_status) {
+    const cls = r.status_code >= 500 ? 'rate-high' : r.status_code >= 400 ? 'rate-med' : 'rate-ok';
+    html += '<tr><td class="' + cls + '"><strong>' + r.status_code + '</strong></td><td>' + r.count + '</td><td>' + r.avg_ms + 'ms</td></tr>';
   }
   html += '</tbody></table>';
-  document.getElementById('api-issues-content').innerHTML = html;
+  if (data.last_errors && data.last_errors.length) {
+    html += '<div style="font-size:12px;font-weight:700;color:#166534;margin-bottom:6px">Dernières erreurs</div>';
+    for (const e of data.last_errors) {
+      html += '<div style="font-size:11px;color:#6b7280;padding:5px 0;border-bottom:1px solid #f3f4f6;line-height:1.5">';
+      html += escHtml((e.created_at||'').replace('T',' ').slice(0,19)) + '<br>';
+      html += '<span style="color:#ef4444;font-family:monospace">' + escHtml((e.method||'') + ' ' + (e.path||'')) + '</span>';
+      html += ' → HTTP <strong>' + (e.status_code||'') + '</strong>';
+      if (e.error_type) html += ' <span style="color:#9ca3af">(' + escHtml(e.error_type) + ')</span>';
+      if (e.duration_ms) html += ' — ' + Math.round(e.duration_ms) + 'ms';
+      html += '</div>';
+    }
+  } else {
+    html += '<div style="color:#16a34a;font-size:12px">Aucune erreur récente.</div>';
+  }
+  document.getElementById('drill-body').innerHTML = html;
+}
+
+function closeDrill(event) {
+  if (event && event.target !== document.getElementById('drill-overlay')) return;
+  document.getElementById('drill-overlay').style.display = 'none';
 }
 
 function renderServices(svcs) {
