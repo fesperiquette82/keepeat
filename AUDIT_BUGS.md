@@ -350,6 +350,14 @@ L'endpoint `GET /api/recipes/:id` existe dans `recipesApi.ts` mais n'est pas uti
 
 **Résultats tests après corrections :** backend 95/95 ✅ · frontend 75/75 ✅
 
+### Session du 2026-04-14 (suite) — déviation flux scan ticket
+
+| Élément | Statut | Note |
+|---|---|---|
+| Erreur API Gemini → retour caméra sans option envoi | `CORRIGÉ` | `processReceiptImage` : erreur non-premium → `setMode('fallback')` au lieu de `Alert + camera`. `pendingImage` déjà présent. Helper `resolveReceiptErrorAction` extrait dans `utils/receiptScanFlow.ts`. Tests dans `utils/receiptScanFlow.test.ts`. |
+
+**Résultats tests après corrections (suite) :** frontend 79/79 ✅
+
 ---
 
 ## Audit ciblé du 2026-04-10 — backend (exécution + revue de code)

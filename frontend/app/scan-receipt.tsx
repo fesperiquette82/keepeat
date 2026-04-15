@@ -18,8 +18,8 @@ import { useLanguageStore } from '../store/languageStore';
 import { buildApiUrl } from '../utils/config';
 import { useAuthStore } from '../store/authStore';
 import { C } from '../utils/theme';
-import { extractPremiumErrorDetail } from '../utils/premiumErrors';
 import { usePremiumUiStore } from '../store/premiumUiStore';
+import { resolveReceiptErrorAction } from '../utils/receiptScanFlow';
 import { getGalleryErrorMessage, pickImageFromGallery } from '../utils/galleryPicker';
 
 // ─── Types ────────────────────────────────────────────────────────────────────
@@ -124,16 +124,14 @@ export default function ScanReceiptScreen() {
       setSelected(new Set(detected.map((_, i) => i)));
       setMode('confirm');
     } catch (err: any) {
-      const premiumError = extractPremiumErrorDetail(err);
-      if (premiumError) {
-        openPaywall(premiumError);
+      const action = resolveReceiptErrorAction(err);
+      if (action.type === 'premium') {
+        openPaywall(action.detail);
         router.push('/premium');
       } else {
-        Alert.alert(
-          isFr ? 'Erreur' : 'Error',
-          isFr ? "Impossible d'analyser le ticket." : 'Unable to analyse the receipt.',
-        );
-        setMode('camera');
+        // Erreur réseau / serveur : l'image est déjà dans pendingImage,
+        // on propose l'envoi pour traitement manuel comme pour le retour vide
+        setMode('fallback');
       }
     }
   };
