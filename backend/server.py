@@ -93,6 +93,7 @@ from entitlements import (
 from ocr_service import OcrApiError, ocr_receipt
 from priority_refresh import build_priority_refresh_state
 from observability import (
+    build_operational_overview,
     build_monitoring_kpis,
     extract_user_id_from_auth_header,
     log_api_request,
@@ -3691,6 +3692,7 @@ async def get_predictions(
 
 @api_router.get("/admin/monitoring/health")
 async def admin_monitoring_health(
+    days: int = Query(7, ge=1, le=90),
     _admin_user: Dict[str, Any] = Depends(_require_admin_user),
 ):
     db_ok = True
@@ -3705,19 +3707,27 @@ async def admin_monitoring_health(
         "brevo_configured": bool(os.getenv("BREVO_API_KEY")),
         "openfoodfacts_configured": bool(os.getenv("OPENFOODFACTS_USER_AGENT", "KeepEat/1.0")),
     }
-    last_critical = await api_request_logs_col.find_one(
-        {"status_code": {"$gte": 500}},
-        sort=[("created_at", -1)],
-        projection={"method": 1, "path": 1, "status_code": 1, "error_type": 1, "created_at": 1},
+    start_iso = (utc_now() - timedelta(days=days)).isoformat()
+    end_iso = utc_now().isoformat()
+    overview = await build_operational_overview(
+        api_request_logs_col=api_request_logs_col,
+        service_usage_logs_col=service_usage_logs_col,
+        start_iso=start_iso,
+        end_iso=end_iso,
     )
     uptime_seconds = max(0, int((utc_now() - APP_STARTED_AT).total_seconds()))
-    global_ok = db_ok
+    global_status = overview["global_status"]
+    if not db_ok:
+        global_status = "critical"
     return {
-        "status": "ok" if global_ok else "degraded",
+        "status": global_status,
         "db": {"ok": db_ok},
         "external_services": external_status,
         "uptime_seconds": uptime_seconds,
-        "last_critical_error": serialize_mongo(last_critical),
+        "last_critical_error": serialize_mongo(overview["last_critical_error"]),
+        "status_reasons": overview["global_status_reasons"],
+        "thresholds": overview["thresholds"],
+        "days": days,
         "generated_at": utc_now().isoformat(),
     }
 
@@ -3738,16 +3748,42 @@ async def admin_monitoring_dashboard(
         end_iso=utc_now().isoformat(),
         limit=10,
     )
+    overview = await build_operational_overview(
+        api_request_logs_col=api_request_logs_col,
+        service_usage_logs_col=service_usage_logs_col,
+        start_iso=(utc_now() - timedelta(days=days)).isoformat(),
+        end_iso=utc_now().isoformat(),
+    )
+    users_total = max(int(kpis["users"].get("total", 0)), 1)
+    active_users = max(int(kpis["users"].get("wau", 0)), 1)
+    estimated_mrr = float(kpis["subscriptions"].get("estimated_mrr_eur", 0.0))
+    ocr_cost = float(overview["cost_breakdown"].get("ocr_cost_eur", 0.0))
     return {
         "generated_at": utc_now().isoformat(),
         "days": days,
         "users": kpis["users"],
         "subscriptions": kpis["subscriptions"],
-        "top_api_issues": apis["highest_error_rate"][:5],
+        "top_api_issues": overview["top_incidents"][:7],
         "top_service_usage": kpis["services"]["top_usage_30d"],
         "estimated_cost_summary": {
             "services_30d_estimated_cost_eur": round(sum(x.get("estimated_cost", 0.0) for x in kpis["services"]["top_usage_30d"]), 6)
         },
+        "operational_status": overview["global_status"],
+        "operational_status_reasons": overview["global_status_reasons"],
+        "status_thresholds": overview["thresholds"],
+        "critical_flows": overview["critical_flows"],
+        "last_critical_error": serialize_mongo(overview["last_critical_error"]),
+        "product_funnel": {
+            **overview["product_funnel"],
+            "premium_conversion_rate": round((int(kpis["users"].get("premium", 0)) / users_total), 4),
+        },
+        "cost_metrics": {
+            "ocr_cost_eur": round(ocr_cost, 6),
+            "ocr_cost_per_scan_eur": overview["cost_breakdown"].get("ocr_cost_per_scan_eur"),
+            "cost_per_active_user_eur": round((ocr_cost / active_users), 6) if active_users else None,
+            "estimated_net_revenue_eur": round(estimated_mrr - ocr_cost, 2),
+        },
+        "legacy_top_api_issues": apis["highest_error_rate"][:5],
     }
 
 
@@ -4923,12 +4959,14 @@ _ADMIN_DASHBOARD_HTML = """<!DOCTYPE html>
   .err{background:#ef4444}
   .uptime-bar{background:#f0fdf4;border:1px solid #bbf7d0;border-radius:8px;padding:9px 14px;font-size:13px;color:#166534;display:flex;gap:20px;flex-wrap:wrap;margin-top:10px}
   .error-banner{background:#fef2f2;border:1px solid #fca5a5;border-radius:8px;padding:9px 14px;font-size:12px;color:#dc2626;margin-top:8px}
+  .error-banner.critical{background:#7f1d1d;border-color:#991b1b;color:#fee2e2}
   .api-table{width:100%;border-collapse:collapse;font-size:12px}
   .api-table th{text-align:left;padding:7px 10px;background:#f0fdf4;color:#166534;font-weight:700;border-bottom:1px solid #d1fae5}
   .api-table td{padding:6px 10px;border-bottom:1px solid #f3f4f6;color:#374151;word-break:break-all}
   .api-table tr:last-child td{border-bottom:none}
   .api-table tr:hover td{background:#f9fafb}
   .rate-high{color:#ef4444;font-weight:700}
+  .rate-critical{color:#7f1d1d;font-weight:800}
   .rate-med{color:#f59e0b;font-weight:700}
   .rate-ok{color:#16a34a}
   .svc-row{display:flex;align-items:center;gap:10px;padding:7px 0;border-bottom:1px solid #f3f4f6;font-size:13px}
@@ -4952,6 +4990,14 @@ _ADMIN_DASHBOARD_HTML = """<!DOCTYPE html>
   .drill-header{background:#f0fdf4;padding:14px 20px;display:flex;align-items:center;gap:10px;border-bottom:1px solid #d1fae5}
   .drill-title{font-size:12px;font-weight:800;color:#111827;flex:1;font-family:monospace;word-break:break-all}
   .drill-body{padding:20px;max-height:400px;overflow-y:auto}
+  .flow-card{border-radius:10px;border:1px solid #e5e7eb;padding:12px}
+  .flow-card.critical{border-color:#991b1b;background:#fef2f2}
+  .flow-card.degraded{border-color:#f59e0b;background:#fffbeb}
+  .flow-card.ok{border-color:#86efac;background:#f0fdf4}
+  .severity-badge{display:inline-flex;align-items:center;padding:2px 8px;border-radius:999px;font-size:10px;font-weight:800;letter-spacing:.03em;text-transform:uppercase}
+  .severity-badge.ok{background:#dcfce7;color:#166534}
+  .severity-badge.degraded{background:#fef3c7;color:#92400e}
+  .severity-badge.critical{background:#fee2e2;color:#991b1b}
 </style>
 </head>
 <body>
@@ -5014,7 +5060,7 @@ _ADMIN_DASHBOARD_HTML = """<!DOCTYPE html>
     <!-- Top issues API + coûts services -->
     <div class="two-col">
       <div class="card">
-        <div class="card-title">⚠️ Top endpoints en erreur <small style="font-weight:400;color:#9ca3af;font-size:11px">(7j)</small></div>
+        <div class="card-title">⚠️ Top endpoints en erreur <small id="api-window-label" style="font-weight:400;color:#9ca3af;font-size:11px">(7j)</small></div>
         <div id="api-issues-content"><div style="color:#9ca3af;font-size:13px">Chargement...</div></div>
       </div>
       <div class="card">
@@ -5023,24 +5069,36 @@ _ADMIN_DASHBOARD_HTML = """<!DOCTYPE html>
       </div>
     </div>
 
+    <!-- Flows métier critiques -->
+    <div class="card">
+      <div class="card-title">🎯 Flux métier critiques</div>
+      <div id="critical-flows-content"><div style="color:#9ca3af;font-size:13px">Chargement...</div></div>
+    </div>
+
+    <!-- Funnel produit -->
+    <div class="card">
+      <div class="card-title">🧭 Funnel produit</div>
+      <div id="funnel-content"><div style="color:#9ca3af;font-size:13px">Chargement...</div></div>
+    </div>
+
     <!-- Graphiques de tendance -->
     <div class="two-col">
       <div class="chart-card">
-        <div class="card-title">📈 Utilisateurs actifs / jour <small style="font-weight:400;color:#9ca3af;font-size:11px">(30j)</small></div>
+        <div class="card-title">📈 Utilisateurs actifs / jour <small id="trend-window-label-1" style="font-weight:400;color:#9ca3af;font-size:11px">(7j)</small></div>
         <canvas id="chart-dau" height="140"></canvas>
       </div>
       <div class="chart-card">
-        <div class="card-title">🆕 Nouveaux utilisateurs / jour <small style="font-weight:400;color:#9ca3af;font-size:11px">(30j)</small></div>
+        <div class="card-title">🆕 Nouveaux utilisateurs / jour <small id="trend-window-label-2" style="font-weight:400;color:#9ca3af;font-size:11px">(7j)</small></div>
         <canvas id="chart-new-users" height="140"></canvas>
       </div>
     </div>
     <div class="two-col">
       <div class="chart-card">
-        <div class="card-title">⚠️ Erreurs API / jour <small style="font-weight:400;color:#9ca3af;font-size:11px">(7j)</small></div>
+        <div class="card-title">⚠️ Erreurs API / jour <small id="trend-window-label-3" style="font-weight:400;color:#9ca3af;font-size:11px">(7j)</small></div>
         <canvas id="chart-errors" height="140"></canvas>
       </div>
       <div class="chart-card">
-        <div class="card-title">💰 Coûts services / jour <small style="font-weight:400;color:#9ca3af;font-size:11px">(30j)</small></div>
+        <div class="card-title">💰 Coûts services / jour <small id="trend-window-label-4" style="font-weight:400;color:#9ca3af;font-size:11px">(7j)</small></div>
         <canvas id="chart-costs" height="140"></canvas>
       </div>
     </div>
@@ -5076,10 +5134,20 @@ function setDays(d) {
   document.querySelectorAll('.period-btn').forEach(b => {
     b.classList.toggle('active', parseInt(b.dataset.days) === d);
   });
+  updateWindowLabels();
   loadAll();
 }
 
+function updateWindowLabels() {
+  const labels = ['api-window-label', 'trend-window-label-1', 'trend-window-label-2', 'trend-window-label-3', 'trend-window-label-4'];
+  labels.forEach((id) => {
+    const el = document.getElementById(id);
+    if (el) el.textContent = '(' + selectedDays + 'j)';
+  });
+}
+
 if (token) showDashboardSection();
+updateWindowLabels();
 
 function showDashboardSection() {
   document.getElementById('login-section').style.display = 'none';
@@ -5128,15 +5196,18 @@ async function apiFetch(path) {
 
 async function loadAll() {
   const [health, dash] = await Promise.all([
-    apiFetch('/api/admin/monitoring/health'),
+    apiFetch('/api/admin/monitoring/health?days=' + selectedDays),
     apiFetch('/api/admin/monitoring/dashboard?days=' + selectedDays),
   ]);
   if (health) renderHealth(health);
   if (dash) {
     renderUsers(dash.users);
     renderSubscriptions(dash.subscriptions, dash.estimated_cost_summary);
-    renderApiIssues(dash.top_api_issues || []);
+    renderApiIssues(dash.top_api_issues || [], selectedDays);
     renderServices(dash.top_service_usage || []);
+    renderCriticalFlows(dash.critical_flows || {});
+    renderFunnel(dash.product_funnel || {});
+    renderCostMetrics(dash.cost_metrics || {});
   }
   loadTrends();
   document.getElementById('last-updated').textContent = 'Mis à jour : ' + new Date().toLocaleTimeString('fr-FR') + ' (' + selectedDays + 'j)';
@@ -5203,11 +5274,16 @@ function renderHealth(h) {
     html += '<div class="health-item"><span class="dot ' + (on ? 'ok' : 'warn') + '"></span>' + lbl + ' : ' + (on ? 'Configuré' : 'Non configuré') + '</div>';
   }
   html += '</div>';
+  const statusLabel = h.status === 'critical' ? '⛔ CRITIQUE' : (h.status === 'degraded' ? '⚠ DÉGRADÉ' : '✓ OK');
+  const statusColor = h.status === 'critical' ? '#991b1b' : (h.status === 'degraded' ? '#f59e0b' : '#16a34a');
   html += '<div class="uptime-bar"><span>⏱ Uptime : <strong>' + fmtUptime(h.uptime_seconds) + '</strong></span>';
-  html += '<span>Statut : <strong style="color:' + (h.status === 'ok' ? '#16a34a' : '#ef4444') + '">' + (h.status === 'ok' ? '✓ OK' : '⚠ DÉGRADÉ') + '</strong></span></div>';
+  html += '<span>Statut global (' + (h.days || selectedDays) + 'j) : <strong style="color:' + statusColor + '">' + statusLabel + '</strong></span></div>';
+  if (Array.isArray(h.status_reasons) && h.status_reasons.length) {
+    html += '<div style="font-size:11px;color:#6b7280;margin-top:8px">Raisons: ' + h.status_reasons.map(escHtml).join(' · ') + '</div>';
+  }
   if (h.last_critical_error) {
     const e = h.last_critical_error;
-    html += '<div class="error-banner">⛔ Dernière erreur critique : <strong>' + escHtml((e.method||'') + ' ' + (e.path||'')) + '</strong> → HTTP ' + (e.status_code||'') + ' — ' + escHtml(e.error_type||'') + ' (' + escHtml((e.created_at||'').replace('T',' ').slice(0,19)) + ')</div>';
+    html += '<div class="error-banner critical">⛔ Dernière erreur critique : <strong>' + escHtml((e.method||'') + ' ' + (e.path||'')) + '</strong> → HTTP ' + (e.status_code||'') + ' — ' + escHtml(e.error_type||'unknown') + ' · Sévérité CRITIQUE · ' + escHtml((e.created_at||'').replace('T',' ').slice(0,19)) + '</div>';
   }
   document.getElementById('health-content').innerHTML = html;
 }
@@ -5243,22 +5319,75 @@ function renderSubscriptions(s, cost) {
     + '<div style="font-size:12px;color:#6b7280;margin-top:8px">Mensuel : ' + (s.by_plan.premium_monthly||0) + ' · Autre : ' + (s.by_plan.premium_other||0) + '</div>';
 }
 
-function renderApiIssues(issues) {
+function severityClass(level) {
+  if (level === 'critical') return 'rate-critical';
+  if (level === 'degraded') return 'rate-med';
+  return 'rate-ok';
+}
+
+function renderApiIssues(issues, days) {
   _apiIssueKeys = (issues || []).map(r => r.endpoint_key || '');
   if (!issues.length) {
     document.getElementById('api-issues-content').innerHTML = '<div style="color:#16a34a;font-size:13px">Aucun problème détecté 🎉</div>';
     return;
   }
-  let html = '<table class="api-table"><thead><tr><th>Endpoint</th><th>Appels</th><th>Erreurs</th><th>Lat. moy.</th></tr></thead><tbody>';
+  let html = '<table class="api-table"><thead><tr><th>Endpoint</th><th>Appels</th><th>Tx erreur</th><th>Erreurs</th><th>Lat. moy.</th><th>Criticité</th><th>Dernière erreur</th></tr></thead><tbody>';
   for (let i = 0; i < issues.length; i++) {
     const row = issues[i];
     const rate = row.error_rate || 0;
-    const cls = rate >= 0.3 ? 'rate-high' : rate >= 0.1 ? 'rate-med' : 'rate-ok';
+    const cls = severityClass(row.severity);
+    const lastErr = row.last_error && row.last_error.created_at ? row.last_error.created_at.replace('T',' ').slice(0,19) : '—';
     html += '<tr style="cursor:pointer" title="Cliquer pour détails" onclick="drillDown(' + i + ')">';
-    html += '<td>' + escHtml(row.endpoint_key||'') + '</td><td>' + (row.volume||0) + '</td><td class="' + cls + '">' + (rate*100).toFixed(1) + '%</td><td>' + (row.avg_latency_ms ? Math.round(row.avg_latency_ms) + 'ms' : '—') + '</td></tr>';
+    html += '<td>' + escHtml(row.endpoint_key||'') + '</td><td>' + (row.calls||row.volume||0) + '</td><td class="' + cls + '">' + (rate*100).toFixed(1) + '%</td><td>' + (row.errors||Math.round(rate * (row.calls||row.volume||0))) + '</td><td>' + (row.avg_latency_ms ? Math.round(row.avg_latency_ms) + 'ms' : '—') + '</td><td><span class="severity-badge ' + escHtml(row.severity||'ok') + '">' + escHtml(row.severity||'ok') + '</span></td><td>' + escHtml(lastErr) + '</td></tr>';
   }
-  html += '</tbody></table><div style="font-size:11px;color:#9ca3af;margin-top:4px">Cliquer sur une ligne pour le détail</div>';
+  html += '</tbody></table><div style="font-size:11px;color:#9ca3af;margin-top:4px">Période ' + days + 'j · trié par sévérité puis impact. Cliquer sur une ligne pour le détail</div>';
   document.getElementById('api-issues-content').innerHTML = html;
+}
+
+function renderCriticalFlows(flowsObj) {
+  const flows = Object.values(flowsObj || {});
+  if (!flows.length) {
+    document.getElementById('critical-flows-content').innerHTML = '<div style="color:#9ca3af;font-size:13px">Aucune donnée.</div>';
+    return;
+  }
+  let html = '<div class="two-col">';
+  for (const row of flows) {
+    const severity = row.severity || 'ok';
+    html += '<div class="flow-card ' + escHtml(severity) + '">';
+    html += '<div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:8px"><strong>' + escHtml(row.label || row.endpoint_key || 'Flux') + '</strong><span class="severity-badge ' + escHtml(severity) + '">' + escHtml(severity) + '</span></div>';
+    html += '<div style="font-size:12px;color:#374151;line-height:1.6">';
+    html += 'Endpoint : <code>' + escHtml(row.endpoint_key || '—') + '</code><br>';
+    html += 'Appels : <strong>' + (row.calls || 0) + '</strong> · Succès : <strong>' + (row.success || 0) + '</strong> · Erreurs : <strong>' + (row.errors || 0) + '</strong><br>';
+    html += 'Tx erreur : <strong>' + (((row.error_rate || 0) * 100).toFixed(1)) + '%</strong> · Lat. moy : <strong>' + (row.avg_latency_ms ? Math.round(row.avg_latency_ms) + 'ms' : '—') + '</strong><br>';
+    html += 'Dernière erreur : ' + escHtml(row.last_error && row.last_error.created_at ? row.last_error.created_at.replace('T',' ').slice(0,19) : '—') + '<br>';
+    html += 'Type dominant : ' + escHtml(row.dominant_error_type || '—');
+    html += '</div></div>';
+  }
+  html += '</div>';
+  document.getElementById('critical-flows-content').innerHTML = html;
+}
+
+function renderFunnel(f) {
+  document.getElementById('funnel-content').innerHTML =
+    '<div class="stats-grid">'
+    + statCard('Users scan ticket', f.users_with_receipt_scan || 0, 'période active')
+    + statCard('Users ajout stock', f.users_with_stock_add || 0, 'POST /api/stock')
+    + statCard('Users recettes', f.users_with_recipes_view || 0, 'suggestions + IA')
+    + statCard('Conv. premium', (((f.premium_conversion_rate || 0) * 100).toFixed(1)) + '%', 'premium / total')
+    + '</div>';
+}
+
+function renderCostMetrics(c) {
+  const container = document.getElementById('services-content');
+  if (!container) return;
+  let html = container.innerHTML;
+  html += '<div style="border-top:1px solid #f3f4f6;margin-top:10px;padding-top:10px;font-size:12px;color:#374151;line-height:1.7">';
+  html += '<div><strong>Coût OCR (' + selectedDays + 'j):</strong> ' + Number(c.ocr_cost_eur || 0).toFixed(4) + ' €</div>';
+  html += '<div><strong>Coût moyen / scan:</strong> ' + (c.ocr_cost_per_scan_eur === null || c.ocr_cost_per_scan_eur === undefined ? '—' : Number(c.ocr_cost_per_scan_eur).toFixed(5) + ' €') + '</div>';
+  html += '<div><strong>Coût moyen / utilisateur actif:</strong> ' + (c.cost_per_active_user_eur === null || c.cost_per_active_user_eur === undefined ? '—' : Number(c.cost_per_active_user_eur).toFixed(5) + ' €') + '</div>';
+  html += '<div><strong>Net estimatif (MRR - OCR):</strong> ' + Number(c.estimated_net_revenue_eur || 0).toFixed(2) + ' €</div>';
+  html += '</div>';
+  container.innerHTML = html;
 }
 
 async function drillDown(idx) {

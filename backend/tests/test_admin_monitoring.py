@@ -10,7 +10,7 @@ BACKEND_DIR = Path(__file__).resolve().parents[1]
 if str(BACKEND_DIR) not in sys.path:
     sys.path.insert(0, str(BACKEND_DIR))
 
-from observability import classify_error_type, normalize_endpoint_key
+from observability import _compute_endpoint_severity, classify_error_type, normalize_endpoint_key
 
 
 class TestNormalizeEndpointKey:
@@ -118,3 +118,39 @@ class TestHighestErrorRatePipeline:
             # error_rate doit être calculable depuis volume (pas de division par 0)
             inferred_errors = round(r["error_rate"] * r["volume"])
             assert inferred_errors >= 1, f"Incohérence : {r['error_rate']} * {r['volume']} < 1"
+
+
+class TestOperationalSeverityRules:
+    """Le niveau de sévérité opérationnelle doit prioriser les flux critiques."""
+
+    def test_ocr_high_error_rate_is_critical(self):
+        severity = _compute_endpoint_severity(
+            endpoint_key="/api/ocr/receipt",
+            error_rate=0.8,
+            has_recent_critical_error=False,
+        )
+        assert severity == "critical"
+
+    def test_stock_moderate_error_rate_is_degraded(self):
+        severity = _compute_endpoint_severity(
+            endpoint_key="/api/stock",
+            error_rate=0.25,
+            has_recent_critical_error=False,
+        )
+        assert severity == "degraded"
+
+    def test_low_error_rate_is_ok(self):
+        severity = _compute_endpoint_severity(
+            endpoint_key="/api/recipes/suggestions",
+            error_rate=0.03,
+            has_recent_critical_error=False,
+        )
+        assert severity == "ok"
+
+    def test_recent_critical_error_for_critical_flow_forces_critical(self):
+        severity = _compute_endpoint_severity(
+            endpoint_key="/api/ocr/receipt",
+            error_rate=0.02,
+            has_recent_critical_error=True,
+        )
+        assert severity == "critical"
