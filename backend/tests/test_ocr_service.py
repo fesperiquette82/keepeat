@@ -19,6 +19,7 @@ if str(BACKEND_DIR) not in sys.path:
 
 from ocr_service import (
     OcrApiError,
+    _decode_base64_image,
     _compute_expiry,
     _detect_mime_type,
     _enrich_normalizations,
@@ -63,12 +64,24 @@ class TestDetectMimeType:
         raw = b"RIFF\x00\x00\x00\x00WEBP" + b"\x00" * 10
         assert _detect_mime_type(self._b64(raw)) == "image/webp"
 
-    def test_unknown_falls_back_to_jpeg(self):
+    def test_unknown_mime_returns_invalid(self):
         raw = b"\x00\x00\x00\x00" * 10
-        assert _detect_mime_type(self._b64(raw)) == "image/jpeg"
+        assert _detect_mime_type(self._b64(raw)) == "invalid"
 
-    def test_invalid_b64_falls_back(self):
-        assert _detect_mime_type("not-valid!!!") == "image/jpeg"
+    def test_invalid_b64_returns_invalid(self):
+        assert _detect_mime_type("not-valid!!!") == "invalid"
+
+
+class TestDecodeBase64Image:
+    def test_valid_base64(self):
+        raw = _decode_base64_image("QUJDRA==")
+        assert raw == b"ABCD"
+
+    def test_invalid_characters_raise(self):
+        from fastapi import HTTPException
+        with pytest.raises(HTTPException) as exc_info:
+            _decode_base64_image("%%%")
+        assert exc_info.value.status_code == 400
 
 
 class TestExtractGeminiText:
@@ -183,6 +196,27 @@ class TestOcrReceiptMocked:
         assert exc_info.value.status_code == 400
 
     @pytest.mark.anyio
+    async def test_invalid_request_structure_raises_422(self, monkeypatch):
+        monkeypatch.setenv("GEMINI_OCR_API_KEY", "fake-key")
+        req = MagicMock()
+        req.json = AsyncMock(return_value=["not-a-dict"])
+        from fastapi import HTTPException
+        with pytest.raises(HTTPException) as exc_info:
+            await ocr_receipt(req, _make_user())
+        assert exc_info.value.status_code == 422
+
+    @pytest.mark.anyio
+    async def test_invalid_mime_type_raises_400(self, monkeypatch):
+        import base64
+        monkeypatch.setenv("GEMINI_OCR_API_KEY", "fake-key")
+        raw = b"\x01\x02\x03\x04" * 20
+        req = _make_request(base64.b64encode(raw).decode())
+        from fastapi import HTTPException
+        with pytest.raises(HTTPException) as exc_info:
+            await ocr_receipt(req, _make_user())
+        assert exc_info.value.status_code == 400
+
+    @pytest.mark.anyio
     async def test_no_api_key_raises_ocr_error(self, monkeypatch):
         monkeypatch.delenv("GEMINI_OCR_API_KEY", raising=False)
         with pytest.raises(OcrApiError) as exc_info:
@@ -216,7 +250,7 @@ class TestOcrReceiptMocked:
             mock_client.return_value.__aexit__ = AsyncMock(return_value=False)
             with pytest.raises(OcrApiError) as exc_info:
                 await ocr_receipt(_make_request(), _make_user())
-        assert exc_info.value.http_status == 429
+        assert exc_info.value.http_status == 502
 
     @pytest.mark.anyio
     async def test_gemini_timeout_returns_504(self, monkeypatch):
@@ -230,6 +264,21 @@ class TestOcrReceiptMocked:
             with pytest.raises(OcrApiError) as exc_info:
                 await ocr_receipt(_make_request(), _make_user())
         assert exc_info.value.http_status == 504
+
+    @pytest.mark.anyio
+    async def test_transient_error_retries_then_success(self, monkeypatch):
+        monkeypatch.setenv("GEMINI_OCR_API_KEY", "fake-key")
+        transient = MagicMock()
+        transient.status_code = 503
+        transient.text = "service unavailable"
+        success = _gemini_ok_response([{"name": "Lait", "category": "frais"}])
+        post = AsyncMock(side_effect=[transient, success])
+        with patch("ocr_service.httpx.AsyncClient") as mock_client:
+            mock_client.return_value.__aenter__ = AsyncMock(return_value=MagicMock(post=post))
+            mock_client.return_value.__aexit__ = AsyncMock(return_value=False)
+            result = await ocr_receipt(_make_request(), _make_user())
+        assert post.await_count == 2
+        assert len(result["items"]) == 1
 
     @pytest.mark.anyio
     async def test_gemini_safety_block(self, monkeypatch):
@@ -256,7 +305,7 @@ class TestOcrReceiptMocked:
             mock_client.return_value.__aenter__ = AsyncMock(return_value=MagicMock(post=AsyncMock(return_value=resp)))
             mock_client.return_value.__aexit__ = AsyncMock(return_value=False)
             result = await ocr_receipt(_make_request(), _make_user())
-        assert result == []
+        assert result["items"] == []
 
     @pytest.mark.anyio
     async def test_nominal_success_v1_compat(self, monkeypatch):
@@ -271,15 +320,16 @@ class TestOcrReceiptMocked:
             mock_client.return_value.__aenter__ = AsyncMock(return_value=MagicMock(post=AsyncMock(return_value=resp)))
             mock_client.return_value.__aexit__ = AsyncMock(return_value=False)
             result = await ocr_receipt(_make_request(), _make_user())
-        assert len(result) == 2
-        assert result[0]["name"] == "Lait demi-écrémé"
-        assert result[0]["category"] == "frais"
-        assert result[0]["food_category"] == "frais"
-        assert result[0]["shelf_life_fridge"] == 7
-        assert result[0]["purchase_date"] is None
-        assert result[0]["expiry_date_fridge"] is None
-        assert result[1]["name"] == "Pâtes"
-        assert result[1]["shelf_life_pantry"] == 365
+        items = result["items"]
+        assert len(items) == 2
+        assert items[0]["name"] == "Lait demi-écrémé"
+        assert items[0]["category"] == "frais"
+        assert items[0]["food_category"] == "frais"
+        assert items[0]["shelf_life_fridge"] == 7
+        assert items[0]["purchase_date"] is None
+        assert items[0]["expiry_date_fridge"] is None
+        assert items[1]["name"] == "Pâtes"
+        assert items[1]["shelf_life_pantry"] == 365
 
     @pytest.mark.anyio
     async def test_nominal_success_v2_with_purchase_date(self, monkeypatch):
@@ -294,17 +344,55 @@ class TestOcrReceiptMocked:
             mock_client.return_value.__aenter__ = AsyncMock(return_value=MagicMock(post=AsyncMock(return_value=resp)))
             mock_client.return_value.__aexit__ = AsyncMock(return_value=False)
             result = await ocr_receipt(_make_request(), _make_user())
-        assert len(result) == 2
-        p0 = result[0]
+        items = result["items"]
+        assert len(items) == 2
+        p0 = items[0]
         assert p0["name"] == "Lait demi-écrémé 1L"
         assert p0["raw_title"] == "LAI 1/2 ECR 1L"
         assert p0["purchase_date"] == "2024-01-15"
         assert p0["shelf_life_fridge"] == 7
         assert p0["expiry_date_fridge"] == "2024-01-22"   # 2024-01-15 + 7j
         assert p0["expiry_date_pantry"] is None
-        p1 = result[1]
+        p1 = items[1]
         assert p1["shelf_life_pantry"] == 365
         assert p1["expiry_date_pantry"] == "2025-01-14"   # 2024-01-15 + 365j (2024 bissextile)
+
+    @pytest.mark.anyio
+    async def test_non_food_items_are_ignored(self, monkeypatch):
+        monkeypatch.setenv("GEMINI_OCR_API_KEY", "fake-key")
+        payload = {
+            "purchase_date": "2024-04-01",
+            "merchant": "Monoprix",
+            "currency": "EUR",
+            "items": [
+                {"raw_title": "SAC CABAS", "normalized_title": "Sac cabas", "is_food": False, "category": "autres"},
+                {"raw_title": "POMME GOLDEN", "normalized_title": "Pomme", "is_food": True, "category": "legumes"},
+            ],
+            "ignored_items": [{"raw_title": "LESSIVE", "reason": "non_food"}],
+        }
+        resp = _gemini_ok_response(payload)
+        with patch("ocr_service.httpx.AsyncClient") as mock_client:
+            mock_client.return_value.__aenter__ = AsyncMock(return_value=MagicMock(post=AsyncMock(return_value=resp)))
+            mock_client.return_value.__aexit__ = AsyncMock(return_value=False)
+            result = await ocr_receipt(_make_request(), _make_user())
+        assert len(result["items"]) == 1
+        assert result["items"][0]["raw_title"] == "POMME GOLDEN"
+        assert len(result["ignored_items"]) == 2
+
+    @pytest.mark.anyio
+    async def test_partial_json_item_keeps_raw_title_and_defaults(self, monkeypatch):
+        monkeypatch.setenv("GEMINI_OCR_API_KEY", "fake-key")
+        payload = {"purchase_date": None, "items": [{"raw_title": "TOM CR PIZZA 4F"}]}
+        resp = _gemini_ok_response(payload)
+        with patch("ocr_service.httpx.AsyncClient") as mock_client:
+            mock_client.return_value.__aenter__ = AsyncMock(return_value=MagicMock(post=AsyncMock(return_value=resp)))
+            mock_client.return_value.__aexit__ = AsyncMock(return_value=False)
+            result = await ocr_receipt(_make_request(), _make_user())
+        assert len(result["items"]) == 1
+        item = result["items"][0]
+        assert item["raw_title"] == "TOM CR PIZZA 4F"
+        assert item["name"] == "TOM CR PIZZA 4F"
+        assert item["purchase_date"] is None
 
     @pytest.mark.anyio
     async def test_invalid_json_response_raises(self, monkeypatch):
@@ -337,7 +425,7 @@ class TestOcrReceiptMocked:
             mock_client.return_value.__aenter__ = AsyncMock(return_value=MagicMock(post=AsyncMock(return_value=resp)))
             mock_client.return_value.__aexit__ = AsyncMock(return_value=False)
             result = await ocr_receipt(req, _make_user())
-        assert len(result) == 1
+        assert len(result["items"]) == 1
 
 
 # ── _normalize_date ────────────────────────────────────────────────────────────
@@ -376,33 +464,40 @@ class TestParseReceiptJson:
             "purchase_date": "2024-01-15",
             "items": [{"raw_title": "LAI", "name": "Lait", "category": "frais"}],
         })
-        purchase_date, items = _parse_receipt_json(text)
+        purchase_date, merchant, currency, items, ignored_items = _parse_receipt_json(text)
         assert purchase_date == "2024-01-15"
+        assert merchant is None
+        assert currency == "EUR"
         assert len(items) == 1
         assert items[0]["name"] == "Lait"
+        assert ignored_items == []
 
     def test_new_format_null_date(self):
         text = json.dumps({"purchase_date": None, "items": []})
-        purchase_date, items = _parse_receipt_json(text)
+        purchase_date, _, _, items, _ = _parse_receipt_json(text)
         assert purchase_date is None
         assert items == []
 
     def test_old_format_array_compat(self):
         text = json.dumps([{"name": "Lait", "category": "frais"}])
-        purchase_date, items = _parse_receipt_json(text)
+        purchase_date, merchant, currency, items, ignored_items = _parse_receipt_json(text)
         assert purchase_date is None
+        assert merchant is None
+        assert currency == "EUR"
         assert len(items) == 1
+        assert ignored_items == []
 
     def test_markdown_json_block_stripped(self):
         text = '```json\n{"purchase_date": "2024-03-10", "items": []}\n```'
-        purchase_date, items = _parse_receipt_json(text)
+        purchase_date, _, _, items, _ = _parse_receipt_json(text)
         assert purchase_date == "2024-03-10"
         assert items == []
 
     def test_markdown_plain_block_stripped(self):
         text = '```\n{"purchase_date": null, "items": []}\n```'
-        purchase_date, items = _parse_receipt_json(text)
+        purchase_date, _, _, items, _ = _parse_receipt_json(text)
         assert purchase_date is None
+        assert items == []
 
     def test_invalid_json_raises(self):
         with pytest.raises(OcrApiError) as exc_info:
@@ -415,7 +510,7 @@ class TestParseReceiptJson:
 
     def test_dmy_date_normalized(self):
         text = json.dumps({"purchase_date": "15/01/2024", "items": []})
-        purchase_date, _ = _parse_receipt_json(text)
+        purchase_date, _, _, _, _ = _parse_receipt_json(text)
         assert purchase_date == "2024-01-15"
 
 

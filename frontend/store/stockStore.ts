@@ -11,6 +11,7 @@ import {
 import { buildApiUrl } from '../utils/config';
 import { logger } from '../utils/logger';
 import { extractPremiumErrorDetail } from '../utils/premiumErrors';
+import { resolveStockItemImageUrl } from '../utils/stockItemImage';
 import { usePremiumUiStore } from './premiumUiStore';
 import type { AxiosError, AxiosRequestConfig } from 'axios';
 
@@ -84,6 +85,12 @@ interface PendingMutation {
   payload: any;
   tempId?: string;  // ID local temporaire pour ADD offline
   timestamp: number;
+}
+
+function normalizeStockItemImage(item: StockItem): StockItem {
+  const image_url = resolveStockItemImageUrl(item);
+  if (!image_url) return { ...item, image_url: undefined };
+  return { ...item, image_url };
 }
 
 // Intercepteur Axios global : déconnexion automatique sur token expiré (401)
@@ -203,7 +210,7 @@ export const useStockStore = create<StockStore>()(
           try {
             if (mutation.type === 'ADD') {
               const res = await axios.post(buildApiUrl('/api/stock'), mutation.payload, authRequestConfig());
-              const realItem: StockItem = res.data;
+              const realItem: StockItem = normalizeStockItemImage(res.data as StockItem);
               // Remplacer le tempId par le vrai ID dans le state local
               set(state => ({
                 items: state.items.map(i =>
@@ -243,7 +250,9 @@ export const useStockStore = create<StockStore>()(
         set(state => ({ loadingCount: state.loadingCount + 1, isLoading: true, error: null }));
         try {
           const res = await axios.get(buildApiUrl('/api/stock?status=active'), authRequestConfig());
-          const items: StockItem[] = res.data;
+          const items: StockItem[] = Array.isArray(res.data)
+            ? res.data.map((item) => normalizeStockItemImage(item as StockItem))
+            : [];
           set({ items });
           rescheduleAllNotifications(items);
         } catch (err: any) {
@@ -266,7 +275,10 @@ export const useStockStore = create<StockStore>()(
         set(state => ({ loadingCount: state.loadingCount + 1, isLoading: true }));
         try {
           const res = await axios.get(buildApiUrl('/api/stock/priority'), authRequestConfig());
-          set({ priorityItems: res.data, error: null });
+          const priorityItems: StockItem[] = Array.isArray(res.data)
+            ? res.data.map((item) => normalizeStockItemImage(item as StockItem))
+            : [];
+          set({ priorityItems, error: null });
         } catch {
           // Garder le cache en cas d'erreur réseau
         } finally {
@@ -507,7 +519,7 @@ export const useStockStore = create<StockStore>()(
 
         try {
           const res = await axios.post(buildApiUrl('/api/stock'), item, authRequestConfig());
-          const newItem: StockItem = res.data;
+          const newItem: StockItem = normalizeStockItemImage(res.data as StockItem);
           const s = get();
           await Promise.all([s.fetchStock(), s.fetchPriorityItems(), s.fetchStats()]);
           return newItem;
@@ -566,7 +578,7 @@ export const useStockStore = create<StockStore>()(
 
         try {
           const res = await axios.put(buildApiUrl(`/api/stock/${itemId}`), updates, authRequestConfig());
-          const updatedItem: StockItem = res.data;
+          const updatedItem: StockItem = normalizeStockItemImage(res.data as StockItem);
           cancelExpiryNotification(itemId);
           scheduleExpiryNotification(updatedItem);
           const s = get();
