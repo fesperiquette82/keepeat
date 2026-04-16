@@ -3,7 +3,7 @@ from __future__ import annotations
 import os
 import re
 from collections import defaultdict
-from datetime import timedelta
+from datetime import datetime, timedelta, timezone
 from typing import Any, Optional
 
 from jose import JWTError, jwt
@@ -30,9 +30,36 @@ _EVENT_NAME_ALLOWED = {
     "premium_restored",
 }
 
+_CRITICAL_ENDPOINTS: dict[str, dict[str, Any]] = {
+    "/api/ocr/receipt": {"label": "OCR ticket", "business_criticality": "critical"},
+    "/api/stock": {"label": "Stock", "business_criticality": "high"},
+    "/api/recipes/suggestions": {"label": "Suggestions recettes", "business_criticality": "high"},
+}
+
+_OPS_THRESHOLDS: dict[str, Any] = {
+    "critical_error_rate_critical_endpoint": 0.50,
+    "critical_error_rate_any_endpoint": 0.75,
+    "degraded_error_rate_critical_endpoint": 0.20,
+    "degraded_error_rate_any_endpoint": 0.10,
+    "critical_recent_error_window_hours": 6,
+}
+
 
 def _iso_days_ago(days: int) -> str:
     return (utc_now() - timedelta(days=days)).isoformat()
+
+
+def _parse_iso_datetime(value: str | None) -> datetime | None:
+    if not isinstance(value, str) or not value:
+        return None
+    candidate = value.replace("Z", "+00:00")
+    try:
+        parsed = datetime.fromisoformat(candidate)
+    except ValueError:
+        return None
+    if parsed.tzinfo is None:
+        return parsed.replace(tzinfo=timezone.utc)
+    return parsed.astimezone(timezone.utc)
 
 
 def normalize_endpoint_key(path: str) -> str:
@@ -301,13 +328,207 @@ async def summarize_api_metrics(*, api_request_logs_col, start_iso: str, end_iso
         {
             "endpoint_key": r["_id"],
             "volume": int(r["count"]),
+            "errors": int(r.get("errors", 0)),
             "error_rate": round(float(r.get("error_rate", 0)), 4),
             "avg_latency_ms": round(float(r.get("avg_latency_ms") or 0.0), 2),
         }
         for r in error_rows
     ]
+    for row in highest_error_rate:
+        endpoint_key = row["endpoint_key"]
+        dominant_error_pipeline = [
+            {
+                "$match": {
+                    **match,
+                    "endpoint_key": endpoint_key,
+                    "status_code": {"$gte": 400},
+                }
+            },
+            {
+                "$group": {
+                    "_id": "$error_type",
+                    "count": {"$sum": 1},
+                }
+            },
+            {"$sort": {"count": -1}},
+            {"$limit": 1},
+        ]
+        dominant_rows = await api_request_logs_col.aggregate(dominant_error_pipeline).to_list(length=1)
+        last_error = await api_request_logs_col.find_one(
+            {
+                **match,
+                "endpoint_key": endpoint_key,
+                "status_code": {"$gte": 400},
+            },
+            sort=[("created_at", -1)],
+            projection={"created_at": 1, "status_code": 1, "error_type": 1},
+        )
+        row["dominant_error_type"] = dominant_rows[0].get("_id") if dominant_rows else None
+        row["last_error_at"] = last_error.get("created_at") if last_error else None
+        row["last_error_status_code"] = int(last_error.get("status_code", 0)) if last_error else None
     worst_latency = sorted(formatted, key=lambda x: x["p95_latency_ms"], reverse=True)[:5]
     return {"volume": volume, "top_endpoints": formatted, "highest_error_rate": highest_error_rate, "highest_latency": worst_latency}
+
+
+def _compute_endpoint_severity(*, endpoint_key: str, error_rate: float, has_recent_critical_error: bool) -> str:
+    is_critical_endpoint = endpoint_key in _CRITICAL_ENDPOINTS and _CRITICAL_ENDPOINTS[endpoint_key]["business_criticality"] == "critical"
+    if has_recent_critical_error and endpoint_key in _CRITICAL_ENDPOINTS:
+        return "critical"
+    if is_critical_endpoint and error_rate >= _OPS_THRESHOLDS["critical_error_rate_critical_endpoint"]:
+        return "critical"
+    if error_rate >= _OPS_THRESHOLDS["critical_error_rate_any_endpoint"]:
+        return "critical"
+    if endpoint_key in _CRITICAL_ENDPOINTS and error_rate >= _OPS_THRESHOLDS["degraded_error_rate_critical_endpoint"]:
+        return "degraded"
+    if error_rate >= _OPS_THRESHOLDS["degraded_error_rate_any_endpoint"]:
+        return "degraded"
+    return "ok"
+
+
+async def build_operational_overview(
+    *,
+    api_request_logs_col,
+    service_usage_logs_col,
+    start_iso: str,
+    end_iso: str,
+) -> dict[str, Any]:
+    now = utc_now()
+    match = {"created_at": {"$gte": start_iso, "$lte": end_iso}}
+    endpoint_stats_pipeline = [
+        {"$match": match},
+        {
+            "$group": {
+                "_id": "$endpoint_key",
+                "calls": {"$sum": 1},
+                "errors": {"$sum": {"$cond": [{"$gte": ["$status_code", 400]}, 1, 0]}},
+                "avg_latency_ms": {"$avg": "$duration_ms"},
+            }
+        },
+    ]
+    stats_rows = await api_request_logs_col.aggregate(endpoint_stats_pipeline).to_list(length=500)
+    by_endpoint: dict[str, dict[str, Any]] = {}
+    for row in stats_rows:
+        calls = int(row.get("calls", 0))
+        errors = int(row.get("errors", 0))
+        by_endpoint[row["_id"]] = {
+            "endpoint_key": row["_id"],
+            "calls": calls,
+            "success": max(calls - errors, 0),
+            "errors": errors,
+            "error_rate": round((errors / calls) if calls else 0.0, 4),
+            "avg_latency_ms": round(float(row.get("avg_latency_ms") or 0.0), 2),
+        }
+
+    for endpoint_key, endpoint_row in by_endpoint.items():
+        dominant_error_pipeline = [
+            {"$match": {**match, "endpoint_key": endpoint_key, "status_code": {"$gte": 400}}},
+            {"$group": {"_id": "$error_type", "count": {"$sum": 1}}},
+            {"$sort": {"count": -1}},
+            {"$limit": 1},
+        ]
+        dominant = await api_request_logs_col.aggregate(dominant_error_pipeline).to_list(length=1)
+        last_error = await api_request_logs_col.find_one(
+            {**match, "endpoint_key": endpoint_key, "status_code": {"$gte": 400}},
+            sort=[("created_at", -1)],
+            projection={"created_at": 1, "status_code": 1, "error_type": 1, "method": 1, "path": 1},
+        )
+        last_error_at = last_error.get("created_at") if last_error else None
+        last_error_dt = _parse_iso_datetime(last_error_at)
+        recent_window_hours = int(_OPS_THRESHOLDS["critical_recent_error_window_hours"])
+        is_recent_critical_error = bool(
+            last_error_dt
+            and int(last_error.get("status_code", 0)) >= 500
+            and (now - last_error_dt).total_seconds() <= recent_window_hours * 3600
+        )
+        endpoint_row["dominant_error_type"] = dominant[0].get("_id") if dominant else None
+        endpoint_row["last_error"] = last_error
+        endpoint_row["severity"] = _compute_endpoint_severity(
+            endpoint_key=endpoint_key,
+            error_rate=float(endpoint_row["error_rate"]),
+            has_recent_critical_error=is_recent_critical_error,
+        )
+
+    critical_flows: dict[str, dict[str, Any]] = {}
+    for endpoint_key, cfg in _CRITICAL_ENDPOINTS.items():
+        base = by_endpoint.get(endpoint_key, {"endpoint_key": endpoint_key, "calls": 0, "success": 0, "errors": 0, "error_rate": 0.0, "avg_latency_ms": 0.0, "dominant_error_type": None, "last_error": None, "severity": "ok"})
+        critical_flows[endpoint_key] = {**base, "label": cfg["label"], "business_criticality": cfg["business_criticality"]}
+
+    issues = [v for v in by_endpoint.values() if v["errors"] > 0]
+    issues.sort(key=lambda x: (x["severity"] == "critical", x["severity"] == "degraded", x["error_rate"], x["errors"]), reverse=True)
+
+    last_critical_error = await api_request_logs_col.find_one(
+        {
+            **match,
+            "status_code": {"$gte": 500},
+            "endpoint_key": {"$in": list(_CRITICAL_ENDPOINTS.keys())},
+        },
+        sort=[("created_at", -1)],
+        projection={"method": 1, "path": 1, "status_code": 1, "error_type": 1, "created_at": 1, "endpoint_key": 1},
+    )
+
+    global_status = "ok"
+    reasons: list[str] = []
+    if any(flow["severity"] == "critical" for flow in critical_flows.values()) or any(issue["severity"] == "critical" for issue in issues):
+        global_status = "critical"
+        reasons.append("Au moins un endpoint métier critique est en incident majeur.")
+    elif any(flow["severity"] == "degraded" for flow in critical_flows.values()) or any(issue["severity"] == "degraded" for issue in issues):
+        global_status = "degraded"
+        reasons.append("Des endpoints métier présentent une dégradation notable.")
+
+    funnel = {
+        "users_with_receipt_scan": len(
+            await api_request_logs_col.distinct(
+                "user_id",
+                {**match, "endpoint_key": "/api/ocr/receipt", "user_id": {"$nin": [None, ""]}},
+            )
+        ),
+        "users_with_stock_add": len(
+            await api_request_logs_col.distinct(
+                "user_id",
+                {
+                    **match,
+                    "endpoint_key": "/api/stock",
+                    "method": "POST",
+                    "status_code": {"$lt": 400},
+                    "user_id": {"$nin": [None, ""]},
+                },
+            )
+        ),
+        "users_with_recipes_view": len(
+            await api_request_logs_col.distinct(
+                "user_id",
+                {
+                    **match,
+                    "endpoint_key": {"$in": ["/api/recipes/suggestions", "/api/recipes/ai"]},
+                    "status_code": {"$lt": 400},
+                    "user_id": {"$nin": [None, ""]},
+                },
+            )
+        ),
+    }
+
+    ocr_cost_aggregate = await service_usage_logs_col.aggregate(
+        [
+            {"$match": {**match, "service_name": "ocr", "action_name": "receipt_scan"}},
+            {"$group": {"_id": None, "cost": {"$sum": "$estimated_cost"}, "calls": {"$sum": 1}}},
+        ]
+    ).to_list(length=1)
+    ocr_cost = float(ocr_cost_aggregate[0].get("cost", 0.0)) if ocr_cost_aggregate else 0.0
+    ocr_cost_calls = int(ocr_cost_aggregate[0].get("calls", 0)) if ocr_cost_aggregate else 0
+
+    return {
+        "global_status": global_status,
+        "global_status_reasons": reasons,
+        "thresholds": _OPS_THRESHOLDS,
+        "critical_flows": critical_flows,
+        "top_incidents": issues[:10],
+        "last_critical_error": last_critical_error,
+        "product_funnel": funnel,
+        "cost_breakdown": {
+            "ocr_cost_eur": round(ocr_cost, 6),
+            "ocr_cost_per_scan_eur": round((ocr_cost / ocr_cost_calls), 6) if ocr_cost_calls else None,
+        },
+    }
 
 
 async def summarize_services_usage(*, service_usage_logs_col, start_iso: str, end_iso: str) -> dict[str, Any]:
