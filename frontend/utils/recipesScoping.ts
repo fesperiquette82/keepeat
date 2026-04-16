@@ -31,14 +31,10 @@ export function filterRecipesByTargetIngredients(
 }
 
 export function dedupeRecipesById(recipes: any[]): any[] {
-  const seen = new Set<string>();
-  return recipes.filter((recipe) => {
-    const id = String(recipe?.id ?? '').trim();
-    if (!id || seen.has(id)) return false;
-    seen.add(id);
   const seenIds = new Set<string>();
   const seenSemanticSignatures = new Set<string>();
   const seenTitleSignatures = new Set<string>();
+
   return recipes.filter((recipe) => {
     const id = String(recipe?.id ?? '').trim();
     const title = String(recipe?.title ?? '').trim().toLowerCase();
@@ -66,6 +62,7 @@ export function dedupeRecipesById(recipes: any[]): any[] {
       if (!semanticKey || seenSemanticSignatures.has(semanticKey)) return false;
       seenSemanticSignatures.add(semanticKey);
     }
+
     return true;
   });
 }
