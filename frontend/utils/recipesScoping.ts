@@ -31,6 +31,11 @@ export function filterRecipesByTargetIngredients(
 }
 
 export function dedupeRecipesById(recipes: any[]): any[] {
+  const seen = new Set<string>();
+  return recipes.filter((recipe) => {
+    const id = String(recipe?.id ?? '').trim();
+    if (!id || seen.has(id)) return false;
+    seen.add(id);
   const seenIds = new Set<string>();
   const seenSemanticSignatures = new Set<string>();
   const seenTitleSignatures = new Set<string>();
@@ -70,4 +75,29 @@ export function scopeAndDedupeRecipes(
   targetIngredientNames: Set<string>,
 ): any[] {
   return dedupeRecipesById(filterRecipesByTargetIngredients(backendRecipes, targetIngredientNames));
+}
+
+export interface RecipesScopeDiagnostics {
+  rawRecipesCount: number;
+  scopedRecipesCount: number;
+  dedupedRecipesCount: number;
+  targetIngredientNamesCount: number;
+}
+
+export function buildScopedRecipesWithDiagnostics(
+  backendRecipes: any[],
+  targetIngredientNames: Set<string>,
+): { recipes: any[]; diagnostics: RecipesScopeDiagnostics } {
+  const rawRecipesCount = backendRecipes.length;
+  const scopedRecipes = filterRecipesByTargetIngredients(backendRecipes, targetIngredientNames);
+  const dedupedRecipes = dedupeRecipesById(scopedRecipes);
+  return {
+    recipes: dedupedRecipes,
+    diagnostics: {
+      rawRecipesCount,
+      scopedRecipesCount: scopedRecipes.length,
+      dedupedRecipesCount: dedupedRecipes.length,
+      targetIngredientNamesCount: targetIngredientNames.size,
+    },
+  };
 }

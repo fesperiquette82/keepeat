@@ -15,6 +15,9 @@ import { logger } from '../../utils/logger';
 import { fetchRecipesSuggestions } from '../../utils/recipesApi';
 import { getActiveItemsByScope, resolveStockItems } from '../../data/mockDashboardData';
 import {
+  buildScopedRecipesWithDiagnostics,
+  buildTargetIngredientNames,
+  getRecipeAvailableIngredients,
   buildTargetIngredientNames,
   filterRecipesByTargetIngredients,
   getRecipeAvailableIngredients,
@@ -103,6 +106,15 @@ export default function RecipesScreen() {
     const load = async () => {
       setIsLoading(true);
       try {
+        const payload = await fetchRecipesSuggestions('stock');
+        if (cancelled) return;
+        const rawRecipes = Array.isArray(payload?.recipes) ? payload.recipes : [];
+        const { recipes: scopedRecipes, diagnostics } = buildScopedRecipesWithDiagnostics(rawRecipes, targetIngredientNames);
+        const antiWasteRecipes = scopedRecipes.slice(0, 2);
+        logger.debug('[RECIPES_MATCH] suggestions payload diagnostics', {
+          activeFilter,
+          ...diagnostics,
+          targetItemsCount: targetItems.length,
         const payload = await fetchRecipesSuggestions(activeFilter);
         if (cancelled) return;
         const rawRecipes = Array.isArray(payload?.recipes) ? payload.recipes : [];
@@ -134,6 +146,7 @@ export default function RecipesScreen() {
     return () => {
       cancelled = true;
     };
+  }, [activeFilter, activeItems.length, activeStockCount, items.length, storeItems.length, targetIngredientNames, targetItems]);
   }, [activeFilter, activeItems.length, activeStockCount, items.length, storeItems.length, targetIngredientNamesKey, targetItems]);
 
   const filters = useMemo(

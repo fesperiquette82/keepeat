@@ -2,6 +2,7 @@ import assert from 'node:assert/strict';
 import test from 'node:test';
 
 import { getActiveItemsByScope, type DashboardStockItem } from '../data/mockDashboardData';
+import { buildScopedRecipesWithDiagnostics, buildTargetIngredientNames, scopeAndDedupeRecipes } from './recipesScoping';
 import { buildTargetIngredientNames, scopeAndDedupeRecipes } from './recipesScoping';
 
 const ACTIVE_STATUS = 'active' as const;
@@ -161,4 +162,33 @@ test('cohérence anti-gaspi / liste principale: top suggestions restent un sous-
   const classicIds = asSet(classic);
 
   antiWasteTop.forEach((recipe) => assert.equal(classicIds.has(recipe.id), true));
+});
+
+test('cas utilisateur: un filtre restrictif ne retourne jamais plus de recettes que Toutes sur base commune', (t) => {
+  t.mock.timers.enable({ apis: ['Date'], now: new Date('2026-04-10T12:00:00.000Z') });
+
+  const items: DashboardStockItem[] = [
+    buildItem('d0', 'Œufs', '2026-04-10'),
+    buildItem('w2', 'Lait', '2026-04-12'),
+    buildItem('m15', 'Riz', '2026-04-25'),
+    buildItem('s80', 'Farine', '2026-06-29'),
+  ];
+  const commonBaseRecipes = [
+    { id: 'r-day', available_ingredients: ['Œufs'] },
+    { id: 'r-week', available_ingredients: ['Lait'] },
+    { id: 'r-month', available_ingredients: ['Riz'] },
+    { id: 'r-all', available_ingredients: ['Farine'] },
+  ];
+
+  const dayTargets = buildTargetIngredientNames(getActiveItemsByScope(items, 'expiryDay'));
+  const allTargets = buildTargetIngredientNames(getActiveItemsByScope(items, 'stock'));
+  const dayResult = buildScopedRecipesWithDiagnostics(commonBaseRecipes, dayTargets);
+  const allResult = buildScopedRecipesWithDiagnostics(commonBaseRecipes, allTargets);
+
+  assert.equal(dayResult.recipes.length <= allResult.recipes.length, true);
+  dayResult.recipes.forEach((recipe) => {
+    assert.equal(allResult.recipes.some((allRecipe) => allRecipe.id === recipe.id), true);
+  });
+  assert.equal(dayResult.diagnostics.dedupedRecipesCount, dayResult.recipes.length);
+  assert.equal(allResult.diagnostics.dedupedRecipesCount, allResult.recipes.length);
 });
