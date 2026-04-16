@@ -2764,15 +2764,15 @@ async def ocr_receipt_route(
     try:
         result = await ocr_receipt(request, current_user)
     except OcrApiError as exc:
-        logger.warning("OCR receipt failed for user=%s: %s", current_user["id"], exc)
+        logger.warning("OCR receipt failed for user=%s http=%s: %s", current_user["id"], exc.http_status, exc)
         await track_business_event(
             business_events_col=business_events_col,
             user_id=current_user["id"],
             event_name="ocr_scan_failed",
             event_category="ocr",
-            metadata_json={"reason": str(exc)},
+            metadata_json={"reason": str(exc), "http_status": exc.http_status},
         )
-        raise HTTPException(status_code=502, detail=str(exc))
+        raise HTTPException(status_code=exc.http_status, detail=str(exc))
     # Quota consommé APRÈS l'appel externe réussi
     await _enforce_feature_access(
         current_user=current_user,
