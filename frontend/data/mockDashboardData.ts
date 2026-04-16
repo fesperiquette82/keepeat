@@ -1,5 +1,6 @@
 import type { StockItem } from '../store/stockStore';
 import { computeRecipeIngredientAvailability, isClearIngredientMatch, normalizeIngredientName } from '../utils/ingredientMatching';
+import { resolveStockItemImageUrl } from '../utils/stockItemImage';
 
 export type StorageZone = 'frigo' | 'placard';
 
@@ -261,6 +262,7 @@ export function resolveStockItems(
       isMock: false,
       items: items.map((item) => ({
         ...item,
+        image_url: resolveStockItemImageUrl(item),
         storageZone: item.food_category && ['frais', 'proteines', 'legumes', 'boissons'].includes(item.food_category)
           ? 'frigo'
           : 'placard',
