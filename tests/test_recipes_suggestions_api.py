@@ -101,6 +101,8 @@ class RecipeSuggestionsEndpointTests(unittest.TestCase):
         self.assertEqual(payload["recipes"], [])
         self.assertTrue(payload["meta"]["gap_logged"])
         mocked_gap.assert_awaited_once()
+        self.assertEqual(mocked_gap.await_args.kwargs["uncovered_ingredients"], ["courgette"])
+        self.assertIsNone(mocked_gap.await_args.kwargs["reference_recipe"])
 
     def test_legacy_filter_value_is_mapped_to_all(self):
         fake_recipes = _FakeCollection([])
@@ -121,6 +123,102 @@ class RecipeSuggestionsEndpointTests(unittest.TestCase):
         mocked_stock, response = asyncio.run(_run())
         self.assertEqual(mocked_stock.await_args.kwargs["filter_value"], "all")
         self.assertEqual(response.headers["X-Recipes-Filter"], "all")
+
+    def test_gap_upsert_failure_does_not_break_response(self):
+        fake_recipes = _FakeCollection([])
+        fake_stock = [{"name": "courgette"}]
+
+        async def _run():
+            with patch("server.recipes_col", fake_recipes):
+                with patch("server._fetch_stock_candidates", AsyncMock(return_value=fake_stock)):
+                    with patch("server._upsert_recipe_gap", AsyncMock(side_effect=RuntimeError("db down"))):
+                        return await get_recipe_suggestions(
+                            response=Response(),
+                            recipe_filter="all",
+                            include_meta=True,
+                            current_user={"id": "u1"},
+                        )
+
+        payload = asyncio.run(_run())
+        self.assertEqual(payload["recipes"], [])
+        self.assertTrue(payload["meta"]["suggest_later"])
+        self.assertFalse(payload["meta"]["gap_logged"])
+
+    def test_gap_transmet_les_non_couverts_par_recette_reference(self):
+        fake_recipes = _FakeCollection(
+            [
+                {
+                    "id": "recipe_ref",
+                    "title": "Tomate mijotée",
+                    "ingredients": [
+                        {"name": "tomate", "optional": False},
+                        {"name": "oignon", "optional": False},
+                        {"name": "ail", "optional": False},
+                        {"name": "sel", "optional": False},
+                        {"name": "poivre", "optional": False},
+                    ],
+                    "steps": ["Cuire"],
+                    "is_active": True,
+                }
+            ]
+        )
+
+        async def _run():
+            with patch("server.recipes_col", fake_recipes):
+                with patch("server._fetch_stock_candidates", AsyncMock(return_value=[{"name": "tomate"}, {"name": "courgette"}])):
+                    with patch("server._upsert_recipe_gap", AsyncMock(return_value=True)) as mocked_gap:
+                        await get_recipe_suggestions(
+                            response=Response(),
+                            recipe_filter="all",
+                            include_meta=True,
+                            current_user={"id": "u1"},
+                        )
+                        return mocked_gap
+
+        mocked_gap = asyncio.run(_run())
+        mocked_gap.assert_awaited_once()
+        self.assertEqual(mocked_gap.await_args.kwargs["reference_recipe"]["id"], "recipe_ref")
+        self.assertEqual(mocked_gap.await_args.kwargs["uncovered_ingredients"], ["courgette"])
+
+    def test_tri_suggestions_recettes_courtes_avant_longues_bug010(self):
+        """BUG-010 : les recettes courtes doivent être proposées avant les longues (anti-gaspi)."""
+        fake_recipes = _FakeCollection(
+            [
+                {
+                    "id": "recipe_long",
+                    "title": "Plat long",
+                    "ingredients": [{"name": "courgette", "optional": False}],
+                    "steps": ["Cuire longtemps"],
+                    "duration_min": 60,
+                    "is_active": True,
+                },
+                {
+                    "id": "recipe_short",
+                    "title": "Plat court",
+                    "ingredients": [{"name": "courgette", "optional": False}],
+                    "steps": ["Cuire vite"],
+                    "duration_min": 10,
+                    "is_active": True,
+                },
+            ]
+        )
+        fake_stock = [{"name": "courgette"}]
+
+        async def _run():
+            with patch("server.recipes_col", fake_recipes):
+                with patch("server._fetch_stock_candidates", AsyncMock(return_value=fake_stock)):
+                    return await get_recipe_suggestions(
+                        response=Response(),
+                        recipe_filter="all",
+                        include_meta=True,
+                        current_user={"id": "u1"},
+                    )
+
+        payload = asyncio.run(_run())
+        ids = [r["id"] for r in payload["recipes"]]
+        self.assertIn("recipe_short", ids)
+        self.assertIn("recipe_long", ids)
+        self.assertLess(ids.index("recipe_short"), ids.index("recipe_long"), "recette courte doit précéder la longue")
 
     def test_include_meta_false_returns_recipe_list(self):
         fake_recipes = _FakeCollection(

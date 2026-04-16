@@ -268,13 +268,27 @@ class RecipeSuggestionGroupsResponse(BaseModel):
     almost: list[RecipeGroupedSuggestion] = Field(default_factory=list)
     inspiration: list[RecipeGroupedSuggestion] = Field(default_factory=list)
 
+class RecipeSuggestionIngredient(BaseModel):
+    name: str
+    quantity: Optional[float] = None
+    unit: Optional[str] = None
+    display_unit: Optional[str] = None
+    display_label: Optional[str] = None
+    optional: bool = False
+    available: bool = False
+    matched_stock_item_ids: list[str] = Field(default_factory=list)
+    missing_quantity: Optional[float] = None
+    is_estimated: bool = False
+
 class RecipeSuggestion(BaseModel):
     id: str
     title: str
+    summary: str = ""
     image: str = ""
     usedIngredients: list[str] = Field(default_factory=list)
     missedIngredients: list[str] = Field(default_factory=list)
     optionalIngredientsUsed: list[str] = Field(default_factory=list)
+    ingredients: list[RecipeSuggestionIngredient] = Field(default_factory=list)
     sourceUrl: str = ""
     is_fallback: bool = False
     instructions_summary: str = ""

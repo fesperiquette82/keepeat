@@ -94,6 +94,7 @@ Une tâche est terminée uniquement si :
 - les tests pertinents passent localement
 - le lint passe
 - le résumé indique quels tests ont été ajoutés et exécutés
+- **pour toute nouvelle fonctionnalité côté application : sa vérification est intégrée dans le dashboard admin** (monitoring d’usage, indicateur de santé, page de suivi ou entrée dans un écran existant selon la nature de la fonctionnalité)
 
 ## Sortie attendue
 Toujours fournir :

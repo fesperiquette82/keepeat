@@ -10,6 +10,7 @@ const LINKS = [
   { label: 'Subscriptions', path: '/admin/monitoring/subscriptions' },
   { label: 'Services', path: '/admin/monitoring/services-usage' },
   { label: 'Events', path: '/admin/monitoring/events' },
+  { label: 'Tickets', path: '/admin/monitoring/receipt-tickets' },
 ];
 
 export function AdminMonitoringNav() {

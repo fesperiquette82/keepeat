@@ -1,11 +1,15 @@
 # backend/server.py
 from __future__ import annotations
 
+import os
+
+from dotenv import load_dotenv
+load_dotenv()
+
 import asyncio
 import base64
 import difflib
 import json
-import os
 import re
 import secrets
 import subprocess
@@ -21,7 +25,6 @@ import aiosmtplib
 import httpx
 from bson import ObjectId
 from pymongo.errors import DuplicateKeyError
-from dotenv import load_dotenv
 from fastapi import APIRouter, Depends, FastAPI, Header, HTTPException, Query, Request, Response, status
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import HTMLResponse
@@ -116,8 +119,6 @@ from recipes_service import (
     suggest_recipes_from_catalog,
 )
 
-load_dotenv()
-
 MONGO_URL = os.getenv("MONGO_URL")
 if not MONGO_URL:
     raise RuntimeError("MONGO_URL is required. Set it in Render > Environment Variables.")
@@ -137,6 +138,8 @@ api_request_logs_col = db["api_request_logs"]
 business_events_col = db["business_events"]
 service_usage_logs_col = db["service_usage_logs"]
 daily_metrics_col = db["daily_metrics"]
+receipt_tickets_col = db["receipt_tickets"]
+ocr_normalizations_col = db["ocr_normalizations"]
 
 _BACKEND_URL = os.getenv("BACKEND_URL", "https://keepeat-backend.onrender.com")
 _GOOGLE_ANDROID_PACKAGE = os.getenv("GOOGLE_ANDROID_PACKAGE", "com.fesperiquette.keepeat")
@@ -381,29 +384,25 @@ def _build_openai_recipes_prompt(*, stock_snapshot: list[dict[str, Any]], active
 
 async def _fetch_gpt_recipes(
     *,
-    openai_key: str,
-    openai_model: str,
+    gemini_key: str,
     stock_snapshot: list[dict[str, Any]],
     active_filter: str,
 ) -> list[_GptRecipePayload]:
     prompt = _build_openai_recipes_prompt(stock_snapshot=stock_snapshot, active_filter=active_filter)
+    system_text = "Tu es un assistant culinaire anti-gaspi strict."
     try:
         async with httpx.AsyncClient(timeout=12.0) as http:
             response = await http.post(
-                "https://api.openai.com/v1/chat/completions",
-                headers={
-                    "Authorization": f"Bearer {openai_key}",
-                    "Content-Type": "application/json",
-                },
+                f"https://generativelanguage.googleapis.com/v1beta/models/gemini-1.5-flash:generateContent?key={gemini_key}",
+                headers={"Content-Type": "application/json"},
                 json={
-                    "model": openai_model,
-                    "temperature": 0.2,
-                    "max_tokens": 1200,
-                    "response_format": {"type": "json_object"},
-                    "messages": [
-                        {"role": "system", "content": "Tu es un assistant culinaire anti-gaspi strict."},
-                        {"role": "user", "content": prompt},
-                    ],
+                    "systemInstruction": {"parts": [{"text": system_text}]},
+                    "contents": [{"parts": [{"text": prompt}]}],
+                    "generationConfig": {
+                        "temperature": 0.2,
+                        "maxOutputTokens": 1200,
+                        "responseMimeType": "application/json",
+                    },
                 },
             )
     except Exception as exc:
@@ -415,7 +414,7 @@ async def _fetch_gpt_recipes(
         return []
 
     try:
-        raw_content = response.json()["choices"][0]["message"]["content"].strip()
+        raw_content = response.json()["candidates"][0]["content"]["parts"][0]["text"].strip()
         parsed = _GptRecipesEnvelope.model_validate_json(raw_content)
         return parsed.recipes[:3]
     except (KeyError, ValidationError, json.JSONDecodeError, ValueError) as exc:
@@ -543,6 +542,8 @@ async def lifespan(app: FastAPI):
     await users_col.create_index("email", unique=True)
     await users_col.create_index("verification_token", sparse=True)
     await users_col.create_index("reset_token", sparse=True)
+    await receipt_tickets_col.create_index([("status", 1), ("created_at", -1)])
+    await receipt_tickets_col.create_index([("user_id", 1), ("created_at", -1)])
     await _seed_shared_recipes_collection_if_needed()
 
     deps = AlertDependencies(
@@ -1984,8 +1985,8 @@ def _normalize_ingredient_name(raw_name: Any) -> str:
         return ""
     normalized = unicodedata.normalize("NFD", token)
     normalized = "".join(ch for ch in normalized if unicodedata.category(ch) != "Mn")
-    normalized = re.sub(r"[^a-z0-9\\s]", " ", normalized)
-    normalized = re.sub(r"\\s+", " ", normalized).strip()
+    normalized = re.sub(r"[^a-z0-9\s]", " ", normalized)
+    normalized = re.sub(r"\s+", " ", normalized).strip()
     aliases = {
         "oeufs": "oeuf",
         "tomates": "tomate",
@@ -2036,14 +2037,18 @@ async def _send_recipe_gap_email(gap_doc: dict[str, Any], *, is_new: bool) -> No
         return
     destination = os.getenv("RECIPE_GAP_EMAIL_TO", "keepeatfe@gmail.com").strip() or "keepeatfe@gmail.com"
     subject = "KeepEat - Besoin recette non couvert"
+    uncovered = gap_doc.get("uncovered_ingredients") or gap_doc.get("normalized_ingredients") or []
+    used = gap_doc.get("used_ingredients_in_reference_recipe") or []
+    reference_title = gap_doc.get("reference_recipe_title") or ""
     html_body = f"""
     <h3>Besoin recette non couvert</h3>
     <p><b>Signature:</b> {gap_doc.get('signature')}</p>
     <p><b>Filtre:</b> {gap_doc.get('filter')}</p>
     <p><b>Statut:</b> {gap_doc.get('status')}</p>
     <p><b>Occurrences:</b> {gap_doc.get('occurrence_count')}</p>
-    <p><b>Ingrédients disponibles:</b> {', '.join(gap_doc.get('available_ingredients', []))}</p>
-    <p><b>Ingrédients normalisés:</b> {', '.join(gap_doc.get('normalized_ingredients', []))}</p>
+    <p><b>Recette de référence:</b> {reference_title or 'aucune'}</p>
+    <p><b>Ingrédients utilisés (recette de référence):</b> {', '.join(used) if used else 'aucun'}</p>
+    <p><b>Ingrédients non couverts:</b> {', '.join(uncovered) if uncovered else 'aucun'}</p>
     <p><b>Dernière détection:</b> {gap_doc.get('last_seen_at')}</p>
     """
     await _send_email(destination, subject, html_body)
@@ -2056,20 +2061,24 @@ async def _mark_coverable_gaps_after_recipe_insert(recipe_doc: dict[str, Any]) -
         return
     pending_gaps = await recipe_gap_requests_col.find({"status": {"$in": ["pending", "partially_resolved"]}}).to_list(length=500)
     for gap in pending_gaps:
-        gap_ingredients = set(gap.get("normalized_ingredients", []))
+        target_uncovered = gap.get("uncovered_ingredients")
+        if target_uncovered is None:
+            target_uncovered = gap.get("normalized_ingredients", [])
+        gap_ingredients = set(target_uncovered)
         if not gap_ingredients:
             continue
         covered = gap_ingredients.intersection(normalized_recipe_ingredients)
         if not covered:
             continue
-        coverage_ratio = len(covered) / max(1, len(gap_ingredients))
-        next_status = "resolved" if coverage_ratio >= 0.8 else "partially_resolved"
+        remaining = sorted(gap_ingredients - covered)
+        next_status = "resolved" if not remaining else "partially_resolved"
         await recipe_gap_requests_col.update_one(
             {"_id": gap["_id"]},
             {
                 "$set": {
                     "status": next_status,
                     "resolved_at": utc_now().isoformat(),
+                    "uncovered_ingredients": remaining,
                 },
                 "$addToSet": {"resolved_by_recipe_ids": recipe_doc.get("id")},
             },
@@ -2146,8 +2155,115 @@ async def _fetch_recipe_image_url(client: httpx.AsyncClient, title: str) -> str:
 
 
 def _score_recipe_match(recipe_doc: dict[str, Any], stock_items: list[dict[str, Any]]) -> dict[str, Any]:
+    normalized_units = {
+        "piece", "g", "kg", "ml", "cl", "l", "tsp", "tbsp", "pinch", "pot", "jar", "can", "slice",
+    }
+    display_unit_labels = {
+        "piece": "pièce",
+        "g": "g",
+        "kg": "kg",
+        "ml": "ml",
+        "cl": "cl",
+        "l": "l",
+        "tsp": "c. à café",
+        "tbsp": "c. à soupe",
+        "pinch": "pincée",
+        "pot": "pot",
+        "jar": "bocal",
+        "can": "boîte",
+        "slice": "tranche",
+    }
+
+    unit_aliases = {
+        "g": "g",
+        "gr": "g",
+        "gramme": "g",
+        "grammes": "g",
+        "kg": "kg",
+        "kilogramme": "kg",
+        "kilogrammes": "kg",
+        "ml": "ml",
+        "cl": "cl",
+        "l": "l",
+        "litre": "l",
+        "litres": "l",
+        "cac": "tsp",
+        "cuillere a cafe": "tsp",
+        "cuillère a cafe": "tsp",
+        "cuillere a soupe": "tbsp",
+        "cuillère a soupe": "tbsp",
+        "cas": "tbsp",
+        "pincee": "pinch",
+        "pot": "pot",
+        "bocal": "jar",
+        "boite": "can",
+        "tranche": "slice",
+        "tranches": "slice",
+        "piece": "piece",
+        "pieces": "piece",
+        "pièce": "piece",
+        "pièces": "piece",
+    }
+
+    per_serving_inference: list[tuple[list[str], float, str, str]] = [
+        (["oeuf", "œuf"], 0.5, "piece", "œuf"),
+        (["riz", "pate", "pâtes", "semoule", "quinoa"], 75, "g", "g"),
+        (["creme", "crème", "lait", "bouillon"], 50, "ml", "ml"),
+        (["huile"], 0.5, "tbsp", "c. à soupe"),
+        (["olive"], 3, "piece", "olive"),
+    ]
+
+    def _format_quantity_label(quantity: float | None, unit: str | None, display_unit: str | None) -> str | None:
+        if quantity is None or not unit:
+            return "Quantité à ajuster"
+        quantity_label = str(int(quantity)) if float(quantity).is_integer() else f"{quantity:.1f}".rstrip("0").rstrip(".")
+        label_unit = display_unit or display_unit_labels.get(unit, unit)
+        return f"{quantity_label} {label_unit}".strip()
+
+    def _parse_quantity_and_unit(quantity_raw: Any) -> tuple[float | None, str | None]:
+        if isinstance(quantity_raw, (int, float)):
+            return float(quantity_raw), "piece"
+        if not isinstance(quantity_raw, str):
+            return None, None
+        raw = quantity_raw.strip().lower()
+        if not raw:
+            return None, None
+        normalized = unicodedata.normalize("NFD", raw)
+        normalized = "".join(ch for ch in normalized if unicodedata.category(ch) != "Mn")
+        normalized = re.sub(r"[^a-z0-9\s\.,]", " ", normalized)
+        normalized = re.sub(r"\s+", " ", normalized).strip()
+        match = re.match(r"^([0-9]+(?:[\.,][0-9]+)?)\s*([a-zàâäéèêëîïôöùûüç\s]+)?$", normalized)
+        if not match:
+            return None, None
+        quantity = float(match.group(1).replace(",", "."))
+        raw_unit = (match.group(2) or "").strip()
+        if not raw_unit:
+            return quantity, "piece"
+        mapped = unit_aliases.get(raw_unit, raw_unit)
+        if mapped in normalized_units:
+            return quantity, mapped
+        return quantity, None
+
+    def _infer_quantity_and_unit(name: str, servings: int) -> tuple[float | None, str | None, str | None, bool]:
+        normalized_name = _normalize_ingredient_name(name)
+        for keywords, quantity_per_serving, unit, display_unit in per_serving_inference:
+            if any(keyword in normalized_name for keyword in keywords):
+                estimated_quantity = quantity_per_serving * max(1, servings)
+                if estimated_quantity >= 10:
+                    estimated_quantity = round(estimated_quantity)
+                else:
+                    estimated_quantity = round(estimated_quantity * 2) / 2
+                return float(estimated_quantity), unit, display_unit, True
+        return None, None, None, True
+
     normalized_stock_names = [_normalize_ingredient_name(i.get("name")) for i in stock_items if i.get("name")]
     stock_set = set(name for name in normalized_stock_names if name)
+    stock_id_map: dict[str, list[str]] = {}
+    for item in stock_items:
+        normalized_name = _normalize_ingredient_name(item.get("name"))
+        stock_id = str(item.get("_id") or item.get("id") or "").strip()
+        if normalized_name and stock_id:
+            stock_id_map.setdefault(normalized_name, []).append(stock_id)
     urgents = {
         _normalize_ingredient_name(item.get("name"))
         for item in stock_items
@@ -2156,19 +2272,53 @@ def _score_recipe_match(recipe_doc: dict[str, Any], stock_items: list[dict[str, 
 
     ingredients = recipe_doc.get("ingredients", []) or []
     required_ingredients = [i for i in ingredients if not bool(i.get("optional"))]
+    servings = int(recipe_doc.get("servings") or 2)
+    structured_ingredients: list[dict[str, Any]] = []
     available: list[str] = []
     missing: list[str] = []
     urgent_hits = 0
-    for ingredient in required_ingredients:
+    for ingredient in ingredients:
         normalized_name = _normalize_ingredient_name(ingredient.get("name"))
         if not normalized_name:
             continue
-        if normalized_name in stock_set:
+        is_optional = bool(ingredient.get("optional"))
+        is_available = normalized_name in stock_set
+        if not is_optional and is_available:
             available.append(normalized_name)
             if normalized_name in urgents:
                 urgent_hits += 1
-        else:
+        elif not is_optional:
             missing.append(normalized_name)
+
+        quantity, unit = _parse_quantity_and_unit(ingredient.get("quantity"))
+        display_unit = display_unit_labels.get(unit) if unit else None
+        is_estimated = False
+        if unit and unit not in normalized_units:
+            unit = None
+        if quantity is None or unit is None:
+            inferred_quantity, inferred_unit, inferred_display, estimated = _infer_quantity_and_unit(
+                ingredient.get("name", ""),
+                servings,
+            )
+            quantity = inferred_quantity if quantity is None else quantity
+            unit = inferred_unit if unit is None else unit
+            display_unit = inferred_display if display_unit is None else display_unit
+            is_estimated = estimated
+        matched_ids = stock_id_map.get(normalized_name, [])
+        structured_ingredients.append(
+            {
+                "name": ingredient.get("name", ""),
+                "quantity": quantity,
+                "unit": unit,
+                "display_unit": display_unit,
+                "display_label": _format_quantity_label(quantity, unit, display_unit),
+                "optional": is_optional,
+                "available": is_available,
+                "matched_stock_item_ids": matched_ids,
+                "missing_quantity": None if is_available else quantity,
+                "is_estimated": is_estimated,
+            }
+        )
 
     available_count = len(available)
     missing_count = len(missing)
@@ -2188,8 +2338,11 @@ def _score_recipe_match(recipe_doc: dict[str, Any], stock_items: list[dict[str, 
     return {
         "id": recipe_doc.get("id"),
         "title": recipe_doc.get("title"),
+        "summary": recipe_doc.get("description", ""),
         "instructions_summary": recipe_doc.get("description", ""),
         "image": recipe_doc.get("image", ""),
+        "servings": servings,
+        "ingredients": structured_ingredients,
         "duration_min": duration,
         "dish_type": recipe_doc.get("dish_type", "Plat"),
         "available_count": available_count,
@@ -2207,30 +2360,42 @@ async def _upsert_recipe_gap(
     recipe_filter: str,
     stock_items: list[dict[str, Any]],
     criteria: dict[str, Any],
+    uncovered_ingredients: list[str],
+    reference_recipe: dict[str, Any] | None = None,
 ) -> bool:
-    normalized_ingredients = sorted(
+    normalized_stock = sorted(
         {
             _normalize_ingredient_name(item.get("name"))
             for item in stock_items
             if item.get("name")
         }
     )
-    normalized_ingredients = [name for name in normalized_ingredients if name]
-    if not normalized_ingredients:
-        # Pas d'ingrédients en stock : aucun gap à signaler, pas d'e-mail.
+    normalized_stock = [name for name in normalized_stock if name]
+    normalized_uncovered = sorted({_normalize_ingredient_name(name) for name in uncovered_ingredients if name})
+    normalized_uncovered = [name for name in normalized_uncovered if name]
+    if not normalized_uncovered:
+        # Aucun ingrédient non couvert : pas de gap à signaler.
         return False
     signature = _build_gap_signature(
-        normalized_ingredients=normalized_ingredients,
+        normalized_ingredients=normalized_uncovered,
         recipe_filter=recipe_filter,
         criteria=criteria,
     )
+    used_by_reference = sorted(set(normalized_stock) - set(normalized_uncovered))
     now_iso = utc_now().isoformat()
     existing = await recipe_gap_requests_col.find_one({"signature": signature})
     if existing:
         await recipe_gap_requests_col.update_one(
             {"_id": existing["_id"]},
             {
-                "$set": {"last_seen_at": now_iso, "status": "pending"},
+                "$set": {
+                    "last_seen_at": now_iso,
+                    "status": "pending",
+                    "uncovered_ingredients": normalized_uncovered,
+                    "used_ingredients_in_reference_recipe": used_by_reference,
+                    "reference_recipe_id": reference_recipe.get("id") if reference_recipe else None,
+                    "reference_recipe_title": reference_recipe.get("title") if reference_recipe else None,
+                },
                 "$inc": {"occurrence_count": 1},
             },
         )
@@ -2243,7 +2408,11 @@ async def _upsert_recipe_gap(
         "user_id": uid,
         "filter": recipe_filter,
         "available_ingredients": [item.get("name") for item in stock_items if item.get("name")],
-        "normalized_ingredients": normalized_ingredients,
+        "normalized_ingredients": normalized_stock,
+        "uncovered_ingredients": normalized_uncovered,
+        "used_ingredients_in_reference_recipe": used_by_reference,
+        "reference_recipe_id": reference_recipe.get("id") if reference_recipe else None,
+        "reference_recipe_title": reference_recipe.get("title") if reference_recipe else None,
         "criteria": criteria,
         "signature": signature,
         "status": "pending",
@@ -2315,11 +2484,11 @@ async def get_recipe_suggestions(
     gap_logged = False
     suggest_later = False
     if not relevant:
-        openai_key = os.environ.get("KEEPEAT_OPENAI_TOKEN", "")
-        if openai_key and stock_names:
+        gemini_key = _get_recipes_ai_api_key()
+        if gemini_key and stock_names:
             try:
                 ai_raw = await asyncio.wait_for(
-                    _ai_gap_fill(stock_names, openai_key),
+                    _ai_gap_fill(stock_names, gemini_key),
                     timeout=10.0,
                 )
                 if ai_raw:
@@ -2336,12 +2505,30 @@ async def get_recipe_suggestions(
             # correspondant au filtre actif. Un stock vide ou un filtre temporel sans
             # produits expirants ne doit pas déclencher d'e-mail.
             if stock_names:
-                gap_logged = await _upsert_recipe_gap(
-                    uid=uid,
-                    recipe_filter=effective_filter,
-                    stock_items=items,
-                    criteria={"min_score": 1, "max_missing": 3},
+                normalized_stock_names = sorted(
+                    {
+                        _normalize_ingredient_name(item.get("name"))
+                        for item in items
+                        if item.get("name")
+                    }
                 )
+                normalized_stock_names = [name for name in normalized_stock_names if name]
+                reference_recipe = scored[0] if scored else None
+                used_ingredients = set(reference_recipe.get("available_ingredients", [])) if reference_recipe else set()
+                uncovered_ingredients = [
+                    ingredient for ingredient in normalized_stock_names if ingredient not in used_ingredients
+                ]
+                try:
+                    gap_logged = await _upsert_recipe_gap(
+                        uid=uid,
+                        recipe_filter=effective_filter,
+                        stock_items=items,
+                        criteria={"min_score": 1, "max_missing": 3},
+                        uncovered_ingredients=uncovered_ingredients,
+                        reference_recipe=reference_recipe,
+                    )
+                except Exception as exc:
+                    logger.warning("Recipe gap upsert failed for user=%s: %s", uid, exc)
             suggest_later = True
 
     logger.info("Recipes suggestions: filter=%s stock=%s top5=%s", recipe_filter, stock_names[:5], [match.get("title") for match in relevant])
@@ -2506,40 +2693,6 @@ async def get_recipe_by_id(
     return recipe_doc
 
 
-@api_router.post("/admin/recipes")
-async def admin_add_recipe(
-    body: Dict[str, Any],
-    admin_user: Dict[str, Any] = Depends(_require_admin_user),
-):
-    now_iso = utc_now().isoformat()
-    recipe_id = str(body.get("id") or "").strip()
-    if not recipe_id:
-        raise HTTPException(status_code=400, detail="id is required")
-    ingredients = body.get("ingredients") or []
-    if not isinstance(ingredients, list) or len(ingredients) == 0:
-        raise HTTPException(status_code=400, detail="ingredients must be a non-empty array")
-    doc = {
-        "id": recipe_id,
-        "title": str(body.get("title") or "").strip(),
-        "description": str(body.get("description") or "").strip(),
-        "dish_type": str(body.get("dish_type") or "Plat"),
-        "duration_min": int(body.get("duration_min") or 0),
-        "difficulty": str(body.get("difficulty") or "easy"),
-        "ingredients": ingredients,
-        "steps": body.get("steps") or [],
-        "tags": body.get("tags") or [],
-        "is_active": bool(body.get("is_active", True)),
-        "created_by": admin_user.get("id"),
-        "created_at": now_iso,
-        "updated_at": now_iso,
-        "usage_count": int(body.get("usage_count") or 0),
-        "view_count": int(body.get("view_count") or 0),
-    }
-    await recipes_col.update_one({"id": recipe_id}, {"$set": doc}, upsert=True)
-    await _mark_coverable_gaps_after_recipe_insert(doc)
-    return {"ok": True, "recipe_id": recipe_id}
-
-
 @api_router.post("/admin/recipe-gaps/{gap_id}/resolve")
 async def admin_resolve_recipe_gap(
     gap_id: str,
@@ -2610,17 +2763,17 @@ async def ocr_receipt_route(
         consume_quota=False,
     )
     try:
-        result = await ocr_receipt(request, current_user)
+        result = await ocr_receipt(request, current_user, normalizations_col=ocr_normalizations_col)
     except OcrApiError as exc:
-        logger.warning("OCR receipt failed for user=%s: %s", current_user["id"], exc)
+        logger.warning("OCR receipt failed for user=%s http=%s: %s", current_user["id"], exc.http_status, exc)
         await track_business_event(
             business_events_col=business_events_col,
             user_id=current_user["id"],
             event_name="ocr_scan_failed",
             event_category="ocr",
-            metadata_json={"reason": str(exc)},
+            metadata_json={"reason": str(exc), "http_status": exc.http_status},
         )
-        raise HTTPException(status_code=502, detail=str(exc))
+        raise HTTPException(status_code=exc.http_status, detail=str(exc))
     # Quota consommé APRÈS l'appel externe réussi
     await _enforce_feature_access(
         current_user=current_user,
@@ -2655,6 +2808,195 @@ async def ocr_receipt_route(
             metadata_json={"reason": "empty_or_parse_failed"},
         )
     return result
+
+
+@api_router.post("/ocr/receipt/report")
+async def report_receipt_ticket(
+    request: Request,
+    current_user: Dict[str, Any] = Depends(_get_current_user),
+):
+    """Sauvegarde un ticket de caisse non reconnu et notifie l'équipe par email (premium uniquement)."""
+    await _enforce_feature_access(current_user=current_user, feature=FEATURE_OCR, consume_quota=False)
+
+    body = await request.json()
+    image_b64: str = body.get("image", "")
+    if not image_b64:
+        raise HTTPException(status_code=400, detail="Champ 'image' manquant")
+    _MAX_IMAGE_B64_LEN = 5_500_000
+    if len(image_b64) > _MAX_IMAGE_B64_LEN:
+        raise HTTPException(status_code=413, detail="Image trop grande (max 4 MB)")
+
+    ticket_doc = {
+        "user_id": current_user["id"],
+        "user_email": current_user.get("email", ""),
+        "image_b64": image_b64,
+        "created_at": utc_now().isoformat(),
+        "status": "pending",
+        "note": "",
+        "items_added": [],
+    }
+    res = await receipt_tickets_col.insert_one(ticket_doc)
+    ticket_id = str(res.inserted_id)
+
+    html_body = f"""
+    <h2>Nouveau ticket de caisse à traiter — KeepEat</h2>
+    <p><strong>Utilisateur :</strong> {current_user.get('email', current_user['id'])}</p>
+    <p><strong>ID ticket :</strong> {ticket_id}</p>
+    <p><strong>Date :</strong> {utc_now().strftime('%d/%m/%Y %H:%M')} UTC</p>
+    <p>L'OCR n'a pas pu identifier les produits. Rendez-vous sur l'interface admin pour traiter ce ticket.</p>
+    """
+    await _send_email("keepeatfe@gmail.com", f"Ticket caisse à traiter — {current_user.get('email', ticket_id)}", html_body)
+
+    logger.info("Receipt ticket reported user=%s ticket_id=%s", current_user["id"], ticket_id)
+    return {"ok": True, "ticket_id": ticket_id}
+
+
+@api_router.get("/admin/receipt-tickets")
+async def list_receipt_tickets(
+    status: str = Query(default="pending"),
+    limit: int = Query(default=20, ge=1, le=100),
+    skip: int = Query(default=0, ge=0),
+    _admin_user: Dict[str, Any] = Depends(_require_admin_user),
+):
+    """Liste les tickets de caisse (admin uniquement)."""
+    query: Dict[str, Any] = {}
+    if status != "all":
+        query["status"] = status
+    cursor = receipt_tickets_col.find(query, {"image_b64": 0}).sort("created_at", -1).skip(skip).limit(limit)
+    docs = await cursor.to_list(length=limit)
+    total = await receipt_tickets_col.count_documents(query)
+    return {
+        "tickets": [serialize_mongo(d) for d in docs],
+        "total": total,
+        "skip": skip,
+        "limit": limit,
+    }
+
+
+@api_router.get("/admin/receipt-tickets/{ticket_id}")
+async def get_receipt_ticket(
+    ticket_id: str,
+    _admin_user: Dict[str, Any] = Depends(_require_admin_user),
+):
+    """Récupère un ticket de caisse avec son image (admin uniquement)."""
+    try:
+        oid = ObjectId(ticket_id)
+    except Exception:
+        raise HTTPException(status_code=400, detail="ID invalide")
+    doc = await receipt_tickets_col.find_one({"_id": oid})
+    if not doc:
+        raise HTTPException(status_code=404, detail="Ticket non trouvé")
+    return serialize_mongo(doc)
+
+
+class ReceiptTicketItem(BaseModel):
+    name: str
+    category: str = "autres"
+    expiry_date: Optional[str] = None
+    storageZone: Optional[str] = None
+
+
+class ProcessReceiptTicketBody(BaseModel):
+    items: List[ReceiptTicketItem]
+    note: str = ""
+
+
+@api_router.post("/admin/receipt-tickets/{ticket_id}/process")
+async def process_receipt_ticket(
+    ticket_id: str,
+    body: ProcessReceiptTicketBody,
+    _admin_user: Dict[str, Any] = Depends(_require_admin_user),
+):
+    """Ajoute manuellement des produits au stock de l'utilisateur et clôture le ticket (admin uniquement)."""
+    try:
+        oid = ObjectId(ticket_id)
+    except Exception:
+        raise HTTPException(status_code=400, detail="ID invalide")
+    doc = await receipt_tickets_col.find_one({"_id": oid})
+    if not doc:
+        raise HTTPException(status_code=404, detail="Ticket non trouvé")
+
+    user_id = doc["user_id"]
+    added_items = []
+    now_iso = utc_now().isoformat()
+
+    for item in body.items:
+        food_cat = item.category if item.category in _SHELF_BY_CATEGORY else "autres"
+        stock_doc = {
+            "user_id": user_id,
+            "name": item.name,
+            "category": item.category,
+            "food_category": food_cat,
+            "expiry_date": item.expiry_date,
+            "quantity": None,
+            "barcode": None,
+            "brand": None,
+            "image_url": None,
+            "notes": None,
+            "storageZone": item.storageZone,
+            "added_date": now_iso,
+            "status": "active",
+            "consumed_date": None,
+            "thrown_date": None,
+        }
+        res = await stock_col.insert_one(stock_doc)
+        added_items.append({"id": str(res.inserted_id), "name": item.name})
+
+    await receipt_tickets_col.update_one(
+        {"_id": oid},
+        {"$set": {
+            "status": "processed",
+            "processed_at": now_iso,
+            "processed_by": _admin_user.get("email", "admin"),
+            "note": body.note,
+            "items_added": [{"name": i.name, "category": i.category} for i in body.items],
+        }},
+    )
+
+    logger.info(
+        "Receipt ticket processed ticket_id=%s user_id=%s items=%d by=%s",
+        ticket_id, user_id, len(added_items), _admin_user.get("email", "admin"),
+    )
+    return {"ok": True, "ticket_id": ticket_id, "items_added": len(added_items)}
+
+
+@api_router.post("/admin/receipt-tickets/{ticket_id}/dismiss")
+async def dismiss_receipt_ticket(
+    ticket_id: str,
+    _admin_user: Dict[str, Any] = Depends(_require_admin_user),
+):
+    """Marque un ticket comme ignoré (admin uniquement)."""
+    try:
+        oid = ObjectId(ticket_id)
+    except Exception:
+        raise HTTPException(status_code=400, detail="ID invalide")
+    res = await receipt_tickets_col.update_one(
+        {"_id": oid},
+        {"$set": {"status": "dismissed", "dismissed_at": utc_now().isoformat(), "dismissed_by": _admin_user.get("email", "admin")}},
+    )
+    if res.matched_count == 0:
+        raise HTTPException(status_code=404, detail="Ticket non trouvé")
+    return {"ok": True}
+
+
+@api_router.post("/admin/receipt-tickets/{ticket_id}/reopen")
+async def reopen_receipt_ticket(
+    ticket_id: str,
+    _admin_user: Dict[str, Any] = Depends(_require_admin_user),
+):
+    """Remet un ticket en attente (annule traitement ou ignoré)."""
+    try:
+        oid = ObjectId(ticket_id)
+    except Exception:
+        raise HTTPException(status_code=400, detail="ID invalide")
+    res = await receipt_tickets_col.update_one(
+        {"_id": oid},
+        {"$set": {"status": "pending"}, "$unset": {"processed_at": "", "dismissed_at": "", "items_added": ""}},
+    )
+    if res.matched_count == 0:
+        raise HTTPException(status_code=404, detail="Ticket non trouvé")
+    logger.info("Receipt ticket reopened ticket_id=%s by=%s", ticket_id, _admin_user.get("email", "admin"))
+    return {"ok": True}
 
 
 # -----------------------------------------------------------------------------
@@ -2820,8 +3162,8 @@ async def get_gamification(
 
 # ── Gap-fill IA : génération automatique quand le catalogue est vide ──────────
 
-async def _ai_gap_fill(stock_names: list[str], openai_key: str) -> dict | None:
-    """Appelle OpenAI pour générer une recette française à partir des articles en stock.
+async def _ai_gap_fill(stock_names: list[str], gemini_key: str) -> dict | None:
+    """Appelle Gemini pour générer une recette française à partir des articles en stock.
     Retourne le premier dict recette valide, ou None en cas d'échec.
     Timeout géré par l'appelant via asyncio.wait_for.
     """
@@ -2830,21 +3172,18 @@ async def _ai_gap_fill(stock_names: list[str], openai_key: str) -> dict | None:
     try:
         async with httpx.AsyncClient(timeout=12) as http:
             r = await http.post(
-                "https://api.openai.com/v1/chat/completions",
-                headers={"Authorization": f"Bearer {openai_key}", "Content-Type": "application/json"},
+                f"https://generativelanguage.googleapis.com/v1beta/models/gemini-1.5-flash:generateContent?key={gemini_key}",
+                headers={"Content-Type": "application/json"},
                 json={
-                    "model": "gpt-4o-mini",
-                    "max_tokens": 600,
-                    "messages": [
-                        {"role": "system", "content": _AI_RECIPE_SYSTEM},
-                        {"role": "user", "content": prompt},
-                    ],
+                    "systemInstruction": {"parts": [{"text": _AI_RECIPE_SYSTEM}]},
+                    "contents": [{"parts": [{"text": prompt}]}],
+                    "generationConfig": {"maxOutputTokens": 600},
                 },
             )
             if r.status_code != 200:
-                logger.warning("AI gap fill OpenAI HTTP %s: %s", r.status_code, r.text[:200])
+                logger.warning("AI gap fill Gemini HTTP %s: %s", r.status_code, r.text[:200])
                 return None
-            text = r.json()["choices"][0]["message"]["content"].strip()
+            text = r.json()["candidates"][0]["content"]["parts"][0]["text"].strip()
     except Exception as exc:
         logger.warning("AI gap fill request failed: %s", exc)
         return None
@@ -2941,10 +3280,29 @@ async def _save_ai_recipe_to_stores(ai_recipe: dict, *, stock_names: list[str]) 
     except Exception as exc:
         logger.warning("AI gap fill: marquage gaps échoué: %s", exc)
 
+    structured_ingredients = [
+        {
+            "name": ingredient,
+            "quantity": None,
+            "unit": None,
+            "display_unit": None,
+            "display_label": "Quantité à ajuster",
+            "optional": False,
+            "available": True,
+            "matched_stock_item_ids": [],
+            "missing_quantity": None,
+            "is_estimated": True,
+        }
+        for ingredient in ingredients_used
+    ]
+
     return {
         "id": recipe_id,
         "title": title,
+        "summary": summary,
         "description": summary,
+        "servings": 2,
+        "ingredients": structured_ingredients,
         "duration_min": prep_time,
         "dish_type": "plat",
         "available_count": len(ingredients_used),
@@ -3017,6 +3375,31 @@ _ai_recipe_cache: dict[str, dict] = {}
 _AI_CACHE_MAX_SIZE = 500
 
 
+def _get_recipes_ai_api_key() -> str:
+    """Retourne la clé provider IA recettes (Gemini)."""
+    return os.environ.get("GEMINI_RECIPES_API_KEY", "").strip()
+
+
+def _extract_ai_recipe_payload_text(payload: dict[str, Any]) -> str:
+    """Extrait le texte JSON de réponse IA pour les formats Gemini et legacy OpenAI."""
+    candidates = payload.get("candidates")
+    if isinstance(candidates, list) and candidates:
+        parts = candidates[0].get("content", {}).get("parts", [])
+        if isinstance(parts, list) and parts:
+            text = parts[0].get("text", "")
+            if isinstance(text, str) and text.strip():
+                return text.strip()
+
+    choices = payload.get("choices")
+    if isinstance(choices, list) and choices:
+        message = choices[0].get("message", {})
+        content = message.get("content", "")
+        if isinstance(content, str) and content.strip():
+            return content.strip()
+
+    raise KeyError("missing_ai_response_text")
+
+
 @api_router.get("/recipes/ai")
 async def get_ai_recipes(
     response: Response = None,
@@ -3035,8 +3418,8 @@ async def get_ai_recipes(
     resolved_suggestion_style = resolve_suggestion_style(suggestion_style)
     include_meta_enabled = include_meta is True or str(include_meta).lower() in {"1", "true", "yes"}
     logger.debug("RECIPES_DEBUG ai called — user=%s", uid)
-    openai_key = os.environ.get("KEEPEAT_OPENAI_TOKEN", "")
-    if not openai_key:
+    gemini_key = _get_recipes_ai_api_key()
+    if not gemini_key:
         raise HTTPException(status_code=503, detail="IA non configurée")
 
     # Cache 1h par utilisateur
@@ -3091,28 +3474,22 @@ async def get_ai_recipes(
     try:
         async with httpx.AsyncClient(timeout=30) as http:
             r = await http.post(
-                "https://api.openai.com/v1/chat/completions",
-                headers={
-                    "Authorization": f"Bearer {openai_key}",
-                    "Content-Type": "application/json",
-                },
+                f"https://generativelanguage.googleapis.com/v1beta/models/gemini-1.5-flash:generateContent?key={gemini_key}",
+                headers={"Content-Type": "application/json"},
                 json={
-                    "model": "gpt-4o-mini",
-                    "max_tokens": 800,
-                    "messages": [
-                        {"role": "system", "content": _AI_RECIPE_SYSTEM},
-                        {"role": "user", "content": prompt},
-                    ],
+                    "systemInstruction": {"parts": [{"text": _AI_RECIPE_SYSTEM}]},
+                    "contents": [{"parts": [{"text": prompt}]}],
+                    "generationConfig": {"maxOutputTokens": 800},
                 },
             )
             if r.status_code != 200:
-                logger.warning("OpenAI recipes/ai error %s: %s", r.status_code, r.text[:200])
+                logger.warning("Gemini recipes/ai error %s: %s", r.status_code, r.text[:200])
                 raise HTTPException(status_code=502, detail="Erreur IA externe")
-            text = r.json()["choices"][0]["message"]["content"].strip()
+            text = _extract_ai_recipe_payload_text(r.json())
     except HTTPException:
         raise
     except Exception as exc:
-        logger.warning("OpenAI recipes/ai request failed: %s", exc)
+        logger.warning("Gemini recipes/ai request failed: %s", exc)
         raise HTTPException(status_code=502, detail="Erreur réseau IA")
 
     # Nettoyage du bloc markdown éventuel
@@ -3126,7 +3503,7 @@ async def get_ai_recipes(
     try:
         recipes = json.loads(text)
     except Exception:
-        logger.warning("OpenAI recipes/ai invalid JSON: %s", text[:200])
+        logger.warning("Gemini recipes/ai invalid JSON: %s", text[:200])
         raise HTTPException(status_code=502, detail="Réponse IA invalide")
 
     for recipe in recipes:
@@ -3301,7 +3678,8 @@ async def admin_monitoring_health(
         db_ok = False
 
     external_status = {
-        "openai_configured": bool(os.getenv("KEEPEAT_OPENAI_TOKEN")),
+        "gemini_ocr_configured": bool(os.getenv("GEMINI_OCR_API_KEY")),
+        "gemini_recipes_configured": bool(_get_recipes_ai_api_key()),
         "brevo_configured": bool(os.getenv("BREVO_API_KEY")),
         "openfoodfacts_configured": bool(os.getenv("OPENFOODFACTS_USER_AGENT", "KeepEat/1.0")),
     }
@@ -3324,6 +3702,7 @@ async def admin_monitoring_health(
 
 @api_router.get("/admin/monitoring/dashboard")
 async def admin_monitoring_dashboard(
+    days: int = Query(7, ge=1, le=90),
     _admin_user: Dict[str, Any] = Depends(_require_admin_user),
 ):
     kpis = await build_monitoring_kpis(
@@ -3333,12 +3712,13 @@ async def admin_monitoring_dashboard(
     )
     apis = await summarize_api_metrics(
         api_request_logs_col=api_request_logs_col,
-        start_iso=(utc_now() - timedelta(days=7)).isoformat(),
+        start_iso=(utc_now() - timedelta(days=days)).isoformat(),
         end_iso=utc_now().isoformat(),
         limit=10,
     )
     return {
         "generated_at": utc_now().isoformat(),
+        "days": days,
         "users": kpis["users"],
         "subscriptions": kpis["subscriptions"],
         "top_api_issues": apis["highest_error_rate"][:5],
@@ -3474,6 +3854,99 @@ async def admin_monitoring_events(
         "page_size": page_size,
         "total": total,
         "events": [serialize_mongo(r) for r in rows],
+    }
+
+
+@api_router.get("/admin/monitoring/trends")
+async def admin_monitoring_trends(
+    days: int = Query(30, ge=1, le=90),
+    _admin_user: Dict[str, Any] = Depends(_require_admin_user),
+):
+    """Séries temporelles pour les graphiques du dashboard admin."""
+    now = utc_now()
+    iso_start = (now - timedelta(days=days)).isoformat()
+    max_points = days + 1
+
+    # DAU quotidiens (utilisateurs distincts par jour)
+    dau_pipeline = [
+        {"$match": {"created_at": {"$gte": iso_start}, "user_id": {"$nin": [None, ""]}}},
+        {"$group": {"_id": {"$substr": ["$created_at", 0, 10]}, "users": {"$addToSet": "$user_id"}}},
+        {"$project": {"date": "$_id", "count": {"$size": "$users"}}},
+        {"$sort": {"date": 1}},
+    ]
+    dau_rows = await api_request_logs_col.aggregate(dau_pipeline).to_list(length=max_points)
+
+    # Nouveaux utilisateurs par jour
+    new_users_pipeline = [
+        {"$match": {"created_at": {"$gte": iso_start}}},
+        {"$group": {"_id": {"$substr": ["$created_at", 0, 10]}, "count": {"$sum": 1}}},
+        {"$sort": {"_id": 1}},
+    ]
+    new_users_rows = await users_col.aggregate(new_users_pipeline).to_list(length=max_points)
+
+    # Erreurs API par jour
+    errors_pipeline = [
+        {"$match": {"created_at": {"$gte": iso_start}, "status_code": {"$gte": 400}}},
+        {"$group": {"_id": {"$substr": ["$created_at", 0, 10]}, "count": {"$sum": 1}}},
+        {"$sort": {"_id": 1}},
+    ]
+    errors_rows = await api_request_logs_col.aggregate(errors_pipeline).to_list(length=max_points)
+
+    # Coûts services par jour
+    costs_pipeline = [
+        {"$match": {"created_at": {"$gte": iso_start}}},
+        {"$group": {"_id": {"$substr": ["$created_at", 0, 10]}, "cost": {"$sum": "$estimated_cost"}}},
+        {"$sort": {"_id": 1}},
+    ]
+    costs_rows = await service_usage_logs_col.aggregate(costs_pipeline).to_list(length=max_points)
+
+    return {
+        "generated_at": now.isoformat(),
+        "days": days,
+        "dau": [{"date": r["date"], "count": r["count"]} for r in dau_rows],
+        "new_users": [{"date": r["_id"], "count": r["count"]} for r in new_users_rows],
+        "errors": [{"date": r["_id"], "count": r["count"]} for r in errors_rows],
+        "costs": [{"date": r["_id"], "cost": round(float(r["cost"]), 6)} for r in costs_rows],
+    }
+
+
+@api_router.get("/admin/monitoring/api-drill")
+async def admin_monitoring_api_drill(
+    endpoint_key: str = Query(...),
+    days: int = Query(7, ge=1, le=90),
+    _admin_user: Dict[str, Any] = Depends(_require_admin_user),
+):
+    """Détail d'un endpoint : breakdown par status code + dernières erreurs."""
+    start_iso = (utc_now() - timedelta(days=days)).isoformat()
+    match = {"endpoint_key": endpoint_key, "created_at": {"$gte": start_iso}}
+
+    status_pipeline = [
+        {"$match": match},
+        {"$group": {
+            "_id": "$status_code",
+            "count": {"$sum": 1},
+            "avg_ms": {"$avg": "$duration_ms"},
+        }},
+        {"$sort": {"count": -1}},
+        {"$limit": 10},
+    ]
+    status_rows = await api_request_logs_col.aggregate(status_pipeline).to_list(length=10)
+
+    last_errors = await api_request_logs_col.find(
+        {**match, "status_code": {"$gte": 400}},
+        projection={"method": 1, "path": 1, "status_code": 1, "duration_ms": 1, "error_type": 1, "created_at": 1},
+    ).sort("created_at", -1).limit(5).to_list(length=5)
+
+    total = await api_request_logs_col.count_documents(match)
+    return {
+        "endpoint_key": endpoint_key,
+        "days": days,
+        "total_calls": total,
+        "by_status": [
+            {"status_code": r["_id"], "count": r["count"], "avg_ms": round(float(r.get("avg_ms") or 0), 1)}
+            for r in status_rows
+        ],
+        "last_errors": [serialize_mongo(e) for e in last_errors],
     }
 
 
@@ -3784,6 +4257,10 @@ _ADMIN_RECIPES_HTML = """<!DOCTYPE html>
 <div class="header">
   <span>🥗</span>
   <h1>KeepEat — Import de recettes</h1>
+  <nav style="display:flex;gap:8px;margin-left:auto;align-items:center">
+    <a href="/admin/dashboard" style="color:#fff;font-size:13px;opacity:.8;text-decoration:none;padding:4px 10px;border-radius:6px;border:1px solid rgba(255,255,255,.3)">Dashboard</a>
+    <a href="/admin/tickets" style="color:#fff;font-size:13px;opacity:.8;text-decoration:none;padding:4px 10px;border-radius:6px;border:1px solid rgba(255,255,255,.3)">Tickets</a>
+  </nav>
   <span id="logged-info" class="logged-as" style="display:none"></span>
   <a id="btn-logout" class="logout" style="display:none" onclick="logout()">Deconnexion</a>
 </div>
@@ -3918,6 +4395,916 @@ document.getElementById('password').addEventListener('keydown', e => { if(e.key=
 async def admin_recipes_page():
     """Page web d'import de recettes pour les administrateurs KeepEat."""
     return HTMLResponse(content=_ADMIN_RECIPES_HTML)
+
+
+# ── Page admin : traitement tickets de caisse ─────────────────────────────────
+
+_ADMIN_TICKETS_HTML = """<!DOCTYPE html>
+<html lang="fr">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>KeepEat — Tickets de caisse</title>
+<style>
+  *{box-sizing:border-box;margin:0;padding:0}
+  body{font-family:system-ui,sans-serif;background:#f0fdf4;color:#1a1a1a;min-height:100vh}
+  .header{background:#16a34a;color:#fff;padding:16px 24px;display:flex;align-items:center;gap:12px}
+  .header h1{font-size:18px;font-weight:700}
+  .header nav{display:flex;gap:8px;margin-left:auto;align-items:center}
+  .header nav a{color:#fff;font-size:13px;opacity:.8;text-decoration:none;padding:4px 10px;border-radius:6px;border:1px solid rgba(255,255,255,.3)}
+  .header nav a:hover{opacity:1;background:rgba(255,255,255,.15)}
+  .logged-as{font-size:12px;color:rgba(255,255,255,.75);margin-right:4px}
+  a.logout{font-size:12px;color:#fca5a5;cursor:pointer;text-decoration:underline}
+  .container{max-width:1100px;margin:28px auto;padding:0 16px;display:flex;flex-direction:column;gap:16px}
+  .card{background:#fff;border-radius:12px;border:1px solid #d1fae5;padding:24px}
+  .card h2{font-size:15px;font-weight:700;color:#166534;margin-bottom:16px}
+  label{display:block;font-size:13px;font-weight:600;color:#374151;margin-bottom:6px}
+  input[type=email],input[type=password],input[type=text]{width:100%;padding:10px 12px;border:1px solid #d1d5db;border-radius:8px;font-size:14px;outline:none}
+  input:focus{border-color:#16a34a;box-shadow:0 0 0 2px #bbf7d0}
+  .row{display:grid;grid-template-columns:1fr 1fr;gap:12px}
+  button{background:#16a34a;color:#fff;border:none;border-radius:8px;padding:10px 20px;font-size:14px;font-weight:700;cursor:pointer;transition:.15s}
+  button:hover{background:#15803d}
+  button.secondary{background:#fff;color:#374151;border:1px solid #d1d5db}
+  button.secondary:hover{background:#f9fafb}
+  button.danger{background:#ef4444}
+  button.danger:hover{background:#dc2626}
+  button:disabled{opacity:.5;cursor:not-allowed}
+  .result{border-radius:8px;padding:12px 16px;font-size:13px;line-height:1.6;margin-top:12px}
+  .result.success{background:#f0fdf4;border:1px solid #86efac;color:#166534}
+  .result.error{background:#fef2f2;border:1px solid #fca5a5;color:#dc2626}
+  .result.info{background:#eff6ff;border:1px solid #93c5fd;color:#1d4ed8}
+  /* Filters */
+  .filter-bar{display:flex;gap:8px;flex-wrap:wrap;align-items:center}
+  .filter-btn{padding:6px 14px;border-radius:999px;border:1.5px solid #d1d5db;background:#fff;font-size:13px;font-weight:700;color:#6b7280;cursor:pointer;transition:.15s}
+  .filter-btn:hover{border-color:#16a34a;color:#166534}
+  .filter-btn.active{border-color:#16a34a;background:#f0fdf4;color:#166534}
+  .filter-count{font-size:12px;color:#9ca3af;margin-left:auto}
+  /* Tickets list */
+  .tickets-grid{display:flex;flex-direction:column;gap:10px}
+  .ticket-card{background:#fff;border-radius:10px;border:1.5px solid #e5e7eb;padding:14px 16px;display:flex;align-items:center;gap:12px;cursor:pointer;transition:.15s}
+  .ticket-card:hover{border-color:#86efac;box-shadow:0 2px 8px rgba(0,0,0,.07)}
+  .ticket-dot{width:12px;height:12px;border-radius:50%;flex-shrink:0}
+  .ticket-info{flex:1;min-width:0}
+  .ticket-email{font-size:14px;font-weight:700;color:#111827;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+  .ticket-meta{font-size:12px;color:#6b7280;margin-top:2px}
+  .ticket-badge{font-size:11px;font-weight:700;padding:3px 10px;border-radius:999px;flex-shrink:0}
+  /* Modal */
+  .modal-overlay{position:fixed;inset:0;background:rgba(0,0,0,.55);display:flex;align-items:flex-start;justify-content:center;padding:32px 16px;z-index:100;overflow-y:auto}
+  .modal{background:#fff;border-radius:16px;width:100%;max-width:780px;overflow:hidden;box-shadow:0 20px 60px rgba(0,0,0,.18)}
+  .modal-header{background:#f0fdf4;padding:16px 20px;display:flex;align-items:center;gap:10px;border-bottom:1px solid #d1fae5}
+  .modal-header h3{font-size:16px;font-weight:800;color:#111827;flex:1}
+  .modal-close{background:none;border:none;font-size:22px;color:#9ca3af;cursor:pointer;padding:0 4px;line-height:1}
+  .modal-close:hover{color:#374151}
+  .modal-body{padding:20px;display:grid;grid-template-columns:1fr 1fr;gap:20px}
+  @media(max-width:640px){.modal-body{grid-template-columns:1fr}}
+  .receipt-img{width:100%;border-radius:10px;border:1px solid #e5e7eb;max-height:420px;object-fit:contain;background:#f9fafb}
+  .receipt-placeholder{width:100%;height:200px;border-radius:10px;border:1.5px dashed #d1d5db;display:flex;align-items:center;justify-content:center;color:#9ca3af;font-size:14px}
+  .form-section{display:flex;flex-direction:column;gap:12px}
+  .items-list{display:flex;flex-direction:column;gap:10px;max-height:300px;overflow-y:auto}
+  .item-row{background:#f9fafb;border-radius:8px;padding:10px;border:1px solid #e5e7eb;display:flex;flex-direction:column;gap:8px}
+  .item-row-top{display:flex;gap:8px}
+  .item-row-top input{flex:1;padding:8px 10px;border:1px solid #d1d5db;border-radius:6px;font-size:13px}
+  .remove-btn{background:#fee2e2;color:#ef4444;border:none;border-radius:6px;padding:0 10px;font-weight:700;cursor:pointer;font-size:16px}
+  .remove-btn:hover{background:#fecaca}
+  .cats{display:flex;gap:5px;flex-wrap:wrap}
+  .cat-btn{padding:3px 9px;border-radius:999px;border:1px solid #e5e7eb;background:#fff;font-size:11px;font-weight:600;color:#6b7280;cursor:pointer}
+  .cat-btn:hover{border-color:#16a34a;color:#166534}
+  .cat-btn.active{border-color:#16a34a;background:#dcfce7;color:#166534}
+  .expiry-input{width:100%;padding:7px 10px;border:1px solid #d1d5db;border-radius:6px;font-size:12px;color:#374151}
+  .add-item-btn{border:1.5px dashed #86efac;background:#f0fdf4;color:#166534;font-size:13px;font-weight:700;border-radius:8px;padding:10px;cursor:pointer;width:100%;text-align:center}
+  .add-item-btn:hover{background:#dcfce7}
+  .note-input{width:100%;padding:10px;border:1px solid #d1d5db;border-radius:8px;font-size:13px;resize:vertical;min-height:60px;outline:none}
+  .note-input:focus{border-color:#16a34a;box-shadow:0 0 0 2px #bbf7d0}
+  .action-row{display:flex;gap:10px;margin-top:4px}
+  .action-row button{flex:1}
+  /* Status colors */
+  .dot-pending{background:#f59e0b}
+  .dot-processed{background:#16a34a}
+  .dot-dismissed{background:#9ca3af}
+  .badge-pending{background:#fef3c7;color:#92400e}
+  .badge-processed{background:#dcfce7;color:#166534}
+  .badge-dismissed{background:#f3f4f6;color:#6b7280}
+  /* Processed info */
+  .processed-banner{background:#f0fdf4;border:1px solid #bbf7d0;border-radius:8px;padding:12px 14px;font-size:13px;color:#166534}
+  .items-added-list{margin-top:8px;font-size:12px;color:#374151;list-style:disc;padding-left:18px}
+  /* Loader */
+  .spinner{display:inline-block;width:18px;height:18px;border:2.5px solid rgba(255,255,255,.4);border-top-color:#fff;border-radius:50%;animation:spin .7s linear infinite;vertical-align:middle}
+  @keyframes spin{to{transform:rotate(360deg)}}
+  #login-section{display:block}
+  #tickets-section{display:none}
+</style>
+</head>
+<body>
+<div class="header">
+  <span>🧾</span>
+  <h1>KeepEat — Tickets de caisse</h1>
+  <nav>
+    <a href="/admin/dashboard">Dashboard</a>
+    <a href="/admin/recipes">Recettes</a>
+    <span id="logged-info" class="logged-as" style="display:none"></span>
+    <a id="btn-logout" class="logout" style="display:none" onclick="logout()">Déconnexion</a>
+  </nav>
+</div>
+<div class="container">
+
+  <!-- LOGIN -->
+  <div class="card" id="login-section">
+    <h2>Connexion admin</h2>
+    <div class="row" style="margin-bottom:12px">
+      <div><label>Email</label><input id="email" type="email" placeholder="admin@example.com" autocomplete="username"></div>
+      <div><label>Mot de passe</label><input id="password" type="password" placeholder="••••••••" autocomplete="current-password"></div>
+    </div>
+    <button onclick="doLogin()">Se connecter</button>
+    <div id="login-result"></div>
+  </div>
+
+  <!-- TICKETS -->
+  <div id="tickets-section">
+    <div class="card">
+      <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:14px">
+        <h2 style="margin:0">Tickets de caisse</h2>
+        <button class="secondary" onclick="loadTickets()" style="padding:7px 14px;font-size:13px">Actualiser</button>
+      </div>
+      <div class="filter-bar" style="margin-bottom:14px">
+        <button class="filter-btn active" data-status="pending"   onclick="setFilter('pending')">En attente</button>
+        <button class="filter-btn"        data-status="processed" onclick="setFilter('processed')">Traités</button>
+        <button class="filter-btn"        data-status="dismissed" onclick="setFilter('dismissed')">Ignorés</button>
+        <button class="filter-btn"        data-status="all"       onclick="setFilter('all')">Tous</button>
+        <span class="filter-count" id="filter-count"></span>
+      </div>
+      <div class="tickets-grid" id="tickets-list">
+        <div class="result info">Chargement des tickets...</div>
+      </div>
+      <div id="list-result"></div>
+    </div>
+  </div>
+
+</div>
+
+<!-- MODAL -->
+<div class="modal-overlay" id="modal-overlay" style="display:none" onclick="closeModal(event)">
+  <div class="modal" id="modal-box">
+    <div class="modal-header">
+      <h3 id="modal-title">Ticket</h3>
+      <button class="modal-close" onclick="closeModal()">×</button>
+    </div>
+    <div class="modal-body" id="modal-body">
+      <div class="result info">Chargement...</div>
+    </div>
+  </div>
+</div>
+
+<script>
+const CATS = ['frais','proteines','legumes','feculents','desserts','boissons','epicerie','autres'];
+let token = localStorage.getItem('keepeat_admin_token');
+let userEmail = localStorage.getItem('keepeat_admin_email');
+let currentFilter = 'pending';
+let currentTicketId = null;
+
+if (token) showTicketsSection();
+
+function showTicketsSection() {
+  document.getElementById('login-section').style.display = 'none';
+  document.getElementById('tickets-section').style.display = 'block';
+  const info = document.getElementById('logged-info');
+  info.textContent = userEmail || 'admin';
+  info.style.display = 'inline';
+  document.getElementById('btn-logout').style.display = 'inline';
+  loadTickets();
+}
+
+async function doLogin() {
+  const email = document.getElementById('email').value.trim();
+  const password = document.getElementById('password').value;
+  const res = document.getElementById('login-result');
+  if (!email || !password) { res.innerHTML = '<div class="result error">Email et mot de passe requis.</div>'; return; }
+  try {
+    const r = await fetch('/api/auth/login', {method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({email,password})});
+    const data = await r.json();
+    if (!r.ok) { res.innerHTML = '<div class="result error">' + (data.detail || 'Identifiants incorrects.') + '</div>'; return; }
+    token = data.access_token;
+    localStorage.setItem('keepeat_admin_token', token);
+    localStorage.setItem('keepeat_admin_email', email);
+    userEmail = email;
+    showTicketsSection();
+  } catch(e) { res.innerHTML = '<div class="result error">Erreur réseau : ' + e.message + '</div>'; }
+}
+
+function logout() {
+  localStorage.removeItem('keepeat_admin_token');
+  localStorage.removeItem('keepeat_admin_email');
+  token = null;
+  document.getElementById('login-section').style.display = 'block';
+  document.getElementById('tickets-section').style.display = 'none';
+  document.getElementById('logged-info').style.display = 'none';
+  document.getElementById('btn-logout').style.display = 'none';
+}
+
+function setFilter(status) {
+  currentFilter = status;
+  document.querySelectorAll('.filter-btn').forEach(b => {
+    b.classList.toggle('active', b.dataset.status === status);
+  });
+  loadTickets();
+}
+
+async function loadTickets() {
+  const list = document.getElementById('tickets-list');
+  list.innerHTML = '<div class="result info">Chargement...</div>';
+  document.getElementById('list-result').innerHTML = '';
+  try {
+    const r = await fetch('/api/admin/receipt-tickets?status=' + currentFilter + '&limit=50&skip=0', {
+      headers: {'Authorization':'Bearer '+token}
+    });
+    if (r.status === 401) { logout(); return; }
+    const data = await r.json();
+    document.getElementById('filter-count').textContent = data.total + ' ticket' + (data.total > 1 ? 's' : '');
+    if (data.tickets.length === 0) {
+      list.innerHTML = '<div class="result info">Aucun ticket dans cette catégorie.</div>';
+      return;
+    }
+    list.innerHTML = data.tickets.map(t => {
+      const dotClass = 'dot-' + t.status;
+      const badgeClass = 'badge-' + t.status;
+      const labels = {pending:'En attente', processed:'Traité', dismissed:'Ignoré'};
+      const date = new Date(t.created_at).toLocaleString('fr-FR');
+      const itemsInfo = t.status === 'processed' && t.items_added && t.items_added.length > 0
+        ? '<span style="font-size:11px;color:#16a34a;margin-left:8px">✓ ' + t.items_added.length + ' produit(s) ajouté(s)</span>'
+        : '';
+      return '<div class="ticket-card" onclick="openTicket(\'' + t.id + '\')">'
+        + '<div class="ticket-dot ' + dotClass + '"></div>'
+        + '<div class="ticket-info">'
+        + '<div class="ticket-email">' + escHtml(t.user_email || t.user_id) + '</div>'
+        + '<div class="ticket-meta">' + date + itemsInfo + '</div>'
+        + '</div>'
+        + '<span class="ticket-badge ' + badgeClass + '">' + (labels[t.status] || t.status) + '</span>'
+        + '</div>';
+    }).join('');
+  } catch(e) {
+    list.innerHTML = '<div class="result error">Erreur : ' + e.message + '</div>';
+  }
+}
+
+async function openTicket(ticketId) {
+  currentTicketId = ticketId;
+  const overlay = document.getElementById('modal-overlay');
+  const body = document.getElementById('modal-body');
+  const title = document.getElementById('modal-title');
+  title.textContent = 'Chargement…';
+  body.innerHTML = '<div style="padding:20px"><div class="result info">Chargement du ticket...</div></div>';
+  overlay.style.display = 'flex';
+
+  try {
+    const r = await fetch('/api/admin/receipt-tickets/' + ticketId, {
+      headers: {'Authorization':'Bearer '+token}
+    });
+    if (r.status === 401) { logout(); closeModal(); return; }
+    const ticket = await r.json();
+    title.textContent = 'Ticket — ' + (ticket.user_email || ticket.user_id);
+    renderModal(ticket);
+  } catch(e) {
+    body.innerHTML = '<div style="padding:20px"><div class="result error">Erreur : ' + e.message + '</div></div>';
+  }
+}
+
+function renderModal(ticket) {
+  const body = document.getElementById('modal-body');
+  const date = new Date(ticket.created_at).toLocaleString('fr-FR');
+  const imgHtml = ticket.image_b64
+    ? '<img class="receipt-img" src="data:image/jpeg;base64,' + ticket.image_b64 + '" alt="Ticket de caisse">'
+    : '<div class="receipt-placeholder">Pas d\'image disponible</div>';
+
+  let rightPanel = '';
+  if (ticket.status !== 'pending') {
+    // Read-only view for processed/dismissed
+    const labels = {processed:'Traité ✓', dismissed:'Ignoré'};
+    let itemsList = '';
+    if (ticket.items_added && ticket.items_added.length > 0) {
+      itemsList = '<ul class="items-added-list">' + ticket.items_added.map(i => '<li>' + escHtml(i.name) + ' <em>(' + escHtml(i.category) + ')</em></li>').join('') + '</ul>';
+    }
+    rightPanel = '<div class="form-section">'
+      + '<div class="processed-banner"><strong>' + (labels[ticket.status] || ticket.status) + '</strong>'
+      + (ticket.note ? '<br>' + escHtml(ticket.note) : '')
+      + (itemsList ? '<br>' + itemsList : '')
+      + '</div>'
+      + (ticket.status === 'processed' ? '' : '<div style="margin-top:12px"><button onclick="reopenTicket(\'' + ticket.id + '\')">Remettre en attente</button></div>')
+      + '</div>';
+  } else {
+    // Editable form
+    rightPanel = '<div class="form-section">'
+      + '<div style="font-size:13px;font-weight:700;color:#374151;margin-bottom:4px">Produits à ajouter au stock</div>'
+      + '<div class="items-list" id="items-list"><div class="item-row">' + buildItemRow(0) + '</div></div>'
+      + '<button class="add-item-btn" onclick="addItemRow()">+ Ajouter un produit</button>'
+      + '<div>'
+      + '<label style="margin-top:4px">Note admin (optionnel)</label>'
+      + '<textarea class="note-input" id="admin-note" placeholder="Commentaire interne..."></textarea>'
+      + '</div>'
+      + '<div class="action-row">'
+      + '<button id="btn-process" onclick="processTicket()">Valider et ajouter au stock</button>'
+      + '<button class="danger" onclick="dismissTicket()">Ignorer</button>'
+      + '</div>'
+      + '<div id="modal-result"></div>'
+      + '</div>';
+  }
+
+  body.innerHTML = '<div>' + imgHtml + '</div>' + rightPanel;
+  initItemRows();
+}
+
+let itemCount = 1;
+
+const ZONES = [{k:'frigo',l:'❄️ Frigo'},{k:'placard',l:'🏠 Placard'},{k:'congelateur',l:'🧊 Congélo'}];
+
+function buildItemRow(idx) {
+  return '<div class="item-row-top">'
+    + '<input type="text" id="item-name-' + idx + '" placeholder="Nom du produit" oninput="syncItems()">'
+    + '<button class="remove-btn" onclick="removeItemRow(' + idx + ')">×</button>'
+    + '</div>'
+    + '<div class="cats" id="cats-' + idx + '">'
+    + CATS.map(c => '<button class="cat-btn' + (c === 'autres' ? ' active' : '') + '" data-cat="' + c + '" data-idx="' + idx + '" onclick="selectCat(this)">' + c + '</button>').join('')
+    + '</div>'
+    + '<div class="cats" id="zones-' + idx + '" style="margin-top:4px">'
+    + ZONES.map((z,i) => '<button class="cat-btn' + (i===0?' active':'') + '" data-zone="' + z.k + '" data-idx="' + idx + '" onclick="selectZone(this)">' + z.l + '</button>').join('')
+    + '</div>'
+    + '<input class="expiry-input" id="item-expiry-' + idx + '" type="text" placeholder="DLC YYYY-MM-DD (optionnel)">';
+}
+
+function initItemRows() { itemCount = 1; }
+
+function addItemRow() {
+  const list = document.getElementById('items-list');
+  const div = document.createElement('div');
+  div.className = 'item-row';
+  div.id = 'item-row-' + itemCount;
+  div.innerHTML = buildItemRow(itemCount);
+  list.appendChild(div);
+  itemCount++;
+}
+
+function removeItemRow(idx) {
+  const row = document.getElementById('item-row-' + idx);
+  if (row) row.remove();
+}
+
+function selectCat(btn) {
+  const idx = btn.dataset.idx;
+  document.querySelectorAll('#cats-' + idx + ' .cat-btn').forEach(b => b.classList.remove('active'));
+  btn.classList.add('active');
+}
+
+function selectZone(btn) {
+  const idx = btn.dataset.idx;
+  document.querySelectorAll('#zones-' + idx + ' .cat-btn').forEach(b => b.classList.remove('active'));
+  btn.classList.add('active');
+}
+
+function syncItems() {}
+
+function collectItems() {
+  const items = [];
+  for (let i = 0; i < itemCount + 10; i++) {
+    const nameEl = document.getElementById('item-name-' + i);
+    if (!nameEl) continue;
+    const name = nameEl.value.trim();
+    if (!name) continue;
+    const activeCat = document.querySelector('#cats-' + i + ' .cat-btn.active');
+    const category = activeCat ? activeCat.dataset.cat : 'autres';
+    const activeZone = document.querySelector('#zones-' + i + ' .cat-btn.active');
+    const storageZone = activeZone ? activeZone.dataset.zone : 'frigo';
+    const expiryEl = document.getElementById('item-expiry-' + i);
+    const expiry = expiryEl ? expiryEl.value.trim() : '';
+    items.push({ name, category, storageZone, expiry_date: expiry || null });
+  }
+  return items;
+}
+
+async function processTicket() {
+  const items = collectItems();
+  if (items.length === 0) {
+    document.getElementById('modal-result').innerHTML = '<div class="result error">Ajoutez au moins un produit.</div>';
+    return;
+  }
+  const note = (document.getElementById('admin-note') || {}).value || '';
+  const btn = document.getElementById('btn-process');
+  btn.disabled = true;
+  btn.innerHTML = '<span class="spinner"></span> Traitement...';
+  try {
+    const r = await fetch('/api/admin/receipt-tickets/' + currentTicketId + '/process', {
+      method: 'POST',
+      headers: {'Content-Type':'application/json','Authorization':'Bearer '+token},
+      body: JSON.stringify({items, note})
+    });
+    const data = await r.json();
+    if (!r.ok) throw new Error(data.detail || JSON.stringify(data));
+    document.getElementById('modal-result').innerHTML = '<div class="result success"><strong>' + data.items_added + ' produit(s) ajouté(s) au stock.</strong></div>';
+    setTimeout(() => { closeModal(); loadTickets(); }, 1500);
+  } catch(e) {
+    document.getElementById('modal-result').innerHTML = '<div class="result error">Erreur : ' + e.message + '</div>';
+    btn.disabled = false;
+    btn.textContent = 'Valider et ajouter au stock';
+  }
+}
+
+async function dismissTicket() {
+  if (!confirm('Ignorer ce ticket ? Il sera marqué comme ignoré.')) return;
+  try {
+    const r = await fetch('/api/admin/receipt-tickets/' + currentTicketId + '/dismiss', {
+      method: 'POST',
+      headers: {'Authorization':'Bearer '+token}
+    });
+    if (!r.ok) { const d = await r.json(); throw new Error(d.detail || 'Erreur'); }
+    closeModal();
+    loadTickets();
+  } catch(e) {
+    alert('Erreur : ' + e.message);
+  }
+}
+
+async function reopenTicket(ticketId) {
+  if (!confirm('Remettre ce ticket en attente ?')) return;
+  try {
+    const r = await fetch('/api/admin/receipt-tickets/' + ticketId + '/reopen', {
+      method: 'POST',
+      headers: {'Authorization':'Bearer '+token}
+    });
+    if (!r.ok) { const d = await r.json(); throw new Error(d.detail || 'Erreur'); }
+    closeModal();
+    loadTickets();
+  } catch(e) {
+    alert('Erreur : ' + e.message);
+  }
+}
+
+function closeModal(event) {
+  if (event && event.target !== document.getElementById('modal-overlay')) return;
+  document.getElementById('modal-overlay').style.display = 'none';
+  currentTicketId = null;
+}
+
+function escHtml(str) {
+  return String(str || '').replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;');
+}
+
+document.getElementById('password').addEventListener('keydown', e => { if (e.key === 'Enter') doLogin(); });
+</script>
+</body>
+</html>"""
+
+
+@app.get("/admin/tickets", response_class=HTMLResponse, include_in_schema=False)
+async def admin_tickets_page():
+    """Page web de traitement des tickets de caisse pour les administrateurs KeepEat."""
+    return HTMLResponse(content=_ADMIN_TICKETS_HTML)
+
+
+# ── Page admin : dashboard Vue d'ensemble / Santé système ─────────────────────
+
+_ADMIN_DASHBOARD_HTML = """<!DOCTYPE html>
+<html lang="fr">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>KeepEat — Dashboard</title>
+<style>
+  *{box-sizing:border-box;margin:0;padding:0}
+  body{font-family:system-ui,sans-serif;background:#f0fdf4;color:#1a1a1a;min-height:100vh}
+  .header{background:#16a34a;color:#fff;padding:16px 24px;display:flex;align-items:center;gap:12px}
+  .header h1{font-size:18px;font-weight:700}
+  .header nav{display:flex;gap:8px;margin-left:auto;align-items:center}
+  .header nav a{color:#fff;font-size:13px;opacity:.8;text-decoration:none;padding:4px 10px;border-radius:6px;border:1px solid rgba(255,255,255,.3)}
+  .header nav a:hover{opacity:1;background:rgba(255,255,255,.15)}
+  .logged-as{font-size:12px;color:rgba(255,255,255,.75);margin-right:4px}
+  a.logout{font-size:12px;color:#fca5a5;cursor:pointer;text-decoration:underline}
+  .container{max-width:1100px;margin:28px auto;padding:0 16px;display:flex;flex-direction:column;gap:16px}
+  .card{background:#fff;border-radius:12px;border:1px solid #d1fae5;padding:24px}
+  .card-title{font-size:15px;font-weight:700;color:#166534;margin-bottom:14px}
+  label{display:block;font-size:13px;font-weight:600;color:#374151;margin-bottom:6px}
+  input[type=email],input[type=password]{width:100%;padding:10px 12px;border:1px solid #d1d5db;border-radius:8px;font-size:14px;outline:none}
+  input:focus{border-color:#16a34a;box-shadow:0 0 0 2px #bbf7d0}
+  .row{display:grid;grid-template-columns:1fr 1fr;gap:12px}
+  button{background:#16a34a;color:#fff;border:none;border-radius:8px;padding:10px 20px;font-size:14px;font-weight:700;cursor:pointer;transition:.15s}
+  button:hover{background:#15803d}
+  button.secondary{background:#fff;color:#374151;border:1px solid #d1d5db}
+  button.secondary:hover{background:#f9fafb}
+  .result{border-radius:8px;padding:12px 16px;font-size:13px;line-height:1.6;margin-top:12px}
+  .result.error{background:#fef2f2;border:1px solid #fca5a5;color:#dc2626}
+  .stats-grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(155px,1fr));gap:10px;margin-bottom:4px}
+  .stat{background:#f0fdf4;border-radius:10px;border:1px solid #bbf7d0;padding:12px 14px}
+  .stat-label{font-size:11px;color:#6b7280;text-transform:uppercase;letter-spacing:.03em;margin-bottom:3px}
+  .stat-value{font-size:20px;font-weight:800;color:#111827;line-height:1.2}
+  .stat-sub{font-size:11px;color:#9ca3af;margin-top:2px}
+  .health-grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(190px,1fr));gap:8px}
+  .health-item{display:flex;align-items:center;gap:8px;padding:9px 12px;border-radius:8px;border:1px solid #e5e7eb;background:#fafafa;font-size:13px}
+  .dot{width:10px;height:10px;border-radius:50%;flex-shrink:0}
+  .ok{background:#16a34a}
+  .warn{background:#f59e0b}
+  .err{background:#ef4444}
+  .uptime-bar{background:#f0fdf4;border:1px solid #bbf7d0;border-radius:8px;padding:9px 14px;font-size:13px;color:#166534;display:flex;gap:20px;flex-wrap:wrap;margin-top:10px}
+  .error-banner{background:#fef2f2;border:1px solid #fca5a5;border-radius:8px;padding:9px 14px;font-size:12px;color:#dc2626;margin-top:8px}
+  .api-table{width:100%;border-collapse:collapse;font-size:12px}
+  .api-table th{text-align:left;padding:7px 10px;background:#f0fdf4;color:#166534;font-weight:700;border-bottom:1px solid #d1fae5}
+  .api-table td{padding:6px 10px;border-bottom:1px solid #f3f4f6;color:#374151;word-break:break-all}
+  .api-table tr:last-child td{border-bottom:none}
+  .api-table tr:hover td{background:#f9fafb}
+  .rate-high{color:#ef4444;font-weight:700}
+  .rate-med{color:#f59e0b;font-weight:700}
+  .rate-ok{color:#16a34a}
+  .svc-row{display:flex;align-items:center;gap:10px;padding:7px 0;border-bottom:1px solid #f3f4f6;font-size:13px}
+  .svc-row:last-child{border-bottom:none}
+  .svc-name{flex:1;font-weight:600;color:#374151}
+  .svc-units{color:#6b7280;font-size:12px}
+  .svc-cost{font-weight:700;color:#166534;min-width:60px;text-align:right}
+  .two-col{display:grid;grid-template-columns:1fr 1fr;gap:16px}
+  @media(max-width:680px){.two-col{grid-template-columns:1fr}.stats-grid{grid-template-columns:repeat(2,1fr)}}
+  .refresh-note{font-size:11px;color:#9ca3af;text-align:right}
+  #login-section{display:block}
+  #dashboard-section{display:none}
+  .chart-card{background:#fff;border-radius:12px;border:1px solid #d1fae5;padding:20px}
+  .chart-card .card-title{font-size:14px;font-weight:700;color:#166534;margin-bottom:12px}
+  .period-bar{display:flex;align-items:center;gap:6px;margin-bottom:16px;flex-wrap:wrap}
+  .period-btn{padding:4px 14px;border-radius:999px;border:1.5px solid #d1d5db;background:#fff;font-size:12px;font-weight:700;color:#6b7280;cursor:pointer;transition:.15s}
+  .period-btn:hover{border-color:#16a34a;color:#166534}
+  .period-btn.active{border-color:#16a34a;background:#f0fdf4;color:#166534}
+  .drill-overlay{display:none;position:fixed;inset:0;background:rgba(0,0,0,.5);z-index:200;align-items:center;justify-content:center;padding:24px}
+  .drill-box{background:#fff;border-radius:16px;width:100%;max-width:600px;overflow:hidden;box-shadow:0 20px 60px rgba(0,0,0,.18)}
+  .drill-header{background:#f0fdf4;padding:14px 20px;display:flex;align-items:center;gap:10px;border-bottom:1px solid #d1fae5}
+  .drill-title{font-size:12px;font-weight:800;color:#111827;flex:1;font-family:monospace;word-break:break-all}
+  .drill-body{padding:20px;max-height:400px;overflow-y:auto}
+</style>
+</head>
+<body>
+<div class="header">
+  <span>📊</span>
+  <h1>KeepEat — Dashboard</h1>
+  <nav>
+    <a href="/admin/tickets">Tickets</a>
+    <a href="/admin/recipes">Recettes</a>
+    <span id="logged-info" class="logged-as" style="display:none"></span>
+    <a id="btn-logout" class="logout" style="display:none" onclick="logout()">Déconnexion</a>
+  </nav>
+</div>
+<div class="container">
+
+  <!-- LOGIN -->
+  <div class="card" id="login-section">
+    <h2 style="font-size:15px;font-weight:700;color:#166534;margin-bottom:16px">Connexion admin</h2>
+    <div class="row" style="margin-bottom:12px">
+      <div><label>Email</label><input id="email" type="email" placeholder="admin@example.com" autocomplete="username"></div>
+      <div><label>Mot de passe</label><input id="password" type="password" placeholder="••••••••" autocomplete="current-password"></div>
+    </div>
+    <button onclick="doLogin()">Se connecter</button>
+    <div id="login-result"></div>
+  </div>
+
+  <!-- DASHBOARD -->
+  <div id="dashboard-section">
+
+    <!-- Filtre période -->
+    <div class="period-bar">
+      <span style="font-size:12px;color:#6b7280;font-weight:600">Période :</span>
+      <button class="period-btn" data-days="1"  onclick="setDays(1)">24h</button>
+      <button class="period-btn active" data-days="7"  onclick="setDays(7)">7j</button>
+      <button class="period-btn" data-days="30" onclick="setDays(30)">30j</button>
+      <button class="period-btn" data-days="90" onclick="setDays(90)">90j</button>
+    </div>
+
+    <!-- Santé système -->
+    <div class="card">
+      <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:14px">
+        <div class="card-title" style="margin:0">🔍 Santé système</div>
+        <button class="secondary" onclick="loadAll()" style="padding:7px 14px;font-size:13px">Actualiser</button>
+      </div>
+      <div id="health-content"><div style="color:#9ca3af;font-size:13px">Chargement...</div></div>
+    </div>
+
+    <!-- KPIs utilisateurs + abonnements -->
+    <div class="two-col">
+      <div class="card">
+        <div class="card-title">👥 Utilisateurs</div>
+        <div id="users-content"><div style="color:#9ca3af;font-size:13px">Chargement...</div></div>
+      </div>
+      <div class="card">
+        <div class="card-title">💳 Abonnements</div>
+        <div id="subscriptions-content"><div style="color:#9ca3af;font-size:13px">Chargement...</div></div>
+      </div>
+    </div>
+
+    <!-- Top issues API + coûts services -->
+    <div class="two-col">
+      <div class="card">
+        <div class="card-title">⚠️ Top endpoints en erreur <small style="font-weight:400;color:#9ca3af;font-size:11px">(7j)</small></div>
+        <div id="api-issues-content"><div style="color:#9ca3af;font-size:13px">Chargement...</div></div>
+      </div>
+      <div class="card">
+        <div class="card-title">💰 Coûts services <small style="font-weight:400;color:#9ca3af;font-size:11px">(30j)</small></div>
+        <div id="services-content"><div style="color:#9ca3af;font-size:13px">Chargement...</div></div>
+      </div>
+    </div>
+
+    <!-- Graphiques de tendance -->
+    <div class="two-col">
+      <div class="chart-card">
+        <div class="card-title">📈 Utilisateurs actifs / jour <small style="font-weight:400;color:#9ca3af;font-size:11px">(30j)</small></div>
+        <canvas id="chart-dau" height="140"></canvas>
+      </div>
+      <div class="chart-card">
+        <div class="card-title">🆕 Nouveaux utilisateurs / jour <small style="font-weight:400;color:#9ca3af;font-size:11px">(30j)</small></div>
+        <canvas id="chart-new-users" height="140"></canvas>
+      </div>
+    </div>
+    <div class="two-col">
+      <div class="chart-card">
+        <div class="card-title">⚠️ Erreurs API / jour <small style="font-weight:400;color:#9ca3af;font-size:11px">(7j)</small></div>
+        <canvas id="chart-errors" height="140"></canvas>
+      </div>
+      <div class="chart-card">
+        <div class="card-title">💰 Coûts services / jour <small style="font-weight:400;color:#9ca3af;font-size:11px">(30j)</small></div>
+        <canvas id="chart-costs" height="140"></canvas>
+      </div>
+    </div>
+
+    <div class="refresh-note" id="last-updated"></div>
+  </div>
+</div>
+
+<!-- DRILL-DOWN MODAL -->
+<div class="drill-overlay" id="drill-overlay" onclick="closeDrill(event)">
+  <div class="drill-box">
+    <div class="drill-header">
+      <span class="drill-title" id="drill-title"></span>
+      <button onclick="closeDrill()" style="background:none;border:none;font-size:22px;color:#9ca3af;cursor:pointer;line-height:1;padding:0 2px">×</button>
+    </div>
+    <div class="drill-body" id="drill-body">
+      <div style="color:#9ca3af;font-size:13px">Chargement...</div>
+    </div>
+  </div>
+</div>
+
+<script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.3/dist/chart.umd.min.js"></script>
+<script>
+let token = localStorage.getItem('keepeat_admin_token');
+let userEmail = localStorage.getItem('keepeat_admin_email');
+let refreshTimer = null;
+let _charts = {};
+let selectedDays = 7;
+let _apiIssueKeys = [];
+
+function setDays(d) {
+  selectedDays = d;
+  document.querySelectorAll('.period-btn').forEach(b => {
+    b.classList.toggle('active', parseInt(b.dataset.days) === d);
+  });
+  loadAll();
+}
+
+if (token) showDashboardSection();
+
+function showDashboardSection() {
+  document.getElementById('login-section').style.display = 'none';
+  document.getElementById('dashboard-section').style.display = 'block';
+  const info = document.getElementById('logged-info');
+  info.textContent = userEmail || 'admin';
+  info.style.display = 'inline';
+  document.getElementById('btn-logout').style.display = 'inline';
+  loadAll();
+  if (!refreshTimer) refreshTimer = setInterval(loadAll, 60000);
+}
+
+async function doLogin() {
+  const email = document.getElementById('email').value.trim();
+  const password = document.getElementById('password').value;
+  const res = document.getElementById('login-result');
+  if (!email || !password) { res.innerHTML = '<div class="result error">Email et mot de passe requis.</div>'; return; }
+  try {
+    const r = await fetch('/api/auth/login', {method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({email,password})});
+    const data = await r.json();
+    if (!r.ok) { res.innerHTML = '<div class="result error">' + (data.detail || 'Identifiants incorrects.') + '</div>'; return; }
+    token = data.access_token;
+    localStorage.setItem('keepeat_admin_token', token);
+    localStorage.setItem('keepeat_admin_email', email);
+    userEmail = email;
+    showDashboardSection();
+  } catch(e) { res.innerHTML = '<div class="result error">Erreur réseau : ' + e.message + '</div>'; }
+}
+
+function logout() {
+  clearInterval(refreshTimer); refreshTimer = null;
+  localStorage.removeItem('keepeat_admin_token');
+  localStorage.removeItem('keepeat_admin_email');
+  token = null;
+  document.getElementById('login-section').style.display = 'block';
+  document.getElementById('dashboard-section').style.display = 'none';
+  document.getElementById('logged-info').style.display = 'none';
+  document.getElementById('btn-logout').style.display = 'none';
+}
+
+async function apiFetch(path) {
+  const r = await fetch(path, {headers:{'Authorization':'Bearer '+token}});
+  if (r.status === 401) { logout(); return null; }
+  return r.json();
+}
+
+async function loadAll() {
+  const [health, dash] = await Promise.all([
+    apiFetch('/api/admin/monitoring/health'),
+    apiFetch('/api/admin/monitoring/dashboard?days=' + selectedDays),
+  ]);
+  if (health) renderHealth(health);
+  if (dash) {
+    renderUsers(dash.users);
+    renderSubscriptions(dash.subscriptions, dash.estimated_cost_summary);
+    renderApiIssues(dash.top_api_issues || []);
+    renderServices(dash.top_service_usage || []);
+  }
+  loadTrends();
+  document.getElementById('last-updated').textContent = 'Mis à jour : ' + new Date().toLocaleTimeString('fr-FR') + ' (' + selectedDays + 'j)';
+}
+
+async function loadTrends() {
+  const data = await apiFetch('/api/admin/monitoring/trends?days=' + selectedDays);
+  if (!data) return;
+  renderChart('chart-dau',       'line', data.dau,       r => r.date, r => r.count, 'Actifs/j',   '#16a34a');
+  renderChart('chart-new-users', 'bar',  data.new_users, r => r.date, r => r.count, 'Nouveaux/j', '#3b82f6');
+  renderChart('chart-errors',    'bar',  data.errors,    r => r.date, r => r.count, 'Erreurs/j',  '#ef4444');
+  renderChart('chart-costs',     'line', data.costs,     r => r.date, r => r.cost,  'Coût €/j',   '#f59e0b');
+}
+
+function renderChart(id, type, rows, getLabel, getValue, label, color) {
+  const labels = (rows || []).map(getLabel);
+  const values = (rows || []).map(getValue);
+  if (_charts[id]) { _charts[id].destroy(); delete _charts[id]; }
+  const ctx = document.getElementById(id);
+  if (!ctx) return;
+  _charts[id] = new Chart(ctx, {
+    type,
+    data: {
+      labels,
+      datasets: [{
+        label,
+        data: values,
+        borderColor: color,
+        backgroundColor: type === 'bar' ? color + 'bb' : color + '22',
+        borderWidth: 2,
+        tension: 0.3,
+        fill: type === 'line',
+        pointRadius: labels.length > 20 ? 2 : 3,
+      }]
+    },
+    options: {
+      responsive: true,
+      plugins: { legend: { display: false } },
+      scales: {
+        x: { ticks: { font: { size: 10 }, maxTicksLimit: 8 }, grid: { display: false } },
+        y: { ticks: { font: { size: 10 } }, beginAtZero: true }
+      }
+    }
+  });
+}
+
+function fmtUptime(s) {
+  if (s < 60) return s + 's';
+  if (s < 3600) return Math.floor(s/60) + 'min ' + (s%60) + 's';
+  return Math.floor(s/3600) + 'h ' + Math.floor((s%3600)/60) + 'min';
+}
+
+function renderHealth(h) {
+  const svcLabels = {
+    gemini_ocr_configured: 'Gemini OCR',
+    gemini_recipes_configured: 'Gemini Recettes',
+    brevo_configured: 'Brevo (email)',
+    openfoodfacts_configured: 'OpenFoodFacts',
+  };
+  let html = '<div class="health-grid">';
+  html += '<div class="health-item"><span class="dot ' + (h.db.ok ? 'ok' : 'err') + '"></span>MongoDB : ' + (h.db.ok ? 'OK' : 'ERREUR') + '</div>';
+  for (const [k, lbl] of Object.entries(svcLabels)) {
+    const on = h.external_services[k];
+    html += '<div class="health-item"><span class="dot ' + (on ? 'ok' : 'warn') + '"></span>' + lbl + ' : ' + (on ? 'Configuré' : 'Non configuré') + '</div>';
+  }
+  html += '</div>';
+  html += '<div class="uptime-bar"><span>⏱ Uptime : <strong>' + fmtUptime(h.uptime_seconds) + '</strong></span>';
+  html += '<span>Statut : <strong style="color:' + (h.status === 'ok' ? '#16a34a' : '#ef4444') + '">' + (h.status === 'ok' ? '✓ OK' : '⚠ DÉGRADÉ') + '</strong></span></div>';
+  if (h.last_critical_error) {
+    const e = h.last_critical_error;
+    html += '<div class="error-banner">⛔ Dernière erreur critique : <strong>' + escHtml((e.method||'') + ' ' + (e.path||'')) + '</strong> → HTTP ' + (e.status_code||'') + ' — ' + escHtml(e.error_type||'') + ' (' + escHtml((e.created_at||'').replace('T',' ').slice(0,19)) + ')</div>';
+  }
+  document.getElementById('health-content').innerHTML = html;
+}
+
+function statCard(label, value, sub) {
+  return '<div class="stat"><div class="stat-label">' + escHtml(String(label)) + '</div><div class="stat-value">' + escHtml(String(value)) + '</div>' + (sub ? '<div class="stat-sub">' + escHtml(sub) + '</div>' : '') + '</div>';
+}
+
+function renderUsers(u) {
+  if (!u) return;
+  document.getElementById('users-content').innerHTML =
+    '<div class="stats-grid">'
+    + statCard('Total', u.total, '')
+    + statCard('Nouveaux 24h', u.new_today, '')
+    + statCard('Nouveaux 7j', u.new_7d, '')
+    + statCard('Nouveaux 30j', u.new_30d, '')
+    + statCard('DAU', u.dau, 'actifs/j')
+    + statCard('WAU', u.wau, 'actifs/sem')
+    + statCard('Premium', u.premium, '')
+    + '</div>';
+}
+
+function renderSubscriptions(s, cost) {
+  if (!s) return;
+  const costVal = cost ? cost.services_30d_estimated_cost_eur : null;
+  document.getElementById('subscriptions-content').innerHTML =
+    '<div class="stats-grid">'
+    + statCard('Actifs', s.active, '')
+    + statCard('MRR', (s.estimated_mrr_eur||0).toFixed(2) + '\u00a0€', '')
+    + statCard('ARR', (s.estimated_arr_eur||0).toFixed(2) + '\u00a0€', '')
+    + (costVal !== null ? statCard('Coûts 30j', costVal.toFixed(4) + '\u00a0€', 'estimé') : '')
+    + '</div>'
+    + '<div style="font-size:12px;color:#6b7280;margin-top:8px">Mensuel : ' + (s.by_plan.premium_monthly||0) + ' · Autre : ' + (s.by_plan.premium_other||0) + '</div>';
+}
+
+function renderApiIssues(issues) {
+  _apiIssueKeys = (issues || []).map(r => r.endpoint_key || '');
+  if (!issues.length) {
+    document.getElementById('api-issues-content').innerHTML = '<div style="color:#16a34a;font-size:13px">Aucun problème détecté 🎉</div>';
+    return;
+  }
+  let html = '<table class="api-table"><thead><tr><th>Endpoint</th><th>Appels</th><th>Erreurs</th><th>Lat. moy.</th></tr></thead><tbody>';
+  for (let i = 0; i < issues.length; i++) {
+    const row = issues[i];
+    const rate = row.error_rate || 0;
+    const cls = rate >= 0.3 ? 'rate-high' : rate >= 0.1 ? 'rate-med' : 'rate-ok';
+    html += '<tr style="cursor:pointer" title="Cliquer pour détails" onclick="drillDown(' + i + ')">';
+    html += '<td>' + escHtml(row.endpoint_key||'') + '</td><td>' + (row.volume||0) + '</td><td class="' + cls + '">' + (rate*100).toFixed(1) + '%</td><td>' + (row.avg_latency_ms ? Math.round(row.avg_latency_ms) + 'ms' : '—') + '</td></tr>';
+  }
+  html += '</tbody></table><div style="font-size:11px;color:#9ca3af;margin-top:4px">Cliquer sur une ligne pour le détail</div>';
+  document.getElementById('api-issues-content').innerHTML = html;
+}
+
+async function drillDown(idx) {
+  const endpointKey = _apiIssueKeys[idx] || '';
+  if (!endpointKey) return;
+  const overlay = document.getElementById('drill-overlay');
+  overlay.style.display = 'flex';
+  document.getElementById('drill-title').textContent = endpointKey;
+  document.getElementById('drill-body').innerHTML = '<div style="color:#9ca3af;font-size:13px">Chargement...</div>';
+  const data = await apiFetch('/api/admin/monitoring/api-drill?endpoint_key=' + encodeURIComponent(endpointKey) + '&days=' + selectedDays);
+  if (!data) { closeDrill(); return; }
+  let html = '<div style="font-size:13px;color:#374151;margin-bottom:14px"><strong>' + data.total_calls + '</strong> appel(s) sur ' + data.days + 'j</div>';
+  html += '<div style="font-size:12px;font-weight:700;color:#166534;margin-bottom:6px">Par code HTTP</div>';
+  html += '<table class="api-table" style="margin-bottom:16px"><thead><tr><th>Status</th><th>Appels</th><th>Lat. moy.</th></tr></thead><tbody>';
+  for (const r of data.by_status) {
+    const cls = r.status_code >= 500 ? 'rate-high' : r.status_code >= 400 ? 'rate-med' : 'rate-ok';
+    html += '<tr><td class="' + cls + '"><strong>' + r.status_code + '</strong></td><td>' + r.count + '</td><td>' + r.avg_ms + 'ms</td></tr>';
+  }
+  html += '</tbody></table>';
+  if (data.last_errors && data.last_errors.length) {
+    html += '<div style="font-size:12px;font-weight:700;color:#166534;margin-bottom:6px">Dernières erreurs</div>';
+    for (const e of data.last_errors) {
+      html += '<div style="font-size:11px;color:#6b7280;padding:5px 0;border-bottom:1px solid #f3f4f6;line-height:1.5">';
+      html += escHtml((e.created_at||'').replace('T',' ').slice(0,19)) + '<br>';
+      html += '<span style="color:#ef4444;font-family:monospace">' + escHtml((e.method||'') + ' ' + (e.path||'')) + '</span>';
+      html += ' → HTTP <strong>' + (e.status_code||'') + '</strong>';
+      if (e.error_type) html += ' <span style="color:#9ca3af">(' + escHtml(e.error_type) + ')</span>';
+      if (e.duration_ms) html += ' — ' + Math.round(e.duration_ms) + 'ms';
+      html += '</div>';
+    }
+  } else {
+    html += '<div style="color:#16a34a;font-size:12px">Aucune erreur récente.</div>';
+  }
+  document.getElementById('drill-body').innerHTML = html;
+}
+
+function closeDrill(event) {
+  if (event && event.target !== document.getElementById('drill-overlay')) return;
+  document.getElementById('drill-overlay').style.display = 'none';
+}
+
+function renderServices(svcs) {
+  if (!svcs.length) {
+    document.getElementById('services-content').innerHTML = '<div style="color:#9ca3af;font-size:13px">Aucune donnée.</div>';
+    return;
+  }
+  let html = '<div>';
+  for (const s of svcs) {
+    html += '<div class="svc-row"><span class="svc-name">' + escHtml(s.service_name||'—') + '</span><span class="svc-units">' + Number(s.units||0).toFixed(0) + ' unités</span><span class="svc-cost">' + Number(s.estimated_cost||0).toFixed(4) + '\u00a0€</span></div>';
+  }
+  html += '</div>';
+  document.getElementById('services-content').innerHTML = html;
+}
+
+function escHtml(str) {
+  return String(str||'').replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;');
+}
+
+document.getElementById('password').addEventListener('keydown', e => { if (e.key==='Enter') doLogin(); });
+</script>
+</body>
+</html>"""
+
+
+@app.get("/admin/dashboard", response_class=HTMLResponse, include_in_schema=False)
+async def admin_dashboard_page():
+    """Page web de dashboard Vue d'ensemble / Santé système pour les administrateurs KeepEat."""
+    return HTMLResponse(content=_ADMIN_DASHBOARD_HTML)
 
 
 # Redirect pages (deep link fallback for email clients)

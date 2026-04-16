@@ -3,6 +3,7 @@ import test from 'node:test';
 
 import { getActiveItemsByScope, type DashboardStockItem } from '../data/mockDashboardData';
 import { buildScopedRecipesWithDiagnostics, buildTargetIngredientNames, scopeAndDedupeRecipes } from './recipesScoping';
+import { buildTargetIngredientNames, scopeAndDedupeRecipes } from './recipesScoping';
 
 const ACTIVE_STATUS = 'active' as const;
 
@@ -77,6 +78,76 @@ test('déduplication: une recette dupliquée n apparait qu une fois dans une mê
 
   const deduped = scopeAndDedupeRecipes(recipes, new Set(['oeuf']));
   assert.deepEqual(deduped.map((recipe) => recipe.id), ['same', 'other']);
+});
+
+test('déduplication: même recette backend avec ids différents est fusionnée via signature sémantique', () => {
+  const recipes = [
+    {
+      id: 'variant-a',
+      title: 'Spirales crème pistache et olivade',
+      duration_min: 20,
+      dish_type: 'rapide',
+      available_ingredients: ['pistache'],
+    },
+    {
+      id: 'variant-b',
+      title: 'Spirales crème pistache et olivade',
+      duration_min: 20,
+      dish_type: 'rapide',
+      available_ingredients: ['Pistaches'],
+    },
+    {
+      id: 'other',
+      title: 'Salade fraîche',
+      duration_min: 10,
+      dish_type: 'salade',
+      available_ingredients: ['oeuf'],
+    },
+  ];
+
+  const deduped = scopeAndDedupeRecipes(recipes, new Set(['pistache', 'oeuf']));
+  assert.deepEqual(deduped.map((recipe) => recipe.id), ['variant-a', 'other']);
+});
+
+test('déduplication: même titre + durée + type reste unique même si les ingrédients disponibles diffèrent', () => {
+  const recipes = [
+    {
+      id: 'variant-a',
+      title: 'Spirales crème pistache et olivade',
+      duration_min: 20,
+      dish_type: 'rapide',
+      available_ingredients: ['pistache'],
+    },
+    {
+      id: 'variant-b',
+      title: 'Spirales crème pistache et olivade',
+      duration_min: 20,
+      dish_type: 'rapide',
+      available_ingredients: ['olive'],
+    },
+    {
+      id: 'other',
+      title: 'Salade fraîche',
+      duration_min: 10,
+      dish_type: 'salade',
+      available_ingredients: ['oeuf'],
+    },
+  ];
+
+  const deduped = scopeAndDedupeRecipes(recipes, new Set(['pistache', 'olive', 'oeuf']));
+  assert.deepEqual(deduped.map((recipe) => recipe.id), ['variant-a', 'other']);
+});
+
+test('buildTargetIngredientNames: deux appels avec les mêmes items produisent des clés sérialisées identiques (BUG-025)', () => {
+  const items = [{ name: 'Tomate' }, { name: 'oeuf' }, { name: 'courgette' }];
+  const set1 = buildTargetIngredientNames(items);
+  const set2 = buildTargetIngredientNames(items);
+  // Deux instances distinctes (références différentes, == ne suffit pas comme dépendance React)
+  assert.notEqual(set1 === set2, true);
+  // Mais les clés sérialisées sont identiques → stable comme dépendance useEffect
+  const key1 = [...set1].sort().join(',');
+  const key2 = [...set2].sort().join(',');
+  assert.equal(key1, key2);
 });
 
 test('cohérence anti-gaspi / liste principale: top suggestions restent un sous-ensemble de la liste filtrée', () => {

@@ -2,6 +2,12 @@ import { create } from 'zustand';
 import * as SecureStore from 'expo-secure-store';
 import { unregisterPushToken } from '../utils/notificationService';
 import { buildApiUrl } from '../utils/config';
+import {
+  BIOMETRIC_CREDENTIALS_KEY,
+  isBiometricAuthenticationCancellationError,
+  parseBiometricCredentials,
+  serializeBiometricCredentials,
+} from '../utils/biometricAuth';
 
 const TOKEN_KEY = 'keepeat_token';
 const USER_KEY = 'keepeat_user';
@@ -46,9 +52,12 @@ interface AuthStore {
   plan: 'free' | 'premium';
   entitlements: BillingEntitlements | null;
   usage: BillingUsage | null;
+  hasBiometricCredentials: boolean;
+  isBiometricSupported: boolean;
 
   loadAuth: () => Promise<void>;
   login: (email: string, password: string) => Promise<void>;
+  loginWithBiometrics: () => Promise<void>;
   register: (email: string, password: string) => Promise<{ email: string }>;
   verifyEmail: (token: string) => Promise<void>;
   resendVerification: (email: string) => Promise<void>;
@@ -86,11 +95,16 @@ export const useAuthStore = create<AuthStore>((set) => ({
   plan: 'free',
   entitlements: null,
   usage: null,
+  hasBiometricCredentials: false,
+  isBiometricSupported: false,
 
   loadAuth: async () => {
     try {
+      const isBiometricSupported = SecureStore.canUseBiometricAuthentication();
       const token = await SecureStore.getItemAsync(TOKEN_KEY);
       const userJson = await SecureStore.getItemAsync(USER_KEY);
+      const biometricPayload = await SecureStore.getItemAsync(BIOMETRIC_CREDENTIALS_KEY);
+      const hasBiometricCredentials = isBiometricSupported && parseBiometricCredentials(biometricPayload) !== null;
       if (token && userJson) {
         // Vérifier l'expiry du JWT sans appel réseau (décodage de la payload Base64)
         try {
@@ -108,9 +122,16 @@ export const useAuthStore = create<AuthStore>((set) => ({
           // Décodage JWT échoué : continuer, le premier appel API retournera 401
         }
         const user: AuthUser = JSON.parse(userJson);
-        set({ token, user, isLoaded: true, plan: user.is_premium ? 'premium' : 'free' });
+        set({
+          token,
+          user,
+          isLoaded: true,
+          plan: user.is_premium ? 'premium' : 'free',
+          hasBiometricCredentials,
+          isBiometricSupported,
+        });
       } else {
-        set({ isLoaded: true });
+        set({ isLoaded: true, hasBiometricCredentials, isBiometricSupported });
       }
     } catch {
       set({ isLoaded: true });
@@ -124,11 +145,62 @@ export const useAuthStore = create<AuthStore>((set) => ({
       const { access_token, user } = data as { access_token: string; user: AuthUser };
       await SecureStore.setItemAsync(TOKEN_KEY, access_token);
       await SecureStore.setItemAsync(USER_KEY, JSON.stringify(user));
-      set({ token: access_token, user, plan: user.is_premium ? 'premium' : 'free' });
+      const isBiometricSupported = SecureStore.canUseBiometricAuthentication();
+      let hasBiometricCredentials = false;
+      if (isBiometricSupported) {
+        try {
+          await SecureStore.setItemAsync(
+            BIOMETRIC_CREDENTIALS_KEY,
+            serializeBiometricCredentials(email, password),
+            { requireAuthentication: true }
+          );
+          hasBiometricCredentials = true;
+        } catch (biometricError) {
+          if (!isBiometricAuthenticationCancellationError(biometricError)) {
+            throw biometricError;
+          }
+        }
+      }
+      set({
+        token: access_token,
+        user,
+        plan: user.is_premium ? 'premium' : 'free',
+        hasBiometricCredentials,
+        isBiometricSupported,
+      });
       await useAuthStore.getState().refreshEntitlements();
       await useAuthStore.getState().refreshUsage();
     } catch (err: any) {
       set({ error: err.message || 'Erreur de connexion' });
+      throw err;
+    }
+  },
+
+  loginWithBiometrics: async () => {
+    set({ error: null });
+    try {
+      if (!SecureStore.canUseBiometricAuthentication()) {
+        throw new Error('BIOMETRIC_NOT_SUPPORTED');
+      }
+      const payload = await SecureStore.getItemAsync(BIOMETRIC_CREDENTIALS_KEY, {
+        requireAuthentication: true,
+        authenticationPrompt: 'Authentifiez-vous pour vous connecter à KeepEat',
+      });
+      const credentials = parseBiometricCredentials(payload);
+      if (!credentials) {
+        throw new Error('BIOMETRIC_CREDENTIALS_NOT_FOUND');
+      }
+      await useAuthStore.getState().login(credentials.email, credentials.password);
+    } catch (err: any) {
+      if (err?.message === 'BIOMETRIC_NOT_SUPPORTED') {
+        set({ error: 'Biométrie non disponible sur cet appareil', isBiometricSupported: false });
+        throw err;
+      }
+      if (err?.message === 'BIOMETRIC_CREDENTIALS_NOT_FOUND') {
+        set({ error: 'Connexion biométrique indisponible' });
+        throw err;
+      }
+      set({ error: err?.message || 'Échec de la connexion biométrique' });
       throw err;
     }
   },
@@ -193,7 +265,11 @@ export const useAuthStore = create<AuthStore>((set) => ({
   logout: async () => {
     const { token } = useAuthStore.getState();
     if (token) {
-      await unregisterPushToken(token);
+      try {
+        await unregisterPushToken(token);
+      } catch {
+        // Erreur réseau : on continue le logout même si la désinscription échoue
+      }
     }
     await SecureStore.deleteItemAsync(TOKEN_KEY);
     await SecureStore.deleteItemAsync(USER_KEY);

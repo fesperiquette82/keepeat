@@ -4,6 +4,7 @@ import {
   Text,
   StyleSheet,
   Image,
+  ImageBackground,
   TextInput,
   TouchableOpacity,
   ActivityIndicator,
@@ -105,6 +106,11 @@ export default function RegisterScreen() {
       };
 
   return (
+    <ImageBackground
+      source={require('../assets/images/auth-background.jpg')}
+      style={styles.bgImage}
+      resizeMode="cover"
+    >
     <SafeAreaView style={styles.container}>
       <KeyboardAvoidingView
         style={styles.flex}
@@ -143,13 +149,13 @@ export default function RegisterScreen() {
             <View style={styles.inputGroup}>
               <Text style={styles.inputLabel}>Email</Text>
               <View style={styles.inputWrapper}>
-                <Ionicons name="mail-outline" size={18} color="#666" style={styles.inputIcon} />
+                <Ionicons name="mail-outline" size={18} color="#9CA3AF" style={styles.inputIcon} />
                 <TextInput
                   style={styles.input}
                   value={email}
                   onChangeText={setEmail}
                   placeholder="example@email.com"
-                  placeholderTextColor="#444"
+                  placeholderTextColor="#9CA3AF"
                   keyboardType="email-address"
                   autoCapitalize="none"
                   autoComplete="email"
@@ -160,17 +166,17 @@ export default function RegisterScreen() {
             <View style={styles.inputGroup}>
               <Text style={styles.inputLabel}>{fr ? 'Mot de passe' : 'Password'}</Text>
               <View style={styles.inputWrapper}>
-                <Ionicons name="lock-closed-outline" size={18} color="#666" style={styles.inputIcon} />
+                <Ionicons name="lock-closed-outline" size={18} color="#9CA3AF" style={styles.inputIcon} />
                 <TextInput
                   style={[styles.input, styles.inputPassword]}
                   value={password}
                   onChangeText={setPassword}
                   placeholder={fr ? 'Créez un mot de passe sécurisé' : 'Create a secure password'}
-                  placeholderTextColor="#444"
+                  placeholderTextColor="#9CA3AF"
                   secureTextEntry={!showPassword}
                 />
                 <TouchableOpacity onPress={() => setShowPassword(!showPassword)} style={styles.eyeBtn}>
-                  <Ionicons name={showPassword ? 'eye-off-outline' : 'eye-outline'} size={18} color="#666" />
+                  <Ionicons name={showPassword ? 'eye-off-outline' : 'eye-outline'} size={18} color="#9CA3AF" />
                 </TouchableOpacity>
               </View>
 
@@ -196,13 +202,13 @@ export default function RegisterScreen() {
             <View style={styles.inputGroup}>
               <Text style={styles.inputLabel}>{fr ? 'Confirmer le mot de passe' : 'Confirm password'}</Text>
               <View style={styles.inputWrapper}>
-                <Ionicons name="lock-closed-outline" size={18} color="#666" style={styles.inputIcon} />
+                <Ionicons name="lock-closed-outline" size={18} color="#9CA3AF" style={styles.inputIcon} />
                 <TextInput
                   style={styles.input}
                   value={confirmPassword}
                   onChangeText={setConfirmPassword}
                   placeholder={fr ? 'Répéter le mot de passe' : 'Repeat password'}
-                  placeholderTextColor="#444"
+                  placeholderTextColor="#9CA3AF"
                   secureTextEntry={!showPassword}
                 />
               </View>
@@ -236,11 +242,13 @@ export default function RegisterScreen() {
         </ScrollView>
       </KeyboardAvoidingView>
     </SafeAreaView>
+    </ImageBackground>
   );
 }
 
 const styles = StyleSheet.create({
-  container: { flex: 1, backgroundColor: '#0a0a0a' },
+  bgImage: { flex: 1 },
+  container: { flex: 1, backgroundColor: 'transparent' },
   flex: { flex: 1 },
   scroll: { flexGrow: 1, justifyContent: 'center', padding: 24 },
 
@@ -253,45 +261,48 @@ const styles = StyleSheet.create({
     marginBottom: 16,
   },
   logoImage: { width: 120, height: 120 },
-  logoTitle: { fontSize: 32, fontWeight: 'bold', color: '#22c55e' },
-  logoTagline: { fontSize: 14, color: '#666', marginTop: 6 },
+  logoTitle: { fontSize: 32, fontWeight: 'bold', color: '#111827' },
+  logoTagline: { fontSize: 14, color: '#6B7280', marginTop: 6 },
 
   form: {
-    backgroundColor: '#111',
-    borderRadius: 16,
-    borderWidth: 1,
-    borderColor: '#1f1f1f',
+    backgroundColor: '#FFFFFF',
+    borderRadius: 20,
     padding: 24,
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 4 },
+    shadowOpacity: 0.08,
+    shadowRadius: 16,
+    elevation: 4,
   },
-  formTitle: { fontSize: 22, fontWeight: '700', color: '#fff', marginBottom: 20 },
+  formTitle: { fontSize: 22, fontWeight: '800', color: '#111827', marginBottom: 20 },
 
   errorBox: {
     flexDirection: 'row',
     alignItems: 'center',
     gap: 8,
-    backgroundColor: '#ef444415',
+    backgroundColor: '#FEF2F2',
     borderWidth: 1,
-    borderColor: '#ef444430',
-    borderRadius: 10,
+    borderColor: '#FECACA',
+    borderRadius: 12,
     padding: 12,
     marginBottom: 16,
   },
-  errorText: { color: '#ef4444', fontSize: 13, flex: 1 },
+  errorText: { color: '#EF4444', fontSize: 13, flex: 1 },
 
   inputGroup: { marginBottom: 16 },
-  inputLabel: { color: '#aaa', fontSize: 13, fontWeight: '600', marginBottom: 8 },
+  inputLabel: { color: '#374151', fontSize: 13, fontWeight: '700', marginBottom: 8 },
   inputWrapper: {
     flexDirection: 'row',
     alignItems: 'center',
-    backgroundColor: '#0c0c0c',
+    backgroundColor: '#F3F6FA',
     borderRadius: 12,
-    borderWidth: 1,
-    borderColor: '#2a2a2a',
+    borderWidth: 1.5,
+    borderColor: '#D5DEE8',
   },
   inputIcon: { paddingLeft: 14 },
   input: {
     flex: 1,
-    color: '#fff',
+    color: '#111827',
     fontSize: 15,
     paddingHorizontal: 10,
     paddingVertical: Platform.OS === 'ios' ? 14 : 10,
@@ -311,7 +322,7 @@ const styles = StyleSheet.create({
   },
   pwdCheckText: {
     fontSize: 12,
-    color: '#555',
+    color: '#9CA3AF',
   },
   pwdCheckTextOk: {
     color: '#22c55e',
@@ -330,6 +341,6 @@ const styles = StyleSheet.create({
   submitBtnText: { color: '#fff', fontWeight: '700', fontSize: 16 },
 
   switchLink: { alignItems: 'center' },
-  switchLinkText: { color: '#666', fontSize: 14 },
+  switchLinkText: { color: '#6B7280', fontSize: 14 },
   switchLinkHighlight: { color: '#22c55e', fontWeight: '600' },
 });

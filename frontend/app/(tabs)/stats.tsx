@@ -7,6 +7,7 @@ import {
   ScrollView,
   ActivityIndicator,
   RefreshControl,
+  ImageBackground,
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import Ionicons from '@expo/vector-icons/Ionicons';
@@ -134,6 +135,7 @@ export default function StatsScreen() {
   const bestMonth = [...chartData].sort((a, b) => b.score - a.score)[0];
 
   return (
+    <ImageBackground source={require('../../assets/images/KeepEat_fond.png')} style={styles.bgImage} resizeMode="cover">
     <SafeAreaView style={styles.container}>
 
       {/* Header */}
@@ -329,11 +331,13 @@ export default function StatsScreen() {
         </ScrollView>
       )}
     </SafeAreaView>
+    </ImageBackground>
   );
 }
 
 const createStyles = (C: ReturnType<typeof getThemeColors>, T: ReturnType<typeof getThemeText>) => StyleSheet.create({
-  container: { flex: 1, backgroundColor: '#F7F5F2' },
+  bgImage: { flex: 1 },
+  container: { flex: 1, backgroundColor: 'transparent' },
 
   // ── Header ──
   header: {

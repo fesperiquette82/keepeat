@@ -18,19 +18,26 @@ import { useLanguageStore } from '../store/languageStore';
 import { buildApiUrl } from '../utils/config';
 import { useAuthStore } from '../store/authStore';
 import { C } from '../utils/theme';
-import { extractPremiumErrorDetail } from '../utils/premiumErrors';
 import { usePremiumUiStore } from '../store/premiumUiStore';
+import { resolveReceiptErrorAction } from '../utils/receiptScanFlow';
 import { getGalleryErrorMessage, pickImageFromGallery } from '../utils/galleryPicker';
 
 // ─── Types ────────────────────────────────────────────────────────────────────
 
+type StorageZone = 'fridge' | 'pantry' | 'freezer';
+
 interface ReceiptProduct {
   name: string;
+  raw_title?: string;
+  purchase_date?: string | null;
   category: string;
   food_category: string;
   shelf_life_fridge: number | null;
   shelf_life_pantry: number | null;
   shelf_life_freezer: number | null;
+  expiry_date_fridge?: string | null;
+  expiry_date_pantry?: string | null;
+  expiry_date_freezer?: string | null;
 }
 
 // ─── Helpers ──────────────────────────────────────────────────────────────────
@@ -40,16 +47,45 @@ const CATEGORY_EMOJI: Record<string, string> = {
   desserts: '🍰', boissons: '🧃', epicerie: '🏪', autres: '📦',
 };
 
-function shelfHint(p: ReceiptProduct, isFr: boolean): string {
-  if (p.shelf_life_fridge)   return isFr ? `~${p.shelf_life_fridge}j frigo`    : `~${p.shelf_life_fridge}d fridge`;
-  if (p.shelf_life_pantry)   return isFr ? `~${p.shelf_life_pantry}j placard`  : `~${p.shelf_life_pantry}d pantry`;
-  if (p.shelf_life_freezer)  return isFr ? `~${p.shelf_life_freezer}j congélo` : `~${p.shelf_life_freezer}d freezer`;
-  return '';
+const STORAGE_ZONES: { key: StorageZone; fr: string; en: string; icon: string }[] = [
+  { key: 'fridge',  fr: 'Frigo',   en: 'Fridge',  icon: '❄️' },
+  { key: 'pantry',  fr: 'Placard', en: 'Pantry',  icon: '🏠' },
+  { key: 'freezer', fr: 'Congélo', en: 'Freezer', icon: '🧊' },
+];
+
+function defaultZone(p: ReceiptProduct): StorageZone {
+  if (p.shelf_life_fridge)  return 'fridge';
+  if (p.shelf_life_pantry)  return 'pantry';
+  if (p.shelf_life_freezer) return 'freezer';
+  return 'pantry';
+}
+
+function shelfHint(p: ReceiptProduct, fr: boolean): string {
+  const parts: string[] = [];
+  if (p.shelf_life_fridge) parts.push(fr ? `${p.shelf_life_fridge}j frigo` : `${p.shelf_life_fridge}d fridge`);
+  if (p.shelf_life_pantry) parts.push(fr ? `${p.shelf_life_pantry}j placard` : `${p.shelf_life_pantry}d pantry`);
+  if (p.shelf_life_freezer) parts.push(fr ? `${p.shelf_life_freezer}j congélo` : `${p.shelf_life_freezer}d frozen`);
+  return parts.join(' · ');
+}
+
+function computeExpiry(p: ReceiptProduct, zone: StorageZone): string | undefined {
+  // Priorité aux dates précalculées par le backend (depuis la date d'achat réelle du ticket)
+  if (zone === 'fridge'  && p.expiry_date_fridge)  return p.expiry_date_fridge;
+  if (zone === 'pantry'  && p.expiry_date_pantry)  return p.expiry_date_pantry;
+  if (zone === 'freezer' && p.expiry_date_freezer) return p.expiry_date_freezer;
+  // Fallback : date de base (purchase_date si connue, sinon aujourd'hui) + durée de conservation
+  const days = zone === 'fridge' ? p.shelf_life_fridge
+             : zone === 'pantry' ? p.shelf_life_pantry
+             : p.shelf_life_freezer;
+  if (!days) return undefined;
+  const d = p.purchase_date ? new Date(p.purchase_date) : new Date();
+  d.setDate(d.getDate() + days);
+  return d.toISOString().split('T')[0];
 }
 
 // ─── Screen ───────────────────────────────────────────────────────────────────
 
-type Mode = 'camera' | 'processing' | 'confirm';
+type Mode = 'camera' | 'processing' | 'confirm' | 'fallback' | 'report_sent';
 
 export default function ScanReceiptScreen() {
   const router = useRouter();
@@ -66,11 +102,15 @@ export default function ScanReceiptScreen() {
   const [products, setProducts] = useState<ReceiptProduct[]>([]);
   const [selected, setSelected] = useState<Set<number>>(new Set());
   const [isSaving, setIsSaving] = useState(false);
+  const [storageZone, setStorageZone] = useState<StorageZone>('fridge');
+  const [pendingImage, setPendingImage] = useState<string | null>(null);
+  const [isReporting, setIsReporting] = useState(false);
 
   // ── Capture & analyse ──────────────────────────────────────────────────────
 
   const processReceiptImage = async (base64Image: string) => {
     setMode('processing');
+    setPendingImage(base64Image);
     try {
       const res = await axios.post(
         buildApiUrl('/api/ocr/receipt'),
@@ -80,31 +120,51 @@ export default function ScanReceiptScreen() {
       const detected: ReceiptProduct[] = res.data;
 
       if (detected.length === 0) {
-        Alert.alert(
-          isFr ? 'Aucun produit détecté' : 'No products detected',
-          isFr
-            ? 'Assurez-vous que le ticket est bien éclairé et lisible.'
-            : 'Make sure the receipt is well-lit and readable.',
-        );
-        setMode('camera');
+        // Aucun produit reconnu → proposer l'envoi pour traitement manuel
+        setMode('fallback');
         return;
       }
+
+      // Choisir la zone par défaut à partir de la majorité des produits
+      const zoneCounts: Record<StorageZone, number> = { fridge: 0, pantry: 0, freezer: 0 };
+      detected.forEach(p => { zoneCounts[defaultZone(p)]++; });
+      const dominantZone = (Object.entries(zoneCounts) as [StorageZone, number][])
+        .sort((a, b) => b[1] - a[1])[0][0];
+      setStorageZone(dominantZone);
 
       setProducts(detected);
       setSelected(new Set(detected.map((_, i) => i)));
       setMode('confirm');
     } catch (err: any) {
-      const premiumError = extractPremiumErrorDetail(err);
-      if (premiumError) {
-        openPaywall(premiumError);
+      const action = resolveReceiptErrorAction(err);
+      if (action.type === 'premium') {
+        openPaywall(action.detail);
         router.push('/premium');
       } else {
-        Alert.alert(
-          isFr ? 'Erreur' : 'Error',
-          isFr ? "Impossible d'analyser le ticket." : 'Unable to analyse the receipt.',
-        );
+        // Erreur réseau / serveur : l'image est déjà dans pendingImage,
+        // on propose l'envoi pour traitement manuel comme pour le retour vide
+        setMode('fallback');
       }
-      setMode('camera');
+    }
+  };
+
+  const handleReportTicket = async () => {
+    if (!pendingImage) return;
+    setIsReporting(true);
+    try {
+      await axios.post(
+        buildApiUrl('/api/ocr/receipt/report'),
+        { image: pendingImage },
+        { headers: { Authorization: `Bearer ${token}` } },
+      );
+      setMode('report_sent');
+    } catch {
+      Alert.alert(
+        isFr ? 'Erreur' : 'Error',
+        isFr ? "Impossible d'envoyer le ticket." : 'Unable to send the receipt.',
+      );
+    } finally {
+      setIsReporting(false);
     }
   };
 
@@ -154,6 +214,8 @@ export default function ScanReceiptScreen() {
             name:          p.name,
             category:      p.category,
             food_category: p.food_category,
+            expiry_date:   computeExpiry(p, storageZone),
+            storageZone:   storageZone === 'fridge' ? 'frigo' : storageZone === 'freezer' ? 'congelateur' : 'placard',
           }),
         ),
       );
@@ -266,6 +328,81 @@ export default function ScanReceiptScreen() {
     );
   }
 
+  // ── Fallback mode (0 produits détectés) ───────────────────────────────────
+
+  if (mode === 'fallback') {
+    return (
+      <SafeAreaView style={styles.container}>
+        <View style={styles.header}>
+          <TouchableOpacity style={styles.backBtn} onPress={() => setMode('camera')}>
+            <Ionicons name="arrow-back" size={24} color="#111" />
+          </TouchableOpacity>
+          <Text style={styles.headerTitle}>
+            {isFr ? 'Ticket non reconnu' : 'Receipt not recognised'}
+          </Text>
+          <View style={{ width: 40 }} />
+        </View>
+        <View style={styles.center}>
+          <Ionicons name="alert-circle-outline" size={64} color="#F59E0B" />
+          <Text style={styles.fallbackTitle}>
+            {isFr ? "L'IA n'a pas pu lire ce ticket" : "The AI couldn't read this receipt"}
+          </Text>
+          <Text style={styles.fallbackSub}>
+            {isFr
+              ? "Envoyez-le à notre équipe. Nous ajouterons les produits à votre stock manuellement sous 24h."
+              : "Send it to our team. We'll add the products to your stock manually within 24h."}
+          </Text>
+          <TouchableOpacity
+            style={[styles.reportBtn, isReporting && styles.captureBtnDisabled]}
+            onPress={handleReportTicket}
+            disabled={isReporting}
+          >
+            {isReporting ? (
+              <ActivityIndicator color="#fff" />
+            ) : (
+              <>
+                <Ionicons name="mail-outline" size={20} color="#fff" />
+                <Text style={styles.captureBtnText}>
+                  {isFr ? 'Envoyer pour traitement manuel' : 'Send for manual review'}
+                </Text>
+              </>
+            )}
+          </TouchableOpacity>
+          <TouchableOpacity style={styles.switchLink} onPress={() => setMode('camera')}>
+            <Text style={styles.switchLinkText}>
+              {isFr ? 'Réessayer' : 'Try again'}
+            </Text>
+          </TouchableOpacity>
+        </View>
+      </SafeAreaView>
+    );
+  }
+
+  // ── Report sent confirmation ───────────────────────────────────────────────
+
+  if (mode === 'report_sent') {
+    return (
+      <SafeAreaView style={styles.container}>
+        <View style={styles.center}>
+          <Ionicons name="checkmark-circle-outline" size={72} color={C.primary} />
+          <Text style={styles.fallbackTitle}>
+            {isFr ? 'Ticket envoyé !' : 'Receipt sent!'}
+          </Text>
+          <Text style={styles.fallbackSub}>
+            {isFr
+              ? "Notre équipe va analyser votre ticket et ajouter les produits à votre stock."
+              : "Our team will review your receipt and add the products to your stock."}
+          </Text>
+          <TouchableOpacity style={styles.reportBtn} onPress={() => router.replace('/')}>
+            <Text style={styles.captureBtnText}>
+              {isFr ? "Retour à l'accueil" : 'Back to home'}
+            </Text>
+          </TouchableOpacity>
+        </View>
+      </SafeAreaView>
+    );
+  }
+
   // ── Confirm mode ──────────────────────────────────────────────────────────
 
   const selectedCount = selected.size;
@@ -288,9 +425,23 @@ export default function ScanReceiptScreen() {
       {/* Subtitle */}
       <Text style={styles.confirmSub}>
         {isFr
-          ? 'Sélectionnez les produits à ajouter au stock (sans date — à renseigner plus tard)'
-          : 'Select products to add to stock (no date — set later)'}
+          ? 'Sélectionnez les produits et choisissez la zone de stockage pour les dates auto.'
+          : 'Select products and choose storage zone for auto expiry dates.'}
       </Text>
+
+      {/* Storage zone selector */}
+      <View style={styles.zoneRow}>
+        <Text style={styles.zoneLabel}>{isFr ? 'Zone :' : 'Zone:'}</Text>
+        {STORAGE_ZONES.map(z => (
+          <TouchableOpacity
+            key={z.key}
+            style={[styles.zoneChip, storageZone === z.key && styles.zoneChipActive]}
+            onPress={() => setStorageZone(z.key)}
+          >
+            <Text style={styles.zoneChipText}>{z.icon} {isFr ? z.fr : z.en}</Text>
+          </TouchableOpacity>
+        ))}
+      </View>
 
       {/* Product list */}
       <ScrollView style={styles.scroll} contentContainerStyle={styles.scrollContent}>
@@ -314,9 +465,15 @@ export default function ScanReceiptScreen() {
               </View>
               <View style={styles.productInfo}>
                 <Text style={styles.productName}>{p.name}</Text>
-                {hint ? (
-                  <Text style={styles.productHint}>{hint}</Text>
-                ) : null}
+                {(() => {
+                  const expiry = computeExpiry(p, storageZone);
+                  if (expiry) {
+                    const d = new Date(expiry);
+                    const label = d.toLocaleDateString(isFr ? 'fr-FR' : 'en-GB', { day: '2-digit', month: 'short', year: 'numeric' });
+                    return <Text style={styles.productHint}>{isFr ? `DLC auto : ${label}` : `Auto expiry: ${label}`}</Text>;
+                  }
+                  return hint ? <Text style={styles.productHint}>{hint}</Text> : null;
+                })()}
               </View>
               <View style={[styles.checkbox, isSelected && styles.checkboxSelected]}>
                 {isSelected && <Ionicons name="checkmark" size={14} color="#fff" />}
@@ -505,6 +662,31 @@ const styles = StyleSheet.create({
     backgroundColor: C.primary,
     borderColor: C.primary,
   },
+
+  // ── Fallback ──
+  fallbackTitle: { fontSize: 18, fontWeight: '800', color: '#111827', textAlign: 'center', marginTop: 16 },
+  fallbackSub: { fontSize: 14, color: C.textMid, textAlign: 'center', marginTop: 8, lineHeight: 20, paddingHorizontal: 8 },
+  reportBtn: {
+    flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 10,
+    backgroundColor: '#F59E0B', borderRadius: 16, paddingVertical: 16, paddingHorizontal: 24,
+    marginTop: 24,
+  },
+  switchLink: { marginTop: 16, alignItems: 'center' },
+  switchLinkText: { color: C.primary, fontSize: 14, fontWeight: '600' },
+
+  // ── Zone selector ──
+  zoneRow: {
+    flexDirection: 'row', alignItems: 'center', gap: 8,
+    paddingHorizontal: 16, paddingVertical: 10,
+    backgroundColor: '#fff', borderBottomWidth: 1, borderBottomColor: '#F0EDE8',
+  },
+  zoneLabel: { fontSize: 13, fontWeight: '700', color: '#374151' },
+  zoneChip: {
+    paddingHorizontal: 10, paddingVertical: 6, borderRadius: 20,
+    borderWidth: 1.5, borderColor: '#D1D5DB', backgroundColor: '#F9FAFB',
+  },
+  zoneChipActive: { borderColor: C.primary, backgroundColor: C.primaryLight },
+  zoneChipText: { fontSize: 12, fontWeight: '700', color: '#111827' },
 
   // ── Footer ──
   footer: {

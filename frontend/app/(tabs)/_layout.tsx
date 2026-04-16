@@ -1,5 +1,5 @@
 import React from 'react';
-import { View } from 'react-native';
+import { ImageBackground } from 'react-native';
 import { Tabs, usePathname, useRouter, useSegments } from 'expo-router';
 import Ionicons from '@expo/vector-icons/Ionicons';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
@@ -23,7 +23,11 @@ export default function TabsLayout() {
   const showScanFab = !shouldHideFabForPath && (activeLeaf === '(tabs)' || activeLeaf === 'index' || activeLeaf === 'stock');
 
   return (
-    <View style={{ flex: 1 }}>
+    <ImageBackground
+      source={require('../../assets/images/KeepEat_fond.png')}
+      style={{ flex: 1 }}
+      resizeMode="cover"
+    >
       <Tabs
         screenOptions={{
           headerShown: false,
@@ -81,6 +85,6 @@ export default function TabsLayout() {
         />
       </Tabs>
       {showScanFab ? <FloatingScanButton onPress={() => router.push('/scan')} /> : null}
-    </View>
+    </ImageBackground>
   );
 }

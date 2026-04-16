@@ -1,6 +1,6 @@
 import React, { useEffect, useMemo } from 'react';
 import { SafeAreaView } from 'react-native-safe-area-context';
-import { View, Text, StyleSheet, ScrollView, TouchableOpacity, Image } from 'react-native';
+import { View, Text, StyleSheet, ScrollView, TouchableOpacity, Image, ImageBackground } from 'react-native';
 import { useRouter } from 'expo-router';
 import Ionicons from '@expo/vector-icons/Ionicons';
 import { useStockStore } from '../../store/stockStore';
@@ -11,14 +11,7 @@ import { countLabelFr } from '../../utils/uiText';
 import { storageZoneLabel, UI_LABELS } from '../../utils/uiLabels';
 import { fetchRecipesSuggestions } from '../../utils/recipesApi';
 import { logger } from '../../utils/logger';
-
-function expiryText(days: number | null): string {
-  if (days === null) return 'Date non renseignée';
-  if (days < 0) return `Périmé depuis ${Math.abs(days)} j`;
-  if (days === 0) return 'Expire aujourd’hui';
-  if (days === 1) return 'Expire demain';
-  return `Expire dans ${days} j`;
-}
+import { expiryColor, expiryText } from '../../utils/expiryLabels';
 
 export default function HomeDashboardScreen() {
   const router = useRouter();
@@ -53,6 +46,7 @@ export default function HomeDashboardScreen() {
         timeMinutes: recipe.duration_min ?? recipe.timeMinutes ?? 0,
         matchedCount: recipe.available_count ?? recipe.availableCount ?? 0,
         missingCount: recipe.missing_count ?? recipe.missingCount ?? 0,
+        imageUrl: recipe.image || recipe.imageUrl || '',
       })),
     [recipesOnHome],
   );
@@ -66,10 +60,10 @@ export default function HomeDashboardScreen() {
     let cancelled = false;
     const loadHomeRecipes = async () => {
       try {
-        const payload = await fetchRecipesSuggestions('stock');
+        const payload = await fetchRecipesSuggestions('expiryDay');
         if (cancelled) return;
         const backendRecipesOnHome = payload.recipes ?? [];
-        setRecipesOnHome(backendRecipesOnHome.slice(0, 2));
+        setRecipesOnHome(backendRecipesOnHome.slice(0, 4));
         logger.debug('[RECIPES_MATCH] home suggestions diagnostics', {
           recipesOnHomeCount: backendRecipesOnHome.length,
           recipesOnHomeIds: backendRecipesOnHome.map((recipe) => recipe.id).slice(0, 10),
@@ -87,6 +81,7 @@ export default function HomeDashboardScreen() {
   }, []);
 
   return (
+    <ImageBackground source={require('../../assets/images/KeepEat_fond.png')} style={styles.bgImage} resizeMode="cover">
     <SafeAreaView style={styles.container}>
       <ScrollView style={styles.scroll} contentContainerStyle={styles.content} showsVerticalScrollIndicator={false}>
         <View style={styles.headerRow}>
@@ -119,7 +114,12 @@ export default function HomeDashboardScreen() {
 
         <View style={styles.sectionCard}>
           <View style={styles.sectionHeader}>
-            <Text style={styles.sectionTitle}>À consommer bientôt</Text>
+            <View style={styles.sectionTitleRow}>
+              <Text style={styles.sectionTitle}>Aperçu du stock :</Text>
+              {expiringSoon.length > 0 && (
+                <View style={[styles.sectionDot, { backgroundColor: expiryColor(daysUntil(expiringSoon[0].expiry_date)) }]} />
+              )}
+            </View>
             <TouchableOpacity onPress={() => router.push('/(tabs)/stock')}>
               <Text style={styles.linkText}>{UI_LABELS.fr.actions.viewStock}</Text>
             </TouchableOpacity>
@@ -127,30 +127,34 @@ export default function HomeDashboardScreen() {
           {expiringSoon.length === 0 ? (
             <Text style={styles.emptyText}>Aucun produit urgent pour le moment 🎉</Text>
           ) : (
-            expiringSoon.map((item) => (
-              <View key={item.id} style={styles.rowItem}>
-                <View style={styles.rowMain}>
-                  <View style={styles.squareThumb}>
-                    {item.image_url ? (
-                      <Image source={{ uri: item.image_url }} style={styles.squareThumbImage} />
-                    ) : (
-                      <Ionicons name="nutrition-outline" size={16} color={C.textMid} />
-                    )}
+            expiringSoon.map((item) => {
+              const days = daysUntil(item.expiry_date);
+              const urgColor = expiryColor(days);
+              return (
+                <View key={item.id} style={styles.rowItem}>
+                  <View style={styles.rowMain}>
+                    <View style={styles.squareThumb}>
+                      {item.image_url ? (
+                        <Image source={{ uri: item.image_url }} style={styles.squareThumbImage} />
+                      ) : (
+                        <Ionicons name="nutrition-outline" size={16} color={C.textMid} />
+                      )}
+                    </View>
+                    <View style={styles.rowText}>
+                      <Text style={styles.rowTitle}>{item.name}</Text>
+                      <Text style={styles.rowMeta}>{storageZoneLabel(item.storageZone)} · {item.quantity ?? UI_LABELS.fr.unknownQuantity}</Text>
+                    </View>
                   </View>
-                  <View style={styles.rowText}>
-                    <Text style={styles.rowTitle}>{item.name}</Text>
-                    <Text style={styles.rowMeta}>{storageZoneLabel(item.storageZone)} · {item.quantity ?? UI_LABELS.fr.unknownQuantity}</Text>
-                  </View>
+                  <Text style={[styles.rowExpiry, { color: urgColor }]}>{expiryText(days)}</Text>
                 </View>
-                <Text style={styles.rowExpiry}>{expiryText(daysUntil(item.expiry_date))}</Text>
-              </View>
-            ))
+              );
+            })
           )}
         </View>
 
         <View style={styles.recipesCard}>
           <View style={styles.sectionHeader}>
-            <Text style={styles.sectionTitle}>Recettes</Text>
+            <Text style={styles.sectionTitle}>Vos recettes à venir</Text>
             <TouchableOpacity onPress={() => router.push('/(tabs)/recipes')}>
               <Text style={styles.linkText}>{UI_LABELS.fr.actions.viewRecipes}</Text>
             </TouchableOpacity>
@@ -159,11 +163,16 @@ export default function HomeDashboardScreen() {
             <Text style={styles.emptyText}>Aucune recette disponible avec votre stock.</Text>
           ) : (
             recipes.map((recipe) => (
-              <View key={recipe.id} style={styles.recipeRow}>
+              <TouchableOpacity
+                key={recipe.id}
+                style={styles.recipeRow}
+                activeOpacity={0.85}
+                onPress={() => router.push({ pathname: '/recipes/[id]', params: { id: recipe.id } })}
+              >
                 <View style={styles.rowMain}>
                   <View style={styles.squareThumb}>
-                    {recipe.image_url ? (
-                      <Image source={{ uri: recipe.image_url }} style={styles.squareThumbImage} />
+                    {recipe.imageUrl ? (
+                      <Image source={{ uri: recipe.imageUrl }} style={styles.squareThumbImage} />
                     ) : (
                       <Ionicons name="restaurant-outline" size={16} color={C.textMid} />
                     )}
@@ -177,7 +186,7 @@ export default function HomeDashboardScreen() {
                     </Text>
                   </View>
                 </View>
-              </View>
+              </TouchableOpacity>
             ))
           )}
         </View>
@@ -188,11 +197,13 @@ export default function HomeDashboardScreen() {
         </View>
       </ScrollView>
     </SafeAreaView>
+    </ImageBackground>
   );
 }
 
 const createStyles = (C: ReturnType<typeof getThemeColors>, T: ReturnType<typeof getThemeText>) => StyleSheet.create({
-  container: { flex: 1, backgroundColor: C.bg },
+  bgImage: { flex: 1 },
+  container: { flex: 1, backgroundColor: 'transparent' },
   scroll: { flex: 1 },
   content: { padding: 16, gap: 12, paddingBottom: 28 },
   headerRow: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center' },
@@ -210,6 +221,8 @@ const createStyles = (C: ReturnType<typeof getThemeColors>, T: ReturnType<typeof
   sectionCard: { backgroundColor: '#fff', borderRadius: 14, padding: 13, gap: 8, ...shadowSm },
   recipesCard: { backgroundColor: '#fff', borderRadius: 14, padding: 13, gap: 8 },
   sectionHeader: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between' },
+  sectionTitleRow: { flexDirection: 'row', alignItems: 'center', gap: 8 },
+  sectionDot: { width: 10, height: 10, borderRadius: 5 },
   sectionTitle: { fontSize: 17, fontWeight: '700', color: C.text },
   linkText: { color: '#166534', fontWeight: '700', fontSize: 13 },
   emptyText: { ...T.secondary, paddingVertical: 8 },
@@ -220,7 +233,7 @@ const createStyles = (C: ReturnType<typeof getThemeColors>, T: ReturnType<typeof
   squareThumbImage: { width: '100%', height: '100%' },
   rowTitle: { fontSize: 15, color: C.text, fontWeight: '600' },
   rowMeta: { ...T.secondarySmall, marginTop: 2 },
-  rowExpiry: { color: '#166534', fontSize: 12, fontWeight: '700' },
+  rowExpiry: { fontSize: 12, fontWeight: '700' },
   recipeRow: { paddingVertical: 5 },
   recipeMeta: { ...T.secondarySmall, marginTop: 2 },
   tipInline: { flexDirection: 'row', gap: 7, alignItems: 'center', paddingVertical: 2 },

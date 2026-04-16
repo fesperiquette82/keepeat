@@ -1,4 +1,4 @@
-import React, { useEffect, useRef, useState } from 'react';
+import React, { useState } from 'react';
 import {
   View,
   Text,
@@ -9,8 +9,7 @@ import {
   KeyboardAvoidingView,
   Platform,
   ScrollView,
-  Animated,
-  Easing,
+  ImageBackground,
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { useRouter } from 'expo-router';
@@ -18,39 +17,20 @@ import Ionicons from '@expo/vector-icons/Ionicons';
 import { useAuthStore } from '../store/authStore';
 import { useLanguageStore } from '../store/languageStore';
 import { APP_CONFIG } from '../utils/appConfig';
+import { shouldDisplayBiometricLoginButton } from '../utils/biometricAuth';
 
-function VeggiePastille() {
-  return (
-    <View style={styles.veggieRow}>
-      <View style={styles.veggieItem}>
-        <View style={styles.carrotGreens}>
-          <View style={[styles.carrotLeaf, styles.carrotLeafLeft]} />
-          <View style={[styles.carrotLeaf, styles.carrotLeafCenter]} />
-          <View style={[styles.carrotLeaf, styles.carrotLeafRight]} />
-        </View>
-        <View style={styles.carrotBody} />
-      </View>
-
-      <View style={styles.veggieItem}>
-        <View style={styles.tomatoLeaf} />
-        <View style={styles.tomatoBody}>
-          <View style={styles.tomatoHighlight} />
-        </View>
-      </View>
-
-      <View style={styles.veggieItem}>
-        <View style={styles.onionStem} />
-        <View style={styles.onionBody}>
-          <View style={styles.onionHighlight} />
-        </View>
-      </View>
-    </View>
-  );
-}
 
 export default function LoginScreen() {
   const router = useRouter();
-  const { login, resendVerification, error, clearError } = useAuthStore();
+  const {
+    login,
+    loginWithBiometrics,
+    resendVerification,
+    error,
+    clearError,
+    hasBiometricCredentials,
+    isBiometricSupported,
+  } = useAuthStore();
   const { language } = useLanguageStore();
 
   const [email, setEmail] = useState('');
@@ -61,39 +41,8 @@ export default function LoginScreen() {
   const [emailNotVerified, setEmailNotVerified] = useState(false);
   const [resendLoading, setResendLoading] = useState(false);
   const [resendDone, setResendDone] = useState(false);
-  const badgeOpacity = useRef(new Animated.Value(0)).current;
-  const badgeScale = useRef(new Animated.Value(0.8)).current;
 
   const fr = language === 'fr';
-
-  useEffect(() => {
-    const timer = setTimeout(() => {
-      Animated.parallel([
-        Animated.timing(badgeOpacity, {
-          toValue: 1,
-          duration: 320,
-          easing: Easing.out(Easing.cubic),
-          useNativeDriver: true,
-        }),
-        Animated.sequence([
-          Animated.timing(badgeScale, {
-            toValue: 1.05,
-            duration: 240,
-            easing: Easing.out(Easing.cubic),
-            useNativeDriver: true,
-          }),
-          Animated.spring(badgeScale, {
-            toValue: 1,
-            tension: 140,
-            friction: 9,
-            useNativeDriver: true,
-          }),
-        ]),
-      ]).start();
-    }, 120);
-
-    return () => clearTimeout(timer);
-  }, [badgeOpacity, badgeScale]);
 
   const handleDevLogin = () => {
     // Identifiants de développement supprimés pour raisons de sécurité.
@@ -132,6 +81,27 @@ export default function LoginScreen() {
     }
   };
 
+  const handleBiometricLogin = async () => {
+    setLocalError(null);
+    clearError();
+    setIsLoading(true);
+    try {
+      await loginWithBiometrics();
+      // La navigation est gérée par _layout.tsx via le changement d'état user
+    } catch (err: any) {
+      if (err?.message === 'BIOMETRIC_NOT_SUPPORTED') {
+        setLocalError(fr ? 'Votre téléphone ne supporte pas la biométrie.' : 'Your phone does not support biometrics.');
+      } else
+      if (err?.message === 'BIOMETRIC_CREDENTIALS_NOT_FOUND') {
+        setLocalError(fr ? 'Aucun identifiant biométrique enregistré.' : 'No biometric credential is saved yet.');
+      } else {
+        setLocalError(fr ? 'Connexion biométrique échouée.' : 'Biometric sign-in failed.');
+      }
+    } finally {
+      setIsLoading(false);
+    }
+  };
+
   const handleResendVerification = async () => {
     if (!email.trim()) {
       setLocalError(fr ? 'Saisissez votre email pour renvoyer la confirmation.' : 'Enter your email to resend confirmation.');
@@ -153,7 +123,12 @@ export default function LoginScreen() {
   const displayError = localError || error;
 
   return (
-    <SafeAreaView style={styles.container}>
+    <ImageBackground
+      source={require('../assets/images/auth-background.jpg')}
+      style={styles.bgImage}
+      resizeMode="cover"
+    >
+    <SafeAreaView style={styles.container} edges={['bottom']}>
       <KeyboardAvoidingView
         style={styles.flex}
         behavior={Platform.OS === 'ios' ? 'padding' : undefined}
@@ -162,24 +137,6 @@ export default function LoginScreen() {
           contentContainerStyle={styles.scroll}
           keyboardShouldPersistTaps="handled"
         >
-          <View style={styles.logoSection}>
-            <Animated.View
-              style={[
-                styles.logoIcon,
-                {
-                  opacity: badgeOpacity,
-                  transform: [{ scale: badgeScale }],
-                },
-              ]}
-            >
-              <VeggiePastille />
-            </Animated.View>
-            <Text style={styles.logoTitle}>KeepEat</Text>
-            <Text style={styles.logoTagline}>
-              {fr ? 'Vos aliments, au bon moment' : 'Your food, at the right time'}
-            </Text>
-          </View>
-
           {/* Form */}
           <View style={styles.form}>
             <Text style={styles.formTitle}>{fr ? 'Connexion' : 'Sign in'}</Text>
@@ -277,6 +234,19 @@ export default function LoginScreen() {
               )}
             </TouchableOpacity>
 
+            {shouldDisplayBiometricLoginButton(hasBiometricCredentials, isBiometricSupported, Platform.OS) && (
+              <TouchableOpacity
+                style={[styles.biometricBtn, isLoading && styles.submitBtnDisabled]}
+                onPress={handleBiometricLogin}
+                disabled={isLoading}
+              >
+                <Ionicons name="finger-print-outline" size={18} color="#22c55e" />
+                <Text style={styles.biometricBtnText}>
+                  {fr ? 'Connexion avec empreinte' : 'Sign in with fingerprint'}
+                </Text>
+              </TouchableOpacity>
+            )}
+
             <TouchableOpacity
               style={styles.switchLink}
               onPress={() => router.replace('/register')}
@@ -301,125 +271,15 @@ export default function LoginScreen() {
         </ScrollView>
       </KeyboardAvoidingView>
     </SafeAreaView>
+    </ImageBackground>
   );
 }
 
 const styles = StyleSheet.create({
-  container: { flex: 1, backgroundColor: '#E3E8F0' },
+  bgImage: { flex: 1 },
+  container: { flex: 1, backgroundColor: 'transparent' },
   flex: { flex: 1 },
-  scroll: { flexGrow: 1, justifyContent: 'center', padding: 24 },
-
-  logoSection: { alignItems: 'center', marginBottom: 36 },
-  logoIcon: {
-    width: 120,
-    height: 120,
-    borderRadius: 60,
-    backgroundColor: '#00C853',
-    alignItems: 'center',
-    justifyContent: 'center',
-    marginBottom: 16,
-    shadowColor: '#111827',
-    shadowOffset: { width: 0, height: 6 },
-    shadowOpacity: 0.15,
-    shadowRadius: 10,
-    elevation: 8,
-  },
-  veggieRow: {
-    flexDirection: 'row',
-    alignItems: 'flex-end',
-    justifyContent: 'center',
-    gap: 10,
-  },
-  veggieItem: {
-    alignItems: 'center',
-    justifyContent: 'flex-end',
-  },
-  carrotGreens: {
-    flexDirection: 'row',
-    alignItems: 'flex-end',
-    marginBottom: -2,
-    zIndex: 2,
-  },
-  carrotLeaf: {
-    width: 5,
-    height: 12,
-    backgroundColor: '#0E9F3D',
-    borderRadius: 8,
-  },
-  carrotLeafLeft: {
-    transform: [{ rotate: '-24deg' }],
-    marginRight: 1,
-  },
-  carrotLeafCenter: {
-    height: 13,
-  },
-  carrotLeafRight: {
-    transform: [{ rotate: '24deg' }],
-    marginLeft: 1,
-  },
-  carrotBody: {
-    width: 18,
-    height: 28,
-    backgroundColor: '#FF8A00',
-    borderTopLeftRadius: 10,
-    borderTopRightRadius: 10,
-    borderBottomLeftRadius: 14,
-    borderBottomRightRadius: 5,
-    transform: [{ rotate: '2deg' }],
-  },
-  tomatoLeaf: {
-    width: 12,
-    height: 7,
-    backgroundColor: '#129A3E',
-    borderRadius: 6,
-    marginBottom: -2,
-    zIndex: 2,
-  },
-  tomatoBody: {
-    width: 24,
-    height: 22,
-    backgroundColor: '#FF3B30',
-    borderRadius: 14,
-    alignItems: 'center',
-    justifyContent: 'center',
-  },
-  tomatoHighlight: {
-    width: 6,
-    height: 6,
-    borderRadius: 4,
-    backgroundColor: 'rgba(255,255,255,0.45)',
-    marginLeft: -6,
-    marginTop: -3,
-  },
-  onionStem: {
-    width: 3,
-    height: 8,
-    backgroundColor: '#8B5CF6',
-    borderRadius: 4,
-    marginBottom: -1,
-    zIndex: 2,
-  },
-  onionBody: {
-    width: 20,
-    height: 24,
-    backgroundColor: '#C026D3',
-    borderTopLeftRadius: 12,
-    borderTopRightRadius: 12,
-    borderBottomLeftRadius: 12,
-    borderBottomRightRadius: 14,
-    alignItems: 'center',
-    justifyContent: 'center',
-  },
-  onionHighlight: {
-    width: 5,
-    height: 9,
-    borderRadius: 4,
-    backgroundColor: 'rgba(255,255,255,0.32)',
-    marginLeft: -5,
-    marginTop: -1,
-  },
-  logoTitle: { fontSize: 34, fontWeight: '800', color: '#111827', letterSpacing: -0.5 },
-  logoTagline: { fontSize: 14, color: '#6B7280', marginTop: 6 },
+  scroll: { flexGrow: 1, justifyContent: 'flex-end', paddingHorizontal: 24, paddingBottom: 24, paddingTop: 280 },
 
   form: {
     backgroundColor: '#FFFFFF',
@@ -506,6 +366,18 @@ const styles = StyleSheet.create({
   },
   submitBtnDisabled: { opacity: 0.6 },
   submitBtnText: { color: '#fff', fontWeight: '800', fontSize: 16 },
+  biometricBtn: {
+    borderColor: '#22c55e',
+    borderWidth: 1.5,
+    borderRadius: 14,
+    height: 48,
+    alignItems: 'center',
+    justifyContent: 'center',
+    marginBottom: 20,
+    flexDirection: 'row',
+    gap: 8,
+  },
+  biometricBtnText: { color: '#166534', fontWeight: '700', fontSize: 15 },
 
   switchLink: { alignItems: 'center' },
   switchLinkText: { color: '#6B7280', fontSize: 14 },

@@ -36,6 +36,36 @@ export function dedupeRecipesById(recipes: any[]): any[] {
     const id = String(recipe?.id ?? '').trim();
     if (!id || seen.has(id)) return false;
     seen.add(id);
+  const seenIds = new Set<string>();
+  const seenSemanticSignatures = new Set<string>();
+  const seenTitleSignatures = new Set<string>();
+  return recipes.filter((recipe) => {
+    const id = String(recipe?.id ?? '').trim();
+    const title = String(recipe?.title ?? '').trim().toLowerCase();
+    const duration = String(recipe?.duration_min ?? recipe?.timeMinutes ?? '').trim();
+    const dishType = String(recipe?.dish_type ?? recipe?.type ?? '').trim().toLowerCase();
+    const availableIngredients = getRecipeAvailableIngredients(recipe)
+      .map((ingredient) => normalizeIngredientName(String(ingredient ?? '')))
+      .filter(Boolean)
+      .sort()
+      .join('|');
+    const semanticKey = [title, duration, dishType, availableIngredients].join('#');
+    const titleKey = [title, duration, dishType].join('#');
+
+    if (id) {
+      if (seenIds.has(id)) return false;
+      seenIds.add(id);
+    }
+
+    if (title && (duration || dishType)) {
+      if (seenTitleSignatures.has(titleKey)) return false;
+      seenTitleSignatures.add(titleKey);
+    }
+
+    if (!id) {
+      if (!semanticKey || seenSemanticSignatures.has(semanticKey)) return false;
+      seenSemanticSignatures.add(semanticKey);
+    }
     return true;
   });
 }

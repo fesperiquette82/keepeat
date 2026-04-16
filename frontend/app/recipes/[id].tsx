@@ -8,57 +8,31 @@ import { useStockStore } from '../../store/stockStore';
 import { useAppSettingsStore } from '../../store/appSettingsStore';
 import { BackendRecipeSuggestion, useRecipesStore } from '../../store/recipesStore';
 import { ActionBanner } from '../../component/ActionBanner';
-import { C, T } from '../../utils/theme';
+import { getThemeColors, getThemeText, ThemeColors } from '../../utils/theme';
 import { matchRecipeIngredientsToStock } from '../../utils/ingredientMatching';
 import { removeStockItems, undoRemovedStockItems } from '../../utils/stockRemoval';
 import { logger } from '../../utils/logger';
 import { buildRecipeIngredientDisplayRows } from '../../utils/recipeIngredientDisplay';
-
-interface RecipeIngredient {
-  name: string;
-  quantity: number;
-  unit: string;
-}
-
-function formatQuantity(value: number | string | null | undefined): string {
-  if (typeof value === 'number') {
-    if (Number.isInteger(value)) return String(value);
-    return value.toFixed(1).replace(/\.0$/, '');
-  }
-  if (typeof value === 'string' && value.trim().length > 0) {
-    return value.trim();
-  }
-  return '';
-}
-
-function scaleIngredients(ingredients: RecipeIngredient[], factor: number): RecipeIngredient[] {
-  return ingredients.map((ingredient) => ({
-    ...ingredient,
-    quantity: ingredient.quantity * factor,
-  }));
-}
-
-function toIngredientList(recipe: BackendRecipeSuggestion | null): RecipeIngredient[] {
-  if (!recipe) return [];
-  const used = Array.isArray(recipe.usedIngredients) ? recipe.usedIngredients : [];
-  const missed = Array.isArray(recipe.missedIngredients) ? recipe.missedIngredients : [];
-  const unique = Array.from(new Set([...used, ...missed].map((item) => item.trim()).filter(Boolean)));
-  return unique.map((name) => ({ name, quantity: 1, unit: 'portion' }));
-}
+import {
+  formatIngredientQuantity,
+  scaleIngredients,
+} from '../../utils/recipeIngredients';
+import { resolveRecipeIngredients } from '../../utils/recipeIngredientsResolver';
+import { formatFrenchRecipeText } from '../../utils/recipeFrenchTypography';
 
 function resolveSteps(recipe: BackendRecipeSuggestion | null): string[] {
   if (!recipe) return [];
   const steps = (recipe.debug as { steps?: unknown } | undefined)?.steps;
   if (Array.isArray(steps)) {
     const safeSteps = steps.filter((step): step is string => typeof step === 'string' && step.trim().length > 0);
-    if (safeSteps.length > 0) return safeSteps;
+    if (safeSteps.length > 0) return safeSteps.map((step) => formatFrenchRecipeText(step));
   }
   if (recipe.instructions_summary) {
     const fallback = recipe.instructions_summary
       .split('.')
       .map((part) => part.trim())
       .filter(Boolean);
-    if (fallback.length > 0) return fallback;
+    if (fallback.length > 0) return fallback.map((step) => formatFrenchRecipeText(step));
   }
   return ['Préparez les ingrédients.', 'Cuisinez la recette simplement.', 'Servez aussitôt.'];
 }
@@ -70,6 +44,10 @@ export default function RecipeDetailScreen() {
 
   const { items: storeItems, fetchStock } = useStockStore();
   const householdSize = useAppSettingsStore((state) => state.householdSize);
+  const themeMode = useAppSettingsStore((state) => state.themeMode);
+  const C = getThemeColors(themeMode);
+  const T = getThemeText(C);
+  const styles = useMemo(() => createStyles(C, T), [C, T]);
   const fetchRecipeById = useRecipesStore((state) => state.fetchRecipeById);
 
   const [isScreenLoading, setIsScreenLoading] = useState(true);
@@ -89,16 +67,15 @@ export default function RecipeDetailScreen() {
   );
 
   const items = useMemo(() => storeItems.filter((item) => item.status === 'active'), [storeItems]);
-  const initialServings = householdSize;
-  const [servings, setServings] = useState(initialServings);
+  const baseServings = useMemo(() => Math.max(1, baseRecipe?.servings ?? householdSize), [baseRecipe?.servings, householdSize]);
+  const [servings, setServings] = useState(baseServings);
 
   useEffect(() => {
-    setServings(initialServings);
-  }, [initialServings]);
+    setServings(baseServings);
+  }, [baseServings]);
 
-  const recipeIngredients = useMemo(() => toIngredientList(baseRecipe), [baseRecipe]);
-  const factor = useMemo(() => servings / Math.max(1, householdSize), [householdSize, servings]);
-  const scaledIngredients = useMemo(() => scaleIngredients(recipeIngredients, factor), [factor, recipeIngredients]);
+  const recipeIngredients = useMemo(() => resolveRecipeIngredients(baseRecipe, baseServings), [baseRecipe, baseServings]);
+  const scaledIngredients = useMemo(() => scaleIngredients(recipeIngredients, servings, baseServings), [baseServings, recipeIngredients, servings]);
   const ingredientRows = useMemo(() => buildRecipeIngredientDisplayRows(items, scaledIngredients), [items, scaledIngredients]);
 
   const ingredientAvailability = useMemo(() => {
@@ -255,7 +232,7 @@ export default function RecipeDetailScreen() {
         {!!baseRecipe.image && (
           <Image source={{ uri: baseRecipe.image }} style={styles.heroImage} resizeMode="cover" />
         )}
-        <Text style={styles.title}>{baseRecipe.title}</Text>
+        <Text style={styles.title}>{formatFrenchRecipeText(baseRecipe.title)}</Text>
         <Text style={styles.meta}>{totalTime} min · Idée simple</Text>
 
         <View style={styles.servingsCard}>
@@ -269,18 +246,18 @@ export default function RecipeDetailScreen() {
               <Ionicons name="add" size={18} color={C.text} />
             </TouchableOpacity>
           </View>
-          <Text style={styles.servingsHint}>Par défaut foyer : {householdSize} personnes</Text>
+          <Text style={styles.servingsHint}>Base recette : {baseServings} personnes · Foyer : {householdSize}</Text>
         </View>
 
         <View style={styles.card}>
           <Text style={styles.sectionTitle}>Ingrédients</Text>
           {ingredientRows.map((row, index) => {
             const { ingredient, isAvailable } = row;
-            const formattedQuantity = formatQuantity(ingredient.quantity);
             const rowKey = `${ingredient.name}-${index}`;
             const hasImage = !!row.imageUrl && !imageErrors[rowKey];
-            return (
-              <View key={rowKey} style={styles.ingredientRow}>
+            const canNavigate = !!row.matchedStockItemId;
+            const rowContent = (
+              <>
                 <View style={styles.ingredientThumb}>
                   {hasImage ? (
                     <Image
@@ -294,15 +271,28 @@ export default function RecipeDetailScreen() {
                 </View>
                 <View style={styles.ingredientTextWrap}>
                   <Text style={styles.ingredientName}>{ingredient.name}</Text>
-                  <Text style={styles.ingredientQuantity}>
-                    {formattedQuantity}
-                    {formattedQuantity ? ' ' : ''}
-                    {ingredient.unit}
-                  </Text>
+                  <Text style={styles.ingredientQuantity}>{formatIngredientQuantity(ingredient, { ingredientName: ingredient.name })}</Text>
                 </View>
                 <Text style={[styles.stockBadge, isAvailable ? styles.badgeOk : styles.badgeMissing]}>
                   {isAvailable ? 'Disponible' : 'Manquant'}
                 </Text>
+              </>
+            );
+            if (canNavigate) {
+              return (
+                <TouchableOpacity
+                  key={rowKey}
+                  style={styles.ingredientRow}
+                  activeOpacity={0.7}
+                  onPress={() => router.push({ pathname: '/edit-product', params: { id: row.matchedStockItemId! } })}
+                >
+                  {rowContent}
+                </TouchableOpacity>
+              );
+            }
+            return (
+              <View key={rowKey} style={styles.ingredientRow}>
+                {rowContent}
               </View>
             );
           })}
@@ -336,7 +326,8 @@ export default function RecipeDetailScreen() {
   );
 }
 
-const styles = StyleSheet.create({
+function createStyles(C: ThemeColors, T: ReturnType<typeof getThemeText>) {
+  return StyleSheet.create({
   container: { flex: 1, backgroundColor: C.bg },
   headerRow: { flexDirection: 'row', alignItems: 'center', gap: 8, paddingHorizontal: 16, paddingTop: 8 },
   backIcon: { width: 32, height: 32, borderRadius: 16, backgroundColor: '#fff', alignItems: 'center', justifyContent: 'center' },
@@ -371,4 +362,5 @@ const styles = StyleSheet.create({
   errorTitle: { color: C.text, fontSize: 20, fontWeight: '800', textAlign: 'center' },
   backButton: { backgroundColor: C.primary, paddingHorizontal: 14, paddingVertical: 10, borderRadius: 10 },
   backButtonLabel: { color: '#fff', fontWeight: '700' },
-});
+  });
+}

@@ -3,6 +3,7 @@ from __future__ import annotations
 import hashlib
 import json
 import os
+import re
 import unicodedata as _ud
 from dataclasses import dataclass
 from functools import lru_cache
@@ -13,7 +14,7 @@ import httpx
 from pydantic import ValidationError
 
 from app_core import logger
-from models import Recipe, RecipeDifficulty, RecipeGroupedSuggestion, RecipeMealType, RecipeSuggestion
+from models import Recipe, RecipeDifficulty, RecipeGroupedSuggestion, RecipeMealType, RecipeSuggestion, RecipeSuggestionIngredient
 
 _FRIGO_CATS = ["frais", "proteines", "legumes", "boissons"]
 _PLACARD_CATS = ["feculents", "desserts", "epicerie", "autres"]
@@ -41,6 +42,27 @@ _EXOTIC_MARKERS = {
     "indien", "indienne", "curry", "masala", "mexicain", "mexicaine", "tacos",
     "kebab", "libanais", "coreen", "kimchi", "wok", "pho", "bo bun", "pad thai",
 }
+
+_RECIPE_TEXT_FIELDS = ("title", "summary")
+_RECIPE_LIST_TEXT_FIELDS = ("steps", "tags", "search_terms")
+_FRENCH_TEXT_REPLACEMENTS: tuple[tuple[re.Pattern[str], str], ...] = (
+    (re.compile(r"\boeufs\b", re.IGNORECASE), "œufs"),
+    (re.compile(r"\boeuf\b", re.IGNORECASE), "œuf"),
+    (re.compile(r"\bcremeuse\b", re.IGNORECASE), "crémeuse"),
+    (re.compile(r"\bcremeux\b", re.IGNORECASE), "crémeux"),
+    (re.compile(r"\bcreme\b", re.IGNORECASE), "crème"),
+    (re.compile(r"\bdejeuner\b", re.IGNORECASE), "déjeuner"),
+    (re.compile(r"\bgouter\b", re.IGNORECASE), "goûter"),
+    (re.compile(r"\bmelanger\b", re.IGNORECASE), "mélanger"),
+    (re.compile(r"\bpate\b", re.IGNORECASE), "pâte"),
+    (re.compile(r"\bcuillere\b", re.IGNORECASE), "cuillère"),
+    (re.compile(r"\bleger\b", re.IGNORECASE), "léger"),
+    (re.compile(r"\bideal\b", re.IGNORECASE), "idéal"),
+    (re.compile(r"\bbouchees\b", re.IGNORECASE), "bouchées"),
+    (re.compile(r"\brafraichir\b", re.IGNORECASE), "rafraîchir"),
+    (re.compile(r"\bmaizena\b", re.IGNORECASE), "maïzena"),
+    (re.compile(r"(?<=\s)a(?=\s|['’])"), "à"),
+)
 
 # Dictionnaire FR → EN pour les alertes quotidiennes (daily alert, _check_daily_expiry_alert)
 _FR_EN: dict[str, str] = {
@@ -143,6 +165,38 @@ class RecipeCatalogError(RuntimeError):
     """Raised when the local recipe catalog cannot be loaded or validated."""
 
 
+def _autocorrect_recipe_text(value: str) -> str:
+    corrected = value
+
+    def _replace(match: re.Match[str], replacement: str) -> str:
+        token = match.group(0)
+        if token.isupper():
+            return replacement.upper()
+        if token[:1].isupper():
+            return replacement[:1].upper() + replacement[1:]
+        return replacement
+
+    for pattern, replacement in _FRENCH_TEXT_REPLACEMENTS:
+        corrected = pattern.sub(lambda m, r=replacement: _replace(m, r), corrected)
+    return corrected
+
+
+def _autocorrect_recipe_payload(item: dict[str, Any]) -> dict[str, Any]:
+    corrected = dict(item)
+
+    for field in _RECIPE_TEXT_FIELDS:
+        raw = corrected.get(field)
+        if isinstance(raw, str):
+            corrected[field] = _autocorrect_recipe_text(raw)
+
+    for field in _RECIPE_LIST_TEXT_FIELDS:
+        raw = corrected.get(field)
+        if isinstance(raw, list):
+            corrected[field] = [_autocorrect_recipe_text(entry) if isinstance(entry, str) else entry for entry in raw]
+
+    return corrected
+
+
 def fr_to_en_ingredient(name: str, category: str = "autres") -> str:
     """Convertit un nom de produit français en ingrédient anglais (pour les alertes quotidiennes)."""
     norm = _normalize_fr(name)
@@ -152,25 +206,30 @@ def fr_to_en_ingredient(name: str, category: str = "autres") -> str:
     return _CATEGORY_TO_EN.get(category, "chicken")
 
 
-async def _generate_ai_recipe(stock_names: list[str], openai_key: str) -> dict | None:
-    """Appelle GPT-4o-mini pour générer 1 recette française depuis les ingrédients du stock.
-    Retourne None en cas d'échec ou si KEEPEAT_OPENAI_TOKEN n'est pas configuré.
+async def _generate_ai_recipe(stock_names: list[str], gemini_key: str) -> dict | None:
+    """Appelle Gemini pour générer 1 recette française depuis les ingrédients du stock.
+    Retourne None en cas d'échec ou si GEMINI_RECIPES_API_KEY n'est pas configuré.
     """
     prompt = _AI_SUGGEST_PROMPT.format(ingredients="\n".join(f"- {n}" for n in stock_names))
     try:
         async with httpx.AsyncClient(timeout=20) as http:
             r = await http.post(
-                "https://api.openai.com/v1/chat/completions",
-                headers={"Authorization": f"Bearer {openai_key}", "Content-Type": "application/json"},
-                json={"model": "gpt-4o-mini", "max_tokens": 350,
-                      "messages": [{"role": "user", "content": prompt}]},
+                f"https://generativelanguage.googleapis.com/v1beta/models/gemini-1.5-flash:generateContent?key={gemini_key}",
+                headers={"Content-Type": "application/json"},
+                json={
+                    "contents": [{"parts": [{"text": prompt}]}],
+                    "generationConfig": {
+                        "maxOutputTokens": 350,
+                        "responseMimeType": "application/json",
+                    },
+                },
             )
             if r.status_code != 200:
-                logger.warning("OpenAI suggest recipe error %s: %s", r.status_code, r.text[:200])
+                logger.warning("Gemini suggest recipe error %s: %s", r.status_code, r.text[:200])
                 return None
-            text = r.json()["choices"][0]["message"]["content"].strip()
+            text = r.json()["candidates"][0]["content"]["parts"][0]["text"].strip()
     except Exception as exc:
-        logger.warning("OpenAI suggest recipe failed: %s", exc)
+        logger.warning("Gemini suggest recipe failed: %s", exc)
         return None
 
     if "```" in text:
@@ -183,11 +242,11 @@ async def _generate_ai_recipe(stock_names: list[str], openai_key: str) -> dict |
     try:
         data = json.loads(text)
         if not isinstance(data.get("title"), str) or not isinstance(data.get("ingredients_keywords"), list):
-            logger.warning("OpenAI suggest recipe invalid structure: %s", text[:200])
+            logger.warning("Gemini suggest recipe invalid structure: %s", text[:200])
             return None
         return data
     except Exception:
-        logger.warning("OpenAI suggest recipe invalid JSON: %s", text[:200])
+        logger.warning("Gemini suggest recipe invalid JSON: %s", text[:200])
         return None
 
 
@@ -213,6 +272,8 @@ def load_local_recipes(catalog_path: str | os.PathLike[str] | None = None) -> tu
     recipes: list[Recipe] = []
     seen_ids: set[str] = set()
     for index, item in enumerate(raw):
+        if isinstance(item, dict):
+            item = _autocorrect_recipe_payload(item)
         try:
             recipe = Recipe.model_validate(item)
         except ValidationError as exc:
@@ -852,13 +913,29 @@ def recipe_to_legacy_candidate(recipe: Recipe) -> dict:
 
 def recipe_match_to_suggestion(match: RecipeMatch) -> RecipeSuggestion:
     recipe = match.recipe
+    structured_ingredients = [
+        RecipeSuggestionIngredient(
+            name=ingredient,
+            quantity=None,
+            unit=None,
+            display_label="Quantité à ajuster",
+            optional=False,
+            available=ingredient in match.used_required,
+            matched_stock_item_ids=[],
+            missing_quantity=None if ingredient in match.used_required else None,
+            is_estimated=True,
+        )
+        for ingredient in recipe.ingredients_required
+    ]
     return RecipeSuggestion(
         id=recipe.id,
         title=recipe.title,
+        summary=recipe.summary,
         image="",
         usedIngredients=match.used_required,
         missedIngredients=match.missing_required,
         optionalIngredientsUsed=match.optional_used,
+        ingredients=structured_ingredients,
         sourceUrl="https://www.marmiton.org/recettes/recherche.aspx?aqt=" + recipe.title.replace(" ", "+"),
         is_fallback=not match.used_required,
         instructions_summary=recipe.summary,

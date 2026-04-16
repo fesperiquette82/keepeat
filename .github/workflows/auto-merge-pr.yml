@@ -26,31 +26,40 @@ jobs:
       - name: Try to enable auto-merge from pull_request_target
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-          PR_NODE_ID: ${{ github.event.pull_request.node_id }}
+          PR_NUMBER: ${{ github.event.pull_request.number }}
+          REPO: ${{ github.repository }}
         run: |
-          set +e
+          set -e
 
-          gh api graphql -f query='
-            mutation($pullRequestId: ID!) {
-              enablePullRequestAutoMerge(input: {
-                pullRequestId: $pullRequestId,
-                mergeMethod: SQUASH
-              }) {
-                pullRequest {
-                  number
-                }
-              }
-            }
-          ' -F pullRequestId="$PR_NODE_ID"
+          PR_INFO=$(gh pr view "$PR_NUMBER" --repo "$REPO" --json mergeStateStatus,isDraft)
+          echo "$PR_INFO"
 
-          echo "Done."
-          exit 0
+          MERGE_STATE=$(echo "$PR_INFO" | jq -r '.mergeStateStatus')
+          IS_DRAFT=$(echo "$PR_INFO" | jq -r '.isDraft')
+
+          if [ "$IS_DRAFT" = "true" ]; then
+            echo "PR is draft. Skip."
+            exit 0
+          fi
+
+          case "$MERGE_STATE" in
+            CLEAN|HAS_HOOKS)
+              ;;
+            *)
+              echo "PR not ready for auto-merge yet. mergeStateStatus=$MERGE_STATE"
+              exit 0
+              ;;
+          esac
+
+          gh pr merge "$PR_NUMBER" --repo "$REPO" --auto --squash
 
   enable-automerge-checksuite:
-    if: github.event_name == 'check_suite'
+    if: >
+      github.event_name == 'check_suite' &&
+      github.event.check_suite.conclusion == 'success'
     runs-on: ubuntu-latest
     permissions:
-      contents: read
+      contents: write
       pull-requests: write
 
     steps:
@@ -69,36 +78,34 @@ jobs:
             exit 0
           fi
 
-          echo "PR_NUMBER=$PR_NUMBER" >> $GITHUB_ENV
+          echo "PR_NUMBER=$PR_NUMBER" >> "$GITHUB_ENV"
 
-      - name: Get PR node id
+      - name: Check PR state and enable auto-merge
         if: env.PR_NUMBER != ''
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
           REPO: ${{ github.repository }}
         run: |
-          PR_NODE_ID=$(gh api repos/$REPO/pulls/$PR_NUMBER --jq '.node_id')
-          echo "PR_NODE_ID=$PR_NODE_ID" >> $GITHUB_ENV
+          set -e
 
-      - name: Try to enable auto-merge after checks complete
-        if: env.PR_NODE_ID != ''
-        env:
-          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-        run: |
-          set +e
+          PR_INFO=$(gh pr view "$PR_NUMBER" --repo "$REPO" --json mergeStateStatus,isDraft)
+          echo "$PR_INFO"
 
-          gh api graphql -f query='
-            mutation($pullRequestId: ID!) {
-              enablePullRequestAutoMerge(input: {
-                pullRequestId: $pullRequestId,
-                mergeMethod: SQUASH
-              }) {
-                pullRequest {
-                  number
-                }
-              }
-            }
-          ' -F pullRequestId="$PR_NODE_ID"
+          MERGE_STATE=$(echo "$PR_INFO" | jq -r '.mergeStateStatus')
+          IS_DRAFT=$(echo "$PR_INFO" | jq -r '.isDraft')
 
-          echo "Done."
-          exit 0
+          if [ "$IS_DRAFT" = "true" ]; then
+            echo "PR is draft. Skip."
+            exit 0
+          fi
+
+          case "$MERGE_STATE" in
+            CLEAN|HAS_HOOKS)
+              ;;
+            *)
+              echo "PR not ready for auto-merge yet. mergeStateStatus=$MERGE_STATE"
+              exit 0
+              ;;
+          esac
+
+          gh pr merge "$PR_NUMBER" --repo "$REPO" --auto --squash

@@ -1,6 +1,6 @@
 import React, { useEffect, useMemo, useState } from 'react';
 import { SafeAreaView, useSafeAreaInsets } from 'react-native-safe-area-context';
-import { View, Text, StyleSheet, TouchableOpacity, FlatList, Image, Alert } from 'react-native';
+import { View, Text, StyleSheet, TouchableOpacity, FlatList, Image, Alert, TextInput, ImageBackground } from 'react-native';
 import { useRouter } from 'expo-router';
 import Ionicons from '@expo/vector-icons/Ionicons';
 import { Swipeable } from 'react-native-gesture-handler';
@@ -12,6 +12,8 @@ import { daysUntil, resolveStockItems } from '../../data/mockDashboardData';
 import { removeStockItems, undoRemovedStockItems } from '../../utils/stockRemoval';
 import { countLabelFr } from '../../utils/uiText';
 import { storageZoneLabel, UI_LABELS } from '../../utils/uiLabels';
+import { expiryColor } from '../../utils/expiryLabels';
+import { resolveSwipeAction } from '../../utils/stockSwipe';
 
 type StockFilter = 'tous' | 'urgents' | 'frigo' | 'placard';
 type StockSort = 'expiry' | 'alpha' | 'recent' | 'oldest';
@@ -50,6 +52,7 @@ export default function StockScreen() {
   const { items: storeItems, fetchStock } = useStockStore();
   const [activeFilter, setActiveFilter] = useState<StockFilter>('tous');
   const [activeSort, setActiveSort] = useState<StockSort>('expiry');
+  const [searchQuery, setSearchQuery] = useState('');
   const [imageErrors, setImageErrors] = useState<Record<string, boolean>>({});
   const [processingIds, setProcessingIds] = useState<Record<string, boolean>>({});
   const [undoItems, setUndoItems] = useState<typeof storeItems>([]);
@@ -64,6 +67,12 @@ export default function StockScreen() {
   }, [fetchStock]);
 
   const { items, isMock } = useMemo(() => resolveStockItems(storeItems, { useMockFallback: false }), [storeItems]);
+
+  const mostUrgentDays = useMemo(() => {
+    const allDays = items.map((item) => daysUntil(item.expiry_date)).filter((d): d is number => d !== null);
+    if (allDays.length === 0) return null;
+    return Math.min(...allDays);
+  }, [items]);
 
   const filteredItems = useMemo(() => {
     if (activeFilter === 'urgents') {
@@ -92,13 +101,20 @@ export default function StockScreen() {
     return list.sort((a, b) => (daysUntil(a.expiry_date) ?? 9999) - (daysUntil(b.expiry_date) ?? 9999));
   }, [activeSort, filteredItems]);
 
+  const displayedItems = useMemo(() => {
+    const q = searchQuery.trim().toLowerCase();
+    if (!q) return sortedItems;
+    return sortedItems.filter((item) => item.name.toLowerCase().includes(q));
+  }, [sortedItems, searchQuery]);
+
   const emptyLabel = useMemo(() => {
+    if (searchQuery.trim()) return `Aucun résultat pour "${searchQuery.trim()}".`;
     if (items.length === 0) return 'Aucun ingrédient en stock pour le moment.';
     if (activeFilter === 'urgents') return 'Aucun produit urgent actuellement 🎉';
     if (activeFilter === 'frigo') return 'Aucun produit au frigo.';
     if (activeFilter === 'placard') return 'Aucun produit au placard.';
     return 'Aucun résultat pour ce filtre.';
-  }, [activeFilter, items.length]);
+  }, [activeFilter, items.length, searchQuery]);
 
   const handleSwipeAction = async (itemId: string, action: 'used' | 'thrown') => {
     if (processingIds[itemId]) return;
@@ -154,15 +170,38 @@ export default function StockScreen() {
   );
 
   return (
+    <ImageBackground source={require('../../assets/images/KeepEat_fond.png')} style={styles.bgImage} resizeMode="cover">
     <SafeAreaView style={styles.container}>
       <View style={styles.header}>
-        <Text style={styles.title}>Stock complet</Text>
-        <Text style={styles.subtitle}>{countLabelFr(sortedItems.length, 'ingrédient')} affiché{sortedItems.length > 1 ? 's' : ''}</Text>
+        <View style={styles.titleRow}>
+          <Text style={styles.title}>Stock complet</Text>
+          {mostUrgentDays !== null && (
+            <View style={[styles.titleDot, { backgroundColor: expiryColor(mostUrgentDays) }]} />
+          )}
+        </View>
+        <Text style={styles.subtitle}>{countLabelFr(displayedItems.length, 'ingrédient')} affiché{displayedItems.length > 1 ? 's' : ''}</Text>
         <Text style={styles.swipeHint}>Glisser à droite = utilisé · à gauche = jeté</Text>
         {isMock && <Text style={styles.mockInfo}>Données de démonstration</Text>}
       </View>
 
       <View style={styles.controlsCard}>
+        {activeFilter === 'tous' && <View style={styles.searchRow}>
+          <Ionicons name="search-outline" size={16} color={C.textMid} />
+          <TextInput
+            style={styles.searchInput}
+            value={searchQuery}
+            onChangeText={setSearchQuery}
+            placeholder="Rechercher un produit..."
+            placeholderTextColor={C.textLight}
+            clearButtonMode="while-editing"
+            autoCorrect={false}
+          />
+          {searchQuery.length > 0 && (
+            <TouchableOpacity onPress={() => setSearchQuery('')}>
+              <Ionicons name="close-circle" size={16} color={C.textMid} />
+            </TouchableOpacity>
+          )}
+        </View>}
         <Text style={styles.controlsSectionLabel}>Filtres</Text>
         <View style={styles.filterRow}>
           {FILTERS.map((filter) => {
@@ -171,7 +210,7 @@ export default function StockScreen() {
               <TouchableOpacity
                 key={filter.key}
                 style={[styles.filterChip, selected && styles.filterChipActive]}
-                onPress={() => setActiveFilter(filter.key)}
+                onPress={() => { setActiveFilter(filter.key); if (filter.key !== 'tous') setSearchQuery(''); }}
               >
                 <Text style={[styles.filterChipLabel, selected && styles.filterChipLabelActive]}>{filter.label}</Text>
               </TouchableOpacity>
@@ -195,14 +234,14 @@ export default function StockScreen() {
         </View>
       </View>
 
-      {sortedItems.length === 0 ? (
+      {displayedItems.length === 0 ? (
         <View style={styles.emptyWrap}>
-          <Text style={styles.emptyTitle}>Stock vide</Text>
+          <Text style={styles.emptyTitle}>{searchQuery.trim() ? 'Aucun résultat' : 'Stock vide'}</Text>
           <Text style={styles.emptyText}>{emptyLabel}</Text>
         </View>
       ) : (
         <FlatList
-          data={sortedItems}
+          data={displayedItems}
           keyExtractor={(item) => item.id}
           contentContainerStyle={styles.listContent}
           renderItem={({ item }) => {
@@ -213,11 +252,7 @@ export default function StockScreen() {
                 renderLeftActions={() => renderSwipeAction('Utilisé', '#16A34A', 'restaurant-outline')}
                 renderRightActions={() => renderSwipeAction('Jeté', '#DC2626', 'trash-outline')}
                 onSwipeableOpen={(direction) => {
-                  if (direction === 'left') {
-                    handleSwipeAction(item.id, 'thrown');
-                  } else {
-                    handleSwipeAction(item.id, 'used');
-                  }
+                  handleSwipeAction(item.id, resolveSwipeAction(direction));
                 }}
               >
                 <TouchableOpacity
@@ -242,7 +277,10 @@ export default function StockScreen() {
                       <Text style={styles.meta}>{storageZoneLabel(item.storageZone)} · {item.quantity ?? UI_LABELS.fr.unknownQuantity}</Text>
                     </View>
                   </View>
-                  <Text style={styles.expiry}>{formatExpiryLabel(item.expiry_date)}</Text>
+                  <View style={styles.expiryBadge}>
+                    <View style={[styles.expiryDot, { backgroundColor: expiryColor(daysUntil(item.expiry_date)) }]} />
+                    <Text style={[styles.expiry, { color: expiryColor(daysUntil(item.expiry_date)) }]}>{formatExpiryLabel(item.expiry_date)}</Text>
+                  </View>
                 </TouchableOpacity>
               </Swipeable>
             );
@@ -260,12 +298,16 @@ export default function StockScreen() {
         />
       )}
     </SafeAreaView>
+    </ImageBackground>
   );
 }
 
 const createStyles = (C: ReturnType<typeof getThemeColors>, T: ReturnType<typeof getThemeText>) => StyleSheet.create({
-  container: { flex: 1, backgroundColor: C.bg },
+  bgImage: { flex: 1 },
+  container: { flex: 1, backgroundColor: 'transparent' },
   header: { paddingHorizontal: 16, paddingTop: 8, paddingBottom: 10 },
+  titleRow: { flexDirection: 'row', alignItems: 'center', gap: 8 },
+  titleDot: { width: 10, height: 10, borderRadius: 5 },
   title: { fontSize: 26, fontWeight: '800', color: C.text },
   subtitle: { marginTop: 4, ...T.secondary },
   swipeHint: { marginTop: 4, color: C.textLight, fontSize: 12, fontWeight: '600' },
@@ -290,7 +332,11 @@ const createStyles = (C: ReturnType<typeof getThemeColors>, T: ReturnType<typeof
   thumbImage: { width: '100%', height: '100%' },
   name: { color: C.text, fontSize: 15, fontWeight: '700' },
   meta: { ...T.secondarySmall, marginTop: 2 },
-  expiry: { color: '#15803d', fontSize: 12, fontWeight: '700' },
+  expiryBadge: { flexDirection: 'row', alignItems: 'center', gap: 5 },
+  expiryDot: { width: 8, height: 8, borderRadius: 4 },
+  expiry: { fontSize: 12, fontWeight: '700' },
+  searchRow: { flexDirection: 'row', alignItems: 'center', gap: 8, backgroundColor: '#F3F4F6', borderRadius: 10, paddingHorizontal: 10, paddingVertical: 8 },
+  searchInput: { flex: 1, fontSize: 14, color: C.text, paddingVertical: 0 },
   swipeAction: { justifyContent: 'center', alignItems: 'center', width: 92, borderRadius: 12, marginVertical: 2, gap: 4 },
   swipeActionText: { color: '#fff', fontSize: 11, fontWeight: '700' },
   emptyWrap: { flex: 1, justifyContent: 'center', alignItems: 'center', paddingHorizontal: 28 },
