@@ -3,7 +3,6 @@ import test from 'node:test';
 
 import { getActiveItemsByScope, type DashboardStockItem } from '../data/mockDashboardData';
 import { buildScopedRecipesWithDiagnostics, buildTargetIngredientNames, scopeAndDedupeRecipes } from './recipesScoping';
-import { buildTargetIngredientNames, scopeAndDedupeRecipes } from './recipesScoping';
 
 const ACTIVE_STATUS = 'active' as const;
 
