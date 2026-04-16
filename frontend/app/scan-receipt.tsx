@@ -28,11 +28,16 @@ type StorageZone = 'fridge' | 'pantry' | 'freezer';
 
 interface ReceiptProduct {
   name: string;
+  raw_title?: string;
+  purchase_date?: string | null;
   category: string;
   food_category: string;
   shelf_life_fridge: number | null;
   shelf_life_pantry: number | null;
   shelf_life_freezer: number | null;
+  expiry_date_fridge?: string | null;
+  expiry_date_pantry?: string | null;
+  expiry_date_freezer?: string | null;
 }
 
 // ─── Helpers ──────────────────────────────────────────────────────────────────
@@ -64,9 +69,16 @@ function shelfHint(p: ReceiptProduct, fr: boolean): string {
 }
 
 function computeExpiry(p: ReceiptProduct, zone: StorageZone): string | undefined {
-  const days = zone === 'fridge' ? p.shelf_life_fridge : zone === 'pantry' ? p.shelf_life_pantry : p.shelf_life_freezer;
+  // Priorité aux dates précalculées par le backend (depuis la date d'achat réelle du ticket)
+  if (zone === 'fridge'  && p.expiry_date_fridge)  return p.expiry_date_fridge;
+  if (zone === 'pantry'  && p.expiry_date_pantry)  return p.expiry_date_pantry;
+  if (zone === 'freezer' && p.expiry_date_freezer) return p.expiry_date_freezer;
+  // Fallback : date de base (purchase_date si connue, sinon aujourd'hui) + durée de conservation
+  const days = zone === 'fridge' ? p.shelf_life_fridge
+             : zone === 'pantry' ? p.shelf_life_pantry
+             : p.shelf_life_freezer;
   if (!days) return undefined;
-  const d = new Date();
+  const d = p.purchase_date ? new Date(p.purchase_date) : new Date();
   d.setDate(d.getDate() + days);
   return d.toISOString().split('T')[0];
 }

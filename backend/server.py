@@ -139,6 +139,7 @@ business_events_col = db["business_events"]
 service_usage_logs_col = db["service_usage_logs"]
 daily_metrics_col = db["daily_metrics"]
 receipt_tickets_col = db["receipt_tickets"]
+ocr_normalizations_col = db["ocr_normalizations"]
 
 _BACKEND_URL = os.getenv("BACKEND_URL", "https://keepeat-backend.onrender.com")
 _GOOGLE_ANDROID_PACKAGE = os.getenv("GOOGLE_ANDROID_PACKAGE", "com.fesperiquette.keepeat")
@@ -2762,7 +2763,7 @@ async def ocr_receipt_route(
         consume_quota=False,
     )
     try:
-        result = await ocr_receipt(request, current_user)
+        result = await ocr_receipt(request, current_user, normalizations_col=ocr_normalizations_col)
     except OcrApiError as exc:
         logger.warning("OCR receipt failed for user=%s http=%s: %s", current_user["id"], exc.http_status, exc)
         await track_business_event(

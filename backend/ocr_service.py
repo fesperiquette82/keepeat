@@ -3,12 +3,14 @@ from __future__ import annotations
 import base64
 import json
 import os
+import re
+from datetime import date, timedelta
 from typing import Any
 
 import httpx
 from fastapi import HTTPException, Request
 
-from app_core import logger
+from app_core import logger, utc_now
 
 
 class OcrApiError(RuntimeError):
@@ -36,16 +38,30 @@ SHELF_BY_CATEGORY: dict[str, dict[str, int | None]] = {
     "autres":    {"fridge": None, "pantry": 365,  "freezer": None},
 }
 
+# Prompt v2 : demande raw_title + purchase_date pour knowledge base et DLC réelle.
 RECEIPT_PROMPT = """Tu analyses une photo de ticket de caisse français.
-Extrait UNIQUEMENT les produits alimentaires visibles.
+Réponds UNIQUEMENT avec un objet JSON valide, sans texte avant ni après.
 
-Pour chaque produit retourne un objet JSON :
-- "name" : nom lisible et normalisé en français (ex: "Lait demi-écrémé bio 1L")
-- "category" : une valeur EXACTE parmi : frais, proteines, legumes, feculents, desserts, boissons, epicerie, autres
+Format EXACT attendu :
+{
+  "purchase_date": "YYYY-MM-DD",
+  "items": [
+    {
+      "raw_title": "libellé exact visible sur le ticket (ex: LAI 1/2 ECR 1L)",
+      "name": "nom normalisé lisible en français (ex: Lait demi-écrémé 1L)",
+      "category": "frais|proteines|legumes|feculents|desserts|boissons|epicerie|autres"
+    }
+  ]
+}
 
-Réponds UNIQUEMENT avec un tableau JSON valide, sans texte avant ou après.
-Si aucun produit alimentaire n'est visible, retourne [].
-Ignore les articles non alimentaires (ménager, hygiène, etc.)."""
+Règles :
+- "purchase_date" : date d'achat visible sur le ticket au format YYYY-MM-DD, ou null si absente.
+- "raw_title" : copie fidèle du libellé brut imprimé sur le ticket.
+- "name" : version normalisée, lisible, en français.
+- "category" : valeur EXACTE parmi : frais, proteines, legumes, feculents, desserts, boissons, epicerie, autres.
+- Inclure UNIQUEMENT les articles alimentaires.
+- Ignorer les articles non alimentaires (ménager, hygiène, vêtements, etc.).
+- Si aucun article alimentaire n'est visible : { "purchase_date": null, "items": [] }"""
 
 # Modèle configurable sans redéploiement. gemini-2.0-flash-lite est le successeur
 # léger de gemini-1.5-flash (déprécié fin 2025).
@@ -55,6 +71,9 @@ _DEFAULT_GEMINI_MODEL = "gemini-2.0-flash-lite"
 _OCR_TIMEOUT = httpx.Timeout(connect=10.0, read=45.0, write=10.0, pool=5.0)
 
 _MAX_IMAGE_B64_LEN = 5_500_000  # ~4 MB décodé
+
+# Regex pour normaliser une date ticket en ISO (ex: "15/01/2024" → "2024-01-15")
+_DATE_DMY_RE = re.compile(r"^(\d{2})[/\-.](\d{2})[/\-.](\d{4})$")
 
 
 def _strip_data_uri_prefix(b64: str) -> str:
@@ -111,7 +130,118 @@ def _extract_gemini_text(data: dict) -> str | None:
     return text.strip() if text else None
 
 
-async def ocr_receipt(request: Request, current_user: dict[str, Any]) -> list[dict[str, Any]]:
+def _normalize_date(raw_date: str | None) -> str | None:
+    """Normalise une date ticket vers ISO YYYY-MM-DD.
+
+    Accepte : "YYYY-MM-DD" (déjà correct), "DD/MM/YYYY", "DD-MM-YYYY", "DD.MM.YYYY".
+    Retourne None si invalide.
+    """
+    if not raw_date:
+        return None
+    raw_date = str(raw_date).strip()
+    # Déjà ISO
+    try:
+        date.fromisoformat(raw_date)
+        return raw_date
+    except ValueError:
+        pass
+    # Format JJ/MM/AAAA
+    m = _DATE_DMY_RE.match(raw_date)
+    if m:
+        try:
+            d, mo, y = int(m.group(1)), int(m.group(2)), int(m.group(3))
+            return date(y, mo, d).isoformat()
+        except ValueError:
+            pass
+    return None
+
+
+def _parse_receipt_json(text: str) -> tuple[str | None, list[dict]]:
+    """Parse le texte retourné par Gemini → (purchase_date, items).
+
+    Accepte :
+    - Format v2 : { "purchase_date": "...", "items": [...] }
+    - Format v1 (compat) : [ {...}, ... ]
+    - Réponse enveloppée dans des blocs markdown ```json ... ```
+
+    Lève OcrApiError(502) si le JSON est invalide ou la structure inattendue.
+    """
+    # Strip markdown éventuel (```json ... ```)
+    if "```" in text:
+        parts = text.split("```")
+        # Trouver le premier bloc non vide après ```
+        for part in parts[1:]:
+            candidate = part.strip()
+            if candidate.startswith("json"):
+                candidate = candidate[4:].strip()
+            if candidate:
+                text = candidate
+                break
+
+    try:
+        parsed = json.loads(text)
+    except Exception:
+        raise OcrApiError("Réponse OCR invalide (JSON inattendu)", http_status=502)
+
+    # Format v2 : objet avec "items"
+    if isinstance(parsed, dict):
+        raw_date = parsed.get("purchase_date")
+        purchase_date = _normalize_date(raw_date)
+        items = parsed.get("items", [])
+        if not isinstance(items, list):
+            raise OcrApiError("Réponse OCR invalide (items n'est pas un tableau)", http_status=502)
+        return purchase_date, items
+
+    # Format v1 : tableau direct (compat descendante)
+    if isinstance(parsed, list):
+        return None, parsed
+
+    raise OcrApiError("Réponse OCR invalide (objet ou tableau attendu)", http_status=502)
+
+
+def _compute_expiry(purchase_date_str: str | None, shelf_days: int | None) -> str | None:
+    """Calcule la date d'expiration : date_achat + durée_conservation.
+
+    Retourne None si la date d'achat ou la durée est absente/invalide.
+    """
+    if not purchase_date_str or not shelf_days:
+        return None
+    try:
+        return (date.fromisoformat(purchase_date_str) + timedelta(days=shelf_days)).isoformat()
+    except Exception:
+        return None
+
+
+async def _enrich_normalizations(col: Any, items: list[dict]) -> None:
+    """Enrichit la base de connaissances raw_title → normalized_name dans MongoDB.
+
+    Silencieux si la collection est None ou si un item n'a pas de raw_title.
+    """
+    now = utc_now()
+    for item in items:
+        raw = item.get("raw_title", "").strip()
+        if not raw:
+            continue
+        await col.update_one(
+            {"raw_title": raw.lower()},
+            {
+                "$set": {
+                    "normalized_name": item.get("name", ""),
+                    "category": item.get("category", "autres"),
+                    "last_seen_at": now,
+                },
+                "$inc": {"seen_count": 1},
+                "$setOnInsert": {"first_seen_at": now},
+            },
+            upsert=True,
+        )
+
+
+async def ocr_receipt(
+    request: Request,
+    current_user: dict[str, Any],
+    normalizations_col: Any = None,
+) -> list[dict[str, Any]]:
     gemini_key = os.environ.get("GEMINI_OCR_API_KEY", "")
     if not gemini_key:
         logger.warning("GEMINI_OCR_API_KEY non configuré — scan ticket désactivé")
@@ -161,7 +291,7 @@ async def ocr_receipt(request: Request, current_user: dict[str, Any]) -> list[di
                         ],
                     }],
                     "generationConfig": {
-                        "maxOutputTokens": 1024,
+                        "maxOutputTokens": 2048,
                     },
                 },
             )
@@ -243,48 +373,58 @@ async def ocr_receipt(request: Request, current_user: dict[str, Any]) -> list[di
         )
         return []
 
-    # Nettoyage du markdown éventuel dans la réponse (```json ... ```)
-    if "```" in text:
-        text = text.split("```")[1]
-        if text.startswith("json"):
-            text = text[4:]
-        text = text.strip().rstrip("```").strip()
-
+    # ── Parse du JSON ticket ───────────────────────────────────────────────────
     try:
-        products: list[dict[str, Any]] = json.loads(text)
-    except Exception:
+        purchase_date, raw_items = _parse_receipt_json(text)
+    except OcrApiError:
         logger.warning(
             "OCR receipt: JSON parse failed — user=%s raw=%s",
             current_user["id"], text[:200],
         )
-        raise OcrApiError("Réponse OCR invalide (JSON inattendu)", http_status=502)
+        raise
 
-    if not isinstance(products, list):
-        logger.warning(
-            "OCR receipt: expected list, got %s — user=%s",
-            type(products).__name__, current_user["id"],
+    if not raw_items:
+        logger.info(
+            "OCR receipt — user=%s model=%s → liste vide (aucun produit alimentaire)",
+            current_user["id"], gemini_model,
         )
-        raise OcrApiError("Réponse OCR invalide (tableau attendu)", http_status=502)
+        return []
 
+    # ── Construction de la réponse enrichie ───────────────────────────────────
     result: list[dict[str, Any]] = []
-    for product in products:
-        if not isinstance(product, dict) or not product.get("name"):
+    for item in raw_items:
+        if not isinstance(item, dict) or not item.get("name"):
             continue
-        category = product.get("category", "autres")
+        category = item.get("category", "autres")
         if category not in SHELF_BY_CATEGORY:
             category = "autres"
         shelf = SHELF_BY_CATEGORY[category]
         result.append({
-            "name": product["name"],
+            "name": item["name"],
+            "raw_title": item.get("raw_title", ""),
+            "purchase_date": purchase_date,
             "category": category,
             "food_category": category,
             "shelf_life_fridge": shelf["fridge"],
             "shelf_life_pantry": shelf["pantry"],
             "shelf_life_freezer": shelf["freezer"],
+            "expiry_date_fridge": _compute_expiry(purchase_date, shelf["fridge"]),
+            "expiry_date_pantry": _compute_expiry(purchase_date, shelf["pantry"]),
+            "expiry_date_freezer": _compute_expiry(purchase_date, shelf["freezer"]),
         })
 
+    # ── Enrichissement knowledge base (silencieux si erreur) ──────────────────
+    if normalizations_col is not None and result:
+        try:
+            await _enrich_normalizations(normalizations_col, result)
+        except Exception as exc:
+            logger.warning(
+                "OCR normalization enrich failed — user=%s: %s",
+                current_user["id"], exc,
+            )
+
     logger.info(
-        "OCR receipt done — user=%s model=%s products=%d",
-        current_user["id"], gemini_model, len(result),
+        "OCR receipt done — user=%s model=%s products=%d purchase_date=%s",
+        current_user["id"], gemini_model, len(result), purchase_date,
     )
     return result
