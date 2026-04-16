@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import asyncio
 import base64
 import json
 import os
@@ -38,30 +39,47 @@ SHELF_BY_CATEGORY: dict[str, dict[str, int | None]] = {
     "autres":    {"fridge": None, "pantry": 365,  "freezer": None},
 }
 
-# Prompt v2 : demande raw_title + purchase_date pour knowledge base et DLC réelle.
-RECEIPT_PROMPT = """Tu analyses une photo de ticket de caisse français.
-Réponds UNIQUEMENT avec un objet JSON valide, sans texte avant ni après.
+# Prompt v3 : structure stricte avec produits ignorés et champs d'estimation explicites.
+RECEIPT_PROMPT = """Tu analyses UNE PHOTO DE TICKET DE CAISSE.
+Tu dois extraire les lignes produits visibles SANS inventer.
 
-Format EXACT attendu :
+Réponds avec UN OBJET JSON STRICT, valide, sans markdown et sans texte hors JSON.
+
+Schéma obligatoire :
 {
-  "purchase_date": "YYYY-MM-DD",
+  "purchase_date": "YYYY-MM-DD ou null",
+  "merchant": "string ou null",
+  "currency": "string ou null",
   "items": [
     {
-      "raw_title": "libellé exact visible sur le ticket (ex: LAI 1/2 ECR 1L)",
-      "name": "nom normalisé lisible en français (ex: Lait demi-écrémé 1L)",
-      "category": "frais|proteines|legumes|feculents|desserts|boissons|epicerie|autres"
+      "raw_title": "libellé exact ticket",
+      "normalized_title": "nom normalisé lisible en français",
+      "is_food": true,
+      "quantity": 1,
+      "unit": "unit|kg|g|l|ml|pack|piece",
+      "category": "frais|proteines|legumes|feculents|desserts|boissons|epicerie|autres",
+      "estimated_shelf_life_days": 7,
+      "estimated_expiration_date": "YYYY-MM-DD ou null",
+      "confidence": 0.0
+    }
+  ],
+  "ignored_items": [
+    {
+      "raw_title": "libellé exact ticket",
+      "reason": "non_food|uncertain|invalid_item"
     }
   ]
 }
 
-Règles :
-- "purchase_date" : date d'achat visible sur le ticket au format YYYY-MM-DD, ou null si absente.
-- "raw_title" : copie fidèle du libellé brut imprimé sur le ticket.
-- "name" : version normalisée, lisible, en français.
-- "category" : valeur EXACTE parmi : frais, proteines, legumes, feculents, desserts, boissons, epicerie, autres.
-- Inclure UNIQUEMENT les articles alimentaires.
-- Ignorer les articles non alimentaires (ménager, hygiène, vêtements, etc.).
-- Si aucun article alimentaire n'est visible : { "purchase_date": null, "items": [] }"""
+Règles métier :
+- Inclure UNIQUEMENT les produits alimentaires dans "items".
+- Tout article non alimentaire va dans "ignored_items".
+- purchase_date = date d'achat visible sinon null.
+- estimated_expiration_date = ESTIMATION (pas une DLC lue), basée sur purchase_date + durée estimée.
+- En cas d'incertitude : conserver raw_title, normaliser prudemment, confidence plus basse.
+- confidence doit être entre 0 et 1.
+- Si aucun produit alimentaire : "items": [].
+"""
 
 # Modèle configurable sans redéploiement. gemini-2.0-flash-lite est le successeur
 # léger de gemini-1.5-flash (déprécié fin 2025).
@@ -74,6 +92,10 @@ _MAX_IMAGE_B64_LEN = 5_500_000  # ~4 MB décodé
 
 # Regex pour normaliser une date ticket en ISO (ex: "15/01/2024" → "2024-01-15")
 _DATE_DMY_RE = re.compile(r"^(\d{2})[/\-.](\d{2})[/\-.](\d{4})$")
+_BASE64_RE = re.compile(r"^[A-Za-z0-9+/=\s]+$")
+
+_DEFAULT_RETRY_ATTEMPTS = 2
+_RETRYABLE_HTTP_STATUSES = {429, 500, 502, 503, 504}
 
 
 def _strip_data_uri_prefix(b64: str) -> str:
@@ -99,7 +121,83 @@ def _detect_mime_type(b64_data: str) -> str:
         return "image/jpeg"
     if len(raw) >= 12 and raw[8:12] == b"WEBP":
         return "image/webp"
-    return "image/jpeg"
+    return "invalid"
+
+
+def _decode_base64_image(b64_data: str) -> bytes:
+    compact = re.sub(r"\s+", "", b64_data)
+    if not compact or not _BASE64_RE.match(compact):
+        raise HTTPException(status_code=400, detail="Image base64 invalide")
+    padding = len(compact) % 4
+    if padding:
+        compact += "=" * (4 - padding)
+    try:
+        return base64.b64decode(compact, validate=True)
+    except Exception as exc:
+        raise HTTPException(status_code=400, detail="Image base64 invalide") from exc
+
+
+def _normalize_receipt_item(item: dict[str, Any], purchase_date: str | None) -> dict[str, Any] | None:
+    raw_title = str(item.get("raw_title") or item.get("title") or item.get("name") or "").strip()
+    normalized_title = str(item.get("normalized_title") or item.get("name") or raw_title).strip()
+    if not raw_title:
+        return None
+
+    category = str(item.get("category") or "autres").strip().lower()
+    if category not in SHELF_BY_CATEGORY:
+        category = "autres"
+
+    is_food = item.get("is_food")
+    if not isinstance(is_food, bool):
+        is_food = category != "autres" or bool(normalized_title)
+    if not is_food:
+        return None
+
+    confidence_value = item.get("confidence", 0.6)
+    try:
+        confidence = min(1.0, max(0.0, float(confidence_value)))
+    except (TypeError, ValueError):
+        confidence = 0.6
+
+    shelf = SHELF_BY_CATEGORY[category]
+    estimated_shelf_life_days = item.get("estimated_shelf_life_days")
+    if not isinstance(estimated_shelf_life_days, int):
+        estimated_shelf_life_days = next((v for v in (shelf["fridge"], shelf["pantry"], shelf["freezer"]) if isinstance(v, int)), None)
+
+    estimated_expiration_date = item.get("estimated_expiration_date")
+    if isinstance(estimated_expiration_date, str):
+        estimated_expiration_date = _normalize_date(estimated_expiration_date)
+    else:
+        estimated_expiration_date = None
+    if estimated_expiration_date is None:
+        estimated_expiration_date = _compute_expiry(purchase_date, estimated_shelf_life_days)
+
+    quantity = item.get("quantity")
+    if not isinstance(quantity, (int, float)):
+        quantity = 1
+    unit = item.get("unit")
+    if not isinstance(unit, str) or not unit.strip():
+        unit = "unit"
+
+    return {
+        "name": normalized_title,
+        "normalized_title": normalized_title,
+        "raw_title": raw_title,
+        "purchase_date": purchase_date,
+        "category": category,
+        "food_category": category,
+        "quantity": quantity,
+        "unit": unit.strip(),
+        "confidence": confidence,
+        "estimated_shelf_life_days": estimated_shelf_life_days,
+        "estimated_expiration_date": estimated_expiration_date,
+        "shelf_life_fridge": shelf["fridge"],
+        "shelf_life_pantry": shelf["pantry"],
+        "shelf_life_freezer": shelf["freezer"],
+        "expiry_date_fridge": _compute_expiry(purchase_date, shelf["fridge"]),
+        "expiry_date_pantry": _compute_expiry(purchase_date, shelf["pantry"]),
+        "expiry_date_freezer": _compute_expiry(purchase_date, shelf["freezer"]),
+    }
 
 
 def _extract_gemini_text(data: dict) -> str | None:
@@ -156,10 +254,11 @@ def _normalize_date(raw_date: str | None) -> str | None:
     return None
 
 
-def _parse_receipt_json(text: str) -> tuple[str | None, list[dict]]:
-    """Parse le texte retourné par Gemini → (purchase_date, items).
+def _parse_receipt_json(text: str) -> tuple[str | None, str | None, str | None, list[dict], list[dict]]:
+    """Parse le texte retourné par Gemini.
 
     Accepte :
+    - Format v3 : { "purchase_date": "...", "merchant": "...", "currency": "...", "items": [...], "ignored_items": [...] }
     - Format v2 : { "purchase_date": "...", "items": [...] }
     - Format v1 (compat) : [ {...}, ... ]
     - Réponse enveloppée dans des blocs markdown ```json ... ```
@@ -187,14 +286,27 @@ def _parse_receipt_json(text: str) -> tuple[str | None, list[dict]]:
     if isinstance(parsed, dict):
         raw_date = parsed.get("purchase_date")
         purchase_date = _normalize_date(raw_date)
+        merchant = parsed.get("merchant")
+        if not isinstance(merchant, str):
+            merchant = None
+        else:
+            merchant = merchant.strip() or None
+        currency = parsed.get("currency")
+        if not isinstance(currency, str):
+            currency = "EUR"
+        else:
+            currency = (currency.strip() or "EUR").upper()
         items = parsed.get("items", [])
         if not isinstance(items, list):
             raise OcrApiError("Réponse OCR invalide (items n'est pas un tableau)", http_status=502)
-        return purchase_date, items
+        ignored_items = parsed.get("ignored_items", [])
+        if not isinstance(ignored_items, list):
+            ignored_items = []
+        return purchase_date, merchant, currency, items, ignored_items
 
     # Format v1 : tableau direct (compat descendante)
     if isinstance(parsed, list):
-        return None, parsed
+        return None, None, "EUR", parsed, []
 
     raise OcrApiError("Réponse OCR invalide (objet ou tableau attendu)", http_status=502)
 
@@ -226,7 +338,7 @@ async def _enrich_normalizations(col: Any, items: list[dict]) -> None:
             {"raw_title": raw.lower()},
             {
                 "$set": {
-                    "normalized_name": item.get("name", ""),
+                    "normalized_name": item.get("normalized_title") or item.get("name", ""),
                     "category": item.get("category", "autres"),
                     "last_seen_at": now,
                 },
@@ -241,7 +353,7 @@ async def ocr_receipt(
     request: Request,
     current_user: dict[str, Any],
     normalizations_col: Any = None,
-) -> list[dict[str, Any]]:
+) -> dict[str, Any]:
     gemini_key = os.environ.get("GEMINI_OCR_API_KEY", "")
     if not gemini_key:
         logger.warning("GEMINI_OCR_API_KEY non configuré — scan ticket désactivé")
@@ -249,8 +361,20 @@ async def ocr_receipt(
 
     gemini_model = os.environ.get("GEMINI_OCR_MODEL", _DEFAULT_GEMINI_MODEL)
 
-    body = await request.json()
-    image_b64: str = body.get("image", "")
+    try:
+        body = await request.json()
+    except Exception as exc:
+        raise HTTPException(status_code=422, detail="Payload JSON invalide") from exc
+    if not isinstance(body, dict):
+        raise HTTPException(status_code=422, detail="Structure de requête invalide")
+
+    image_value = body.get("image")
+    if image_value is None:
+        raise HTTPException(status_code=400, detail="Champ 'image' manquant")
+    if not isinstance(image_value, str):
+        raise HTTPException(status_code=422, detail="Le champ 'image' doit être une chaîne base64")
+
+    image_b64 = image_value.strip()
     if not image_b64:
         raise HTTPException(status_code=400, detail="Champ 'image' manquant")
 
@@ -258,15 +382,13 @@ async def ocr_receipt(
     image_b64 = _strip_data_uri_prefix(image_b64)
 
     if len(image_b64) > _MAX_IMAGE_B64_LEN:
-        raise HTTPException(status_code=413, detail="Image trop grande (max ~4 MB décodé)")
+        raise HTTPException(status_code=400, detail="Image trop grande (max ~4 MB décodé)")
 
-    # Validation rapide du base64 avant l'appel réseau
-    try:
-        base64.b64decode(image_b64[:64] + "==", validate=False)
-    except Exception:
-        raise HTTPException(status_code=400, detail="Image base64 invalide")
+    _decode_base64_image(image_b64)
 
     mime_type = _detect_mime_type(image_b64)
+    if mime_type == "invalid":
+        raise HTTPException(status_code=400, detail="Mime type image non supporté (jpeg/png/webp uniquement)")
     logger.info(
         "OCR receipt start — user=%s model=%s mime=%s b64_len=%d",
         current_user["id"], gemini_model, mime_type, len(image_b64),
@@ -277,42 +399,66 @@ async def ocr_receipt(
         f"{gemini_model}:generateContent?key={gemini_key}"
     )
 
-    # ── Appel Gemini ──────────────────────────────────────────────────────────
-    try:
-        async with httpx.AsyncClient(timeout=_OCR_TIMEOUT) as http_client:
-            response = await http_client.post(
-                url,
-                headers={"Content-Type": "application/json"},
-                json={
-                    "contents": [{
-                        "parts": [
-                            {"text": RECEIPT_PROMPT},
-                            {"inline_data": {"mime_type": mime_type, "data": image_b64}},
-                        ],
-                    }],
-                    "generationConfig": {
-                        "maxOutputTokens": 2048,
-                    },
-                },
+    provider_payload = {
+        "contents": [{
+            "parts": [
+                {"text": RECEIPT_PROMPT},
+                {"inline_data": {"mime_type": mime_type, "data": image_b64}},
+            ],
+        }],
+        "generationConfig": {
+            "responseMimeType": "application/json",
+            "temperature": 0.1,
+            "maxOutputTokens": 3072,
+        },
+    }
+
+    # ── Appel Gemini (retry court sur erreurs transitoires) ──────────────────
+    response: Any = None
+    for attempt in range(1, _DEFAULT_RETRY_ATTEMPTS + 1):
+        try:
+            async with httpx.AsyncClient(timeout=_OCR_TIMEOUT) as http_client:
+                response = await http_client.post(
+                    url,
+                    headers={"Content-Type": "application/json"},
+                    json=provider_payload,
+                )
+        except httpx.TimeoutException as exc:
+            logger.warning(
+                "OCR receipt timeout — user=%s model=%s attempt=%d/%d err=%s",
+                current_user["id"], gemini_model, attempt, _DEFAULT_RETRY_ATTEMPTS, exc,
             )
-    except httpx.TimeoutException as exc:
-        logger.warning(
-            "OCR receipt timeout — user=%s model=%s: %s",
-            current_user["id"], gemini_model, exc,
-        )
-        raise OcrApiError(
-            "Timeout lors de l'appel OCR (>45s) — réessayez dans quelques secondes",
-            http_status=504,
-        ) from exc
-    except httpx.RequestError as exc:
-        logger.warning(
-            "OCR receipt network error — user=%s model=%s: %s",
-            current_user["id"], gemini_model, exc,
-        )
-        raise OcrApiError(
-            f"Erreur réseau lors de l'appel OCR : {type(exc).__name__}",
-            http_status=502,
-        ) from exc
+            if attempt >= _DEFAULT_RETRY_ATTEMPTS:
+                raise OcrApiError(
+                    "Timeout lors de l'appel OCR (>45s) — réessayez dans quelques secondes",
+                    http_status=504,
+                ) from exc
+            await asyncio.sleep(0.35 * attempt)
+            continue
+        except httpx.RequestError as exc:
+            logger.warning(
+                "OCR receipt network error — user=%s model=%s attempt=%d/%d err=%s",
+                current_user["id"], gemini_model, attempt, _DEFAULT_RETRY_ATTEMPTS, exc,
+            )
+            if attempt >= _DEFAULT_RETRY_ATTEMPTS:
+                raise OcrApiError(
+                    f"Erreur réseau lors de l'appel OCR : {type(exc).__name__}",
+                    http_status=502,
+                ) from exc
+            await asyncio.sleep(0.35 * attempt)
+            continue
+
+        if response.status_code in _RETRYABLE_HTTP_STATUSES and attempt < _DEFAULT_RETRY_ATTEMPTS:
+            logger.warning(
+                "Gemini OCR transient HTTP %s — user=%s model=%s attempt=%d/%d",
+                response.status_code, current_user["id"], gemini_model, attempt, _DEFAULT_RETRY_ATTEMPTS,
+            )
+            await asyncio.sleep(0.35 * attempt)
+            continue
+        break
+
+    if response is None:
+        raise OcrApiError("Échec OCR provider (aucune réponse)", http_status=502)
 
     # ── Gestion des erreurs HTTP Gemini ───────────────────────────────────────
     if response.status_code != 200:
@@ -324,7 +470,7 @@ async def ocr_receipt(
         if response.status_code == 429:
             raise OcrApiError(
                 "Quota Gemini dépassé (rate limit 429) — réessayez dans quelques secondes",
-                http_status=429,
+                http_status=502,
             )
         if response.status_code in (401, 403):
             raise OcrApiError(
@@ -371,11 +517,17 @@ async def ocr_receipt(
             "OCR receipt — user=%s model=%s → réponse vide (aucun produit détecté)",
             current_user["id"], gemini_model,
         )
-        return []
+        return {
+            "purchase_date": None,
+            "merchant": None,
+            "currency": "EUR",
+            "items": [],
+            "ignored_items": [],
+        }
 
     # ── Parse du JSON ticket ───────────────────────────────────────────────────
     try:
-        purchase_date, raw_items = _parse_receipt_json(text)
+        purchase_date, merchant, currency, raw_items, ignored_items = _parse_receipt_json(text)
     except OcrApiError:
         logger.warning(
             "OCR receipt: JSON parse failed — user=%s raw=%s",
@@ -388,30 +540,35 @@ async def ocr_receipt(
             "OCR receipt — user=%s model=%s → liste vide (aucun produit alimentaire)",
             current_user["id"], gemini_model,
         )
-        return []
+        return {
+            "purchase_date": purchase_date,
+            "merchant": merchant,
+            "currency": currency or "EUR",
+            "items": [],
+            "ignored_items": ignored_items,
+        }
 
     # ── Construction de la réponse enrichie ───────────────────────────────────
     result: list[dict[str, Any]] = []
+    normalized_ignored = []
     for item in raw_items:
-        if not isinstance(item, dict) or not item.get("name"):
+        if not isinstance(item, dict):
             continue
-        category = item.get("category", "autres")
-        if category not in SHELF_BY_CATEGORY:
-            category = "autres"
-        shelf = SHELF_BY_CATEGORY[category]
-        result.append({
-            "name": item["name"],
-            "raw_title": item.get("raw_title", ""),
-            "purchase_date": purchase_date,
-            "category": category,
-            "food_category": category,
-            "shelf_life_fridge": shelf["fridge"],
-            "shelf_life_pantry": shelf["pantry"],
-            "shelf_life_freezer": shelf["freezer"],
-            "expiry_date_fridge": _compute_expiry(purchase_date, shelf["fridge"]),
-            "expiry_date_pantry": _compute_expiry(purchase_date, shelf["pantry"]),
-            "expiry_date_freezer": _compute_expiry(purchase_date, shelf["freezer"]),
-        })
+        normalized = _normalize_receipt_item(item, purchase_date)
+        if normalized:
+            result.append(normalized)
+            continue
+        raw_title = str(item.get("raw_title") or item.get("title") or item.get("name") or "").strip()
+        if raw_title:
+            normalized_ignored.append({"raw_title": raw_title, "reason": "non_food"})
+
+    for ignored in ignored_items:
+        if not isinstance(ignored, dict):
+            continue
+        raw_title = str(ignored.get("raw_title") or "").strip()
+        reason = str(ignored.get("reason") or "non_food").strip() or "non_food"
+        if raw_title:
+            normalized_ignored.append({"raw_title": raw_title, "reason": reason})
 
     # ── Enrichissement knowledge base (silencieux si erreur) ──────────────────
     if normalizations_col is not None and result:
@@ -424,7 +581,13 @@ async def ocr_receipt(
             )
 
     logger.info(
-        "OCR receipt done — user=%s model=%s products=%d purchase_date=%s",
-        current_user["id"], gemini_model, len(result), purchase_date,
+        "OCR receipt done — user=%s model=%s products=%d ignored=%d purchase_date=%s merchant=%s",
+        current_user["id"], gemini_model, len(result), len(normalized_ignored), purchase_date, merchant,
     )
-    return result
+    return {
+        "purchase_date": purchase_date,
+        "merchant": merchant,
+        "currency": currency or "EUR",
+        "items": result,
+        "ignored_items": normalized_ignored,
+    }

@@ -2748,7 +2748,7 @@ async def ocr_receipt_route(
     request: Request,
     current_user: Dict[str, Any] = Depends(_get_current_user),
 ):
-    """Analyse un ticket de caisse via GPT-4o-mini vision et retourne la liste des produits alimentaires."""
+    """Analyse un ticket de caisse via OCR provider et retourne un JSON structuré."""
     await track_business_event(
         business_events_col=business_events_col,
         user_id=current_user["id"],
@@ -2764,6 +2764,16 @@ async def ocr_receipt_route(
     )
     try:
         result = await ocr_receipt(request, current_user, normalizations_col=ocr_normalizations_col)
+    except HTTPException as exc:
+        logger.warning("OCR receipt validation failed for user=%s http=%s detail=%s", current_user["id"], exc.status_code, exc.detail)
+        await track_business_event(
+            business_events_col=business_events_col,
+            user_id=current_user["id"],
+            event_name="ocr_scan_failed",
+            event_category="ocr",
+            metadata_json={"reason": str(exc.detail), "http_status": exc.status_code},
+        )
+        raise
     except OcrApiError as exc:
         logger.warning("OCR receipt failed for user=%s http=%s: %s", current_user["id"], exc.http_status, exc)
         await track_business_event(
@@ -2774,6 +2784,18 @@ async def ocr_receipt_route(
             metadata_json={"reason": str(exc), "http_status": exc.http_status},
         )
         raise HTTPException(status_code=exc.http_status, detail=str(exc))
+    except Exception as exc:
+        logger.exception("OCR receipt unexpected failure user=%s", current_user["id"])
+        await track_business_event(
+            business_events_col=business_events_col,
+            user_id=current_user["id"],
+            event_name="ocr_scan_failed",
+            event_category="ocr",
+            metadata_json={"reason": "internal_unexpected_error", "http_status": 500},
+        )
+        raise HTTPException(status_code=500, detail="Erreur interne OCR") from exc
+
+    items = result.get("items", []) if isinstance(result, dict) else []
     # Quota consommé APRÈS l'appel externe réussi
     await _enforce_feature_access(
         current_user=current_user,
@@ -2789,15 +2811,15 @@ async def ocr_receipt_route(
         units_consumed=1,
         estimated_cost=float(os.getenv("OCR_ESTIMATED_COST_EUR", "0.01")),
         plan_type_at_time=plan_type,
-        metadata_json={"items_count": len(result)},
+        metadata_json={"items_count": len(items)},
     )
-    if result:
+    if items:
         await track_business_event(
             business_events_col=business_events_col,
             user_id=current_user["id"],
             event_name="ocr_scan_succeeded",
             event_category="ocr",
-            metadata_json={"items_count": len(result)},
+            metadata_json={"items_count": len(items)},
         )
     else:
         await track_business_event(

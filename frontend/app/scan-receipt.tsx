@@ -40,6 +40,14 @@ interface ReceiptProduct {
   expiry_date_freezer?: string | null;
 }
 
+interface ReceiptOcrResponse {
+  purchase_date?: string | null;
+  merchant?: string | null;
+  currency?: string | null;
+  items?: ReceiptProduct[];
+  ignored_items?: Array<{ raw_title?: string; reason?: string }>;
+}
+
 // ─── Helpers ──────────────────────────────────────────────────────────────────
 
 const CATEGORY_EMOJI: Record<string, string> = {
@@ -117,7 +125,10 @@ export default function ScanReceiptScreen() {
         { image: base64Image },
         { headers: { Authorization: `Bearer ${token}` } },
       );
-      const detected: ReceiptProduct[] = res.data;
+      const payload = res.data as ReceiptProduct[] | ReceiptOcrResponse;
+      const detected: ReceiptProduct[] = Array.isArray(payload)
+        ? payload
+        : (Array.isArray(payload?.items) ? payload.items : []);
 
       if (detected.length === 0) {
         // Aucun produit reconnu → proposer l'envoi pour traitement manuel
