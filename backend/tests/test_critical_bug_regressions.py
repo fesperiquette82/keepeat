@@ -3,6 +3,7 @@ import importlib
 import sys
 from pathlib import Path
 
+from fastapi.testclient import TestClient
 from starlette.responses import Response
 
 BACKEND_DIR = Path(__file__).resolve().parents[1]
@@ -82,3 +83,21 @@ def test_recipe_suggestions_survives_gap_upsert_failure(monkeypatch):
     assert result["meta"]["suggest_later"] is True
     assert result["meta"]["gap_logged"] is False
     assert captured_meta.get("suggest_later") is True
+
+
+def test_openapi_ocr_receipt_declares_json_body_and_bearer_auth(monkeypatch):
+    server = _load_server(monkeypatch)
+    client = TestClient(server.app)
+
+    response = client.get("/openapi.json")
+    assert response.status_code == 200
+    openapi = response.json()
+
+    operation = openapi["paths"]["/api/ocr/receipt"]["post"]
+    request_body = operation.get("requestBody")
+    assert request_body is not None
+    assert request_body.get("required") is True
+
+    json_schema = request_body["content"]["application/json"]["schema"]
+    assert json_schema == {"$ref": "#/components/schemas/OcrReceiptRequest"}
+    assert operation.get("security") == [{"HTTPBearer": []}]
