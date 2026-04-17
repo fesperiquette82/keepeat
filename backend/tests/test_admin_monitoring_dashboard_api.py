@@ -2,8 +2,11 @@ import asyncio
 import os
 import sys
 from pathlib import Path
+from decimal import Decimal
 
 import httpx
+from bson import ObjectId
+from bson.decimal128 import Decimal128
 
 BACKEND_DIR = Path(__file__).resolve().parents[1]
 if str(BACKEND_DIR) not in sys.path:
@@ -273,3 +276,69 @@ def test_trends_stays_200_with_empty_sources(monkeypatch):
     assert payload["new_users"] == []
     assert payload["errors"] == []
     assert payload["costs"] == []
+
+
+def test_dashboard_prod_like_objectid_and_decimal_payload_stays_200(monkeypatch):
+    prod_like_overview = _build_nominal_overview()
+    prod_like_overview["top_incidents"] = [
+        {
+            "endpoint_key": "/api/ocr/receipt",
+            "errors": 7,
+            "error_rate": Decimal128("0.35"),
+            "severity": "critical",
+            "last_error": {
+                "_id": ObjectId("507f1f77bcf86cd799439011"),
+                "status_code": 500,
+                "created_at": "2026-04-16T12:00:00+00:00",
+            },
+        }
+    ]
+    prod_like_overview["cost_breakdown"] = {
+        "ocr_cost_eur": Decimal("5.44"),
+        "ocr_cost_per_scan_eur": Decimal128("0.08"),
+    }
+    prod_like_kpis = _build_nominal_kpis()
+    prod_like_kpis["services"]["top_usage_30d"] = [
+        {"service_name": "ocr", "units": Decimal128("12"), "estimated_cost": Decimal128("2.1")}
+    ]
+    _patch_dashboard_sources(monkeypatch, kpis=prod_like_kpis, overview=prod_like_overview)
+    _with_admin_override()
+
+    response = asyncio.run(_request("/api/admin/monitoring/dashboard?days=7"))
+
+    server.app.dependency_overrides = {}
+    assert response.status_code == 200
+    payload = response.json()
+    assert payload["top_api_issues"][0]["last_error"]["_id"] == "507f1f77bcf86cd799439011"
+    assert payload["cost_metrics"]["ocr_cost_per_scan_eur"] == 0.08
+
+
+def test_dashboard_survives_kpis_source_exception_with_block_fallbacks(monkeypatch):
+    async def _failing_kpis(**kwargs):
+        _ = kwargs
+        raise TypeError("Decimal128 doesn't define __round__")
+
+    async def _fake_overview(**kwargs):
+        _ = kwargs
+        return _build_nominal_overview()
+
+    async def _fake_apis(**kwargs):
+        _ = kwargs
+        return _build_nominal_apis()
+
+    monkeypatch.setattr(server, "build_monitoring_kpis", _failing_kpis)
+    monkeypatch.setattr(server, "build_operational_overview", _fake_overview)
+    monkeypatch.setattr(server, "summarize_api_metrics", _fake_apis)
+    monkeypatch.setattr(server, "log_api_request", _noop_log_api_request)
+    _with_admin_override()
+
+    response = asyncio.run(_request("/api/admin/monitoring/dashboard?days=7"))
+
+    server.app.dependency_overrides = {}
+    assert response.status_code == 200
+    payload = response.json()
+    assert payload["users"] == {}
+    assert payload["subscriptions"] == {}
+    assert isinstance(payload["top_api_issues"], list)
+    assert isinstance(payload["critical_flows"], dict)
+    assert payload["cost_metrics"]["ocr_cost_eur"] >= 0.0
