@@ -18,8 +18,10 @@ import ocr_service
 def _load_server(monkeypatch):
     monkeypatch.setenv("MONGO_URL", "mongodb://localhost:27017/keepeat-test")
     monkeypatch.setenv("JWT_SECRET_KEY", "test-secret")
-    if "server" in sys.modules:
-        del sys.modules["server"]
+    # Vider aussi "models" pour éviter les TypeAdapters Pydantic v2 stale
+    # (ForwardRef('UserCreate') non résolu quand server est rechargé sans models).
+    for mod in ("server", "models"):
+        sys.modules.pop(mod, None)
     return importlib.import_module("server")
 
 
