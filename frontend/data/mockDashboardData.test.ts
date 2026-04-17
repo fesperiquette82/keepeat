@@ -6,6 +6,7 @@ import {
   buildRecipeSuggestionsByScope,
   daysUntil,
   getActiveItemsByScope,
+  resolveStockItems,
   type DashboardStockItem,
 } from './mockDashboardData';
 import { buildTargetIngredientNames, filterRecipesByTargetIngredients } from '../utils/recipesScoping';
@@ -117,4 +118,47 @@ test('filtrage recettes: exclut les recettes fallback génériques même si les 
 
   const filtered = filterRecipesByTargetIngredients(recipes, new Set(['oeuf']));
   assert.deepEqual(filtered.map((recipe) => recipe.id), ['scoped']);
+});
+
+test("resolveStockItems expose l'image quand la payload stock fournit image_url", () => {
+  const result = resolveStockItems([
+    {
+      ...buildItem('img-snake', 'Œufs plein air', '2026-04-20'),
+      image_url: 'https://cdn/img/oeufs.jpg',
+    },
+  ]);
+  assert.equal(result.items[0]?.image_url, 'https://cdn/img/oeufs.jpg');
+});
+
+test("resolveStockItems expose l'image quand la payload stock fournit imageUrl", () => {
+  const result = resolveStockItems([
+    {
+      ...buildItem('img-camel', 'Crema de pistacho', '2026-04-20'),
+      imageUrl: 'https://cdn/img/pistache.jpg',
+    } as DashboardStockItem,
+  ]);
+  assert.equal(result.items[0]?.image_url, 'https://cdn/img/pistache.jpg');
+});
+
+test("resolveStockItems expose l'image quand la payload stock contient product.image_url", () => {
+  const result = resolveStockItems([
+    {
+      ...buildItem('img-nested', 'Mix énergie', '2026-04-20'),
+      product: {
+        image_url: 'https://cdn/img/mix.jpg',
+      },
+    } as DashboardStockItem,
+  ]);
+  assert.equal(result.items[0]?.image_url, 'https://cdn/img/mix.jpg');
+});
+
+test("resolveStockItems garde le placeholder UI quand aucune image valide n'existe", () => {
+  const result = resolveStockItems([
+    {
+      ...buildItem('img-none', 'Produit sans image', '2026-04-20'),
+      image_url: '   ',
+      imageUrl: '',
+    } as DashboardStockItem,
+  ]);
+  assert.equal(result.items[0]?.image_url, undefined);
 });
