@@ -3,16 +3,12 @@ name: CI
 on:
   pull_request:
   push:
-    branches:
-      - main
-      - ai-improvements
   merge_group:
 
 jobs:
   frontend:
     name: Frontend lint + tests
     runs-on: ubuntu-latest
-    continue-on-error: true   # informatif uniquement — ne bloque pas le merge
 
     defaults:
       run:
@@ -41,7 +37,6 @@ jobs:
   backend:
     name: Backend tests (pytest)
     runs-on: ubuntu-latest
-    continue-on-error: true   # informatif uniquement — ne bloque pas le merge
 
     steps:
       - name: Checkout
@@ -55,17 +50,15 @@ jobs:
           cache-dependency-path: backend/requirements.txt
 
       - name: Install dependencies
-        working-directory: backend
-        run: pip install -r requirements.txt pytest
+        run: pip install -r backend/requirements.txt pytest
 
-      - name: Run pytest
-        working-directory: backend
+      - name: Run pytest non-regressions
         env:
           MONGODB_URI: "mongodb://localhost:27017/keepeat_test"
           JWT_SECRET: "test_secret_ci"
           GEMINI_OCR_API_KEY: "dummy_for_tests"
           GEMINI_RECIPES_API_KEY: "dummy_for_tests"
-        run: python -m pytest --tb=short -q
+        run: python -m pytest tests backend/tests --tb=short -q
 
   test-policy:
     name: Enforce test changes
