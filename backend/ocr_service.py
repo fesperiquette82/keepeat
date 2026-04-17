@@ -403,7 +403,7 @@ async def ocr_receipt(
         "contents": [{
             "parts": [
                 {"text": RECEIPT_PROMPT},
-                {"inline_data": {"mime_type": mime_type, "data": image_b64}},
+                {"inlineData": {"mimeType": mime_type, "data": image_b64}},
             ],
         }],
         "generationConfig": {
@@ -475,6 +475,11 @@ async def ocr_receipt(
         if response.status_code in (401, 403):
             raise OcrApiError(
                 f"Clé API Gemini invalide ou non autorisée (HTTP {response.status_code})",
+                http_status=502,
+            )
+        if response.status_code in (400, 422):
+            raise OcrApiError(
+                f"Requête OCR rejetée par le provider (HTTP {response.status_code})",
                 http_status=502,
             )
         if response.status_code == 404:

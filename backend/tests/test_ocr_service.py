@@ -217,6 +217,15 @@ class TestOcrReceiptMocked:
         assert exc_info.value.status_code == 400
 
     @pytest.mark.anyio
+    async def test_invalid_base64_payload_raises_400(self, monkeypatch):
+        monkeypatch.setenv("GEMINI_OCR_API_KEY", "fake-key")
+        req = _make_request("%%%not-base64%%%")
+        from fastapi import HTTPException
+        with pytest.raises(HTTPException) as exc_info:
+            await ocr_receipt(req, _make_user())
+        assert exc_info.value.status_code == 400
+
+    @pytest.mark.anyio
     async def test_no_api_key_raises_ocr_error(self, monkeypatch):
         monkeypatch.delenv("GEMINI_OCR_API_KEY", raising=False)
         with pytest.raises(OcrApiError) as exc_info:
@@ -408,6 +417,52 @@ class TestOcrReceiptMocked:
             with pytest.raises(OcrApiError) as exc_info:
                 await ocr_receipt(_make_request(), _make_user())
         assert exc_info.value.http_status == 502
+
+    @pytest.mark.anyio
+    async def test_provider_non_json_http_body_raises_502(self, monkeypatch):
+        monkeypatch.setenv("GEMINI_OCR_API_KEY", "fake-key")
+        resp = MagicMock()
+        resp.status_code = 200
+        resp.text = "<html>bad gateway</html>"
+        resp.json.side_effect = ValueError("not json")
+        with patch("ocr_service.httpx.AsyncClient") as mock_client:
+            mock_client.return_value.__aenter__ = AsyncMock(return_value=MagicMock(post=AsyncMock(return_value=resp)))
+            mock_client.return_value.__aexit__ = AsyncMock(return_value=False)
+            with pytest.raises(OcrApiError) as exc_info:
+                await ocr_receipt(_make_request(), _make_user())
+        assert exc_info.value.http_status == 502
+
+    @pytest.mark.anyio
+    async def test_regression_provider_payload_uses_inline_data_camel_case(self, monkeypatch):
+        """Régression prod: snake_case inline_data/mime_type => HTTP 400 provider puis 502 API."""
+        monkeypatch.setenv("GEMINI_OCR_API_KEY", "fake-key")
+
+        async def _post(_url, *, headers, json):
+            del headers
+            parts = json["contents"][0]["parts"]
+            has_inline_data = any("inlineData" in part for part in parts)
+            has_mime_type = any("mimeType" in part.get("inlineData", {}) for part in parts if isinstance(part, dict))
+            resp = MagicMock()
+            if not (has_inline_data and has_mime_type):
+                resp.status_code = 400
+                resp.text = "INVALID_ARGUMENT: Unknown name \"inline_data\""
+                return resp
+            resp.status_code = 200
+            resp.json.return_value = {
+                "candidates": [{
+                    "finishReason": "STOP",
+                    "content": {"parts": [{"text": json_module.dumps({"items": [{"raw_title": "POMME", "normalized_title": "Pomme", "category": "legumes"}]})}]},
+                }]
+            }
+            return resp
+
+        import json as json_module
+        with patch("ocr_service.httpx.AsyncClient") as mock_client:
+            mock_client.return_value.__aenter__ = AsyncMock(return_value=MagicMock(post=AsyncMock(side_effect=_post)))
+            mock_client.return_value.__aexit__ = AsyncMock(return_value=False)
+            result = await ocr_receipt(_make_request(), _make_user())
+        assert len(result["items"]) == 1
+        assert result["items"][0]["raw_title"] == "POMME"
 
     @pytest.mark.anyio
     async def test_data_uri_prefix_stripped_transparently(self, monkeypatch):
