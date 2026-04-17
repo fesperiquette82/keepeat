@@ -262,11 +262,11 @@ export default function StockScreen() {
                 >
                   <View style={styles.cardMain}>
                     <View style={styles.thumb}>
-                      {item.image_url && !imageErrors[item.id] ? (
+                      {item.image_url && !imageErrors[`${item.id}:${item.image_url}`] ? (
                         <Image
                           source={{ uri: item.image_url }}
                           style={styles.thumbImage}
-                          onError={() => setImageErrors((prev) => ({ ...prev, [item.id]: true }))}
+                          onError={() => setImageErrors((prev) => ({ ...prev, [`${item.id}:${item.image_url}`]: true }))}
                         />
                       ) : (
                         <Ionicons name="nutrition-outline" size={17} color={C.textMid} />

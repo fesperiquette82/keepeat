@@ -5128,11 +5128,13 @@ let refreshTimer = null;
 let _charts = {};
 let selectedDays = 7;
 let _apiIssueKeys = [];
+const allowedDays = new Set([1, 7, 30, 90]);
 
 function setDays(d) {
-  selectedDays = d;
+  const nextDays = Number(d);
+  selectedDays = allowedDays.has(nextDays) ? nextDays : 7;
   document.querySelectorAll('.period-btn').forEach(b => {
-    b.classList.toggle('active', parseInt(b.dataset.days) === d);
+    b.classList.toggle('active', parseInt(b.dataset.days) === selectedDays);
   });
   updateWindowLabels();
   loadAll();
@@ -5188,38 +5190,91 @@ function logout() {
   document.getElementById('btn-logout').style.display = 'none';
 }
 
+function escHtml(str) {
+  return String(str||'').replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;');
+}
+
+function setBlockError(id, message) {
+  const el = document.getElementById(id);
+  if (!el) return;
+  el.innerHTML = '<div class="error-banner">⚠️ ' + escHtml(message || 'Erreur de chargement.') + '</div>';
+}
+
 async function apiFetch(path) {
   const r = await fetch(path, {headers:{'Authorization':'Bearer '+token}});
-  if (r.status === 401) { logout(); return null; }
-  return r.json();
+  const raw = await r.text();
+  let payload = null;
+  try {
+    payload = raw ? JSON.parse(raw) : null;
+  } catch (_err) {
+    payload = null;
+  }
+  if (r.status === 401) {
+    logout();
+    throw new Error('Session expirée. Merci de vous reconnecter.');
+  }
+  if (!r.ok) {
+    const detail = payload && typeof payload === 'object'
+      ? (payload.detail || payload.message || payload.error)
+      : null;
+    throw new Error((detail ? String(detail) : 'HTTP ' + r.status));
+  }
+  if (payload === null) {
+    throw new Error('Réponse JSON invalide pour ' + path);
+  }
+  return payload;
 }
 
 async function loadAll() {
-  const [health, dash] = await Promise.all([
+  const [healthResult, dashResult, trendsResult] = await Promise.allSettled([
     apiFetch('/api/admin/monitoring/health?days=' + selectedDays),
     apiFetch('/api/admin/monitoring/dashboard?days=' + selectedDays),
+    loadTrends(),
   ]);
-  if (health) renderHealth(health);
-  if (dash) {
-    renderUsers(dash.users);
-    renderSubscriptions(dash.subscriptions, dash.estimated_cost_summary);
-    renderApiIssues(dash.top_api_issues || [], selectedDays);
-    renderServices(dash.top_service_usage || []);
+
+  if (healthResult.status === 'fulfilled') {
+    renderHealth(healthResult.value);
+  } else {
+    setBlockError('health-content', 'Erreur de chargement de la santé système : ' + healthResult.reason.message);
+  }
+
+  if (dashResult.status === 'fulfilled') {
+    const dash = dashResult.value || {};
+    renderUsers(dash.users || {});
+    renderSubscriptions(dash.subscriptions || {}, dash.estimated_cost_summary || {});
+    renderApiIssues(Array.isArray(dash.top_api_issues) ? dash.top_api_issues : [], selectedDays);
+    renderServices(Array.isArray(dash.top_service_usage) ? dash.top_service_usage : []);
     renderCriticalFlows(dash.critical_flows || {});
     renderFunnel(dash.product_funnel || {});
     renderCostMetrics(dash.cost_metrics || {});
+  } else {
+    const msg = 'Erreur de chargement du dashboard : ' + dashResult.reason.message;
+    setBlockError('users-content', msg);
+    setBlockError('subscriptions-content', msg);
+    setBlockError('api-issues-content', msg);
+    setBlockError('services-content', msg);
+    setBlockError('critical-flows-content', msg);
+    setBlockError('funnel-content', msg);
   }
-  loadTrends();
+
+  if (trendsResult.status === 'rejected') {
+    const msg = 'Erreur de chargement des tendances : ' + trendsResult.reason.message;
+    ['chart-dau', 'chart-new-users', 'chart-errors', 'chart-costs'].forEach((id) => {
+      const canvas = document.getElementById(id);
+      if (!canvas || !canvas.parentElement) return;
+      canvas.parentElement.innerHTML = '<div class="error-banner">' + escHtml(msg) + '</div>';
+    });
+  }
+
   document.getElementById('last-updated').textContent = 'Mis à jour : ' + new Date().toLocaleTimeString('fr-FR') + ' (' + selectedDays + 'j)';
 }
 
 async function loadTrends() {
   const data = await apiFetch('/api/admin/monitoring/trends?days=' + selectedDays);
-  if (!data) return;
-  renderChart('chart-dau',       'line', data.dau,       r => r.date, r => r.count, 'Actifs/j',   '#16a34a');
-  renderChart('chart-new-users', 'bar',  data.new_users, r => r.date, r => r.count, 'Nouveaux/j', '#3b82f6');
-  renderChart('chart-errors',    'bar',  data.errors,    r => r.date, r => r.count, 'Erreurs/j',  '#ef4444');
-  renderChart('chart-costs',     'line', data.costs,     r => r.date, r => r.cost,  'Coût €/j',   '#f59e0b');
+  renderChart('chart-dau',       'line', Array.isArray(data.dau) ? data.dau : [],       r => r.date, r => r.count, 'Actifs/j',   '#16a34a');
+  renderChart('chart-new-users', 'bar',  Array.isArray(data.new_users) ? data.new_users : [], r => r.date, r => r.count, 'Nouveaux/j', '#3b82f6');
+  renderChart('chart-errors',    'bar',  Array.isArray(data.errors) ? data.errors : [],    r => r.date, r => r.count, 'Erreurs/j',  '#ef4444');
+  renderChart('chart-costs',     'line', Array.isArray(data.costs) ? data.costs : [],     r => r.date, r => r.cost,  'Coût €/j',   '#f59e0b');
 }
 
 function renderChart(id, type, rows, getLabel, getValue, label, color) {
@@ -5261,6 +5316,11 @@ function fmtUptime(s) {
 }
 
 function renderHealth(h) {
+  if (!h || typeof h !== 'object' || !h.db || typeof h.db.ok !== 'boolean') {
+    setBlockError('health-content', 'Réponse santé système invalide.');
+    return;
+  }
+  const externalServices = (h.external_services && typeof h.external_services === 'object') ? h.external_services : {};
   const svcLabels = {
     gemini_ocr_configured: 'Gemini OCR',
     gemini_recipes_configured: 'Gemini Recettes',
@@ -5270,7 +5330,7 @@ function renderHealth(h) {
   let html = '<div class="health-grid">';
   html += '<div class="health-item"><span class="dot ' + (h.db.ok ? 'ok' : 'err') + '"></span>MongoDB : ' + (h.db.ok ? 'OK' : 'ERREUR') + '</div>';
   for (const [k, lbl] of Object.entries(svcLabels)) {
-    const on = h.external_services[k];
+    const on = externalServices[k];
     html += '<div class="health-item"><span class="dot ' + (on ? 'ok' : 'warn') + '"></span>' + lbl + ' : ' + (on ? 'Configuré' : 'Non configuré') + '</div>';
   }
   html += '</div>';
@@ -5293,7 +5353,10 @@ function statCard(label, value, sub) {
 }
 
 function renderUsers(u) {
-  if (!u) return;
+  if (!u || typeof u !== 'object') {
+    setBlockError('users-content', 'Données utilisateurs indisponibles.');
+    return;
+  }
   document.getElementById('users-content').innerHTML =
     '<div class="stats-grid">'
     + statCard('Total', u.total, '')
@@ -5307,7 +5370,11 @@ function renderUsers(u) {
 }
 
 function renderSubscriptions(s, cost) {
-  if (!s) return;
+  if (!s || typeof s !== 'object') {
+    setBlockError('subscriptions-content', 'Données abonnements indisponibles.');
+    return;
+  }
+  const byPlan = (s.by_plan && typeof s.by_plan === 'object') ? s.by_plan : {};
   const costVal = cost ? cost.services_30d_estimated_cost_eur : null;
   document.getElementById('subscriptions-content').innerHTML =
     '<div class="stats-grid">'
@@ -5316,7 +5383,7 @@ function renderSubscriptions(s, cost) {
     + statCard('ARR', (s.estimated_arr_eur||0).toFixed(2) + '\u00a0€', '')
     + (costVal !== null ? statCard('Coûts 30j', costVal.toFixed(4) + '\u00a0€', 'estimé') : '')
     + '</div>'
-    + '<div style="font-size:12px;color:#6b7280;margin-top:8px">Mensuel : ' + (s.by_plan.premium_monthly||0) + ' · Autre : ' + (s.by_plan.premium_other||0) + '</div>';
+    + '<div style="font-size:12px;color:#6b7280;margin-top:8px">Mensuel : ' + (byPlan.premium_monthly||0) + ' · Autre : ' + (byPlan.premium_other||0) + '</div>';
 }
 
 function severityClass(level) {
@@ -5430,7 +5497,7 @@ function closeDrill(event) {
 }
 
 function renderServices(svcs) {
-  if (!svcs.length) {
+  if (!Array.isArray(svcs) || !svcs.length) {
     document.getElementById('services-content').innerHTML = '<div style="color:#9ca3af;font-size:13px">Aucune donnée.</div>';
     return;
   }
@@ -5440,10 +5507,6 @@ function renderServices(svcs) {
   }
   html += '</div>';
   document.getElementById('services-content').innerHTML = html;
-}
-
-function escHtml(str) {
-  return String(str||'').replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;');
 }
 
 document.getElementById('password').addEventListener('keydown', e => { if (e.key==='Enter') doLogin(); });

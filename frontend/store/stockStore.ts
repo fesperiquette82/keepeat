@@ -11,7 +11,7 @@ import {
 import { buildApiUrl } from '../utils/config';
 import { logger } from '../utils/logger';
 import { extractPremiumErrorDetail } from '../utils/premiumErrors';
-import { resolveStockItemImageUrl } from '../utils/stockItemImage';
+import { resolveStockItemImageUrlWithFallback } from '../utils/stockItemImage';
 import { usePremiumUiStore } from './premiumUiStore';
 import type { AxiosError, AxiosRequestConfig } from 'axios';
 
@@ -87,8 +87,8 @@ interface PendingMutation {
   timestamp: number;
 }
 
-function normalizeStockItemImage(item: StockItem): StockItem {
-  const image_url = resolveStockItemImageUrl(item);
+function normalizeStockItemImage(item: StockItem, fallbackItem?: Partial<StockItem>): StockItem {
+  const image_url = resolveStockItemImageUrlWithFallback(item, fallbackItem);
   if (!image_url) return { ...item, image_url: undefined };
   return { ...item, image_url };
 }
@@ -519,7 +519,7 @@ export const useStockStore = create<StockStore>()(
 
         try {
           const res = await axios.post(buildApiUrl('/api/stock'), item, authRequestConfig());
-          const newItem: StockItem = normalizeStockItemImage(res.data as StockItem);
+          const newItem: StockItem = normalizeStockItemImage(res.data as StockItem, item);
           const s = get();
           await Promise.all([s.fetchStock(), s.fetchPriorityItems(), s.fetchStats()]);
           return newItem;
@@ -559,6 +559,7 @@ export const useStockStore = create<StockStore>()(
 
       updateItem: async (itemId, updates) => {
         const { isOnline } = get();
+        const existingItem = get().items.find((entry) => entry.id === itemId);
 
         if (!isOnline) {
           set(state => ({
@@ -578,7 +579,7 @@ export const useStockStore = create<StockStore>()(
 
         try {
           const res = await axios.put(buildApiUrl(`/api/stock/${itemId}`), updates, authRequestConfig());
-          const updatedItem: StockItem = normalizeStockItemImage(res.data as StockItem);
+          const updatedItem: StockItem = normalizeStockItemImage(res.data as StockItem, existingItem);
           cancelExpiryNotification(itemId);
           scheduleExpiryNotification(updatedItem);
           const s = get();

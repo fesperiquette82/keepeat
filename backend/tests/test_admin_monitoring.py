@@ -99,6 +99,19 @@ class TestAdminDashboardRouteRegistered:
         api_paths = [getattr(r, "path", None) for r in server.api_router.routes]
         assert "/api/admin/monitoring/api-drill" in api_paths, "Route /api/admin/monitoring/api-drill absente de l'api_router"
 
+    def test_dashboard_embedded_script_is_resilient_to_partial_failures(self, monkeypatch):
+        server = self._load(monkeypatch)
+        html = server._ADMIN_DASHBOARD_HTML
+        assert "Promise.allSettled" in html, "Le chargement dashboard doit tolérer les échecs partiels"
+        assert "setBlockError('health-content'" in html, "Le bloc santé doit afficher une erreur dédiée"
+        assert "setBlockError('users-content'" in html, "Le bloc utilisateurs doit afficher une erreur dédiée"
+        assert "Erreur de chargement des tendances" in html, "Les tendances doivent exposer une erreur utile"
+
+    def test_dashboard_embedded_script_rejects_invalid_days(self, monkeypatch):
+        server = self._load(monkeypatch)
+        html = server._ADMIN_DASHBOARD_HTML
+        assert "const allowedDays = new Set([1, 7, 30, 90]);" in html, "La période doit être validée côté client"
+
 
 class TestHighestErrorRatePipeline:
     """La logique de highest_error_rate ne doit pas retourner d'endpoint
