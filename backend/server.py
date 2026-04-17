@@ -28,8 +28,10 @@ from bson import ObjectId
 from bson.decimal128 import Decimal128
 from pymongo.errors import DuplicateKeyError
 from fastapi import APIRouter, Depends, FastAPI, Header, HTTPException, Query, Request, Response, status
+from fastapi.exception_handlers import request_validation_exception_handler
+from fastapi.exceptions import RequestValidationError
 from fastapi.middleware.cors import CORSMiddleware
-from fastapi.responses import HTMLResponse
+from fastapi.responses import HTMLResponse, JSONResponse
 from motor.motor_asyncio import AsyncIOMotorClient
 from pydantic import BaseModel, Field, ValidationError
 from slowapi import Limiter, _rate_limit_exceeded_handler
@@ -569,6 +571,20 @@ app = FastAPI(title="KeepEat Backend", version="1.0.0", lifespan=lifespan)
 limiter = Limiter(key_func=get_remote_address)
 app.state.limiter = limiter
 app.add_exception_handler(RateLimitExceeded, _rate_limit_exceeded_handler)
+
+
+@app.exception_handler(RequestValidationError)
+async def custom_request_validation_exception_handler(request: Request, exc: RequestValidationError):
+    if request.url.path == "/api/ocr/receipt":
+        errors = exc.errors()
+        missing_image = any(
+            tuple(err.get("loc") or ()) == ("body", "image") and err.get("type") == "missing"
+            for err in errors
+        )
+        if missing_image:
+            return JSONResponse(status_code=400, content={"detail": "Champ 'image' manquant"})
+        return JSONResponse(status_code=400, content={"detail": "Payload JSON invalide"})
+    return await request_validation_exception_handler(request, exc)
 
 
 @app.get("/privacy-policy", response_class=HTMLResponse, include_in_schema=False)
