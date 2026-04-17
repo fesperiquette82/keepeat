@@ -350,8 +350,9 @@ async def _enrich_normalizations(col: Any, items: list[dict]) -> None:
 
 
 async def ocr_receipt(
-    request: Request,
+    request: Request | None,
     current_user: dict[str, Any],
+    request_payload: dict[str, Any] | None = None,
     normalizations_col: Any = None,
 ) -> dict[str, Any]:
     gemini_key = os.environ.get("GEMINI_OCR_API_KEY", "")
@@ -361,10 +362,15 @@ async def ocr_receipt(
 
     gemini_model = os.environ.get("GEMINI_OCR_MODEL", _DEFAULT_GEMINI_MODEL)
 
-    try:
-        body = await request.json()
-    except Exception as exc:
-        raise HTTPException(status_code=422, detail="Payload JSON invalide") from exc
+    if request_payload is None:
+        if request is None:
+            raise HTTPException(status_code=422, detail="Payload JSON invalide")
+        try:
+            body = await request.json()
+        except Exception as exc:
+            raise HTTPException(status_code=422, detail="Payload JSON invalide") from exc
+    else:
+        body = request_payload
     if not isinstance(body, dict):
         raise HTTPException(status_code=422, detail="Structure de requête invalide")
 

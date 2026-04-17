@@ -186,6 +186,23 @@ class TestOcrReceiptMocked:
     """Tests de ocr_receipt() avec httpx mocké (pas d'appel réseau réel)."""
 
     @pytest.mark.anyio
+    async def test_accepts_explicit_request_payload_without_request_object(self, monkeypatch):
+        monkeypatch.setenv("GEMINI_OCR_API_KEY", "fake-key")
+        with patch("ocr_service.httpx.AsyncClient") as mock_client:
+            fake_client = MagicMock()
+            fake_client.__aenter__.return_value = fake_client
+            fake_client.post = AsyncMock(return_value=_gemini_ok_response([]))
+            mock_client.return_value = fake_client
+
+            result = await ocr_receipt(
+                request=None,
+                request_payload={"image": _make_request().json.return_value["image"]},
+                current_user=_make_user(),
+            )
+
+        assert result["items"] == []
+
+    @pytest.mark.anyio
     async def test_missing_image_field_raises_400(self, monkeypatch):
         monkeypatch.setenv("GEMINI_OCR_API_KEY", "fake-key")
         req = MagicMock()

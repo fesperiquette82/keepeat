@@ -28,8 +28,10 @@ from bson import ObjectId
 from bson.decimal128 import Decimal128
 from pymongo.errors import DuplicateKeyError
 from fastapi import APIRouter, Depends, FastAPI, Header, HTTPException, Query, Request, Response, status
+from fastapi.exception_handlers import request_validation_exception_handler
+from fastapi.exceptions import RequestValidationError
 from fastapi.middleware.cors import CORSMiddleware
-from fastapi.responses import HTMLResponse
+from fastapi.responses import HTMLResponse, JSONResponse
 from motor.motor_asyncio import AsyncIOMotorClient
 from pydantic import BaseModel, Field, ValidationError
 from slowapi import Limiter, _rate_limit_exceeded_handler
@@ -569,6 +571,20 @@ app = FastAPI(title="KeepEat Backend", version="1.0.0", lifespan=lifespan)
 limiter = Limiter(key_func=get_remote_address)
 app.state.limiter = limiter
 app.add_exception_handler(RateLimitExceeded, _rate_limit_exceeded_handler)
+
+
+@app.exception_handler(RequestValidationError)
+async def custom_request_validation_exception_handler(request: Request, exc: RequestValidationError):
+    if request.url.path == "/api/ocr/receipt":
+        errors = exc.errors()
+        missing_image = any(
+            tuple(err.get("loc") or ()) == ("body", "image") and err.get("type") == "missing"
+            for err in errors
+        )
+        if missing_image:
+            return JSONResponse(status_code=400, content={"detail": "Champ 'image' manquant"})
+        return JSONResponse(status_code=400, content={"detail": "Payload JSON invalide"})
+    return await request_validation_exception_handler(request, exc)
 
 
 @app.get("/privacy-policy", response_class=HTMLResponse, include_in_schema=False)
@@ -2746,9 +2762,23 @@ Si aucun produit alimentaire n'est visible, retourne [].
 Ignore les articles non alimentaires (ménager, hygiène, etc.)."""
 
 
+class OcrReceiptRequest(BaseModel):
+    image: str = Field(
+        ...,
+        description=(
+            "Image du ticket encodée en base64 (brut ou data URI "
+            "data:image/<type>;base64,...)."
+        ),
+        examples=[
+            "/9j/4AAQSkZJRgABAQAAAQABAAD...",
+            "data:image/jpeg;base64,/9j/4AAQSkZJRgABAQAAAQABAAD...",
+        ],
+    )
+
+
 @api_router.post("/ocr/receipt")
 async def ocr_receipt_route(
-    request: Request,
+    payload: OcrReceiptRequest,
     current_user: Dict[str, Any] = Depends(_get_current_user),
 ):
     """Analyse un ticket de caisse via OCR provider et retourne un JSON structuré."""
@@ -2766,7 +2796,12 @@ async def ocr_receipt_route(
         consume_quota=False,
     )
     try:
-        result = await ocr_receipt(request, current_user, normalizations_col=ocr_normalizations_col)
+        result = await ocr_receipt(
+            request=None,
+            request_payload=payload.model_dump(),
+            current_user=current_user,
+            normalizations_col=ocr_normalizations_col,
+        )
     except HTTPException as exc:
         logger.warning("OCR receipt validation failed for user=%s http=%s detail=%s", current_user["id"], exc.status_code, exc.detail)
         await track_business_event(
