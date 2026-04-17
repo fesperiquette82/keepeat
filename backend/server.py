@@ -17,6 +17,7 @@ import time
 import unicodedata
 from contextlib import asynccontextmanager
 from datetime import datetime, timedelta, timezone
+from decimal import Decimal
 from email.mime.multipart import MIMEMultipart
 from email.mime.text import MIMEText
 from typing import Any, Dict, List, Optional
@@ -24,6 +25,7 @@ from typing import Any, Dict, List, Optional
 import aiosmtplib
 import httpx
 from bson import ObjectId
+from bson.decimal128 import Decimal128
 from pymongo.errors import DuplicateKeyError
 from fastapi import APIRouter, Depends, FastAPI, Header, HTTPException, Query, Request, Response, status
 from fastapi.middleware.cors import CORSMiddleware
@@ -3737,37 +3739,100 @@ async def admin_monitoring_dashboard(
     days: int = Query(7, ge=1, le=90),
     _admin_user: Dict[str, Any] = Depends(_require_admin_user),
 ):
-    kpis = await build_monitoring_kpis(
-        users_col=users_col,
-        api_request_logs_col=api_request_logs_col,
-        service_usage_logs_col=service_usage_logs_col,
-    )
-    apis = await summarize_api_metrics(
-        api_request_logs_col=api_request_logs_col,
-        start_iso=(utc_now() - timedelta(days=days)).isoformat(),
-        end_iso=utc_now().isoformat(),
-        limit=10,
-    )
-    overview = await build_operational_overview(
-        api_request_logs_col=api_request_logs_col,
-        service_usage_logs_col=service_usage_logs_col,
-        start_iso=(utc_now() - timedelta(days=days)).isoformat(),
-        end_iso=utc_now().isoformat(),
-    )
+    def _json_safe(value: Any) -> Any:
+        if isinstance(value, dict):
+            return {str(k): _json_safe(v) for k, v in value.items()}
+        if isinstance(value, (list, tuple, set)):
+            return [_json_safe(v) for v in value]
+        if isinstance(value, ObjectId):
+            return str(value)
+        if isinstance(value, Decimal128):
+            try:
+                return float(value.to_decimal())
+            except Exception:
+                return 0.0
+        if isinstance(value, Decimal):
+            return float(value)
+        if isinstance(value, datetime):
+            return value.isoformat()
+        return value
+
+    def _block_fallback(block_name: str):
+        if block_name == "users":
+            return {}
+        if block_name == "subscriptions":
+            return {}
+        if block_name == "top_api_issues":
+            return []
+        if block_name == "cost_metrics":
+            return {
+                "ocr_cost_eur": 0.0,
+                "ocr_cost_per_scan_eur": None,
+                "cost_per_active_user_eur": 0.0,
+                "estimated_net_revenue_eur": 0.0,
+            }
+        if block_name == "critical_flows":
+            return {}
+        if block_name == "product_funnel":
+            return {"premium_conversion_rate": 0.0}
+        return None
+
+    def _safe_block(block_name: str, producer):
+        try:
+            return producer()
+        except Exception as exc:
+            logger.warning("admin_monitoring_dashboard block failed: %s (%s)", block_name, exc)
+            return _block_fallback(block_name)
+
+    start_iso = (utc_now() - timedelta(days=days)).isoformat()
+    end_iso = utc_now().isoformat()
+
+    try:
+        kpis = await build_monitoring_kpis(
+            users_col=users_col,
+            api_request_logs_col=api_request_logs_col,
+            service_usage_logs_col=service_usage_logs_col,
+        )
+    except Exception as exc:
+        logger.warning("admin_monitoring_dashboard source failed: kpis (%s)", exc)
+        kpis = {}
+
+    try:
+        apis = await summarize_api_metrics(
+            api_request_logs_col=api_request_logs_col,
+            start_iso=start_iso,
+            end_iso=end_iso,
+            limit=10,
+        )
+    except Exception as exc:
+        logger.warning("admin_monitoring_dashboard source failed: apis (%s)", exc)
+        apis = {}
+
+    try:
+        overview = await build_operational_overview(
+            api_request_logs_col=api_request_logs_col,
+            service_usage_logs_col=service_usage_logs_col,
+            start_iso=start_iso,
+            end_iso=end_iso,
+        )
+    except Exception as exc:
+        logger.warning("admin_monitoring_dashboard source failed: overview (%s)", exc)
+        overview = {}
+
     kpis = kpis if isinstance(kpis, dict) else {}
     apis = apis if isinstance(apis, dict) else {}
     overview = overview if isinstance(overview, dict) else {}
 
-    users = kpis.get("users") if isinstance(kpis.get("users"), dict) else {}
-    subscriptions = kpis.get("subscriptions") if isinstance(kpis.get("subscriptions"), dict) else {}
+    users = _safe_block("users", lambda: _json_safe(kpis.get("users")) if isinstance(kpis.get("users"), dict) else {})
+    subscriptions = _safe_block("subscriptions", lambda: _json_safe(kpis.get("subscriptions")) if isinstance(kpis.get("subscriptions"), dict) else {})
     services = kpis.get("services") if isinstance(kpis.get("services"), dict) else {}
     cost_breakdown = overview.get("cost_breakdown") if isinstance(overview.get("cost_breakdown"), dict) else {}
-    product_funnel = overview.get("product_funnel") if isinstance(overview.get("product_funnel"), dict) else {}
-    critical_flows = overview.get("critical_flows") if isinstance(overview.get("critical_flows"), dict) else {}
-    top_incidents = overview.get("top_incidents") if isinstance(overview.get("top_incidents"), list) else []
+    product_funnel = _safe_block("product_funnel", lambda: _json_safe(overview.get("product_funnel")) if isinstance(overview.get("product_funnel"), dict) else {})
+    critical_flows = _safe_block("critical_flows", lambda: _json_safe(overview.get("critical_flows")) if isinstance(overview.get("critical_flows"), dict) else {})
+    top_incidents = _safe_block("top_api_issues", lambda: _json_safe(overview.get("top_incidents")) if isinstance(overview.get("top_incidents"), list) else [])
 
     top_service_usage_raw = services.get("top_usage_30d")
-    top_service_usage = [row for row in top_service_usage_raw if isinstance(row, dict)] if isinstance(top_service_usage_raw, list) else []
+    top_service_usage = [row for row in _json_safe(top_service_usage_raw) if isinstance(row, dict)] if isinstance(top_service_usage_raw, list) else []
 
     def _safe_int(value: Any, default: int = 0) -> int:
         try:
@@ -3785,6 +3850,15 @@ async def admin_monitoring_dashboard(
     active_users = max(_safe_int(users.get("wau")), 1)
     estimated_mrr = _safe_float(subscriptions.get("estimated_mrr_eur"))
     ocr_cost = _safe_float(cost_breakdown.get("ocr_cost_eur"))
+    cost_metrics = _safe_block(
+        "cost_metrics",
+        lambda: {
+            "ocr_cost_eur": round(ocr_cost, 6),
+            "ocr_cost_per_scan_eur": _json_safe(cost_breakdown.get("ocr_cost_per_scan_eur")),
+            "cost_per_active_user_eur": round((ocr_cost / active_users), 6) if active_users else None,
+            "estimated_net_revenue_eur": round(estimated_mrr - ocr_cost, 2),
+        },
+    )
     return {
         "generated_at": utc_now().isoformat(),
         "days": days,
@@ -3799,17 +3873,12 @@ async def admin_monitoring_dashboard(
         "operational_status_reasons": overview.get("global_status_reasons", []),
         "status_thresholds": overview.get("thresholds", {}),
         "critical_flows": critical_flows,
-        "last_critical_error": serialize_mongo(overview.get("last_critical_error")),
+        "last_critical_error": _json_safe(serialize_mongo(overview.get("last_critical_error"))),
         "product_funnel": {
             **product_funnel,
             "premium_conversion_rate": round((_safe_int(users.get("premium")) / users_total), 4),
         },
-        "cost_metrics": {
-            "ocr_cost_eur": round(ocr_cost, 6),
-            "ocr_cost_per_scan_eur": cost_breakdown.get("ocr_cost_per_scan_eur"),
-            "cost_per_active_user_eur": round((ocr_cost / active_users), 6) if active_users else None,
-            "estimated_net_revenue_eur": round(estimated_mrr - ocr_cost, 2),
-        },
+        "cost_metrics": cost_metrics,
         "legacy_top_api_issues": apis.get("highest_error_rate", [])[:5] if isinstance(apis.get("highest_error_rate"), list) else [],
     }
 

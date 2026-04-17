@@ -197,6 +197,19 @@ async def track_service_usage(
         logger.warning("SERVICE_USAGE insert failed: %s", exc)
 
 
+def _coerce_float(value: Any, default: float = 0.0) -> float:
+    try:
+        return float(value)
+    except (TypeError, ValueError):
+        to_decimal = getattr(value, "to_decimal", None)
+        if callable(to_decimal):
+            try:
+                return float(to_decimal())
+            except Exception:
+                return default
+        return default
+
+
 async def build_monitoring_kpis(*, users_col, api_request_logs_col, service_usage_logs_col) -> dict[str, Any]:
     now_iso = utc_now().isoformat()
     users_total = await users_col.count_documents({})
@@ -253,7 +266,11 @@ async def build_monitoring_kpis(*, users_col, api_request_logs_col, service_usag
         "apis": {"volume_7d": api_volume},
         "services": {
             "top_usage_30d": [
-                {"service_name": row.get("_id"), "units": row.get("units", 0), "estimated_cost": round(row.get("cost", 0.0), 4)}
+                {
+                    "service_name": row.get("_id"),
+                    "units": _coerce_float(row.get("units", 0), 0.0),
+                    "estimated_cost": round(_coerce_float(row.get("cost", 0.0), 0.0), 4),
+                }
                 for row in top_service_usage
             ]
         },
