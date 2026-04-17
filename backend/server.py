@@ -3754,36 +3754,63 @@ async def admin_monitoring_dashboard(
         start_iso=(utc_now() - timedelta(days=days)).isoformat(),
         end_iso=utc_now().isoformat(),
     )
-    users_total = max(int(kpis["users"].get("total", 0)), 1)
-    active_users = max(int(kpis["users"].get("wau", 0)), 1)
-    estimated_mrr = float(kpis["subscriptions"].get("estimated_mrr_eur", 0.0))
-    ocr_cost = float(overview["cost_breakdown"].get("ocr_cost_eur", 0.0))
+    kpis = kpis if isinstance(kpis, dict) else {}
+    apis = apis if isinstance(apis, dict) else {}
+    overview = overview if isinstance(overview, dict) else {}
+
+    users = kpis.get("users") if isinstance(kpis.get("users"), dict) else {}
+    subscriptions = kpis.get("subscriptions") if isinstance(kpis.get("subscriptions"), dict) else {}
+    services = kpis.get("services") if isinstance(kpis.get("services"), dict) else {}
+    cost_breakdown = overview.get("cost_breakdown") if isinstance(overview.get("cost_breakdown"), dict) else {}
+    product_funnel = overview.get("product_funnel") if isinstance(overview.get("product_funnel"), dict) else {}
+    critical_flows = overview.get("critical_flows") if isinstance(overview.get("critical_flows"), dict) else {}
+    top_incidents = overview.get("top_incidents") if isinstance(overview.get("top_incidents"), list) else []
+
+    top_service_usage_raw = services.get("top_usage_30d")
+    top_service_usage = [row for row in top_service_usage_raw if isinstance(row, dict)] if isinstance(top_service_usage_raw, list) else []
+
+    def _safe_int(value: Any, default: int = 0) -> int:
+        try:
+            return int(value)
+        except (TypeError, ValueError):
+            return default
+
+    def _safe_float(value: Any, default: float = 0.0) -> float:
+        try:
+            return float(value)
+        except (TypeError, ValueError):
+            return default
+
+    users_total = max(_safe_int(users.get("total")), 1)
+    active_users = max(_safe_int(users.get("wau")), 1)
+    estimated_mrr = _safe_float(subscriptions.get("estimated_mrr_eur"))
+    ocr_cost = _safe_float(cost_breakdown.get("ocr_cost_eur"))
     return {
         "generated_at": utc_now().isoformat(),
         "days": days,
-        "users": kpis["users"],
-        "subscriptions": kpis["subscriptions"],
-        "top_api_issues": overview["top_incidents"][:7],
-        "top_service_usage": kpis["services"]["top_usage_30d"],
+        "users": users,
+        "subscriptions": subscriptions,
+        "top_api_issues": top_incidents[:7],
+        "top_service_usage": top_service_usage,
         "estimated_cost_summary": {
-            "services_30d_estimated_cost_eur": round(sum(x.get("estimated_cost", 0.0) for x in kpis["services"]["top_usage_30d"]), 6)
+            "services_30d_estimated_cost_eur": round(sum(_safe_float(x.get("estimated_cost", 0.0)) for x in top_service_usage), 6)
         },
-        "operational_status": overview["global_status"],
-        "operational_status_reasons": overview["global_status_reasons"],
-        "status_thresholds": overview["thresholds"],
-        "critical_flows": overview["critical_flows"],
-        "last_critical_error": serialize_mongo(overview["last_critical_error"]),
+        "operational_status": overview.get("global_status", "ok"),
+        "operational_status_reasons": overview.get("global_status_reasons", []),
+        "status_thresholds": overview.get("thresholds", {}),
+        "critical_flows": critical_flows,
+        "last_critical_error": serialize_mongo(overview.get("last_critical_error")),
         "product_funnel": {
-            **overview["product_funnel"],
-            "premium_conversion_rate": round((int(kpis["users"].get("premium", 0)) / users_total), 4),
+            **product_funnel,
+            "premium_conversion_rate": round((_safe_int(users.get("premium")) / users_total), 4),
         },
         "cost_metrics": {
             "ocr_cost_eur": round(ocr_cost, 6),
-            "ocr_cost_per_scan_eur": overview["cost_breakdown"].get("ocr_cost_per_scan_eur"),
+            "ocr_cost_per_scan_eur": cost_breakdown.get("ocr_cost_per_scan_eur"),
             "cost_per_active_user_eur": round((ocr_cost / active_users), 6) if active_users else None,
             "estimated_net_revenue_eur": round(estimated_mrr - ocr_cost, 2),
         },
-        "legacy_top_api_issues": apis["highest_error_rate"][:5],
+        "legacy_top_api_issues": apis.get("highest_error_rate", [])[:5] if isinstance(apis.get("highest_error_rate"), list) else [],
     }
 
 

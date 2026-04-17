@@ -1,0 +1,275 @@
+import asyncio
+import os
+import sys
+from pathlib import Path
+
+import httpx
+
+BACKEND_DIR = Path(__file__).resolve().parents[1]
+if str(BACKEND_DIR) not in sys.path:
+    sys.path.insert(0, str(BACKEND_DIR))
+
+os.environ.setdefault("MONGO_URL", "mongodb://localhost:27017")
+os.environ.setdefault("JWT_SECRET_KEY", "test-secret")
+
+import server
+
+
+ADMIN_USER = {"id": "507f1f77bcf86cd799439011", "email": "admin@keepeat.app", "is_admin": True}
+
+
+async def _noop_log_api_request(**kwargs):
+    _ = kwargs
+
+
+async def _admin_override():
+    return ADMIN_USER
+
+
+def _build_nominal_kpis():
+    return {
+        "users": {
+            "total": 10,
+            "new_today": 1,
+            "new_7d": 3,
+            "new_30d": 7,
+            "dau": 4,
+            "wau": 6,
+            "mau": 8,
+            "free": 8,
+            "premium": 2,
+        },
+        "subscriptions": {
+            "active": 2,
+            "by_plan": {"premium_monthly": 2, "premium_other": 0},
+            "estimated_mrr_eur": 9.98,
+            "estimated_arr_eur": 119.76,
+        },
+        "services": {
+            "top_usage_30d": [
+                {"service_name": "ocr", "units": 22, "estimated_cost": 1.2},
+                {"service_name": "recipes_ai", "units": 6, "estimated_cost": 0.8},
+            ]
+        },
+    }
+
+
+def _build_nominal_overview():
+    return {
+        "global_status": "critical",
+        "global_status_reasons": ["incident"],
+        "thresholds": {"critical_error_rate_any_endpoint": 0.5},
+        "critical_flows": {
+            "/api/ocr/receipt": {
+                "endpoint_key": "/api/ocr/receipt",
+                "calls": 10,
+                "success": 8,
+                "errors": 2,
+                "error_rate": 0.2,
+                "avg_latency_ms": 123.4,
+                "dominant_error_type": "external_service_error",
+                "last_error": None,
+                "severity": "degraded",
+                "label": "Scan ticket",
+                "business_criticality": "critical",
+            }
+        },
+        "top_incidents": [
+            {
+                "endpoint_key": "/api/ocr/receipt",
+                "errors": 2,
+                "error_rate": 0.2,
+                "severity": "degraded",
+            }
+        ],
+        "last_critical_error": None,
+        "product_funnel": {
+            "users_with_receipt_scan": 4,
+            "users_with_stock_add": 3,
+            "users_with_recipes_view": 2,
+        },
+        "cost_breakdown": {
+            "ocr_cost_eur": 1.2,
+            "ocr_cost_per_scan_eur": 0.0545,
+        },
+    }
+
+
+def _build_nominal_apis():
+    return {
+        "highest_error_rate": [
+            {
+                "endpoint_key": "/api/ocr/receipt",
+                "volume": 10,
+                "errors": 2,
+                "error_rate": 0.2,
+                "avg_latency_ms": 123.4,
+            }
+        ]
+    }
+
+
+def _patch_dashboard_sources(monkeypatch, *, kpis=None, overview=None, apis=None):
+    async def _fake_kpis(**kwargs):
+        _ = kwargs
+        return _build_nominal_kpis() if kpis is None else kpis
+
+    async def _fake_overview(**kwargs):
+        _ = kwargs
+        return _build_nominal_overview() if overview is None else overview
+
+    async def _fake_apis(**kwargs):
+        _ = kwargs
+        return _build_nominal_apis() if apis is None else apis
+
+    monkeypatch.setattr(server, "build_monitoring_kpis", _fake_kpis)
+    monkeypatch.setattr(server, "build_operational_overview", _fake_overview)
+    monkeypatch.setattr(server, "summarize_api_metrics", _fake_apis)
+    monkeypatch.setattr(server, "log_api_request", _noop_log_api_request)
+
+
+def _with_admin_override():
+    server.app.dependency_overrides[server._require_admin_user] = _admin_override
+
+
+async def _request(path: str):
+    transport = httpx.ASGITransport(app=server.app)
+    async with httpx.AsyncClient(transport=transport, base_url="http://testserver") as client:
+        return await client.get(path)
+
+
+def test_dashboard_returns_200_with_nominal_payload(monkeypatch):
+    _patch_dashboard_sources(monkeypatch)
+    _with_admin_override()
+
+    response = asyncio.run(_request("/api/admin/monitoring/dashboard?days=7"))
+
+    server.app.dependency_overrides = {}
+    assert response.status_code == 200
+    payload = response.json()
+    assert isinstance(payload.get("users"), dict)
+    assert isinstance(payload.get("subscriptions"), dict)
+    assert isinstance(payload.get("top_api_issues"), list)
+    assert isinstance(payload.get("cost_metrics"), dict)
+    assert isinstance(payload.get("critical_flows"), dict)
+    assert isinstance(payload.get("product_funnel"), dict)
+
+
+def test_dashboard_supports_partial_data_without_500(monkeypatch):
+    partial_kpis = {"users": {"total": None, "premium": None, "wau": None}, "subscriptions": None, "services": {"top_usage_30d": [None, {"estimated_cost": None}]}}
+    partial_overview = {
+        "global_status": None,
+        "global_status_reasons": None,
+        "thresholds": None,
+        "top_incidents": None,
+        "critical_flows": None,
+        "last_critical_error": None,
+        "product_funnel": None,
+        "cost_breakdown": None,
+    }
+    _patch_dashboard_sources(monkeypatch, kpis=partial_kpis, overview=partial_overview, apis={"highest_error_rate": None})
+    _with_admin_override()
+
+    response = asyncio.run(_request("/api/admin/monitoring/dashboard?days=7"))
+
+    server.app.dependency_overrides = {}
+    assert response.status_code == 200
+    payload = response.json()
+    assert payload["top_api_issues"] == []
+    assert payload["critical_flows"] == {}
+    assert payload["cost_metrics"]["ocr_cost_eur"] == 0.0
+    assert payload["product_funnel"]["premium_conversion_rate"] == 0.0
+
+
+def test_dashboard_allows_missing_blocks_without_500(monkeypatch):
+    overview = _build_nominal_overview()
+    overview.pop("critical_flows")
+    overview.pop("product_funnel")
+    overview.pop("top_incidents")
+    overview.pop("cost_breakdown")
+    _patch_dashboard_sources(monkeypatch, overview=overview)
+    _with_admin_override()
+
+    response = asyncio.run(_request("/api/admin/monitoring/dashboard?days=30"))
+
+    server.app.dependency_overrides = {}
+    assert response.status_code == 200
+    payload = response.json()
+    assert payload["critical_flows"] == {}
+    assert payload["product_funnel"]["premium_conversion_rate"] >= 0
+    assert payload["top_api_issues"] == []
+    assert payload["cost_metrics"]["ocr_cost_eur"] == 0.0
+
+
+def test_dashboard_supports_days_1_7_30_90(monkeypatch):
+    _patch_dashboard_sources(monkeypatch)
+    _with_admin_override()
+
+    for days in (1, 7, 30, 90):
+        response = asyncio.run(_request(f"/api/admin/monitoring/dashboard?days={days}"))
+        assert response.status_code == 200
+        assert response.json()["days"] == days
+
+    server.app.dependency_overrides = {}
+
+
+def test_health_ok_and_dashboard_stays_200_on_partial_dashboard_data(monkeypatch):
+    async def _fake_health_overview(**kwargs):
+        _ = kwargs
+        return {
+            "global_status": "ok",
+            "global_status_reasons": [],
+            "thresholds": {},
+            "last_critical_error": None,
+            "critical_flows": {},
+            "top_incidents": [],
+            "product_funnel": {},
+            "cost_breakdown": {},
+        }
+
+    partial_kpis = {
+        "users": {"total": None, "premium": None, "wau": None},
+        "subscriptions": {"estimated_mrr_eur": None},
+        "services": {"top_usage_30d": [{"estimated_cost": None}]},
+    }
+    _patch_dashboard_sources(monkeypatch, kpis=partial_kpis, overview=_build_nominal_overview(), apis={"highest_error_rate": None})
+    monkeypatch.setattr(server, "build_operational_overview", _fake_health_overview)
+    _with_admin_override()
+
+    health = asyncio.run(_request("/api/admin/monitoring/health?days=7"))
+    dashboard = asyncio.run(_request("/api/admin/monitoring/dashboard?days=7"))
+
+    server.app.dependency_overrides = {}
+    assert health.status_code == 200
+    assert health.json()["status"] in {"ok", "degraded", "critical"}
+    assert dashboard.status_code == 200
+    assert isinstance(dashboard.json(), dict)
+
+
+def test_trends_stays_200_with_empty_sources(monkeypatch):
+    class _FakeCursor:
+        async def to_list(self, length):
+            _ = length
+            return []
+
+    class _FakeCollection:
+        def aggregate(self, pipeline):
+            _ = pipeline
+            return _FakeCursor()
+
+    monkeypatch.setattr(server, "api_request_logs_col", _FakeCollection())
+    monkeypatch.setattr(server, "users_col", _FakeCollection())
+    monkeypatch.setattr(server, "service_usage_logs_col", _FakeCollection())
+    monkeypatch.setattr(server, "log_api_request", _noop_log_api_request)
+    _with_admin_override()
+
+    response = asyncio.run(_request("/api/admin/monitoring/trends?days=7"))
+
+    server.app.dependency_overrides = {}
+    assert response.status_code == 200
+    payload = response.json()
+    assert payload["days"] == 7
+    assert payload["dau"] == []
+    assert payload["new_users"] == []
+    assert payload["errors"] == []
+    assert payload["costs"] == []
