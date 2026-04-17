@@ -893,7 +893,29 @@ async def build_info():
 # Auth routes
 # -----------------------------------------------------------------------------
 
+def _resolve_annotations(fn):
+    """Middle decorator: resolves string annotations on a slowapi wrapper before FastAPI processes them.
+
+    `from __future__ import annotations` stores all annotations as strings. When slowapi wraps
+    a function, FastAPI's get_typed_signature() uses inspect.signature() which follows __wrapped__
+    to the original function — so it reads param annotations from the ORIGINAL function's
+    __annotations__, not the wrapper's. The original function's __globals__ IS server.py's globals,
+    but inspect.signature returns the string annotations as-is without eval. We must pre-resolve
+    those strings so FastAPI sees real types rather than unresolvable ForwardRefs.
+    """
+    import typing
+    source = getattr(fn, "__wrapped__", fn)
+    try:
+        resolved = typing.get_type_hints(source, globalns=globals(), include_extras=True)
+        source.__annotations__ = resolved  # original function — read by inspect.signature(wrapper)
+        fn.__annotations__ = resolved      # wrapper itself — belt and suspenders
+    except Exception:
+        pass
+    return fn
+
+
 @api_router.post("/auth/register", response_model=RegisterResponse, status_code=201)
+@_resolve_annotations
 @limiter.limit("5/minute")
 async def register(request: Request, body: UserCreate):
     validate_password(body.password)
@@ -943,6 +965,7 @@ async def register(request: Request, body: UserCreate):
 
 
 @api_router.post("/auth/login", response_model=TokenResponse)
+@_resolve_annotations
 @limiter.limit("10/minute")
 async def login(request: Request, body: UserLogin):
     doc = await users_col.find_one({"email": body.email.lower()})
@@ -1004,6 +1027,7 @@ async def verify_email(body: VerifyEmailBody):
 
 
 @api_router.post("/auth/resend-verification")
+@_resolve_annotations
 @limiter.limit("3/minute")
 async def resend_verification(request: Request, body: ResendVerificationBody):
     doc = await users_col.find_one({"email": body.email.lower(), "email_verified": False})
@@ -1033,6 +1057,7 @@ async def resend_verification(request: Request, body: ResendVerificationBody):
 
 
 @api_router.post("/auth/forgot-password")
+@_resolve_annotations
 @limiter.limit("5/minute")
 async def forgot_password(request: Request, body: ForgotPasswordBody):
     doc = await users_col.find_one({"email": body.email.lower()})
@@ -1061,6 +1086,7 @@ async def forgot_password(request: Request, body: ForgotPasswordBody):
 
 
 @api_router.post("/auth/reset-password")
+@_resolve_annotations
 @limiter.limit("5/minute")
 async def reset_password(request: Request, body: ResetPasswordBody):
     validate_password(body.new_password)
