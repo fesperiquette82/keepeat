@@ -258,7 +258,7 @@ export default function StockScreen() {
                 <TouchableOpacity
                   style={styles.card}
                   activeOpacity={0.8}
-                  onPress={() => router.push({ pathname: '/edit-product', params: { id: item.id } })}
+                  onPress={() => router.push({ pathname: '/stock/[id]', params: { id: item.id } })}
                 >
                   <View style={styles.cardMain}>
                     <View style={styles.thumb}>
