@@ -156,6 +156,7 @@ def test_dashboard_returns_200_with_nominal_payload(monkeypatch):
     assert isinstance(payload.get("cost_metrics"), dict)
     assert isinstance(payload.get("critical_flows"), dict)
     assert isinstance(payload.get("product_funnel"), dict)
+    assert isinstance(payload.get("frontend_deployment"), dict)
 
 
 def test_dashboard_supports_partial_data_without_500(monkeypatch):
@@ -342,3 +343,113 @@ def test_dashboard_survives_kpis_source_exception_with_block_fallbacks(monkeypat
     assert isinstance(payload["top_api_issues"], list)
     assert isinstance(payload["critical_flows"], dict)
     assert payload["cost_metrics"]["ocr_cost_eur"] >= 0.0
+
+
+def _set_frontend_env(monkeypatch, values: dict[str, str | None]):
+    managed_keys = [
+        "FRONTEND_DEPLOYED_COMMIT",
+        "FRONTEND_EXPECTED_COMMIT",
+        "FRONTEND_DEPLOYED_VERSION",
+        "FRONTEND_EXPECTED_VERSION",
+        "FRONTEND_DEPLOYED_BUILD_TIME",
+        "FRONTEND_EXPECTED_BUILD_TIME",
+        "FRONTEND_DEPLOYED_DEPLOY_ID",
+        "FRONTEND_EXPECTED_DEPLOY_ID",
+        "FRONTEND_DEPLOYED_SERVICE_ID",
+    ]
+    for key in managed_keys:
+        monkeypatch.delenv(key, raising=False)
+    for key, value in values.items():
+        if value is None:
+            monkeypatch.delenv(key, raising=False)
+        else:
+            monkeypatch.setenv(key, value)
+
+
+def test_dashboard_frontend_deployment_status_ok_when_commits_match(monkeypatch):
+    _patch_dashboard_sources(monkeypatch)
+    _set_frontend_env(
+        monkeypatch,
+        {
+            "FRONTEND_DEPLOYED_COMMIT": "abc1234",
+            "FRONTEND_EXPECTED_COMMIT": "abc1234",
+            "FRONTEND_DEPLOYED_VERSION": "1.4.0",
+            "FRONTEND_EXPECTED_VERSION": "1.4.0",
+        },
+    )
+    _with_admin_override()
+
+    response = asyncio.run(_request("/api/admin/monitoring/dashboard?days=7"))
+
+    server.app.dependency_overrides = {}
+    assert response.status_code == 200
+    payload = response.json()
+    meta = payload["frontend_deployment"]
+    assert meta["status"] == "up_to_date"
+    assert meta["badge"] == "ok"
+    assert meta["current"]["commit"] == "abc1234"
+    assert meta["expected"]["commit"] == "abc1234"
+
+
+def test_dashboard_frontend_deployment_status_warning_when_commits_mismatch(monkeypatch):
+    _patch_dashboard_sources(monkeypatch)
+    _set_frontend_env(
+        monkeypatch,
+        {
+            "FRONTEND_DEPLOYED_COMMIT": "abc1234",
+            "FRONTEND_EXPECTED_COMMIT": "def5678",
+            "FRONTEND_DEPLOYED_DEPLOY_ID": "dep-current",
+            "FRONTEND_EXPECTED_DEPLOY_ID": "dep-latest",
+        },
+    )
+    _with_admin_override()
+
+    response = asyncio.run(_request("/api/admin/monitoring/dashboard?days=7"))
+
+    server.app.dependency_overrides = {}
+    assert response.status_code == 200
+    payload = response.json()
+    meta = payload["frontend_deployment"]
+    assert meta["status"] == "mismatch"
+    assert meta["badge"] == "warning"
+    assert meta["current"]["deploy_id"] == "dep-current"
+    assert meta["expected"]["deploy_id"] == "dep-latest"
+
+
+def test_dashboard_frontend_deployment_status_unknown_when_metadata_missing(monkeypatch):
+    _patch_dashboard_sources(monkeypatch)
+    _set_frontend_env(monkeypatch, {})
+    _with_admin_override()
+
+    response = asyncio.run(_request("/api/admin/monitoring/dashboard?days=7"))
+
+    server.app.dependency_overrides = {}
+    assert response.status_code == 200
+    payload = response.json()
+    meta = payload["frontend_deployment"]
+    assert meta["status"] == "unknown"
+    assert meta["badge"] == "unknown"
+    assert meta["current"]["commit"] == "unknown"
+    assert meta["expected"]["commit"] == "unknown"
+
+
+def test_dashboard_frontend_deployment_status_check_when_partial_metadata(monkeypatch):
+    _patch_dashboard_sources(monkeypatch)
+    _set_frontend_env(
+        monkeypatch,
+        {
+            "FRONTEND_DEPLOYED_COMMIT": "abc1234",
+        },
+    )
+    _with_admin_override()
+
+    response = asyncio.run(_request("/api/admin/monitoring/dashboard?days=7"))
+
+    server.app.dependency_overrides = {}
+    assert response.status_code == 200
+    payload = response.json()
+    meta = payload["frontend_deployment"]
+    assert meta["status"] == "deployment_check"
+    assert meta["badge"] == "warning"
+    assert meta["current"]["commit"] == "abc1234"
+    assert meta["expected"]["commit"] == "unknown"
