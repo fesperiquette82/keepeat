@@ -22,6 +22,8 @@ _PLACARD_CATS = ["feculents", "desserts", "epicerie", "autres"]
 _DEFAULT_CATALOG_PATH = Path(__file__).resolve().parent / "data" / "recipes.catalog.json"
 _MIN_SCORE_MAIN_SUGGESTION = 0.55
 _MIN_SCORE_NEAR_SUGGESTION = 0.35
+_DEFAULT_GEMINI_RECIPES_MODEL = "gemini-2.0-flash-lite"
+_DEPRECATED_GEMINI_RECIPES_MODELS: frozenset[str] = frozenset({"gemini-1.5-flash"})
 _ULTRA_GENERIC_INGREDIENTS = {
     "sel", "salt", "poivre", "pepper", "eau", "water", "huile", "oil", "olive oil",
 }
@@ -211,10 +213,15 @@ async def _generate_ai_recipe(stock_names: list[str], gemini_key: str) -> dict |
     Retourne None en cas d'échec ou si GEMINI_RECIPES_API_KEY n'est pas configuré.
     """
     prompt = _AI_SUGGEST_PROMPT.format(ingredients="\n".join(f"- {n}" for n in stock_names))
+    model = os.environ.get("GEMINI_RECIPES_MODEL", "").strip()
+    if model.startswith("models/"):
+        model = model.split("models/", 1)[1].strip()
+    if not model or model in _DEPRECATED_GEMINI_RECIPES_MODELS:
+        model = _DEFAULT_GEMINI_RECIPES_MODEL
     try:
         async with httpx.AsyncClient(timeout=20) as http:
             r = await http.post(
-                f"https://generativelanguage.googleapis.com/v1beta/models/gemini-1.5-flash:generateContent?key={gemini_key}",
+                f"https://generativelanguage.googleapis.com/v1beta/models/{model}:generateContent?key={gemini_key}",
                 headers={"Content-Type": "application/json"},
                 json={
                     "contents": [{"parts": [{"text": prompt}]}],
@@ -225,7 +232,7 @@ async def _generate_ai_recipe(stock_names: list[str], gemini_key: str) -> dict |
                 },
             )
             if r.status_code != 200:
-                logger.warning("Gemini suggest recipe error %s: %s", r.status_code, r.text[:200])
+                logger.warning("Gemini suggest recipe error %s model=%s: %s", r.status_code, model, r.text[:200])
                 return None
             text = r.json()["candidates"][0]["content"]["parts"][0]["text"].strip()
     except Exception as exc:

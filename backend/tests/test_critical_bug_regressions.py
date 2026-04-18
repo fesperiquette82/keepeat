@@ -53,6 +53,34 @@ class _FakeRecipesCollection:
         return _FakeCursor(self._payload)
 
 
+class _GeminiResponse:
+    def __init__(self, status_code: int, payload: dict | None = None, text: str = ""):
+        self.status_code = status_code
+        self._payload = payload or {}
+        self.text = text
+
+    def json(self):
+        return self._payload
+
+
+class _FakeGeminiClient:
+    def __init__(self, responses, calls):
+        self._responses = list(responses)
+        self._calls = calls
+
+    async def __aenter__(self):
+        return self
+
+    async def __aexit__(self, exc_type, exc, tb):
+        return False
+
+    async def post(self, url, headers=None, json=None):
+        self._calls.append(url)
+        if not self._responses:
+            raise AssertionError("No fake Gemini response configured")
+        return self._responses.pop(0)
+
+
 def test_recipe_suggestions_survives_gap_upsert_failure(monkeypatch):
     server = _load_server(monkeypatch)
 
@@ -89,6 +117,142 @@ def test_recipe_suggestions_survives_gap_upsert_failure(monkeypatch):
     assert result["meta"]["suggest_later"] is True
     assert result["meta"]["gap_logged"] is False
     assert captured_meta.get("suggest_later") is True
+
+
+def test_gap_fill_default_model_no_longer_uses_gemini_1_5_flash(monkeypatch):
+    monkeypatch.delenv("GEMINI_RECIPES_MODEL", raising=False)
+    server = _load_server(monkeypatch)
+    calls = []
+    recipe_payload = [{"title": "Omelette tomate", "ingredients_used": ["Tomate"], "instructions_summary": "Cuire.", "prep_time_min": 10}]
+    fake_client = _FakeGeminiClient(
+        responses=[
+            _GeminiResponse(
+                status_code=200,
+                payload={"candidates": [{"content": {"parts": [{"text": json.dumps(recipe_payload)}]}}]},
+            )
+        ],
+        calls=calls,
+    )
+    monkeypatch.setattr(server.httpx, "AsyncClient", MagicMock(return_value=fake_client))
+
+    result = asyncio.run(server._ai_gap_fill(["Tomate"], "test-key"))
+
+    assert result is not None
+    assert calls
+    assert "models/gemini-2.0-flash-lite:generateContent" in calls[0]
+    assert "gemini-1.5-flash" not in calls[0]
+
+
+def test_gap_fill_uses_configured_recipes_model(monkeypatch):
+    monkeypatch.setenv("GEMINI_RECIPES_MODEL", "gemini-2.0-flash")
+    server = _load_server(monkeypatch)
+    calls = []
+    recipe_payload = [{"title": "Soupe tomate", "ingredients_used": ["Tomate"], "instructions_summary": "Cuire.", "prep_time_min": 15}]
+    fake_client = _FakeGeminiClient(
+        responses=[
+            _GeminiResponse(
+                status_code=200,
+                payload={"candidates": [{"content": {"parts": [{"text": json.dumps(recipe_payload)}]}}]},
+            )
+        ],
+        calls=calls,
+    )
+    monkeypatch.setattr(server.httpx, "AsyncClient", MagicMock(return_value=fake_client))
+
+    result = asyncio.run(server._ai_gap_fill(["Tomate"], "test-key"))
+
+    assert result is not None
+    assert "models/gemini-2.0-flash:generateContent" in calls[0]
+
+
+def test_gap_fill_invalid_model_falls_back_to_safe_default(monkeypatch):
+    monkeypatch.setenv("GEMINI_RECIPES_MODEL", "gemini-1.5-flash")
+    server = _load_server(monkeypatch)
+    calls = []
+    recipe_payload = [{"title": "Salade tomate", "ingredients_used": ["Tomate"], "instructions_summary": "Mélanger.", "prep_time_min": 8}]
+    fake_client = _FakeGeminiClient(
+        responses=[
+            _GeminiResponse(
+                status_code=200,
+                payload={"candidates": [{"content": {"parts": [{"text": json.dumps(recipe_payload)}]}}]},
+            )
+        ],
+        calls=calls,
+    )
+    monkeypatch.setattr(server.httpx, "AsyncClient", MagicMock(return_value=fake_client))
+
+    result = asyncio.run(server._ai_gap_fill(["Tomate"], "test-key"))
+
+    assert result is not None
+    assert "models/gemini-2.0-flash-lite:generateContent" in calls[0]
+    assert "gemini-1.5-flash" not in calls[0]
+
+
+def test_recipes_model_empty_env_falls_back_to_default(monkeypatch):
+    monkeypatch.setenv("GEMINI_RECIPES_MODEL", "   ")
+    server = _load_server(monkeypatch)
+
+    assert server._resolve_recipes_gemini_model() == "gemini-2.0-flash-lite"
+
+
+def test_gap_fill_runtime_404_retries_with_default_model(monkeypatch, caplog):
+    monkeypatch.setenv("GEMINI_RECIPES_MODEL", "gemini-2.5-pro-preview")
+    server = _load_server(monkeypatch)
+    calls = []
+    recipe_payload = [{"title": "Riz tomate", "ingredients_used": ["Tomate"], "instructions_summary": "Cuire.", "prep_time_min": 20}]
+    fake_client = _FakeGeminiClient(
+        responses=[
+            _GeminiResponse(status_code=404, text="model not found"),
+            _GeminiResponse(
+                status_code=200,
+                payload={"candidates": [{"content": {"parts": [{"text": json.dumps(recipe_payload)}]}}]},
+            ),
+        ],
+        calls=calls,
+    )
+    monkeypatch.setattr(server.httpx, "AsyncClient", MagicMock(return_value=fake_client))
+
+    with caplog.at_level("WARNING"):
+        result = asyncio.run(server._ai_gap_fill(["Tomate"], "test-key"))
+
+    assert result is not None
+    assert len(calls) == 2
+    assert "models/gemini-2.5-pro-preview:generateContent" in calls[0]
+    assert "models/gemini-2.0-flash-lite:generateContent" in calls[1]
+    assert "fallback model=gemini-2.0-flash-lite" in caplog.text
+
+
+def test_recipes_suggestions_returns_200_when_gap_fill_provider_fails(monkeypatch, caplog):
+    server = _load_server(monkeypatch)
+
+    async def fake_fetch_stock_candidates(*, uid, filter_value):
+        return [{"name": "Tomate"}]
+
+    async def failing_ai_gap_fill(stock_names, gemini_key):
+        raise RuntimeError("provider 404")
+
+    async def fake_upsert_recipe_gap(**_kwargs):
+        return False
+
+    monkeypatch.setattr(server, "_fetch_stock_candidates", fake_fetch_stock_candidates)
+    monkeypatch.setattr(server, "_ai_gap_fill", failing_ai_gap_fill)
+    monkeypatch.setattr(server, "_upsert_recipe_gap", fake_upsert_recipe_gap)
+    monkeypatch.setattr(server, "_get_recipes_ai_api_key", lambda: "recipes-key")
+    monkeypatch.setattr(server, "recipes_col", _FakeRecipesCollection([]))
+    server.app.dependency_overrides[server._get_current_user] = lambda: {"id": "user-1"}
+
+    client = TestClient(server.app)
+    with caplog.at_level("WARNING"):
+        response = client.get("/api/recipes/suggestions?include_meta=true")
+
+    server.app.dependency_overrides.clear()
+
+    assert response.status_code == 200
+    payload = response.json()
+    assert payload["recipes"] == []
+    assert payload["meta"]["suggest_later"] is True
+    assert payload["meta"]["gap_logged"] is False
+    assert "AI gap fill: erreur pour user=user-1: provider 404" in caplog.text
 
 
 def test_openapi_ocr_receipt_declares_json_body_and_bearer_auth(monkeypatch):
