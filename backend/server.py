@@ -203,6 +203,95 @@ _BACKEND_VERSION = _resolve_backend_version()
 _BACKEND_COMMIT = _resolve_backend_commit()
 
 
+def _normalize_build_meta(value: Any, default: str = "unknown") -> str:
+    if value is None:
+        return default
+    token = str(value).strip()
+    return token or default
+
+
+def _build_frontend_deployment_meta() -> dict[str, Any]:
+    current_commit = _normalize_build_meta(
+        os.getenv("FRONTEND_DEPLOYED_COMMIT")
+        or os.getenv("EXPO_PUBLIC_APP_COMMIT")
+        or os.getenv("FRONTEND_CURRENT_COMMIT")
+    )
+    current_version = _normalize_build_meta(
+        os.getenv("FRONTEND_DEPLOYED_VERSION")
+        or os.getenv("EXPO_PUBLIC_APP_VERSION")
+        or os.getenv("FRONTEND_CURRENT_VERSION")
+    )
+    current_build_time = _normalize_build_meta(
+        os.getenv("FRONTEND_DEPLOYED_BUILD_TIME")
+        or os.getenv("EXPO_PUBLIC_BUILD_TIME")
+        or os.getenv("FRONTEND_CURRENT_BUILD_TIME")
+    )
+    current_deploy_id = _normalize_build_meta(
+        os.getenv("FRONTEND_DEPLOYED_DEPLOY_ID")
+        or os.getenv("FRONTEND_RENDER_DEPLOY_ID")
+        or os.getenv("RENDER_DEPLOY_ID")
+    )
+    current_service_id = _normalize_build_meta(os.getenv("FRONTEND_DEPLOYED_SERVICE_ID") or os.getenv("RENDER_SERVICE_ID"))
+
+    expected_commit = _normalize_build_meta(
+        os.getenv("FRONTEND_EXPECTED_COMMIT")
+        or os.getenv("FRONTEND_LATEST_RENDER_COMMIT")
+        or os.getenv("FRONTEND_LATEST_COMMIT")
+    )
+    expected_version = _normalize_build_meta(os.getenv("FRONTEND_EXPECTED_VERSION") or os.getenv("FRONTEND_LATEST_VERSION"))
+    expected_deploy_id = _normalize_build_meta(
+        os.getenv("FRONTEND_EXPECTED_DEPLOY_ID")
+        or os.getenv("FRONTEND_LATEST_RENDER_DEPLOY_ID")
+        or os.getenv("FRONTEND_LATEST_DEPLOY_ID")
+    )
+    expected_build_time = _normalize_build_meta(
+        os.getenv("FRONTEND_EXPECTED_BUILD_TIME")
+        or os.getenv("FRONTEND_LATEST_RENDER_BUILD_TIME")
+        or os.getenv("FRONTEND_LATEST_BUILD_TIME")
+    )
+
+    has_current_commit = current_commit != "unknown"
+    has_expected_commit = expected_commit != "unknown"
+    if has_current_commit and has_expected_commit:
+        if current_commit == expected_commit:
+            status = "up_to_date"
+            badge = "ok"
+            message = "Le frontend déployé correspond au dernier build connu."
+        else:
+            status = "mismatch"
+            badge = "warning"
+            message = "Le frontend actuellement servi ne correspond pas au dernier déploiement attendu — vérifier un échec de build/déploiement."
+    elif has_current_commit or has_expected_commit:
+        status = "deployment_check"
+        badge = "warning"
+        message = "Métadonnées frontend partielles : comparaison incomplète, déploiement à vérifier."
+    else:
+        status = "unknown"
+        badge = "unknown"
+        message = "Aucune métadonnée frontend exploitable n'est configurée."
+
+    return {
+        "status": status,
+        "badge": badge,
+        "message": message,
+        "current": {
+            "commit": current_commit,
+            "version": current_version,
+            "build_time": current_build_time,
+            "deploy_id": current_deploy_id,
+            "service_id": current_service_id,
+            "source": "env:FRONTEND_DEPLOYED_*|EXPO_PUBLIC_*",
+        },
+        "expected": {
+            "commit": expected_commit,
+            "version": expected_version,
+            "build_time": expected_build_time,
+            "deploy_id": expected_deploy_id,
+            "source": "env:FRONTEND_EXPECTED_*|FRONTEND_LATEST_*",
+        },
+    }
+
+
 def _normalize_locale_tag(raw_locale: Any) -> str | None:
     if not isinstance(raw_locale, str):
         return None
@@ -4004,6 +4093,7 @@ async def admin_monitoring_dashboard(
         "days": days,
         "users": users,
         "subscriptions": subscriptions,
+        "frontend_deployment": _build_frontend_deployment_meta(),
         "top_api_issues": top_incidents[:7],
         "top_service_usage": top_service_usage,
         "estimated_cost_summary": {
@@ -5293,6 +5383,11 @@ _ADMIN_DASHBOARD_HTML = """<!DOCTYPE html>
       </div>
     </div>
 
+    <div class="card">
+      <div class="card-title">🚀 Version frontend / Déploiement</div>
+      <div id="frontend-deploy-content"><div style="color:#9ca3af;font-size:13px">Chargement...</div></div>
+    </div>
+
     <!-- Top issues API + coûts services -->
     <div class="two-col">
       <div class="card">
@@ -5478,6 +5573,7 @@ async function loadAll() {
     const dash = dashResult.value || {};
     renderUsers(dash.users || {});
     renderSubscriptions(dash.subscriptions || {}, dash.estimated_cost_summary || {});
+    renderFrontendDeployment(dash.frontend_deployment || {});
     renderApiIssues(Array.isArray(dash.top_api_issues) ? dash.top_api_issues : [], selectedDays);
     renderServices(Array.isArray(dash.top_service_usage) ? dash.top_service_usage : []);
     renderCriticalFlows(dash.critical_flows || {});
@@ -5487,6 +5583,7 @@ async function loadAll() {
     const msg = 'Erreur de chargement du dashboard : ' + dashResult.reason.message;
     setBlockError('users-content', msg);
     setBlockError('subscriptions-content', msg);
+    setBlockError('frontend-deploy-content', msg);
     setBlockError('api-issues-content', msg);
     setBlockError('services-content', msg);
     setBlockError('critical-flows-content', msg);
@@ -5620,6 +5717,46 @@ function renderSubscriptions(s, cost) {
     + (costVal !== null ? statCard('Coûts 30j', costVal.toFixed(4) + '\u00a0€', 'estimé') : '')
     + '</div>'
     + '<div style="font-size:12px;color:#6b7280;margin-top:8px">Mensuel : ' + (byPlan.premium_monthly||0) + ' · Autre : ' + (byPlan.premium_other||0) + '</div>';
+}
+
+function frontendDeployStatusLabel(status) {
+  if (status === 'up_to_date') return 'OK / Up to date';
+  if (status === 'mismatch') return 'Warning / Mismatch';
+  if (status === 'deployment_check') return 'Déploiement à vérifier';
+  return 'Unknown';
+}
+
+function frontendDeployStatusClass(status) {
+  if (status === 'up_to_date') return 'ok';
+  if (status === 'mismatch' || status === 'deployment_check') return 'warn';
+  return 'err';
+}
+
+function frontendValue(v) {
+  return (v === null || v === undefined || v === '' || v === 'unknown') ? '—' : String(v);
+}
+
+function renderFrontendDeployment(meta) {
+  const status = meta && typeof meta === 'object' ? (meta.status || 'unknown') : 'unknown';
+  const current = (meta && typeof meta.current === 'object') ? meta.current : {};
+  const expected = (meta && typeof meta.expected === 'object') ? meta.expected : {};
+  const statusClass = frontendDeployStatusClass(status);
+  const statusText = frontendDeployStatusLabel(status);
+  const message = meta && typeof meta.message === 'string' && meta.message ? meta.message : 'Métadonnées de version frontend indisponibles.';
+  let html = '<div class="health-grid">';
+  html += '<div class="health-item"><span class="dot ' + statusClass + '"></span><strong>Statut :</strong>&nbsp;' + escHtml(statusText) + '</div>';
+  html += '<div class="health-item"><span class="dot ok"></span><strong>Frontend actuel :</strong>&nbsp;<code>' + escHtml(frontendValue(current.commit)) + '</code></div>';
+  html += '<div class="health-item"><span class="dot ' + (status === 'mismatch' ? 'warn' : 'ok') + '"></span><strong>Dernière version connue :</strong>&nbsp;<code>' + escHtml(frontendValue(expected.commit)) + '</code></div>';
+  html += '</div>';
+  html += '<div style="font-size:12px;color:#374151;line-height:1.8;margin-top:10px">';
+  html += '<div><strong>Version frontend actuelle :</strong> ' + escHtml(frontendValue(current.version)) + '</div>';
+  html += '<div><strong>Build frontend actuel :</strong> ' + escHtml(frontendValue(current.build_time)) + '</div>';
+  html += '<div><strong>Deploy ID actuel :</strong> ' + escHtml(frontendValue(current.deploy_id)) + ' · <strong>Service ID :</strong> ' + escHtml(frontendValue(current.service_id)) + '</div>';
+  html += '<div><strong>Version/deploy attendu :</strong> ' + escHtml(frontendValue(expected.version)) + ' · <strong>Deploy ID attendu :</strong> ' + escHtml(frontendValue(expected.deploy_id)) + '</div>';
+  html += '<div><strong>Build attendu :</strong> ' + escHtml(frontendValue(expected.build_time)) + '</div>';
+  html += '</div>';
+  html += '<div class="error-banner" style="margin-top:10px;background:#f0fdf4;border-color:#bbf7d0;color:#166534">' + escHtml(message) + '</div>';
+  document.getElementById('frontend-deploy-content').innerHTML = html;
 }
 
 function severityClass(level) {
