@@ -395,10 +395,11 @@ async def _fetch_gpt_recipes(
 ) -> list[_GptRecipePayload]:
     prompt = _build_openai_recipes_prompt(stock_snapshot=stock_snapshot, active_filter=active_filter)
     system_text = "Tu es un assistant culinaire anti-gaspi strict."
+    gemini_model = _resolve_recipes_gemini_model()
     try:
         async with httpx.AsyncClient(timeout=12.0) as http:
             response = await http.post(
-                f"https://generativelanguage.googleapis.com/v1beta/models/gemini-1.5-flash:generateContent?key={gemini_key}",
+                _build_gemini_generate_content_url(model=gemini_model, gemini_key=gemini_key),
                 headers={"Content-Type": "application/json"},
                 json={
                     "systemInstruction": {"parts": [{"text": system_text}]},
@@ -415,7 +416,12 @@ async def _fetch_gpt_recipes(
         return []
 
     if response.status_code != 200:
-        logger.warning("RECIPES_GPT request error status=%s body=%s", response.status_code, response.text[:200])
+        logger.warning(
+            "RECIPES_GPT request error status=%s model=%s body=%s",
+            response.status_code,
+            gemini_model,
+            response.text[:200],
+        )
         return []
 
     try:
@@ -3255,23 +3261,40 @@ async def _ai_gap_fill(stock_names: list[str], gemini_key: str) -> dict | None:
     """
     ingredients_list = "\n".join(f"- {name}" for name in stock_names[:10])
     prompt = _AI_RECIPE_PROMPT.format(ingredients=ingredients_list)
+    configured_model = _resolve_recipes_gemini_model()
+    models_to_try = [configured_model]
+    if configured_model != _DEFAULT_GEMINI_RECIPES_MODEL:
+        models_to_try.append(_DEFAULT_GEMINI_RECIPES_MODEL)
+
+    text: str | None = None
     try:
         async with httpx.AsyncClient(timeout=12) as http:
-            r = await http.post(
-                f"https://generativelanguage.googleapis.com/v1beta/models/gemini-1.5-flash:generateContent?key={gemini_key}",
-                headers={"Content-Type": "application/json"},
-                json={
-                    "systemInstruction": {"parts": [{"text": _AI_RECIPE_SYSTEM}]},
-                    "contents": [{"parts": [{"text": prompt}]}],
-                    "generationConfig": {"maxOutputTokens": 600},
-                },
-            )
-            if r.status_code != 200:
-                logger.warning("AI gap fill Gemini HTTP %s: %s", r.status_code, r.text[:200])
+            for model in models_to_try:
+                r = await http.post(
+                    _build_gemini_generate_content_url(model=model, gemini_key=gemini_key),
+                    headers={"Content-Type": "application/json"},
+                    json={
+                        "systemInstruction": {"parts": [{"text": _AI_RECIPE_SYSTEM}]},
+                        "contents": [{"parts": [{"text": prompt}]}],
+                        "generationConfig": {"maxOutputTokens": 600},
+                    },
+                )
+                if r.status_code == 200:
+                    text = r.json()["candidates"][0]["content"]["parts"][0]["text"].strip()
+                    break
+                if r.status_code == 404 and model != _DEFAULT_GEMINI_RECIPES_MODEL:
+                    logger.warning(
+                        "AI gap fill Gemini HTTP 404 model=%s: fallback model=%s",
+                        model,
+                        _DEFAULT_GEMINI_RECIPES_MODEL,
+                    )
+                    continue
+                logger.warning("AI gap fill Gemini HTTP %s model=%s: %s", r.status_code, model, r.text[:200])
                 return None
-            text = r.json()["candidates"][0]["content"]["parts"][0]["text"].strip()
     except Exception as exc:
         logger.warning("AI gap fill request failed: %s", exc)
+        return None
+    if not text:
         return None
 
     if "```" in text:
@@ -3460,10 +3483,50 @@ def _is_french_ai_recipe(recipe: dict) -> bool:
 _ai_recipe_cache: dict[str, dict] = {}
 _AI_CACHE_MAX_SIZE = 500
 
+_DEFAULT_GEMINI_RECIPES_MODEL = "gemini-2.0-flash-lite"
+_DEPRECATED_GEMINI_RECIPES_MODELS: frozenset[str] = frozenset({
+    "gemini-1.5-flash",
+})
+
 
 def _get_recipes_ai_api_key() -> str:
     """Retourne la clé provider IA recettes (Gemini)."""
     return os.environ.get("GEMINI_RECIPES_API_KEY", "").strip()
+
+
+def _resolve_recipes_gemini_model(configured_model: str | None = None) -> str:
+    """Retourne le modèle Gemini recettes valide à utiliser (configurable via env)."""
+    raw_model = configured_model
+    if raw_model is None:
+        raw_model = os.environ.get("GEMINI_RECIPES_MODEL", "")
+
+    normalized = str(raw_model or "").strip()
+    if normalized.startswith("models/"):
+        normalized = normalized.split("models/", 1)[1].strip()
+
+    if not normalized:
+        return _DEFAULT_GEMINI_RECIPES_MODEL
+
+    if normalized in _DEPRECATED_GEMINI_RECIPES_MODELS:
+        logger.warning(
+            "Gemini recipes model '%s' déprécié/invalide pour v1beta: fallback '%s'",
+            normalized,
+            _DEFAULT_GEMINI_RECIPES_MODEL,
+        )
+        return _DEFAULT_GEMINI_RECIPES_MODEL
+
+    return normalized
+
+
+def _build_gemini_generate_content_url(*, model: str, gemini_key: str) -> str:
+    """Construit l'URL generateContent Gemini en normalisant le nom de modèle."""
+    normalized_model = str(model).strip()
+    if normalized_model.startswith("models/"):
+        normalized_model = normalized_model.split("models/", 1)[1].strip()
+    return (
+        "https://generativelanguage.googleapis.com/v1beta/models/"
+        f"{normalized_model}:generateContent?key={gemini_key}"
+    )
 
 
 def _extract_ai_recipe_payload_text(payload: dict[str, Any]) -> str:
@@ -3556,22 +3619,38 @@ async def get_ai_recipes(
         for i in items
     )
     prompt = _AI_RECIPE_PROMPT.format(ingredients=ingredients_list)
+    configured_model = _resolve_recipes_gemini_model()
+    models_to_try = [configured_model]
+    if configured_model != _DEFAULT_GEMINI_RECIPES_MODEL:
+        models_to_try.append(_DEFAULT_GEMINI_RECIPES_MODEL)
 
     try:
         async with httpx.AsyncClient(timeout=30) as http:
-            r = await http.post(
-                f"https://generativelanguage.googleapis.com/v1beta/models/gemini-1.5-flash:generateContent?key={gemini_key}",
-                headers={"Content-Type": "application/json"},
-                json={
-                    "systemInstruction": {"parts": [{"text": _AI_RECIPE_SYSTEM}]},
-                    "contents": [{"parts": [{"text": prompt}]}],
-                    "generationConfig": {"maxOutputTokens": 800},
-                },
-            )
-            if r.status_code != 200:
-                logger.warning("Gemini recipes/ai error %s: %s", r.status_code, r.text[:200])
+            text: str | None = None
+            for model in models_to_try:
+                r = await http.post(
+                    _build_gemini_generate_content_url(model=model, gemini_key=gemini_key),
+                    headers={"Content-Type": "application/json"},
+                    json={
+                        "systemInstruction": {"parts": [{"text": _AI_RECIPE_SYSTEM}]},
+                        "contents": [{"parts": [{"text": prompt}]}],
+                        "generationConfig": {"maxOutputTokens": 800},
+                    },
+                )
+                if r.status_code == 200:
+                    text = _extract_ai_recipe_payload_text(r.json())
+                    break
+                if r.status_code == 404 and model != _DEFAULT_GEMINI_RECIPES_MODEL:
+                    logger.warning(
+                        "Gemini recipes/ai HTTP 404 model=%s: fallback model=%s",
+                        model,
+                        _DEFAULT_GEMINI_RECIPES_MODEL,
+                    )
+                    continue
+                logger.warning("Gemini recipes/ai error %s model=%s: %s", r.status_code, model, r.text[:200])
                 raise HTTPException(status_code=502, detail="Erreur IA externe")
-            text = _extract_ai_recipe_payload_text(r.json())
+            if not text:
+                raise HTTPException(status_code=502, detail="Erreur IA externe")
     except HTTPException:
         raise
     except Exception as exc:
