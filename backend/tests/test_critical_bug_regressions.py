@@ -273,11 +273,16 @@ def test_openapi_ocr_receipt_declares_json_body_and_bearer_auth(monkeypatch):
     assert operation.get("security") == [{"HTTPBearer": []}]
 
 
-def _wire_ocr_test_doubles(monkeypatch, server):
+def _wire_ocr_test_doubles(monkeypatch, server, *, captured_events: list[dict] | None = None):
     async def _noop(*args, **kwargs):
         return None
 
-    monkeypatch.setattr(server, "track_business_event", _noop)
+    async def _track_business_event(*args, **kwargs):
+        if captured_events is not None:
+            captured_events.append(kwargs)
+        return None
+
+    monkeypatch.setattr(server, "track_business_event", _track_business_event)
     monkeypatch.setattr(server, "track_service_usage", _noop)
     monkeypatch.setattr(server, "_enforce_feature_access", _noop)
     monkeypatch.setattr(server, "log_api_request", _noop)
@@ -409,5 +414,35 @@ def test_ocr_receipt_route_provider_failures_mapping(monkeypatch):
     monkeypatch.setattr(ocr_service.httpx, "AsyncClient", MagicMock(return_value=non_json_client))
     non_json_resp = client.post("/api/ocr/receipt", json={"image": _jpeg_b64()})
     assert non_json_resp.status_code == 502
+
+    server.app.dependency_overrides.clear()
+
+
+def test_ocr_receipt_route_provider_429_returns_explicit_rate_limit(monkeypatch):
+    monkeypatch.setenv("GEMINI_OCR_API_KEY", "fake-key")
+    server = _load_server(monkeypatch)
+    captured_events: list[dict] = []
+    _wire_ocr_test_doubles(monkeypatch, server, captured_events=captured_events)
+    server.app.dependency_overrides[server._get_current_user] = lambda: {"id": "u-1"}
+    client = TestClient(server.app)
+
+    http_429 = MagicMock()
+    http_429.status_code = 429
+    http_429.text = "RATE_LIMIT_EXCEEDED"
+    err_client = MagicMock()
+    err_client.__aenter__.return_value = err_client
+    err_client.post = AsyncMock(return_value=http_429)
+    monkeypatch.setattr(ocr_service.httpx, "AsyncClient", MagicMock(return_value=err_client))
+
+    response = client.post("/api/ocr/receipt", json={"image": _jpeg_b64()})
+    assert response.status_code == 429
+    assert "quota provider gemini atteint" in response.json()["detail"].lower()
+    assert err_client.post.await_count == 1
+
+    failed_events = [e for e in captured_events if e.get("event_name") == "ocr_scan_failed"]
+    assert failed_events, "Un événement ocr_scan_failed doit être loggé"
+    metadata = failed_events[-1]["metadata_json"]
+    assert metadata.get("http_status") == 429
+    assert "quota provider gemini atteint" in str(metadata.get("reason", "")).lower()
 
     server.app.dependency_overrides.clear()
