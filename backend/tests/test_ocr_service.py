@@ -271,12 +271,15 @@ class TestOcrReceiptMocked:
         resp = MagicMock()
         resp.status_code = 429
         resp.text = "RATE_LIMIT_EXCEEDED"
+        post = AsyncMock(return_value=resp)
         with patch("ocr_service.httpx.AsyncClient") as mock_client:
-            mock_client.return_value.__aenter__ = AsyncMock(return_value=MagicMock(post=AsyncMock(return_value=resp)))
+            mock_client.return_value.__aenter__ = AsyncMock(return_value=MagicMock(post=post))
             mock_client.return_value.__aexit__ = AsyncMock(return_value=False)
             with pytest.raises(OcrApiError) as exc_info:
                 await ocr_receipt(_make_request(), _make_user())
-        assert exc_info.value.http_status == 502
+        assert exc_info.value.http_status == 429
+        assert "quota provider gemini atteint" in str(exc_info.value).lower()
+        assert post.await_count == 1
 
     @pytest.mark.anyio
     async def test_gemini_timeout_returns_504(self, monkeypatch):

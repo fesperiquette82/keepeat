@@ -73,6 +73,10 @@ def classify_error_type(*, status_code: int, path: str) -> Optional[str]:
         return None
     if status_code == 422:
         return "validation_error"
+    if status_code == 429:
+        if path == "/api/ocr/receipt":
+            return "upstream_rate_limited"
+        return "rate_limited"
     if status_code in (401, 403):
         return "auth_error"
     if status_code in (502, 503):

@@ -95,7 +95,7 @@ _DATE_DMY_RE = re.compile(r"^(\d{2})[/\-.](\d{2})[/\-.](\d{4})$")
 _BASE64_RE = re.compile(r"^[A-Za-z0-9+/=\s]+$")
 
 _DEFAULT_RETRY_ATTEMPTS = 2
-_RETRYABLE_HTTP_STATUSES = {429, 500, 502, 503, 504}
+_RETRYABLE_HTTP_STATUSES = {500, 502, 503, 504}
 
 
 def _strip_data_uri_prefix(b64: str) -> str:
@@ -475,8 +475,8 @@ async def ocr_receipt(
         )
         if response.status_code == 429:
             raise OcrApiError(
-                "Quota Gemini dépassé (rate limit 429) — réessayez dans quelques secondes",
-                http_status=502,
+                "Service OCR temporairement indisponible : quota provider Gemini atteint (HTTP 429). Réessayez plus tard.",
+                http_status=429,
             )
         if response.status_code in (401, 403):
             raise OcrApiError(

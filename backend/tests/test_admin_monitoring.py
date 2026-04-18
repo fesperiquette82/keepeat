@@ -49,6 +49,10 @@ class TestClassifyErrorType:
     def test_422_validation_error(self):
         assert classify_error_type(status_code=422, path="/api/x") == "validation_error"
 
+    def test_429_rate_limit_variants(self):
+        assert classify_error_type(status_code=429, path="/api/ocr/receipt") == "upstream_rate_limited"
+        assert classify_error_type(status_code=429, path="/api/stock") == "rate_limited"
+
     def test_401_403_auth_error(self):
         assert classify_error_type(status_code=401, path="/api/x") == "auth_error"
         assert classify_error_type(status_code=403, path="/api/x") == "auth_error"
