@@ -434,7 +434,7 @@ async def ocr_receipt(
         "generationConfig": {
             "responseMimeType": "application/json",
             "temperature": 0.1,
-            "maxOutputTokens": 3072,
+            "maxOutputTokens": 8192,
         },
     }
 

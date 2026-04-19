@@ -468,7 +468,8 @@ def test_ocr_receipt_route_provider_429_returns_explicit_rate_limit(monkeypatch)
     response = client.post("/api/ocr/receipt", json={"image": _jpeg_b64()})
     assert response.status_code == 429
     assert "quota provider gemini atteint" in response.json()["detail"].lower()
-    assert err_client.post.await_count == 1
+    # 429 est dans _RETRYABLE_HTTP_STATUSES → le service épuise les 3 tentatives avant d'échouer
+    assert err_client.post.await_count == 3
 
     failed_events = [e for e in captured_events if e.get("event_name") == "ocr_scan_failed"]
     assert failed_events, "Un événement ocr_scan_failed doit être loggé"
