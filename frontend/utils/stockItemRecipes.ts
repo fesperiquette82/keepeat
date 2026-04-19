@@ -34,6 +34,7 @@ export interface RecipeCandidate {
 export interface StockItemRecipeSections {
   directRecipes: RecipeCandidate[];
   antiWasteRecipes: RecipeCandidate[];
+  globalSuggestions: RecipeCandidate[];
 }
 
 export function buildRecipeDetailRoute(recipeId: string): { pathname: '/recipes/[id]'; params: { id: string } } {
@@ -131,7 +132,7 @@ export function buildStockItemRecipeSections(
   const itemExpiryDays = daysUntil(item.expiry_date);
   const itemIsUrgent = itemExpiryDays !== null && itemExpiryDays <= 2;
 
-  const antiWasteRecipes = uniqueRecipes
+  const scoredRecipes = uniqueRecipes
     .map((recipe) => {
       const direct = directRecipes.some((directRecipe) => directRecipe.id === recipe.id);
       const { matchedCount, usesOtherUrgentCount } = countAvailableStockIngredients(
@@ -158,11 +159,19 @@ export function buildStockItemRecipeSections(
     .sort((a, b) => {
       if (b.score !== a.score) return b.score - a.score;
       return recipeDuration(a.recipe) - recipeDuration(b.recipe);
-    })
+    });
+
+  const antiWasteRecipes = scoredRecipes
+    .filter((entry) => entry.direct)
+    .map((entry) => entry.recipe);
+
+  const globalSuggestions = scoredRecipes
+    .filter((entry) => !entry.direct)
     .map((entry) => entry.recipe);
 
   return {
     directRecipes,
     antiWasteRecipes,
+    globalSuggestions,
   };
 }

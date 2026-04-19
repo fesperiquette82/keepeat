@@ -106,6 +106,7 @@ export default function StockItemDetailScreen() {
   const [recipes, setRecipes] = useState<RecipeCandidate[]>([]);
   const [showAllDirect, setShowAllDirect] = useState(false);
   const [showAllAntiWaste, setShowAllAntiWaste] = useState(false);
+  const [showAllGlobal, setShowAllGlobal] = useState(false);
 
   useEffect(() => {
     let cancelled = false;
@@ -139,12 +140,16 @@ export default function StockItemDetailScreen() {
   const selectedItem = useMemo(() => items.find((item) => item.id === itemId) ?? null, [itemId, items]);
 
   const sections = useMemo(() => {
-    if (!selectedItem) return { directRecipes: [], antiWasteRecipes: [] };
+    if (!selectedItem) return { directRecipes: [], antiWasteRecipes: [], globalSuggestions: [] };
     return buildStockItemRecipeSections(selectedItem, items, recipes);
   }, [items, recipes, selectedItem]);
 
   const blockState: BlockState = isLoading ? 'loading' : loadError ? 'error' : 'success';
-  const everythingEmpty = !isLoading && !loadError && sections.directRecipes.length === 0 && sections.antiWasteRecipes.length === 0;
+  const everythingEmpty = !isLoading
+    && !loadError
+    && sections.directRecipes.length === 0
+    && sections.antiWasteRecipes.length === 0
+    && sections.globalSuggestions.length === 0;
 
   if (!selectedItem) {
     return (
@@ -201,21 +206,37 @@ export default function StockItemDetailScreen() {
           C={C}
         />
 
-        <RecipeListBlock
-          title="Recettes anti-gaspi liées"
-          emptyText="Aucune suggestion anti-gaspi spécifique pour cet article."
-          state={blockState}
-          recipes={sections.antiWasteRecipes}
-          expanded={showAllAntiWaste}
-          onToggle={() => setShowAllAntiWaste((prev) => !prev)}
-          onOpenRecipe={(recipeId) => router.push(buildRecipeDetailRoute(recipeId))}
-          styles={styles}
-          C={C}
-        />
+        {sections.antiWasteRecipes.length > 0 && (
+          <RecipeListBlock
+            title="Recettes anti-gaspi liées"
+            emptyText="Aucune suggestion anti-gaspi spécifique pour cet article."
+            state={blockState}
+            recipes={sections.antiWasteRecipes}
+            expanded={showAllAntiWaste}
+            onToggle={() => setShowAllAntiWaste((prev) => !prev)}
+            onOpenRecipe={(recipeId) => router.push(buildRecipeDetailRoute(recipeId))}
+            styles={styles}
+            C={C}
+          />
+        )}
+
+        {sections.globalSuggestions.length > 0 && (
+          <RecipeListBlock
+            title="Suggestions anti-gaspi générales"
+            emptyText="Aucune suggestion générale disponible pour le stock actuel."
+            state={blockState}
+            recipes={sections.globalSuggestions}
+            expanded={showAllGlobal}
+            onToggle={() => setShowAllGlobal((prev) => !prev)}
+            onOpenRecipe={(recipeId) => router.push(buildRecipeDetailRoute(recipeId))}
+            styles={styles}
+            C={C}
+          />
+        )}
 
         {everythingEmpty && (
           <View style={styles.globalEmptyWrap}>
-            <Text style={styles.globalEmptyText}>Aucune recette liée à cet article pour le moment.</Text>
+            <Text style={styles.globalEmptyText}>Aucune recette liée à cet article ni suggestion générale pour le moment.</Text>
           </View>
         )}
 

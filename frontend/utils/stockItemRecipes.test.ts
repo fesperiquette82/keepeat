@@ -34,7 +34,7 @@ test('retourne des recettes directes quand l’article est référencé', () => 
   assert.deepEqual(sections.directRecipes.map((recipe) => recipe.id), ['r1']);
 });
 
-test('retourne des suggestions anti-gaspi liées', () => {
+test("retourne des suggestions anti-gaspi liées uniquement pour les recettes qui utilisent vraiment l'ingrédient", () => {
   const selected = stockItem({ id: 'cream', name: 'Crème entière UHT 30%MG, 3x20cl', expiry_date: '2026-04-18' });
   const urgentOther = stockItem({ id: 'egg', name: 'Oeufs', expiry_date: '2026-04-18' });
   const stock = [selected, urgentOther, stockItem({ id: 'rice', name: 'Riz basmati', expiry_date: '2026-05-30' })];
@@ -45,7 +45,8 @@ test('retourne des suggestions anti-gaspi liées', () => {
   ];
 
   const sections = buildStockItemRecipeSections(selected, stock, recipes);
-  assert.deepEqual(sections.antiWasteRecipes.map((recipe) => recipe.id), ['direct', 'urgent-other']);
+  assert.deepEqual(sections.antiWasteRecipes.map((recipe) => recipe.id), ['direct']);
+  assert.deepEqual(sections.globalSuggestions.map((recipe) => recipe.id), ['urgent-other']);
 });
 
 test('article sans recette liée retourne des sections vides', () => {
@@ -56,6 +57,23 @@ test('article sans recette liée retourne des sections vides', () => {
   const sections = buildStockItemRecipeSections(selected, stock, recipes);
   assert.equal(sections.directRecipes.length, 0);
   assert.equal(sections.antiWasteRecipes.length, 0);
+  assert.equal(sections.globalSuggestions.length, 0);
+});
+
+
+
+test('sépare les suggestions globales des recettes réellement liées pour éviter un écran contradictoire', () => {
+  const selected = stockItem({ id: 'jam', name: 'Confiture de fraise', expiry_date: '2026-05-20' });
+  const urgentEgg = stockItem({ id: 'egg', name: 'Oeufs', expiry_date: '2026-04-18' });
+  const stock = [selected, urgentEgg];
+  const recipes = [
+    { id: 'r-omelette', title: 'Omelette', available_ingredients: ['oeuf'], duration_min: 8 },
+  ];
+
+  const sections = buildStockItemRecipeSections(selected, stock, recipes);
+  assert.deepEqual(sections.directRecipes.map((recipe) => recipe.id), []);
+  assert.deepEqual(sections.antiWasteRecipes.map((recipe) => recipe.id), []);
+  assert.deepEqual(sections.globalSuggestions.map((recipe) => recipe.id), ['r-omelette']);
 });
 
 test('construit la route de navigation vers le détail recette existant', () => {

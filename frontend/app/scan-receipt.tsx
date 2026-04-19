@@ -21,12 +21,13 @@ import { C } from '../utils/theme';
 import { usePremiumUiStore } from '../store/premiumUiStore';
 import { resolveReceiptErrorAction } from '../utils/receiptScanFlow';
 import { getGalleryErrorMessage, pickImageFromGallery } from '../utils/galleryPicker';
+import { computeReceiptItemExpiry, defaultReceiptZone, type ReceiptExpiryProduct, type ReceiptStorageZone } from '../utils/receiptExpiry';
 
 // ─── Types ────────────────────────────────────────────────────────────────────
 
-type StorageZone = 'fridge' | 'pantry' | 'freezer';
+type StorageZone = ReceiptStorageZone;
 
-interface ReceiptProduct {
+interface ReceiptProduct extends ReceiptExpiryProduct {
   name: string;
   raw_title?: string;
   purchase_date?: string | null;
@@ -45,7 +46,7 @@ interface ReceiptOcrResponse {
   merchant?: string | null;
   currency?: string | null;
   items?: ReceiptProduct[];
-  ignored_items?: Array<{ raw_title?: string; reason?: string }>;
+  ignored_items?: { raw_title?: string; reason?: string }[];
 }
 
 // ─── Helpers ──────────────────────────────────────────────────────────────────
@@ -61,34 +62,12 @@ const STORAGE_ZONES: { key: StorageZone; fr: string; en: string; icon: string }[
   { key: 'freezer', fr: 'Congélo', en: 'Freezer', icon: '🧊' },
 ];
 
-function defaultZone(p: ReceiptProduct): StorageZone {
-  if (p.shelf_life_fridge)  return 'fridge';
-  if (p.shelf_life_pantry)  return 'pantry';
-  if (p.shelf_life_freezer) return 'freezer';
-  return 'pantry';
-}
-
 function shelfHint(p: ReceiptProduct, fr: boolean): string {
   const parts: string[] = [];
   if (p.shelf_life_fridge) parts.push(fr ? `${p.shelf_life_fridge}j frigo` : `${p.shelf_life_fridge}d fridge`);
   if (p.shelf_life_pantry) parts.push(fr ? `${p.shelf_life_pantry}j placard` : `${p.shelf_life_pantry}d pantry`);
   if (p.shelf_life_freezer) parts.push(fr ? `${p.shelf_life_freezer}j congélo` : `${p.shelf_life_freezer}d frozen`);
   return parts.join(' · ');
-}
-
-function computeExpiry(p: ReceiptProduct, zone: StorageZone): string | undefined {
-  // Priorité aux dates précalculées par le backend (depuis la date d'achat réelle du ticket)
-  if (zone === 'fridge'  && p.expiry_date_fridge)  return p.expiry_date_fridge;
-  if (zone === 'pantry'  && p.expiry_date_pantry)  return p.expiry_date_pantry;
-  if (zone === 'freezer' && p.expiry_date_freezer) return p.expiry_date_freezer;
-  // Fallback : date de base (purchase_date si connue, sinon aujourd'hui) + durée de conservation
-  const days = zone === 'fridge' ? p.shelf_life_fridge
-             : zone === 'pantry' ? p.shelf_life_pantry
-             : p.shelf_life_freezer;
-  if (!days) return undefined;
-  const d = p.purchase_date ? new Date(p.purchase_date) : new Date();
-  d.setDate(d.getDate() + days);
-  return d.toISOString().split('T')[0];
 }
 
 // ─── Screen ───────────────────────────────────────────────────────────────────
@@ -138,7 +117,7 @@ export default function ScanReceiptScreen() {
 
       // Choisir la zone par défaut à partir de la majorité des produits
       const zoneCounts: Record<StorageZone, number> = { fridge: 0, pantry: 0, freezer: 0 };
-      detected.forEach(p => { zoneCounts[defaultZone(p)]++; });
+      detected.forEach(p => { zoneCounts[defaultReceiptZone(p)]++; });
       const dominantZone = (Object.entries(zoneCounts) as [StorageZone, number][])
         .sort((a, b) => b[1] - a[1])[0][0];
       setStorageZone(dominantZone);
@@ -225,7 +204,7 @@ export default function ScanReceiptScreen() {
             name:          p.name,
             category:      p.category,
             food_category: p.food_category,
-            expiry_date:   computeExpiry(p, storageZone),
+            expiry_date:   computeReceiptItemExpiry(p, storageZone),
             storageZone:   storageZone === 'fridge' ? 'frigo' : storageZone === 'freezer' ? 'congelateur' : 'placard',
           }),
         ),
