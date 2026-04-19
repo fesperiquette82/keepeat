@@ -100,8 +100,8 @@ Règles métier :
 # léger de gemini-1.5-flash (déprécié fin 2025).
 _DEFAULT_GEMINI_MODEL = "gemini-2.0-flash-lite"
 
-# Timeout réseau explicite : connect court, read long (inférence Gemini ~10-40s)
-_OCR_TIMEOUT = httpx.Timeout(connect=10.0, read=45.0, write=10.0, pool=5.0)
+# Timeout réseau explicite : connect court, read long (inférence Gemini potentiellement lente)
+_OCR_TIMEOUT = httpx.Timeout(connect=10.0, read=60.0, write=10.0, pool=5.0)
 
 _MAX_IMAGE_B64_LEN = 5_500_000  # ~4 MB décodé
 
@@ -109,8 +109,8 @@ _MAX_IMAGE_B64_LEN = 5_500_000  # ~4 MB décodé
 _DATE_DMY_RE = re.compile(r"^(\d{2})[/\-.](\d{2})[/\-.](\d{4})$")
 _BASE64_RE = re.compile(r"^[A-Za-z0-9+/=\s]+$")
 
-_DEFAULT_RETRY_ATTEMPTS = 2
-_RETRYABLE_HTTP_STATUSES = {500, 502, 503, 504}
+_DEFAULT_RETRY_ATTEMPTS = 3
+_RETRYABLE_HTTP_STATUSES = {429, 500, 502, 503, 504}
 
 
 def _strip_data_uri_prefix(b64: str) -> str:
@@ -414,6 +414,10 @@ async def ocr_receipt(
         "OCR receipt start — user=%s model=%s mime=%s b64_len=%d",
         current_user["id"], gemini_model, mime_type, len(image_b64),
     )
+    logger.debug(
+        "OCR receipt payload diagnostics — user=%s mime=%s inline_data_b64_len=%d",
+        current_user["id"], mime_type, len(image_b64),
+    )
 
     url = (
         f"https://generativelanguage.googleapis.com/v1beta/models/"
@@ -434,7 +438,7 @@ async def ocr_receipt(
         },
     }
 
-    # ── Appel Gemini (retry court sur erreurs transitoires) ──────────────────
+    # ── Appel Gemini (retry avec backoff exponentiel sur erreurs transitoires) ──
     response: Any = None
     for attempt in range(1, _DEFAULT_RETRY_ATTEMPTS + 1):
         try:
@@ -451,14 +455,19 @@ async def ocr_receipt(
             )
             if attempt >= _DEFAULT_RETRY_ATTEMPTS:
                 raise OcrApiError(
-                    "Timeout lors de l'appel OCR (>45s) — réessayez dans quelques secondes",
+                    "Timeout lors de l'appel OCR (>60s) — réessayez dans quelques secondes",
                     http_status=504,
                     stage="provider_call",
                     mime_type=mime_type,
                     image_b64_len=len(image_b64),
                     cause=type(exc).__name__,
                 ) from exc
-            await asyncio.sleep(0.35 * attempt)
+            backoff_seconds = float(2 ** attempt)
+            logger.warning(
+                "OCR receipt timeout retry backoff — user=%s model=%s wait=%.1fs next_attempt=%d/%d",
+                current_user["id"], gemini_model, backoff_seconds, attempt + 1, _DEFAULT_RETRY_ATTEMPTS,
+            )
+            await asyncio.sleep(backoff_seconds)
             continue
         except httpx.RequestError as exc:
             logger.warning(
@@ -474,15 +483,21 @@ async def ocr_receipt(
                     image_b64_len=len(image_b64),
                     cause=type(exc).__name__,
                 ) from exc
-            await asyncio.sleep(0.35 * attempt)
+            backoff_seconds = float(2 ** attempt)
+            logger.warning(
+                "OCR receipt network retry backoff — user=%s model=%s wait=%.1fs next_attempt=%d/%d",
+                current_user["id"], gemini_model, backoff_seconds, attempt + 1, _DEFAULT_RETRY_ATTEMPTS,
+            )
+            await asyncio.sleep(backoff_seconds)
             continue
 
         if response.status_code in _RETRYABLE_HTTP_STATUSES and attempt < _DEFAULT_RETRY_ATTEMPTS:
+            backoff_seconds = float(2 ** attempt)
             logger.warning(
-                "Gemini OCR transient HTTP %s — user=%s model=%s attempt=%d/%d",
-                response.status_code, current_user["id"], gemini_model, attempt, _DEFAULT_RETRY_ATTEMPTS,
+                "Gemini OCR transient HTTP %s — user=%s model=%s attempt=%d/%d wait=%.1fs",
+                response.status_code, current_user["id"], gemini_model, attempt, _DEFAULT_RETRY_ATTEMPTS, backoff_seconds,
             )
-            await asyncio.sleep(0.35 * attempt)
+            await asyncio.sleep(backoff_seconds)
             continue
         break
 
@@ -612,7 +627,14 @@ async def ocr_receipt(
             "OCR receipt: JSON parse failed — user=%s raw=%s",
             current_user["id"], text[:200],
         )
-        raise
+        raise OcrApiError(
+            "Le modèle Gemini n'a pas renvoyé un JSON valide exploitable pour le ticket",
+            http_status=502,
+            stage="provider_response_parse",
+            mime_type=mime_type,
+            image_b64_len=len(image_b64),
+            cause="invalid_model_json",
+        )
 
     if not raw_items:
         logger.info(

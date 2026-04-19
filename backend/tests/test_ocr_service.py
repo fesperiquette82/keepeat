@@ -272,20 +272,21 @@ class TestOcrReceiptMocked:
         resp.status_code = 429
         resp.text = "RATE_LIMIT_EXCEEDED"
         post = AsyncMock(return_value=resp)
-        with patch("ocr_service.httpx.AsyncClient") as mock_client:
+        with patch("ocr_service.httpx.AsyncClient") as mock_client, patch("ocr_service.asyncio.sleep", new=AsyncMock()) as sleep_mock:
             mock_client.return_value.__aenter__ = AsyncMock(return_value=MagicMock(post=post))
             mock_client.return_value.__aexit__ = AsyncMock(return_value=False)
             with pytest.raises(OcrApiError) as exc_info:
                 await ocr_receipt(_make_request(), _make_user())
         assert exc_info.value.http_status == 429
         assert "quota provider gemini atteint" in str(exc_info.value).lower()
-        assert post.await_count == 1
+        assert post.await_count == 3
+        assert sleep_mock.await_count == 2
 
     @pytest.mark.anyio
     async def test_gemini_timeout_returns_504(self, monkeypatch):
         monkeypatch.setenv("GEMINI_OCR_API_KEY", "fake-key")
         import httpx as _httpx
-        with patch("ocr_service.httpx.AsyncClient") as mock_client:
+        with patch("ocr_service.httpx.AsyncClient") as mock_client, patch("ocr_service.asyncio.sleep", new=AsyncMock()) as sleep_mock:
             mock_client.return_value.__aenter__ = AsyncMock(
                 return_value=MagicMock(post=AsyncMock(side_effect=_httpx.TimeoutException("timeout")))
             )
@@ -295,6 +296,7 @@ class TestOcrReceiptMocked:
         assert exc_info.value.http_status == 504
         assert exc_info.value.stage == "provider_call"
         assert exc_info.value.cause == "TimeoutException"
+        assert sleep_mock.await_count == 2
 
     @pytest.mark.anyio
     async def test_transient_error_retries_then_success(self, monkeypatch):
@@ -304,12 +306,30 @@ class TestOcrReceiptMocked:
         transient.text = "service unavailable"
         success = _gemini_ok_response([{"name": "Lait", "category": "frais"}])
         post = AsyncMock(side_effect=[transient, success])
-        with patch("ocr_service.httpx.AsyncClient") as mock_client:
+        with patch("ocr_service.httpx.AsyncClient") as mock_client, patch("ocr_service.asyncio.sleep", new=AsyncMock()) as sleep_mock:
             mock_client.return_value.__aenter__ = AsyncMock(return_value=MagicMock(post=post))
             mock_client.return_value.__aexit__ = AsyncMock(return_value=False)
             result = await ocr_receipt(_make_request(), _make_user())
         assert post.await_count == 2
+        assert sleep_mock.await_count == 1
         assert len(result["items"]) == 1
+
+    @pytest.mark.anyio
+    async def test_invalid_model_json_returns_clear_502_error(self, monkeypatch):
+        monkeypatch.setenv("GEMINI_OCR_API_KEY", "fake-key")
+        resp = MagicMock()
+        resp.status_code = 200
+        resp.json.return_value = {
+            "candidates": [{"content": {"parts": [{"text": "not-json-response"}]}}]
+        }
+        with patch("ocr_service.httpx.AsyncClient") as mock_client:
+            mock_client.return_value.__aenter__ = AsyncMock(return_value=MagicMock(post=AsyncMock(return_value=resp)))
+            mock_client.return_value.__aexit__ = AsyncMock(return_value=False)
+            with pytest.raises(OcrApiError) as exc_info:
+                await ocr_receipt(_make_request(), _make_user())
+        assert exc_info.value.http_status == 502
+        assert exc_info.value.stage == "provider_response_parse"
+        assert exc_info.value.cause == "invalid_model_json"
 
     @pytest.mark.anyio
     async def test_gemini_safety_block(self, monkeypatch):
