@@ -358,6 +358,9 @@ def _set_frontend_env(monkeypatch, values: dict[str, str | None]):
         "FRONTEND_DEPLOYED_SERVICE_ID",
         "FRONTEND_RENDER_SERVICE_ID",
         "RENDER_API_KEY",
+        "FRONTEND_PUBLIC_URL",
+        "FRONTEND_BUILD_INFO_URL",
+        "FRONTEND_URL",
         "EXPO_PUBLIC_APP_COMMIT",
         "EXPO_PUBLIC_APP_VERSION",
         "EXPO_PUBLIC_BUILD_TIME",
@@ -394,6 +397,7 @@ def test_dashboard_frontend_deployment_status_ok_when_commits_match(monkeypatch)
     assert meta["badge"] == "ok"
     assert meta["source"] == "env fallback"
     assert meta["current"]["commit"] == "abc1234"
+    assert meta["current"]["source"] == "env:FRONTEND_DEPLOYED_*|EXPO_PUBLIC_*"
     assert meta["expected"]["commit"] == "abc1234"
 
 
@@ -500,8 +504,67 @@ def test_dashboard_frontend_deployment_uses_render_api_when_configured(monkeypat
     assert meta["status"] == "up_to_date"
     assert meta["source"] == "Render API"
     assert meta["expected"]["source"] == "render_api"
+    assert meta["expected"]["deploy_time"] == "2026-04-18T12:45:00Z"
     assert meta["expected"]["deploy_id"] == "dep-123"
     assert meta["expected"]["commit"] == "2ebc82f"
+
+
+def test_dashboard_frontend_deployment_prefers_build_metadata_for_current(monkeypatch):
+    _patch_dashboard_sources(monkeypatch)
+    _set_frontend_env(
+        monkeypatch,
+        {
+            "FRONTEND_DEPLOYED_COMMIT": "legacy-env-commit",
+            "FRONTEND_EXPECTED_COMMIT": "from-build-meta",
+        },
+    )
+
+    async def _fake_fetch_frontend_build_info():
+        return {
+            "commit": "from-build-meta",
+            "build_time": "2026-04-19T10:00:00Z",
+            "version": "2.0.0",
+        }
+
+    monkeypatch.setattr(server, "_fetch_frontend_build_info", _fake_fetch_frontend_build_info)
+    _with_admin_override()
+
+    response = asyncio.run(_request("/api/admin/monitoring/dashboard?days=7"))
+
+    server.app.dependency_overrides = {}
+    assert response.status_code == 200
+    meta = response.json()["frontend_deployment"]
+    assert meta["status"] == "up_to_date"
+    assert meta["current"]["commit"] == "from-build-meta"
+    assert meta["current"]["version"] == "2.0.0"
+    assert meta["current"]["build_time"] == "2026-04-19T10:00:00Z"
+    assert meta["current"]["source"] == "build metadata"
+
+
+def test_dashboard_frontend_deployment_build_metadata_missing_fallback_non_blocking(monkeypatch):
+    _patch_dashboard_sources(monkeypatch)
+    _set_frontend_env(
+        monkeypatch,
+        {
+            "FRONTEND_DEPLOYED_COMMIT": "env-commit",
+            "FRONTEND_EXPECTED_COMMIT": "env-commit",
+        },
+    )
+
+    async def _fake_fetch_frontend_build_info():
+        return None
+
+    monkeypatch.setattr(server, "_fetch_frontend_build_info", _fake_fetch_frontend_build_info)
+    _with_admin_override()
+
+    response = asyncio.run(_request("/api/admin/monitoring/dashboard?days=7"))
+
+    server.app.dependency_overrides = {}
+    assert response.status_code == 200
+    meta = response.json()["frontend_deployment"]
+    assert meta["status"] == "up_to_date"
+    assert meta["current"]["commit"] == "env-commit"
+    assert meta["current"]["source"] == "env:FRONTEND_DEPLOYED_*|EXPO_PUBLIC_*"
 
 
 def test_dashboard_frontend_deployment_mismatch_with_render_api(monkeypatch):
@@ -634,3 +697,24 @@ def test_dashboard_frontend_deployment_payload_serialization_stable(monkeypatch)
     serialized = __import__("json").loads(__import__("json").dumps(frontend_deployment, sort_keys=True))
     assert isinstance(serialized, dict)
     assert set(serialized.keys()) == {"status", "badge", "message", "source", "current", "expected"}
+    assert set(serialized["expected"].keys()) == {"commit", "version", "build_time", "deploy_time", "deploy_id", "source"}
+
+
+def test_extract_frontend_build_info_serialization_stable():
+    payload = {
+        "commit": "abcd1234",
+        "build_time": "2026-04-19T12:00:00Z",
+        "version": "1.2.3",
+    }
+    parsed = server._extract_frontend_build_info(payload)
+    serialized = __import__("json").loads(__import__("json").dumps(parsed, sort_keys=True))
+    assert serialized == payload
+
+
+def test_extract_frontend_build_info_returns_none_when_unusable():
+    payload = {
+        "commit": "",
+        "build_time": "",
+        "version": "",
+    }
+    assert server._extract_frontend_build_info(payload) is None
