@@ -293,6 +293,8 @@ class TestOcrReceiptMocked:
             with pytest.raises(OcrApiError) as exc_info:
                 await ocr_receipt(_make_request(), _make_user())
         assert exc_info.value.http_status == 504
+        assert exc_info.value.stage == "provider_call"
+        assert exc_info.value.cause == "TimeoutException"
 
     @pytest.mark.anyio
     async def test_transient_error_retries_then_success(self, monkeypatch):
@@ -451,6 +453,22 @@ class TestOcrReceiptMocked:
             with pytest.raises(OcrApiError) as exc_info:
                 await ocr_receipt(_make_request(), _make_user())
         assert exc_info.value.http_status == 502
+        assert exc_info.value.stage == "provider_response_parse"
+
+    @pytest.mark.anyio
+    async def test_provider_400_is_mapped_to_400_not_generic_502(self, monkeypatch):
+        monkeypatch.setenv("GEMINI_OCR_API_KEY", "fake-key")
+        resp = MagicMock()
+        resp.status_code = 400
+        resp.text = "INVALID_ARGUMENT"
+        with patch("ocr_service.httpx.AsyncClient") as mock_client:
+            mock_client.return_value.__aenter__ = AsyncMock(return_value=MagicMock(post=AsyncMock(return_value=resp)))
+            mock_client.return_value.__aexit__ = AsyncMock(return_value=False)
+            with pytest.raises(OcrApiError) as exc_info:
+                await ocr_receipt(_make_request(), _make_user())
+        assert exc_info.value.http_status == 400
+        assert exc_info.value.upstream_status == 400
+        assert exc_info.value.cause == "provider_invalid_request"
 
     @pytest.mark.anyio
     async def test_regression_provider_payload_uses_inline_data_camel_case(self, monkeypatch):

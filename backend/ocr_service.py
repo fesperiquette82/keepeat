@@ -23,9 +23,24 @@ class OcrApiError(RuntimeError):
     - 429 : quota / rate-limit provider
     """
 
-    def __init__(self, message: str, http_status: int = 502):
+    def __init__(
+        self,
+        message: str,
+        http_status: int = 502,
+        *,
+        stage: str | None = None,
+        upstream_status: int | None = None,
+        mime_type: str | None = None,
+        image_b64_len: int | None = None,
+        cause: str | None = None,
+    ):
         super().__init__(message)
         self.http_status = http_status
+        self.stage = stage
+        self.upstream_status = upstream_status
+        self.mime_type = mime_type
+        self.image_b64_len = image_b64_len
+        self.cause = cause
 
 
 SHELF_BY_CATEGORY: dict[str, dict[str, int | None]] = {
@@ -431,25 +446,33 @@ async def ocr_receipt(
                 )
         except httpx.TimeoutException as exc:
             logger.warning(
-                "OCR receipt timeout — user=%s model=%s attempt=%d/%d err=%s",
-                current_user["id"], gemini_model, attempt, _DEFAULT_RETRY_ATTEMPTS, exc,
+                "OCR receipt timeout — user=%s model=%s mime=%s b64_len=%d attempt=%d/%d err=%s",
+                current_user["id"], gemini_model, mime_type, len(image_b64), attempt, _DEFAULT_RETRY_ATTEMPTS, exc,
             )
             if attempt >= _DEFAULT_RETRY_ATTEMPTS:
                 raise OcrApiError(
                     "Timeout lors de l'appel OCR (>45s) — réessayez dans quelques secondes",
                     http_status=504,
+                    stage="provider_call",
+                    mime_type=mime_type,
+                    image_b64_len=len(image_b64),
+                    cause=type(exc).__name__,
                 ) from exc
             await asyncio.sleep(0.35 * attempt)
             continue
         except httpx.RequestError as exc:
             logger.warning(
-                "OCR receipt network error — user=%s model=%s attempt=%d/%d err=%s",
-                current_user["id"], gemini_model, attempt, _DEFAULT_RETRY_ATTEMPTS, exc,
+                "OCR receipt network error — user=%s model=%s mime=%s b64_len=%d attempt=%d/%d err=%s",
+                current_user["id"], gemini_model, mime_type, len(image_b64), attempt, _DEFAULT_RETRY_ATTEMPTS, exc,
             )
             if attempt >= _DEFAULT_RETRY_ATTEMPTS:
                 raise OcrApiError(
                     f"Erreur réseau lors de l'appel OCR : {type(exc).__name__}",
                     http_status=502,
+                    stage="provider_call",
+                    mime_type=mime_type,
+                    image_b64_len=len(image_b64),
+                    cause=type(exc).__name__,
                 ) from exc
             await asyncio.sleep(0.35 * attempt)
             continue
@@ -464,39 +487,73 @@ async def ocr_receipt(
         break
 
     if response is None:
-        raise OcrApiError("Échec OCR provider (aucune réponse)", http_status=502)
+        raise OcrApiError(
+            "Échec OCR provider (aucune réponse)",
+            http_status=502,
+            stage="provider_call",
+            mime_type=mime_type,
+            image_b64_len=len(image_b64),
+        )
 
     # ── Gestion des erreurs HTTP Gemini ───────────────────────────────────────
     if response.status_code != 200:
         body_preview = response.text[:400]
         logger.warning(
-            "Gemini OCR HTTP %s — user=%s model=%s body=%s",
-            response.status_code, current_user["id"], gemini_model, body_preview,
+            "Gemini OCR HTTP %s — user=%s model=%s mime=%s b64_len=%d body=%s",
+            response.status_code, current_user["id"], gemini_model, mime_type, len(image_b64), body_preview,
         )
         if response.status_code == 429:
             raise OcrApiError(
                 "Service OCR temporairement indisponible : quota provider Gemini atteint (HTTP 429). Réessayez plus tard.",
                 http_status=429,
+                stage="provider_http_error",
+                upstream_status=response.status_code,
+                mime_type=mime_type,
+                image_b64_len=len(image_b64),
+                cause="provider_rate_limit",
             )
         if response.status_code in (401, 403):
             raise OcrApiError(
                 f"Clé API Gemini invalide ou non autorisée (HTTP {response.status_code})",
                 http_status=502,
+                stage="provider_http_error",
+                upstream_status=response.status_code,
+                mime_type=mime_type,
+                image_b64_len=len(image_b64),
+                cause="provider_auth",
             )
         if response.status_code in (400, 422):
             raise OcrApiError(
-                f"Requête OCR rejetée par le provider (HTTP {response.status_code})",
-                http_status=502,
+                (
+                    f"Image/requête OCR invalide pour le provider Gemini (HTTP {response.status_code}). "
+                    "Vérifiez le format du fichier et réessayez."
+                ),
+                http_status=400,
+                stage="provider_http_error",
+                upstream_status=response.status_code,
+                mime_type=mime_type,
+                image_b64_len=len(image_b64),
+                cause="provider_invalid_request",
             )
         if response.status_code == 404:
             raise OcrApiError(
                 f"Modèle Gemini '{gemini_model}' introuvable (HTTP 404)"
                 " — vérifiez GEMINI_OCR_MODEL sur Render",
                 http_status=502,
+                stage="provider_http_error",
+                upstream_status=response.status_code,
+                mime_type=mime_type,
+                image_b64_len=len(image_b64),
+                cause="provider_model_not_found",
             )
         raise OcrApiError(
             f"Gemini a retourné HTTP {response.status_code}",
             http_status=502,
+            stage="provider_http_error",
+            upstream_status=response.status_code,
+            mime_type=mime_type,
+            image_b64_len=len(image_b64),
+            cause="provider_http_error",
         )
 
     # ── Parsing de la réponse ─────────────────────────────────────────────────
@@ -507,7 +564,14 @@ async def ocr_receipt(
             "OCR receipt: réponse Gemini non-JSON — user=%s body=%s",
             current_user["id"], response.text[:400],
         )
-        raise OcrApiError("Réponse OCR illisible (non-JSON)", http_status=502) from exc
+        raise OcrApiError(
+            "Réponse OCR illisible (non-JSON)",
+            http_status=502,
+            stage="provider_response_parse",
+            mime_type=mime_type,
+            image_b64_len=len(image_b64),
+            cause=type(exc).__name__,
+        ) from exc
 
     try:
         text = _extract_gemini_text(resp_json)
@@ -521,6 +585,10 @@ async def ocr_receipt(
         raise OcrApiError(
             f"Structure de réponse Gemini inattendue : {exc}",
             http_status=502,
+            stage="provider_response_parse",
+            mime_type=mime_type,
+            image_b64_len=len(image_b64),
+            cause=type(exc).__name__,
         ) from exc
 
     if not text:
