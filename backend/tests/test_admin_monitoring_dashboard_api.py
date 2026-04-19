@@ -356,6 +356,11 @@ def _set_frontend_env(monkeypatch, values: dict[str, str | None]):
         "FRONTEND_DEPLOYED_DEPLOY_ID",
         "FRONTEND_EXPECTED_DEPLOY_ID",
         "FRONTEND_DEPLOYED_SERVICE_ID",
+        "FRONTEND_RENDER_SERVICE_ID",
+        "RENDER_API_KEY",
+        "EXPO_PUBLIC_APP_COMMIT",
+        "EXPO_PUBLIC_APP_VERSION",
+        "EXPO_PUBLIC_BUILD_TIME",
     ]
     for key in managed_keys:
         monkeypatch.delenv(key, raising=False)
@@ -387,6 +392,7 @@ def test_dashboard_frontend_deployment_status_ok_when_commits_match(monkeypatch)
     meta = payload["frontend_deployment"]
     assert meta["status"] == "up_to_date"
     assert meta["badge"] == "ok"
+    assert meta["source"] == "env fallback"
     assert meta["current"]["commit"] == "abc1234"
     assert meta["expected"]["commit"] == "abc1234"
 
@@ -412,6 +418,7 @@ def test_dashboard_frontend_deployment_status_warning_when_commits_mismatch(monk
     meta = payload["frontend_deployment"]
     assert meta["status"] == "mismatch"
     assert meta["badge"] == "warning"
+    assert meta["source"] == "env fallback"
     assert meta["current"]["deploy_id"] == "dep-current"
     assert meta["expected"]["deploy_id"] == "dep-latest"
 
@@ -429,6 +436,7 @@ def test_dashboard_frontend_deployment_status_unknown_when_metadata_missing(monk
     meta = payload["frontend_deployment"]
     assert meta["status"] == "unknown"
     assert meta["badge"] == "unknown"
+    assert meta["source"] == "unknown"
     assert meta["current"]["commit"] == "unknown"
     assert meta["expected"]["commit"] == "unknown"
 
@@ -451,5 +459,178 @@ def test_dashboard_frontend_deployment_status_check_when_partial_metadata(monkey
     meta = payload["frontend_deployment"]
     assert meta["status"] == "deployment_check"
     assert meta["badge"] == "warning"
+    assert meta["source"] == "unknown"
     assert meta["current"]["commit"] == "abc1234"
     assert meta["expected"]["commit"] == "unknown"
+
+
+def test_dashboard_frontend_deployment_uses_render_api_when_configured(monkeypatch):
+    _patch_dashboard_sources(monkeypatch)
+    _set_frontend_env(
+        monkeypatch,
+        {
+            "EXPO_PUBLIC_APP_COMMIT": "2ebc82f",
+            "RENDER_API_KEY": "render-token",
+            "FRONTEND_RENDER_SERVICE_ID": "srv-frontend",
+        },
+    )
+
+    async def _fake_fetch_render_latest_deploy(service_id: str, api_key: str):
+        assert service_id == "srv-frontend"
+        assert api_key == "render-token"
+        return {
+            "deploy_id": "dep-123",
+            "commit": "2ebc82f",
+            "build_time": "2026-04-18T12:45:00Z",
+            "status": "live",
+            "created_at": "2026-04-18T12:40:00Z",
+            "updated_at": "2026-04-18T12:45:00Z",
+            "finished_at": "2026-04-18T12:45:00Z",
+        }
+
+    monkeypatch.setattr(server, "_fetch_render_latest_deploy", _fake_fetch_render_latest_deploy)
+    _with_admin_override()
+
+    response = asyncio.run(_request("/api/admin/monitoring/dashboard?days=7"))
+
+    server.app.dependency_overrides = {}
+    assert response.status_code == 200
+    payload = response.json()
+    meta = payload["frontend_deployment"]
+    assert meta["status"] == "up_to_date"
+    assert meta["source"] == "Render API"
+    assert meta["expected"]["source"] == "render_api"
+    assert meta["expected"]["deploy_id"] == "dep-123"
+    assert meta["expected"]["commit"] == "2ebc82f"
+
+
+def test_dashboard_frontend_deployment_mismatch_with_render_api(monkeypatch):
+    _patch_dashboard_sources(monkeypatch)
+    _set_frontend_env(
+        monkeypatch,
+        {
+            "FRONTEND_DEPLOYED_COMMIT": "1a2b3c4",
+            "RENDER_API_KEY": "render-token",
+            "FRONTEND_RENDER_SERVICE_ID": "srv-frontend",
+        },
+    )
+
+    async def _fake_fetch_render_latest_deploy(service_id: str, api_key: str):
+        _ = service_id, api_key
+        return {
+            "deploy_id": "dep-latest",
+            "commit": "2ebc82f",
+            "build_time": "2026-04-19T09:00:00Z",
+            "status": "live",
+            "created_at": "2026-04-19T08:58:00Z",
+            "updated_at": "2026-04-19T09:00:00Z",
+            "finished_at": "2026-04-19T09:00:00Z",
+        }
+
+    monkeypatch.setattr(server, "_fetch_render_latest_deploy", _fake_fetch_render_latest_deploy)
+    _with_admin_override()
+
+    response = asyncio.run(_request("/api/admin/monitoring/dashboard?days=7"))
+
+    server.app.dependency_overrides = {}
+    assert response.status_code == 200
+    payload = response.json()
+    meta = payload["frontend_deployment"]
+    assert meta["status"] == "mismatch"
+    assert meta["source"] == "Render API"
+    assert meta["current"]["commit"] == "1a2b3c4"
+    assert meta["expected"]["commit"] == "2ebc82f"
+
+
+def test_dashboard_frontend_deployment_fallback_when_render_api_errors(monkeypatch):
+    _patch_dashboard_sources(monkeypatch)
+    _set_frontend_env(
+        monkeypatch,
+        {
+            "FRONTEND_DEPLOYED_COMMIT": "abc1234",
+            "FRONTEND_EXPECTED_COMMIT": "abc1234",
+            "RENDER_API_KEY": "render-token",
+            "FRONTEND_RENDER_SERVICE_ID": "srv-frontend",
+        },
+    )
+
+    async def _fake_fetch_render_latest_deploy(service_id: str, api_key: str):
+        _ = service_id, api_key
+        return None
+
+    monkeypatch.setattr(server, "_fetch_render_latest_deploy", _fake_fetch_render_latest_deploy)
+    _with_admin_override()
+
+    response = asyncio.run(_request("/api/admin/monitoring/dashboard?days=7"))
+
+    server.app.dependency_overrides = {}
+    assert response.status_code == 200
+    payload = response.json()
+    meta = payload["frontend_deployment"]
+    assert meta["status"] == "up_to_date"
+    assert meta["source"] == "env fallback"
+    assert meta["expected"]["source"] == "env:FRONTEND_EXPECTED_*|FRONTEND_LATEST_*"
+
+
+def test_dashboard_frontend_deployment_fallback_when_render_api_key_missing(monkeypatch):
+    _patch_dashboard_sources(monkeypatch)
+    _set_frontend_env(
+        monkeypatch,
+        {
+            "FRONTEND_DEPLOYED_COMMIT": "abc1234",
+            "FRONTEND_EXPECTED_COMMIT": "abc1234",
+            "FRONTEND_RENDER_SERVICE_ID": "srv-frontend",
+        },
+    )
+    _with_admin_override()
+
+    response = asyncio.run(_request("/api/admin/monitoring/dashboard?days=7"))
+
+    server.app.dependency_overrides = {}
+    assert response.status_code == 200
+    meta = response.json()["frontend_deployment"]
+    assert meta["status"] == "up_to_date"
+    assert meta["source"] == "env fallback"
+    assert meta["expected"]["source"] == "env:FRONTEND_EXPECTED_*|FRONTEND_LATEST_*"
+
+
+def test_dashboard_frontend_deployment_fallback_when_render_service_id_missing(monkeypatch):
+    _patch_dashboard_sources(monkeypatch)
+    _set_frontend_env(
+        monkeypatch,
+        {
+            "FRONTEND_DEPLOYED_COMMIT": "abc1234",
+            "FRONTEND_EXPECTED_COMMIT": "abc1234",
+            "RENDER_API_KEY": "render-token",
+        },
+    )
+    _with_admin_override()
+
+    response = asyncio.run(_request("/api/admin/monitoring/dashboard?days=7"))
+
+    server.app.dependency_overrides = {}
+    assert response.status_code == 200
+    meta = response.json()["frontend_deployment"]
+    assert meta["status"] == "up_to_date"
+    assert meta["source"] == "env fallback"
+
+
+def test_dashboard_frontend_deployment_payload_serialization_stable(monkeypatch):
+    _patch_dashboard_sources(monkeypatch)
+    _set_frontend_env(
+        monkeypatch,
+        {
+            "FRONTEND_DEPLOYED_COMMIT": "abc1234",
+            "FRONTEND_EXPECTED_COMMIT": "abc1234",
+        },
+    )
+    _with_admin_override()
+
+    response = asyncio.run(_request("/api/admin/monitoring/dashboard?days=7"))
+
+    server.app.dependency_overrides = {}
+    assert response.status_code == 200
+    frontend_deployment = response.json()["frontend_deployment"]
+    serialized = __import__("json").loads(__import__("json").dumps(frontend_deployment, sort_keys=True))
+    assert isinstance(serialized, dict)
+    assert set(serialized.keys()) == {"status", "badge", "message", "source", "current", "expected"}

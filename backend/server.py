@@ -210,7 +210,80 @@ def _normalize_build_meta(value: Any, default: str = "unknown") -> str:
     return token or default
 
 
-def _build_frontend_deployment_meta() -> dict[str, Any]:
+def _extract_render_deploy_meta(payload: Any) -> dict[str, str] | None:
+    if not isinstance(payload, dict):
+        return None
+    deploy_id = _normalize_build_meta(payload.get("id"))
+    status = _normalize_build_meta(payload.get("status"), default="").lower()
+    commit_raw = payload.get("commit")
+    commit = "unknown"
+    if isinstance(commit_raw, str):
+        commit = _normalize_build_meta(commit_raw)
+    elif isinstance(commit_raw, dict):
+        commit = _normalize_build_meta(
+            commit_raw.get("id")
+            or commit_raw.get("sha")
+            or commit_raw.get("commit")
+            or commit_raw.get("commitId")
+        )
+    commit = _normalize_build_meta(payload.get("commitId") or payload.get("commitSha") or commit)
+    created_at = _normalize_build_meta(payload.get("createdAt") or payload.get("created_at"))
+    updated_at = _normalize_build_meta(payload.get("updatedAt") or payload.get("updated_at"))
+    finished_at = _normalize_build_meta(payload.get("finishedAt") or payload.get("finished_at"))
+    if deploy_id == "unknown" and commit == "unknown":
+        return None
+    return {
+        "deploy_id": deploy_id,
+        "commit": commit,
+        "status": status or "unknown",
+        "build_time": finished_at if finished_at != "unknown" else updated_at,
+        "created_at": created_at,
+        "updated_at": updated_at,
+        "finished_at": finished_at,
+    }
+
+
+def _pick_latest_successful_render_deploy(items: Any) -> dict[str, str] | None:
+    if not isinstance(items, list):
+        return None
+    preferred_statuses = {"live", "succeeded", "success", "update_success", "build_succeeded"}
+    excluded_status_tokens = ("fail", "error", "cancel", "aborted")
+    first_candidate: dict[str, str] | None = None
+    for item in items:
+        deploy = _extract_render_deploy_meta(item)
+        if not deploy:
+            continue
+        if first_candidate is None:
+            first_candidate = deploy
+        status = deploy.get("status", "")
+        if status in preferred_statuses:
+            return deploy
+        if any(token in status for token in excluded_status_tokens):
+            continue
+        if deploy.get("finished_at") != "unknown":
+            return deploy
+    return first_candidate
+
+
+async def _fetch_render_latest_deploy(service_id: str, api_key: str) -> dict[str, str] | None:
+    endpoint = f"https://api.render.com/v1/services/{service_id}/deploys"
+    headers = {
+        "Authorization": f"Bearer {api_key}",
+        "Accept": "application/json",
+    }
+    try:
+        timeout = httpx.Timeout(6.0, connect=2.0)
+        async with httpx.AsyncClient(timeout=timeout) as http:
+            response = await http.get(endpoint, headers=headers, params={"limit": 20})
+            response.raise_for_status()
+            deploys = response.json()
+    except Exception as exc:
+        logger.warning("frontend_deployment render api unavailable service=%s (%s)", service_id, exc.__class__.__name__)
+        return None
+    return _pick_latest_successful_render_deploy(deploys)
+
+
+async def _build_frontend_deployment_meta() -> dict[str, Any]:
     current_commit = _normalize_build_meta(
         os.getenv("FRONTEND_DEPLOYED_COMMIT")
         or os.getenv("EXPO_PUBLIC_APP_COMMIT")
@@ -233,22 +306,52 @@ def _build_frontend_deployment_meta() -> dict[str, Any]:
     )
     current_service_id = _normalize_build_meta(os.getenv("FRONTEND_DEPLOYED_SERVICE_ID") or os.getenv("RENDER_SERVICE_ID"))
 
-    expected_commit = _normalize_build_meta(
+    fallback_expected_commit = _normalize_build_meta(
         os.getenv("FRONTEND_EXPECTED_COMMIT")
         or os.getenv("FRONTEND_LATEST_RENDER_COMMIT")
         or os.getenv("FRONTEND_LATEST_COMMIT")
     )
-    expected_version = _normalize_build_meta(os.getenv("FRONTEND_EXPECTED_VERSION") or os.getenv("FRONTEND_LATEST_VERSION"))
-    expected_deploy_id = _normalize_build_meta(
+    fallback_expected_version = _normalize_build_meta(os.getenv("FRONTEND_EXPECTED_VERSION") or os.getenv("FRONTEND_LATEST_VERSION"))
+    fallback_expected_deploy_id = _normalize_build_meta(
         os.getenv("FRONTEND_EXPECTED_DEPLOY_ID")
         or os.getenv("FRONTEND_LATEST_RENDER_DEPLOY_ID")
         or os.getenv("FRONTEND_LATEST_DEPLOY_ID")
     )
-    expected_build_time = _normalize_build_meta(
+    fallback_expected_build_time = _normalize_build_meta(
         os.getenv("FRONTEND_EXPECTED_BUILD_TIME")
         or os.getenv("FRONTEND_LATEST_RENDER_BUILD_TIME")
         or os.getenv("FRONTEND_LATEST_BUILD_TIME")
     )
+    expected_source = "env:FRONTEND_EXPECTED_*|FRONTEND_LATEST_*"
+    expected_commit = fallback_expected_commit
+    expected_version = fallback_expected_version
+    expected_deploy_id = fallback_expected_deploy_id
+    expected_build_time = fallback_expected_build_time
+
+    render_api_key = _normalize_build_meta(os.getenv("RENDER_API_KEY"), default="")
+    render_service_id = _normalize_build_meta(
+        os.getenv("FRONTEND_RENDER_SERVICE_ID")
+        or os.getenv("FRONTEND_DEPLOYED_SERVICE_ID")
+        or os.getenv("RENDER_SERVICE_ID"),
+        default="",
+    )
+    if render_api_key and render_service_id:
+        render_deploy = await _fetch_render_latest_deploy(render_service_id, render_api_key)
+        if render_deploy and render_deploy.get("commit", "unknown") != "unknown":
+            expected_commit = _normalize_build_meta(render_deploy.get("commit"))
+            expected_deploy_id = _normalize_build_meta(render_deploy.get("deploy_id"))
+            expected_build_time = _normalize_build_meta(render_deploy.get("build_time"))
+            expected_source = "render_api"
+        elif render_deploy and render_deploy.get("deploy_id", "unknown") != "unknown":
+            expected_deploy_id = _normalize_build_meta(render_deploy.get("deploy_id"))
+            expected_build_time = _normalize_build_meta(render_deploy.get("build_time"))
+            expected_source = "env_fallback_partial_render"
+
+    comparison_source = "unknown"
+    if expected_source == "render_api":
+        comparison_source = "Render API"
+    elif expected_commit != "unknown" or expected_deploy_id != "unknown":
+        comparison_source = "env fallback"
 
     has_current_commit = current_commit != "unknown"
     has_expected_commit = expected_commit != "unknown"
@@ -269,11 +372,14 @@ def _build_frontend_deployment_meta() -> dict[str, Any]:
         status = "unknown"
         badge = "unknown"
         message = "Aucune métadonnée frontend exploitable n'est configurée."
+        if comparison_source == "Render API":
+            message = "Render API disponible mais aucune métadonnée frontend exploitable n'a été trouvée."
 
     return {
         "status": status,
         "badge": badge,
         "message": message,
+        "source": comparison_source,
         "current": {
             "commit": current_commit,
             "version": current_version,
@@ -287,7 +393,7 @@ def _build_frontend_deployment_meta() -> dict[str, Any]:
             "version": expected_version,
             "build_time": expected_build_time,
             "deploy_id": expected_deploy_id,
-            "source": "env:FRONTEND_EXPECTED_*|FRONTEND_LATEST_*",
+            "source": expected_source,
         },
     }
 
@@ -4093,7 +4199,7 @@ async def admin_monitoring_dashboard(
         "days": days,
         "users": users,
         "subscriptions": subscriptions,
-        "frontend_deployment": _build_frontend_deployment_meta(),
+        "frontend_deployment": await _build_frontend_deployment_meta(),
         "top_api_issues": top_incidents[:7],
         "top_service_usage": top_service_usage,
         "estimated_cost_summary": {
@@ -5738,6 +5844,7 @@ function frontendValue(v) {
 
 function renderFrontendDeployment(meta) {
   const status = meta && typeof meta === 'object' ? (meta.status || 'unknown') : 'unknown';
+  const source = meta && typeof meta === 'object' ? (meta.source || 'unknown') : 'unknown';
   const current = (meta && typeof meta.current === 'object') ? meta.current : {};
   const expected = (meta && typeof meta.expected === 'object') ? meta.expected : {};
   const statusClass = frontendDeployStatusClass(status);
@@ -5746,9 +5853,10 @@ function renderFrontendDeployment(meta) {
   let html = '<div class="health-grid">';
   html += '<div class="health-item"><span class="dot ' + statusClass + '"></span><strong>Statut :</strong>&nbsp;' + escHtml(statusText) + '</div>';
   html += '<div class="health-item"><span class="dot ok"></span><strong>Frontend actuel :</strong>&nbsp;<code>' + escHtml(frontendValue(current.commit)) + '</code></div>';
-  html += '<div class="health-item"><span class="dot ' + (status === 'mismatch' ? 'warn' : 'ok') + '"></span><strong>Dernière version connue :</strong>&nbsp;<code>' + escHtml(frontendValue(expected.commit)) + '</code></div>';
+  html += '<div class="health-item"><span class="dot ' + (status === 'mismatch' ? 'warn' : 'ok') + '"></span><strong>Dernier deploy connu :</strong>&nbsp;<code>' + escHtml(frontendValue(expected.commit)) + '</code></div>';
   html += '</div>';
   html += '<div style="font-size:12px;color:#374151;line-height:1.8;margin-top:10px">';
+  html += '<div><strong>Source de vérité :</strong> ' + escHtml(frontendValue(source)) + '</div>';
   html += '<div><strong>Version frontend actuelle :</strong> ' + escHtml(frontendValue(current.version)) + '</div>';
   html += '<div><strong>Build frontend actuel :</strong> ' + escHtml(frontendValue(current.build_time)) + '</div>';
   html += '<div><strong>Deploy ID actuel :</strong> ' + escHtml(frontendValue(current.deploy_id)) + ' · <strong>Service ID :</strong> ' + escHtml(frontendValue(current.service_id)) + '</div>';
