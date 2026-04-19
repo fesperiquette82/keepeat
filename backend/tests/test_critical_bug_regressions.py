@@ -418,6 +418,37 @@ def test_ocr_receipt_route_provider_failures_mapping(monkeypatch):
     server.app.dependency_overrides.clear()
 
 
+def test_ocr_receipt_route_provider_400_is_not_mapped_to_generic_502(monkeypatch):
+    monkeypatch.setenv("GEMINI_OCR_API_KEY", "fake-key")
+    server = _load_server(monkeypatch)
+    captured_events: list[dict] = []
+    _wire_ocr_test_doubles(monkeypatch, server, captured_events=captured_events)
+    server.app.dependency_overrides[server._get_current_user] = lambda: {"id": "u-1"}
+    client = TestClient(server.app)
+
+    http_400 = MagicMock()
+    http_400.status_code = 400
+    http_400.text = "INVALID_ARGUMENT"
+    err_client = MagicMock()
+    err_client.__aenter__.return_value = err_client
+    err_client.post = AsyncMock(return_value=http_400)
+    monkeypatch.setattr(ocr_service.httpx, "AsyncClient", MagicMock(return_value=err_client))
+
+    response = client.post("/api/ocr/receipt", json={"image": _jpeg_b64()})
+    assert response.status_code == 400
+    assert "invalide pour le provider gemini" in response.json()["detail"].lower()
+
+    failed_events = [e for e in captured_events if e.get("event_name") == "ocr_scan_failed"]
+    assert failed_events, "Un événement ocr_scan_failed doit être loggé"
+    metadata = failed_events[-1]["metadata_json"]
+    assert metadata.get("http_status") == 400
+    assert metadata.get("upstream_http_status") == 400
+    assert metadata.get("failure_cause") == "provider_invalid_request"
+    assert metadata.get("failure_stage") == "provider_http_error"
+
+    server.app.dependency_overrides.clear()
+
+
 def test_ocr_receipt_route_provider_429_returns_explicit_rate_limit(monkeypatch):
     monkeypatch.setenv("GEMINI_OCR_API_KEY", "fake-key")
     server = _load_server(monkeypatch)

@@ -3040,13 +3040,31 @@ async def ocr_receipt_route(
         )
         raise
     except OcrApiError as exc:
-        logger.warning("OCR receipt failed for user=%s http=%s: %s", current_user["id"], exc.http_status, exc)
+        logger.warning(
+            "OCR receipt failed — user=%s http=%s stage=%s upstream_http=%s mime=%s b64_len=%s cause=%s detail=%s",
+            current_user["id"],
+            exc.http_status,
+            getattr(exc, "stage", None),
+            getattr(exc, "upstream_status", None),
+            getattr(exc, "mime_type", None),
+            getattr(exc, "image_b64_len", None),
+            getattr(exc, "cause", None),
+            exc,
+        )
         await track_business_event(
             business_events_col=business_events_col,
             user_id=current_user["id"],
             event_name="ocr_scan_failed",
             event_category="ocr",
-            metadata_json={"reason": str(exc), "http_status": exc.http_status},
+            metadata_json={
+                "reason": str(exc),
+                "http_status": exc.http_status,
+                "failure_stage": getattr(exc, "stage", None),
+                "upstream_http_status": getattr(exc, "upstream_status", None),
+                "mime_type": getattr(exc, "mime_type", None),
+                "image_b64_len": getattr(exc, "image_b64_len", None),
+                "failure_cause": getattr(exc, "cause", None),
+            },
         )
         raise HTTPException(status_code=exc.http_status, detail=str(exc))
     except Exception as exc:
