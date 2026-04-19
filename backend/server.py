@@ -283,19 +283,67 @@ async def _fetch_render_latest_deploy(service_id: str, api_key: str) -> dict[str
     return _pick_latest_successful_render_deploy(deploys)
 
 
+def _resolve_frontend_build_info_url() -> str:
+    explicit_url = _normalize_build_meta(os.getenv("FRONTEND_BUILD_INFO_URL"), default="")
+    if explicit_url:
+        return explicit_url
+    base_url = _normalize_build_meta(
+        os.getenv("FRONTEND_PUBLIC_URL") or os.getenv("FRONTEND_URL"),
+        default="",
+    )
+    if not base_url:
+        return ""
+    return f"{base_url.rstrip('/')}/build-info.json"
+
+
+def _extract_frontend_build_info(payload: Any) -> dict[str, str] | None:
+    if not isinstance(payload, dict):
+        return None
+    commit = _normalize_build_meta(payload.get("commit"))
+    build_time = _normalize_build_meta(payload.get("build_time") or payload.get("built_at"))
+    version = _normalize_build_meta(payload.get("version"))
+    if commit == "unknown" and build_time == "unknown" and version == "unknown":
+        return None
+    return {
+        "commit": commit,
+        "build_time": build_time,
+        "version": version,
+    }
+
+
+async def _fetch_frontend_build_info() -> dict[str, str] | None:
+    build_info_url = _resolve_frontend_build_info_url()
+    if not build_info_url:
+        return None
+    try:
+        timeout = httpx.Timeout(5.0, connect=2.0)
+        async with httpx.AsyncClient(timeout=timeout) as http:
+            response = await http.get(build_info_url, headers={"Accept": "application/json"})
+            response.raise_for_status()
+            payload = response.json()
+    except Exception as exc:
+        logger.warning("frontend_deployment build metadata unavailable (%s)", exc.__class__.__name__)
+        return None
+    return _extract_frontend_build_info(payload)
+
+
 async def _build_frontend_deployment_meta() -> dict[str, Any]:
+    frontend_build_info = await _fetch_frontend_build_info()
     current_commit = _normalize_build_meta(
-        os.getenv("FRONTEND_DEPLOYED_COMMIT")
+        (frontend_build_info or {}).get("commit")
+        or os.getenv("FRONTEND_DEPLOYED_COMMIT")
         or os.getenv("EXPO_PUBLIC_APP_COMMIT")
         or os.getenv("FRONTEND_CURRENT_COMMIT")
     )
     current_version = _normalize_build_meta(
-        os.getenv("FRONTEND_DEPLOYED_VERSION")
+        (frontend_build_info or {}).get("version")
+        or os.getenv("FRONTEND_DEPLOYED_VERSION")
         or os.getenv("EXPO_PUBLIC_APP_VERSION")
         or os.getenv("FRONTEND_CURRENT_VERSION")
     )
     current_build_time = _normalize_build_meta(
-        os.getenv("FRONTEND_DEPLOYED_BUILD_TIME")
+        (frontend_build_info or {}).get("build_time")
+        or os.getenv("FRONTEND_DEPLOYED_BUILD_TIME")
         or os.getenv("EXPO_PUBLIC_BUILD_TIME")
         or os.getenv("FRONTEND_CURRENT_BUILD_TIME")
     )
@@ -327,6 +375,7 @@ async def _build_frontend_deployment_meta() -> dict[str, Any]:
     expected_version = fallback_expected_version
     expected_deploy_id = fallback_expected_deploy_id
     expected_build_time = fallback_expected_build_time
+    expected_deploy_time = _normalize_build_meta("unknown")
 
     render_api_key = _normalize_build_meta(os.getenv("RENDER_API_KEY"), default="")
     render_service_id = _normalize_build_meta(
@@ -341,10 +390,12 @@ async def _build_frontend_deployment_meta() -> dict[str, Any]:
             expected_commit = _normalize_build_meta(render_deploy.get("commit"))
             expected_deploy_id = _normalize_build_meta(render_deploy.get("deploy_id"))
             expected_build_time = _normalize_build_meta(render_deploy.get("build_time"))
+            expected_deploy_time = _normalize_build_meta(render_deploy.get("finished_at") or render_deploy.get("updated_at"))
             expected_source = "render_api"
         elif render_deploy and render_deploy.get("deploy_id", "unknown") != "unknown":
             expected_deploy_id = _normalize_build_meta(render_deploy.get("deploy_id"))
             expected_build_time = _normalize_build_meta(render_deploy.get("build_time"))
+            expected_deploy_time = _normalize_build_meta(render_deploy.get("finished_at") or render_deploy.get("updated_at"))
             expected_source = "env_fallback_partial_render"
 
     comparison_source = "unknown"
@@ -359,7 +410,7 @@ async def _build_frontend_deployment_meta() -> dict[str, Any]:
         if current_commit == expected_commit:
             status = "up_to_date"
             badge = "ok"
-            message = "Le frontend déployé correspond au dernier build connu."
+            message = "Le frontend servi correspond au dernier déploiement connu."
         else:
             status = "mismatch"
             badge = "warning"
@@ -371,9 +422,13 @@ async def _build_frontend_deployment_meta() -> dict[str, Any]:
     else:
         status = "unknown"
         badge = "unknown"
-        message = "Aucune métadonnée frontend exploitable n'est configurée."
+        message = "Impossible de déterminer l’état de cohérence — métadonnées insuffisantes."
         if comparison_source == "Render API":
             message = "Render API disponible mais aucune métadonnée frontend exploitable n'a été trouvée."
+
+    current_source = "build metadata"
+    if frontend_build_info is None:
+        current_source = "env:FRONTEND_DEPLOYED_*|EXPO_PUBLIC_*"
 
     return {
         "status": status,
@@ -386,12 +441,13 @@ async def _build_frontend_deployment_meta() -> dict[str, Any]:
             "build_time": current_build_time,
             "deploy_id": current_deploy_id,
             "service_id": current_service_id,
-            "source": "env:FRONTEND_DEPLOYED_*|EXPO_PUBLIC_*",
+            "source": current_source,
         },
         "expected": {
             "commit": expected_commit,
             "version": expected_version,
             "build_time": expected_build_time,
+            "deploy_time": expected_deploy_time,
             "deploy_id": expected_deploy_id,
             "source": expected_source,
         },
@@ -5874,12 +5930,14 @@ function renderFrontendDeployment(meta) {
   html += '<div class="health-item"><span class="dot ' + (status === 'mismatch' ? 'warn' : 'ok') + '"></span><strong>Dernier deploy connu :</strong>&nbsp;<code>' + escHtml(frontendValue(expected.commit)) + '</code></div>';
   html += '</div>';
   html += '<div style="font-size:12px;color:#374151;line-height:1.8;margin-top:10px">';
-  html += '<div><strong>Source de vérité :</strong> ' + escHtml(frontendValue(source)) + '</div>';
+  html += '<div><strong>Source frontend actuel :</strong> ' + escHtml(frontendValue(current.source)) + '</div>';
+  html += '<div><strong>Source dernier deploy :</strong> ' + escHtml(frontendValue(expected.source)) + '</div>';
+  html += '<div><strong>Source de comparaison :</strong> ' + escHtml(frontendValue(source)) + '</div>';
   html += '<div><strong>Version frontend actuelle :</strong> ' + escHtml(frontendValue(current.version)) + '</div>';
   html += '<div><strong>Build frontend actuel :</strong> ' + escHtml(frontendValue(current.build_time)) + '</div>';
   html += '<div><strong>Deploy ID actuel :</strong> ' + escHtml(frontendValue(current.deploy_id)) + ' · <strong>Service ID :</strong> ' + escHtml(frontendValue(current.service_id)) + '</div>';
   html += '<div><strong>Version/deploy attendu :</strong> ' + escHtml(frontendValue(expected.version)) + ' · <strong>Deploy ID attendu :</strong> ' + escHtml(frontendValue(expected.deploy_id)) + '</div>';
-  html += '<div><strong>Build attendu :</strong> ' + escHtml(frontendValue(expected.build_time)) + '</div>';
+  html += '<div><strong>Build attendu :</strong> ' + escHtml(frontendValue(expected.build_time)) + ' · <strong>Dernier deploy time :</strong> ' + escHtml(frontendValue(expected.deploy_time)) + '</div>';
   html += '</div>';
   html += '<div class="error-banner" style="margin-top:10px;background:#f0fdf4;border-color:#bbf7d0;color:#166534">' + escHtml(message) + '</div>';
   document.getElementById('frontend-deploy-content').innerHTML = html;
