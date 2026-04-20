@@ -1,6 +1,6 @@
 import React, { useEffect, useMemo, useRef, useState } from 'react';
 import { SafeAreaView } from 'react-native-safe-area-context';
-import { View, Text, StyleSheet, TouchableOpacity, ScrollView, Alert, Image } from 'react-native';
+import { View, Text, StyleSheet, TouchableOpacity, ScrollView, Alert, Image, BackHandler } from 'react-native';
 import Ionicons from '@expo/vector-icons/Ionicons';
 import { useLocalSearchParams, useRouter } from 'expo-router';
 import { useFocusEffect } from '@react-navigation/native';
@@ -21,6 +21,7 @@ import { resolveRecipeIngredients } from '../../utils/recipeIngredientsResolver'
 import { formatFrenchRecipeText } from '../../utils/recipeFrenchTypography';
 import { buildProductEditRoute } from '../../utils/productEditNavigation';
 import { shouldSkipStockFetch } from '../../utils/stockFetchPolicy';
+import { resolveBackNavigationAction } from '../../utils/navigationBack';
 
 function resolveSteps(recipe: BackendRecipeSuggestion | null): string[] {
   if (!recipe) return [];
@@ -152,6 +153,27 @@ export default function RecipeDetailScreen() {
     return { matchedCount, missingCount };
   }, [ingredientRows, recipeId]);
   const recipeSteps = useMemo(() => resolveSteps(baseRecipe), [baseRecipe]);
+  const handleBack = React.useCallback(() => {
+    const action = resolveBackNavigationAction({
+      canGoBack: typeof router.canGoBack === 'function' ? router.canGoBack() : false,
+    });
+    if (action.type === 'back') {
+      router.back();
+      return;
+    }
+    router.replace(action.href);
+  }, [router]);
+
+  useFocusEffect(
+    React.useCallback(() => {
+      const subscription = BackHandler.addEventListener('hardwareBackPress', () => {
+        handleBack();
+        return true;
+      });
+      return () => subscription.remove();
+    }, [handleBack]),
+  );
+
   const totalTime = useMemo(() => {
     if (!baseRecipe) return 15;
     const prep = typeof baseRecipe.prep_time_min === 'number' ? baseRecipe.prep_time_min : 0;
@@ -300,7 +322,7 @@ export default function RecipeDetailScreen() {
       <SafeAreaView style={styles.container}>
         <View style={styles.errorWrap}>
           <Text style={styles.errorTitle}>{screenError ?? 'Recette introuvable'}</Text>
-          <TouchableOpacity style={styles.backButton} onPress={() => router.back()}>
+          <TouchableOpacity style={styles.backButton} onPress={handleBack}>
             <Text style={styles.backButtonLabel}>Retour</Text>
           </TouchableOpacity>
         </View>
@@ -311,7 +333,7 @@ export default function RecipeDetailScreen() {
   return (
     <SafeAreaView style={styles.container}>
       <View style={styles.headerRow}>
-        <TouchableOpacity style={styles.backIcon} onPress={() => router.back()}>
+        <TouchableOpacity style={styles.backIcon} onPress={handleBack}>
           <Ionicons name="chevron-back" size={20} color={C.text} />
         </TouchableOpacity>
         <Text style={styles.headerTitle}>Détail recette</Text>
