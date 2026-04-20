@@ -108,6 +108,7 @@ from observability import (
     track_service_usage,
 )
 from admin_service_control import build_cost_recommendations, build_services_status, build_usage_metrics
+from service_limits import build_external_services_quota_snapshot
 from product_catalog import infer_food_category, infer_shelf_life, lookup_product_openfoodfacts
 from recipes_service import (
     _FRIGO_CATS,
@@ -4184,6 +4185,8 @@ async def admin_monitoring_dashboard(
             return {}
         if block_name == "product_funnel":
             return {"premium_conversion_rate": 0.0}
+        if block_name == "external_service_quotas":
+            return {"generated_at": utc_now().isoformat(), "services": [], "comparison_chart": [], "notes": {}}
         return None
 
     def _safe_block(block_name: str, producer):
@@ -4228,6 +4231,15 @@ async def admin_monitoring_dashboard(
         logger.warning("admin_monitoring_dashboard source failed: overview (%s)", exc)
         overview = {}
 
+    try:
+        external_service_quotas = await build_external_services_quota_snapshot(
+            service_usage_logs_col=service_usage_logs_col,
+            api_request_logs_col=api_request_logs_col,
+        )
+    except Exception as exc:
+        logger.warning("admin_monitoring_dashboard source failed: external_service_quotas (%s)", exc)
+        external_service_quotas = {}
+
     kpis = kpis if isinstance(kpis, dict) else {}
     apis = apis if isinstance(apis, dict) else {}
     overview = overview if isinstance(overview, dict) else {}
@@ -4242,6 +4254,10 @@ async def admin_monitoring_dashboard(
 
     top_service_usage_raw = services.get("top_usage_30d")
     top_service_usage = [row for row in _json_safe(top_service_usage_raw) if isinstance(row, dict)] if isinstance(top_service_usage_raw, list) else []
+    external_service_quotas_safe = _safe_block(
+        "external_service_quotas",
+        lambda: _json_safe(external_service_quotas) if isinstance(external_service_quotas, dict) else _block_fallback("external_service_quotas"),
+    )
 
     def _safe_int(value: Any, default: int = 0) -> int:
         try:
@@ -4289,6 +4305,7 @@ async def admin_monitoring_dashboard(
             "premium_conversion_rate": round((_safe_int(users.get("premium")) / users_total), 4),
         },
         "cost_metrics": cost_metrics,
+        "external_service_quotas": external_service_quotas_safe,
         "legacy_top_api_issues": apis.get("highest_error_rate", [])[:5] if isinstance(apis.get("highest_error_rate"), list) else [],
     }
 
@@ -5480,6 +5497,18 @@ _ADMIN_DASHBOARD_HTML = """<!DOCTYPE html>
   .svc-name{flex:1;font-weight:600;color:#374151}
   .svc-units{color:#6b7280;font-size:12px}
   .svc-cost{font-weight:700;color:#166534;min-width:60px;text-align:right}
+  .quota-list{display:grid;grid-template-columns:repeat(auto-fill,minmax(240px,1fr));gap:10px}
+  .quota-card{border:1px solid #e5e7eb;border-radius:10px;padding:10px;background:#fafafa}
+  .quota-title{display:flex;justify-content:space-between;align-items:center;gap:8px;font-size:13px;font-weight:700;color:#111827;margin-bottom:6px}
+  .quota-chip{display:inline-flex;align-items:center;padding:2px 8px;border-radius:999px;font-size:10px;font-weight:800;letter-spacing:.03em;text-transform:uppercase}
+  .quota-chip.ok{background:#dcfce7;color:#166534}
+  .quota-chip.warning{background:#fef3c7;color:#92400e}
+  .quota-chip.critical{background:#fee2e2;color:#991b1b}
+  .quota-chip.unknown{background:#e5e7eb;color:#374151}
+  .quota-row{font-size:12px;color:#374151;line-height:1.6;word-break:break-word}
+  .quota-row.muted{color:#6b7280}
+  .quota-bar{height:8px;border-radius:999px;background:#e5e7eb;overflow:hidden;margin:6px 0 8px}
+  .quota-fill{height:100%;border-radius:999px}
   .two-col{display:grid;grid-template-columns:1fr 1fr;gap:16px}
   @media(max-width:680px){.two-col{grid-template-columns:1fr}.stats-grid{grid-template-columns:repeat(2,1fr)}}
   .refresh-note{font-size:11px;color:#9ca3af;text-align:right}
@@ -5578,6 +5607,12 @@ _ADMIN_DASHBOARD_HTML = """<!DOCTYPE html>
         <div class="card-title">💰 Coûts services <small style="font-weight:400;color:#9ca3af;font-size:11px">(30j)</small></div>
         <div id="services-content"><div style="color:#9ca3af;font-size:13px">Chargement...</div></div>
       </div>
+    </div>
+
+    <!-- Quotas services externes -->
+    <div class="card">
+      <div class="card-title">🧩 Services externes & limites</div>
+      <div id="quotas-content"><div style="color:#9ca3af;font-size:13px">Chargement...</div></div>
     </div>
 
     <!-- Flows métier critiques -->
@@ -5759,6 +5794,7 @@ async function loadAll() {
     renderCriticalFlows(dash.critical_flows || {});
     renderFunnel(dash.product_funnel || {});
     renderCostMetrics(dash.cost_metrics || {});
+    renderExternalServiceQuotas(dash.external_service_quotas || null);
   } else {
     const msg = 'Erreur de chargement du dashboard : ' + dashResult.reason.message;
     setBlockError('users-content', msg);
@@ -5766,6 +5802,7 @@ async function loadAll() {
     setBlockError('frontend-deploy-content', msg);
     setBlockError('api-issues-content', msg);
     setBlockError('services-content', msg);
+    setBlockError('quotas-content', msg);
     setBlockError('critical-flows-content', msg);
     setBlockError('funnel-content', msg);
   }
@@ -6064,6 +6101,61 @@ function renderServices(svcs) {
   }
   html += '</div>';
   document.getElementById('services-content').innerHTML = html;
+}
+
+function quotaStatusClass(status) {
+  if (status === 'ok' || status === 'warning' || status === 'critical') return status;
+  return 'unknown';
+}
+
+function quotaFillColor(status) {
+  if (status === 'critical') return '#ef4444';
+  if (status === 'warning') return '#f59e0b';
+  if (status === 'ok') return '#16a34a';
+  return '#9ca3af';
+}
+
+function quotaPeriodLabel(period) {
+  if (period === 'day') return 'par jour';
+  if (period === 'month') return 'par mois';
+  if (period) return 'sur ' + period;
+  return 'unknown';
+}
+
+function renderExternalServiceQuotas(payload) {
+  const container = document.getElementById('quotas-content');
+  if (!container) return;
+  const list = payload && Array.isArray(payload.services) ? payload.services.filter((x) => x && typeof x === 'object') : [];
+  if (!list.length) {
+    container.innerHTML = '<div style="color:#6b7280;font-size:13px">Aucune donnée de quota disponible.</div>';
+    return;
+  }
+  let html = '<div class="quota-list">';
+  for (const service of list) {
+    const status = quotaStatusClass(service.status);
+    const usage = service.usage_current_period;
+    const limit = service.quota_limit_value;
+    const percentRaw = service.usage_percent;
+    const percentNumber = typeof percentRaw === 'number' && Number.isFinite(percentRaw) ? percentRaw : null;
+    const percentLabel = percentNumber === null ? 'unknown' : percentNumber.toFixed(2) + '%';
+    const fillRatio = percentNumber === null ? 0 : Math.max(0, Math.min(percentNumber, 100));
+    const usageRemaining = service.usage_remaining;
+    const unit = service.quota_unit || '';
+    html += '<div class="quota-card">';
+    html += '<div class="quota-title"><span>' + escHtml(String(service.display_name || service.service_key || 'service')) + '</span>';
+    html += '<span class="quota-chip ' + escHtml(status) + '">' + escHtml(status) + '</span></div>';
+    html += '<div class="quota-row">Usage: <strong>' + escHtml(String(usage ?? 'unknown')) + '</strong> / <strong>' + escHtml(String(limit ?? 'unknown')) + '</strong> ' + escHtml(String(unit)) + '</div>';
+    html += '<div class="quota-row">Période quota: <strong>' + escHtml(quotaPeriodLabel(service.quota_period)) + '</strong></div>';
+    html += '<div class="quota-row">Restant: <strong>' + escHtml(String(usageRemaining ?? 'unknown')) + '</strong></div>';
+    html += '<div class="quota-row">Consommation: <strong>' + escHtml(percentLabel) + '</strong></div>';
+    html += '<div class="quota-bar"><div class="quota-fill" style="width:' + fillRatio + '%;background:' + quotaFillColor(status) + '"></div></div>';
+    html += '<div class="quota-row muted">Source: ' + escHtml(String(service.source_of_truth || 'unknown')) + '</div>';
+    html += '<div class="quota-row muted">Pricing: ' + escHtml(String(service.pricing_note || 'pricing unknown')) + '</div>';
+    html += '<div class="quota-row muted">Upgrade: ' + escHtml(String(service.upgrade_note || 'à renseigner')) + '</div>';
+    html += '</div>';
+  }
+  html += '</div>';
+  container.innerHTML = html;
 }
 
 document.getElementById('password').addEventListener('keydown', e => { if (e.key==='Enter') doLogin(); });

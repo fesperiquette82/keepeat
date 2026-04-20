@@ -1,5 +1,5 @@
 import React, { useEffect, useState } from 'react';
-import { Text, View } from 'react-native';
+import { StyleSheet, Text, View } from 'react-native';
 import { AdminMonitoringNav } from '../../../component/admin/AdminMonitoringNav';
 import {
   AdminScaffold,
@@ -14,6 +14,29 @@ import {
 } from '../../../component/admin/AdminUi';
 import { getMonitoringDashboard, getMonitoringHealth, MonitoringDashboardResponse, MonitoringHealthResponse } from '../../../utils/adminMonitoringApi';
 import { useAuthStore } from '../../../store/authStore';
+
+
+
+function quotaPeriodLabel(period?: string | null) {
+  if (!period) return 'unknown';
+  if (period === 'day') return 'par jour';
+  if (period === 'month') return 'par mois';
+  return `sur ${period}`;
+}
+
+function quotaStatusLabel(status?: string) {
+  if (status === 'ok') return 'ok';
+  if (status === 'warning') return 'warning';
+  if (status === 'critical') return 'critical';
+  return 'unknown';
+}
+
+function quotaStatusColor(status?: string) {
+  if (status === 'critical') return '#DC2626';
+  if (status === 'warning') return '#D97706';
+  if (status === 'ok') return '#16A34A';
+  return '#6B7280';
+}
 
 export default function AdminMonitoringDashboardScreen() {
   const [health, setHealth] = useState<MonitoringHealthResponse | null>(null);
@@ -84,8 +107,52 @@ export default function AdminMonitoringDashboardScreen() {
               Coût total estimé: {formatMoney(Number(dashboard.estimated_cost_summary?.services_30d_estimated_cost_eur ?? 0))}
             </Text>
           </AdminSectionCard>
+
+          <AdminSectionCard title="Services externes & limites">
+            {(dashboard.external_service_quotas?.services || []).map((service) => {
+              const used = service.usage_current_period;
+              const limit = service.quota_limit_value;
+              const percent = service.usage_percent;
+              const ratio = percent != null ? Math.max(0, Math.min(percent / 100, 1)) : 0;
+              const status = quotaStatusLabel(service.status);
+              const color = quotaStatusColor(service.status);
+              return (
+                <View key={service.service_key} style={styles.quotaCard}>
+                  <View style={styles.quotaHeader}>
+                    <Text style={styles.quotaTitle}>{service.display_name}</Text>
+                    <Text style={[styles.quotaStatus, { color }]}>{status}</Text>
+                  </View>
+                  <Text style={styles.quotaMeta}>Usage: {used ?? 'unknown'} / {limit ?? 'unknown'} {service.quota_unit || ''}</Text>
+                  <Text style={styles.quotaMeta}>Période quota: {quotaPeriodLabel(service.quota_period)}</Text>
+                  <Text style={styles.quotaMeta}>Restant: {service.usage_remaining ?? 'unknown'}</Text>
+                  <Text style={styles.quotaMeta}>Consommation: {percent != null ? `${percent}%` : 'unknown'}</Text>
+                  <View style={styles.progressTrack}>
+                    <View style={[styles.progressFill, { width: `${ratio * 100}%`, backgroundColor: color }]} />
+                  </View>
+                  <Text style={styles.quotaMeta}>Pricing: {service.pricing_note || 'pricing unknown'}</Text>
+                  <Text style={styles.quotaMeta}>Upgrade: {service.upgrade_note || 'à renseigner'}</Text>
+                  <Text style={styles.quotaMeta}>Source quota: {service.source_of_truth || 'unknown'}</Text>
+                  <Text style={styles.quotaMeta}>Fenêtre observée: {service.usage_window || 'unknown'}</Text>
+                </View>
+              );
+            })}
+            {(!dashboard.external_service_quotas?.services || dashboard.external_service_quotas.services.length === 0) && (
+              <EmptyState label="Quota indisponible / non configuré / unknown." />
+            )}
+          </AdminSectionCard>
         </>
       )}
     </AdminScaffold>
   );
 }
+
+
+const styles = StyleSheet.create({
+  quotaCard: { borderWidth: 1, borderColor: '#E5E7EB', borderRadius: 10, padding: 10, marginBottom: 8, gap: 4 },
+  quotaHeader: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', gap: 8 },
+  quotaTitle: { fontWeight: '700', fontSize: 14 },
+  quotaStatus: { fontWeight: '700', textTransform: 'uppercase' },
+  quotaMeta: { fontSize: 12, color: '#374151' },
+  progressTrack: { height: 8, borderRadius: 999, backgroundColor: '#E5E7EB', overflow: 'hidden', marginTop: 2, marginBottom: 4 },
+  progressFill: { height: '100%', borderRadius: 999 },
+});

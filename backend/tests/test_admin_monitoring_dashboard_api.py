@@ -112,7 +112,54 @@ def _build_nominal_apis():
     }
 
 
-def _patch_dashboard_sources(monkeypatch, *, kpis=None, overview=None, apis=None):
+
+
+def _build_nominal_external_service_quotas():
+    return {
+        "generated_at": "2026-04-20T00:00:00+00:00",
+        "services": [
+            {
+                "service_key": "gemini_ocr",
+                "display_name": "Gemini OCR",
+                "free_tier_limited": True,
+                "quota_limit_value": 1500,
+                "quota_period": "month",
+                "quota_unit": "requests",
+                "usage_current_period": 300,
+                "usage_remaining": 1200,
+                "usage_percent": 20.0,
+                "source_of_truth": "env:SERVICE_LIMIT_GEMINI_OCR_REQUESTS_PER_MONTH",
+                "status": "ok",
+            },
+            {
+                "service_key": "brevo_email",
+                "display_name": "Brevo Email",
+                "free_tier_limited": True,
+                "quota_limit_value": 300,
+                "quota_period": "day",
+                "quota_unit": "emails",
+                "usage_current_period": None,
+                "usage_remaining": None,
+                "usage_percent": None,
+                "source_of_truth": "env:SERVICE_LIMIT_BREVO_EMAILS_PER_DAY",
+                "status": "unknown",
+            },
+        ],
+        "comparison_chart": [
+            {
+                "service_key": "gemini_ocr",
+                "display_name": "Gemini OCR",
+                "capacity_max": 1500,
+                "capacity_used": 300,
+                "capacity_remaining": 1200,
+                "usage_percent": 20.0,
+                "status": "ok",
+            }
+        ],
+        "notes": {"unknown_quota": "unknown / non configuré / à renseigner"},
+    }
+
+def _patch_dashboard_sources(monkeypatch, *, kpis=None, overview=None, apis=None, quotas=None):
     async def _fake_kpis(**kwargs):
         _ = kwargs
         return _build_nominal_kpis() if kpis is None else kpis
@@ -126,8 +173,13 @@ def _patch_dashboard_sources(monkeypatch, *, kpis=None, overview=None, apis=None
         return _build_nominal_apis() if apis is None else apis
 
     monkeypatch.setattr(server, "build_monitoring_kpis", _fake_kpis)
+    async def _fake_quotas(**kwargs):
+        _ = kwargs
+        return _build_nominal_external_service_quotas() if quotas is None else quotas
+
     monkeypatch.setattr(server, "build_operational_overview", _fake_overview)
     monkeypatch.setattr(server, "summarize_api_metrics", _fake_apis)
+    monkeypatch.setattr(server, "build_external_services_quota_snapshot", _fake_quotas)
     monkeypatch.setattr(server, "log_api_request", _noop_log_api_request)
 
 
@@ -157,6 +209,8 @@ def test_dashboard_returns_200_with_nominal_payload(monkeypatch):
     assert isinstance(payload.get("critical_flows"), dict)
     assert isinstance(payload.get("product_funnel"), dict)
     assert isinstance(payload.get("frontend_deployment"), dict)
+    assert isinstance(payload.get("external_service_quotas"), dict)
+    assert isinstance(payload["external_service_quotas"].get("services"), list)
 
 
 def test_dashboard_supports_partial_data_without_500(monkeypatch):
@@ -183,6 +237,7 @@ def test_dashboard_supports_partial_data_without_500(monkeypatch):
     assert payload["critical_flows"] == {}
     assert payload["cost_metrics"]["ocr_cost_eur"] == 0.0
     assert payload["product_funnel"]["premium_conversion_rate"] == 0.0
+    assert isinstance(payload["external_service_quotas"], dict)
 
 
 def test_dashboard_allows_missing_blocks_without_500(monkeypatch):
@@ -328,8 +383,13 @@ def test_dashboard_survives_kpis_source_exception_with_block_fallbacks(monkeypat
         return _build_nominal_apis()
 
     monkeypatch.setattr(server, "build_monitoring_kpis", _failing_kpis)
+    async def _fake_quotas(**kwargs):
+        _ = kwargs
+        return _build_nominal_external_service_quotas() if quotas is None else quotas
+
     monkeypatch.setattr(server, "build_operational_overview", _fake_overview)
     monkeypatch.setattr(server, "summarize_api_metrics", _fake_apis)
+    monkeypatch.setattr(server, "build_external_services_quota_snapshot", _fake_quotas)
     monkeypatch.setattr(server, "log_api_request", _noop_log_api_request)
     _with_admin_override()
 
@@ -699,6 +759,21 @@ def test_dashboard_frontend_deployment_payload_serialization_stable(monkeypatch)
     assert set(serialized.keys()) == {"status", "badge", "message", "source", "current", "expected"}
     assert set(serialized["expected"].keys()) == {"commit", "version", "build_time", "deploy_time", "deploy_id", "source"}
 
+
+
+def test_dashboard_external_service_quotas_serialization_stable(monkeypatch):
+    _patch_dashboard_sources(monkeypatch)
+    _with_admin_override()
+
+    response = asyncio.run(_request("/api/admin/monitoring/dashboard?days=7"))
+
+    server.app.dependency_overrides = {}
+    assert response.status_code == 200
+    quotas = response.json()["external_service_quotas"]
+    serialized = __import__("json").loads(__import__("json").dumps(quotas, sort_keys=True))
+    assert set(serialized.keys()) == {"generated_at", "services", "comparison_chart", "notes"}
+    assert isinstance(serialized["services"], list)
+    assert isinstance(serialized["comparison_chart"], list)
 
 def test_extract_frontend_build_info_serialization_stable():
     payload = {

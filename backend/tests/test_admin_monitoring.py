@@ -116,6 +116,22 @@ class TestAdminDashboardRouteRegistered:
         html = server._ADMIN_DASHBOARD_HTML
         assert "const allowedDays = new Set([1, 7, 30, 90]);" in html, "La période doit être validée côté client"
 
+    def test_dashboard_embedded_quotas_block_hooks_exist(self, monkeypatch):
+        server = self._load(monkeypatch)
+        html = server._ADMIN_DASHBOARD_HTML
+        assert "Services externes & limites" in html, "Le bloc quotas doit être visible dans /admin/dashboard"
+        assert "id=\"quotas-content\"" in html, "Le conteneur quotas doit exister"
+        assert "renderExternalServiceQuotas(dash.external_service_quotas || null);" in html, "Le dashboard doit brancher la payload quotas"
+        assert "setBlockError('quotas-content'" in html, "Le bloc quotas doit gérer les erreurs de chargement"
+
+    def test_dashboard_embedded_quotas_renderer_is_resilient(self, monkeypatch):
+        server = self._load(monkeypatch)
+        html = server._ADMIN_DASHBOARD_HTML
+        assert "Aucune donnée de quota disponible." in html, "Le fallback visuel quotas doit être explicite"
+        assert "Array.isArray(payload.services)" in html, "Le renderer quotas doit tolérer payload partielle"
+        assert "quotaStatusClass(service.status)" in html, "Le status quotas doit être normalisé"
+        assert "service.usage_percent" in html, "Le renderer quotas doit supporter quotas unknown/partiels"
+
 
 class TestHighestErrorRatePipeline:
     """La logique de highest_error_rate ne doit pas retourner d'endpoint
