@@ -51,6 +51,7 @@ interface RecipesStoreState {
     source: StockMutationRefreshSource;
     stockItems: DashboardStockItem[];
   }) => Promise<Record<string, RecipeCandidate[]>>;
+  recomputeRecipeAssociationsFromCache: (stockItems: DashboardStockItem[]) => Record<string, RecipeCandidate[]>;
   fetchRecipeById: (id: string) => Promise<BackendRecipeSuggestion | null>;
   getRecipeById: (id: string) => BackendRecipeSuggestion | null;
   getRecipesForStockItem: (stockItemId: string) => RecipeCandidate[];
@@ -185,6 +186,17 @@ export const useRecipesStore = create<RecipesStoreState>((set, get) => ({
       source,
       stockItemsCount: stockItems.length,
       recipesCount: snapshot.recipes.length,
+      associatedStockItemsCount: Object.keys(snapshot.associationsByStockItemId).length,
+    });
+    return snapshot.associationsByStockItemId;
+  },
+  recomputeRecipeAssociationsFromCache: (stockItems) => {
+    const cachedRecipes = Object.values(get().suggestionsByFilter).flat() as BackendRecipeSuggestion[];
+    const snapshot = buildRecipeAssociationsSnapshot(stockItems, cachedRecipes);
+    set({ associationsByStockItemId: snapshot.associationsByStockItemId });
+    logger.debug('[RECIPES_MATCH] recipe associations recomputed from cache', {
+      stockItemsCount: stockItems.length,
+      cachedRecipesCount: cachedRecipes.length,
       associatedStockItemsCount: Object.keys(snapshot.associationsByStockItemId).length,
     });
     return snapshot.associationsByStockItemId;
