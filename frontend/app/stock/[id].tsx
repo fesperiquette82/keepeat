@@ -12,7 +12,12 @@ import { daysUntil, resolveStockItems } from '../../data/mockDashboardData';
 import { storageZoneLabel, UI_LABELS } from '../../utils/uiLabels';
 import { expiryColor } from '../../utils/expiryLabels';
 import { dedupeRecipesById } from '../../utils/recipesScoping';
-import { buildRecipeDetailRoute, buildStockItemRecipeSections, type RecipeCandidate } from '../../utils/stockItemRecipes';
+import { buildStockItemDetailRecipeBlocks } from '../../utils/stockItemDetailRecipes';
+import {
+  buildRecipeDetailRoute,
+  buildStockItemRecipeSections,
+  type RecipeCandidate,
+} from '../../utils/stockItemRecipes';
 
 type BlockState = 'loading' | 'error' | 'success';
 
@@ -105,8 +110,6 @@ export default function StockItemDetailScreen() {
   const [loadError, setLoadError] = useState<string | null>(null);
   const [recipes, setRecipes] = useState<RecipeCandidate[]>([]);
   const [showAllDirect, setShowAllDirect] = useState(false);
-  const [showAllAntiWaste, setShowAllAntiWaste] = useState(false);
-  const [showAllGlobal, setShowAllGlobal] = useState(false);
 
   useEffect(() => {
     let cancelled = false;
@@ -145,11 +148,7 @@ export default function StockItemDetailScreen() {
   }, [items, recipes, selectedItem]);
 
   const blockState: BlockState = isLoading ? 'loading' : loadError ? 'error' : 'success';
-  const everythingEmpty = !isLoading
-    && !loadError
-    && sections.directRecipes.length === 0
-    && sections.antiWasteRecipes.length === 0
-    && sections.globalSuggestions.length === 0;
+  const recipeBlocks = useMemo(() => buildStockItemDetailRecipeBlocks(sections), [sections]);
 
   if (!selectedItem) {
     return (
@@ -194,51 +193,20 @@ export default function StockItemDetailScreen() {
           </View>
         </View>
 
-        <RecipeListBlock
-          title="Recettes avec cet ingrédient"
-          emptyText="Aucune recette ne référence directement cet ingrédient."
-          state={blockState}
-          recipes={sections.directRecipes}
-          expanded={showAllDirect}
-          onToggle={() => setShowAllDirect((prev) => !prev)}
-          onOpenRecipe={(recipeId) => router.push(buildRecipeDetailRoute(recipeId))}
-          styles={styles}
-          C={C}
-        />
-
-        {sections.antiWasteRecipes.length > 0 && (
+        {recipeBlocks.map((block) => (
           <RecipeListBlock
-            title="Recettes anti-gaspi liées"
-            emptyText="Aucune suggestion anti-gaspi spécifique pour cet article."
+            key={block.title}
+            title={block.title}
+            emptyText={block.emptyText}
             state={blockState}
-            recipes={sections.antiWasteRecipes}
-            expanded={showAllAntiWaste}
-            onToggle={() => setShowAllAntiWaste((prev) => !prev)}
+            recipes={block.recipes}
+            expanded={showAllDirect}
+            onToggle={() => setShowAllDirect((prev) => !prev)}
             onOpenRecipe={(recipeId) => router.push(buildRecipeDetailRoute(recipeId))}
             styles={styles}
             C={C}
           />
-        )}
-
-        {sections.globalSuggestions.length > 0 && (
-          <RecipeListBlock
-            title="Suggestions anti-gaspi générales"
-            emptyText="Aucune suggestion générale disponible pour le stock actuel."
-            state={blockState}
-            recipes={sections.globalSuggestions}
-            expanded={showAllGlobal}
-            onToggle={() => setShowAllGlobal((prev) => !prev)}
-            onOpenRecipe={(recipeId) => router.push(buildRecipeDetailRoute(recipeId))}
-            styles={styles}
-            C={C}
-          />
-        )}
-
-        {everythingEmpty && (
-          <View style={styles.globalEmptyWrap}>
-            <Text style={styles.globalEmptyText}>Aucune recette liée à cet article ni suggestion générale pour le moment.</Text>
-          </View>
-        )}
+        ))}
 
         {loadError ? <Text style={styles.globalError}>{loadError}</Text> : null}
       </ScrollView>
@@ -278,7 +246,5 @@ const createStyles = (C: ReturnType<typeof getThemeColors>, T: ReturnType<typeof
   recipeTextWrap: { flex: 1 },
   recipeTitle: { color: C.text, fontSize: 14, fontWeight: '700' },
   recipeMeta: { ...T.secondarySmall },
-  globalEmptyWrap: { paddingVertical: 8 },
-  globalEmptyText: { ...T.secondary, textAlign: 'center', fontWeight: '600' },
   globalError: { color: '#B91C1C', fontSize: 12, textAlign: 'center' },
 });

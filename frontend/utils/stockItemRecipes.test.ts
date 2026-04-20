@@ -1,6 +1,7 @@
 import assert from 'node:assert/strict';
 import test from 'node:test';
 
+import { buildStockItemDetailRecipeBlocks } from './stockItemDetailRecipes';
 import type { DashboardStockItem } from '../data/mockDashboardData';
 import { buildStockItemRecipeSections, buildRecipeDetailRoute, normalizeStockItemNameForRecipeMatching } from './stockItemRecipes';
 
@@ -34,6 +35,17 @@ test('retourne des recettes directes quand l’article est référencé', () => 
   assert.deepEqual(sections.directRecipes.map((recipe) => recipe.id), ['r1']);
 });
 
+test("l'écran détail produit n'affiche pas de bloc de suggestions générales", () => {
+  const blocks = buildStockItemDetailRecipeBlocks({
+    directRecipes: [],
+    antiWasteRecipes: [{ id: 'aw1', title: 'Anti-gaspi lié' }],
+    globalSuggestions: [{ id: 'g1', title: 'Suggestion globale' }],
+  });
+
+  assert.equal(blocks.length, 1);
+  assert.equal(blocks[0]?.title, 'Recettes avec cet ingrédient');
+});
+
 test("retourne des suggestions anti-gaspi liées uniquement pour les recettes qui utilisent vraiment l'ingrédient", () => {
   const selected = stockItem({ id: 'cream', name: 'Crème entière UHT 30%MG, 3x20cl', expiry_date: '2026-04-18' });
   const urgentOther = stockItem({ id: 'egg', name: 'Oeufs', expiry_date: '2026-04-18' });
@@ -58,6 +70,39 @@ test('article sans recette liée retourne des sections vides', () => {
   assert.equal(sections.directRecipes.length, 0);
   assert.equal(sections.antiWasteRecipes.length, 0);
   assert.equal(sections.globalSuggestions.length, 0);
+});
+
+test('si aucune recette n’est réellement liée, aucune recette non liée n’est injectée dans la section directe', () => {
+  const selected = stockItem({ id: 'jam', name: 'Confiture de fraise', expiry_date: '2026-05-20' });
+  const stock = [selected, stockItem({ id: 'egg', name: 'Oeufs', expiry_date: '2026-04-18' })];
+  const recipes = [
+    { id: 'r-omelette', title: 'Omelette', available_ingredients: ['oeuf'], duration_min: 8 },
+  ];
+
+  const sections = buildStockItemRecipeSections(selected, stock, recipes);
+  assert.deepEqual(sections.directRecipes.map((recipe) => recipe.id), []);
+});
+
+test('supprime les doublons de recettes dans la section des recettes associées', () => {
+  const selected = stockItem({ id: 'egg', name: 'Oeufs', expiry_date: '2026-04-18' });
+  const stock = [selected];
+  const recipes = [
+    { id: 'r1', title: 'Omelette', available_ingredients: ['oeuf'], duration_min: 8 },
+    { id: 'r1', title: 'Omelette (dup)', available_ingredients: ['oeuf'], duration_min: 8 },
+  ];
+
+  const sections = buildStockItemRecipeSections(selected, stock, recipes);
+  assert.deepEqual(sections.directRecipes.map((recipe) => recipe.id), ['r1']);
+});
+
+test("l'écran détail produit garde un état vide explicite pour les recettes associées", () => {
+  const blocks = buildStockItemDetailRecipeBlocks({
+    directRecipes: [],
+    antiWasteRecipes: [],
+    globalSuggestions: [],
+  });
+
+  assert.equal(blocks[0]?.emptyText, 'Aucune recette ne référence directement cet ingrédient.');
 });
 
 
