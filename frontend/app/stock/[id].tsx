@@ -11,13 +11,12 @@ import { getThemeColors, getThemeText } from '../../utils/theme';
 import { daysUntil, resolveStockItems } from '../../data/mockDashboardData';
 import { storageZoneLabel, UI_LABELS } from '../../utils/uiLabels';
 import { expiryColor } from '../../utils/expiryLabels';
-import { dedupeRecipesById } from '../../utils/recipesScoping';
 import { buildStockItemDetailRecipeBlocks } from '../../utils/stockItemDetailRecipes';
 import {
   buildRecipeDetailRoute,
-  buildStockItemRecipeSections,
   type RecipeCandidate,
 } from '../../utils/stockItemRecipes';
+import type { DashboardStockItem } from '../../data/mockDashboardData';
 
 type BlockState = 'loading' | 'error' | 'success';
 
@@ -104,11 +103,11 @@ export default function StockItemDetailScreen() {
   const styles = useMemo(() => createStyles(C, T), [C, T]);
 
   const { items: storeItems, fetchStock } = useStockStore();
-  const fetchSuggestions = useRecipesStore((state) => state.fetchSuggestions);
+  const refreshRecipeAssociationsForStockMutation = useRecipesStore((state) => state.refreshRecipeAssociationsForStockMutation);
+  const getRecipesForStockItem = useRecipesStore((state) => state.getRecipesForStockItem);
 
   const [isLoading, setIsLoading] = useState(true);
   const [loadError, setLoadError] = useState<string | null>(null);
-  const [recipes, setRecipes] = useState<RecipeCandidate[]>([]);
   const [showAllDirect, setShowAllDirect] = useState(false);
 
   useEffect(() => {
@@ -118,13 +117,11 @@ export default function StockItemDetailScreen() {
       setLoadError(null);
       try {
         await fetchStock();
-        const [stockRecipes, expiryDayRecipes, expiryWeekRecipes] = await Promise.all([
-          fetchSuggestions('stock'),
-          fetchSuggestions('expiryDay'),
-          fetchSuggestions('expiryWeek'),
-        ]);
+        await refreshRecipeAssociationsForStockMutation({
+          source: 'stock.fetch',
+          stockItems: useStockStore.getState().items as DashboardStockItem[],
+        });
         if (cancelled) return;
-        setRecipes(dedupeRecipesById([...stockRecipes, ...expiryDayRecipes, ...expiryWeekRecipes]) as RecipeCandidate[]);
       } catch {
         if (cancelled) return;
         setLoadError('Impossible de charger les recettes liées à cet article.');
@@ -137,15 +134,19 @@ export default function StockItemDetailScreen() {
     return () => {
       cancelled = true;
     };
-  }, [fetchStock, fetchSuggestions, itemId]);
+  }, [fetchStock, itemId, refreshRecipeAssociationsForStockMutation]);
 
   const { items } = useMemo(() => resolveStockItems(storeItems, { useMockFallback: false }), [storeItems]);
   const selectedItem = useMemo(() => items.find((item) => item.id === itemId) ?? null, [itemId, items]);
 
   const sections = useMemo(() => {
     if (!selectedItem) return { directRecipes: [], antiWasteRecipes: [], globalSuggestions: [] };
-    return buildStockItemRecipeSections(selectedItem, items, recipes);
-  }, [items, recipes, selectedItem]);
+    return {
+      directRecipes: getRecipesForStockItem(selectedItem.id) as RecipeCandidate[],
+      antiWasteRecipes: [],
+      globalSuggestions: [],
+    };
+  }, [getRecipesForStockItem, selectedItem]);
 
   const blockState: BlockState = isLoading ? 'loading' : loadError ? 'error' : 'success';
   const recipeBlocks = useMemo(() => buildStockItemDetailRecipeBlocks(sections), [sections]);

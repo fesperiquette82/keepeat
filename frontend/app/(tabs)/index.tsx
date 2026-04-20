@@ -9,13 +9,14 @@ import { useAppSettingsStore } from '../../store/appSettingsStore';
 import { daysUntil, findExpiringSoon, resolveStockItems } from '../../data/mockDashboardData';
 import { countLabelFr } from '../../utils/uiText';
 import { storageZoneLabel, UI_LABELS } from '../../utils/uiLabels';
-import { fetchRecipesSuggestions } from '../../utils/recipesApi';
 import { logger } from '../../utils/logger';
 import { expiryColor, expiryText } from '../../utils/expiryLabels';
+import { useRecipesStore } from '../../store/recipesStore';
 
 export default function HomeDashboardScreen() {
   const router = useRouter();
   const { items: storeItems, fetchStock } = useStockStore();
+  const fetchSuggestions = useRecipesStore((state) => state.fetchSuggestions);
   const [recipesOnHome, setRecipesOnHome] = React.useState<any[]>([]);
 
   useEffect(() => {
@@ -60,9 +61,8 @@ export default function HomeDashboardScreen() {
     let cancelled = false;
     const loadHomeRecipes = async () => {
       try {
-        const payload = await fetchRecipesSuggestions('expiryDay');
+        const backendRecipesOnHome = await fetchSuggestions('expiryDay');
         if (cancelled) return;
-        const backendRecipesOnHome = payload.recipes ?? [];
         setRecipesOnHome(backendRecipesOnHome.slice(0, 4));
         logger.debug('[RECIPES_MATCH] home suggestions diagnostics', {
           recipesOnHomeCount: backendRecipesOnHome.length,
@@ -78,7 +78,7 @@ export default function HomeDashboardScreen() {
     return () => {
       cancelled = true;
     };
-  }, []);
+  }, [fetchSuggestions]);
 
   return (
     <ImageBackground source={require('../../assets/images/KeepEat_fond.png')} style={styles.bgImage} resizeMode="cover">
