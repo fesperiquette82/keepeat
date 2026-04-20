@@ -19,3 +19,9 @@ def test_ci_executes_backend_non_regression_test_suites():
     workflow = Path(".github/workflows/ci.yml").read_text(encoding="utf-8")
 
     assert "python -m pytest tests backend/tests --tb=short -q" in workflow
+
+
+def test_codex_autofix_requires_gemini_global_purpose_api_key_secret():
+    workflow = Path(".github/workflows/codex-autofix.yml").read_text(encoding="utf-8")
+
+    assert "if: ${{ secrets.GEMINI_GLOBAL_PURPOSE_API_KEY != '' }}" in workflow
