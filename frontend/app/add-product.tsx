@@ -214,7 +214,7 @@ export default function AddProductScreen() {
         image_url: imageUrl        || undefined,
         category:  foodCategory    || undefined,
         quantity:  quantity.trim() || undefined,
-      });
+      }, { source: normalizedBarcode ? 'barcode' : 'manual' });
       router.replace('/');
     } catch {
       // silent — user can retry with full save
@@ -242,7 +242,7 @@ export default function AddProductScreen() {
         quantity:    quantity.trim() || undefined,
         expiry_date: expiryDate ? format(expiryDate, 'yyyy-MM-dd') : undefined,
         notes:       notes.trim()    || undefined,
-      });
+      }, { source: normalizedBarcode ? 'barcode' : 'manual' });
       router.replace('/');
     } catch {
       Alert.alert(

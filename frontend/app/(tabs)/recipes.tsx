@@ -12,7 +12,6 @@ import { UI_LABELS } from '../../utils/uiLabels';
 import { useLanguageStore } from '../../store/languageStore';
 import { RecipesFilter, useRecipesStore } from '../../store/recipesStore';
 import { logger } from '../../utils/logger';
-import { fetchRecipesSuggestions } from '../../utils/recipesApi';
 import { getActiveItemsByScope, resolveStockItems } from '../../data/mockDashboardData';
 import {
   buildTargetIngredientNames,
@@ -51,7 +50,7 @@ export default function RecipesScreen() {
   const router = useRouter();
   const { t } = useLanguageStore();
   const { items: storeItems, fetchStock } = useStockStore();
-  const { suggestLaterByFilter } = useRecipesStore();
+  const { suggestLaterByFilter, fetchSuggestions } = useRecipesStore();
   const [imageErrors, setImageErrors] = React.useState<Record<string, boolean>>({});
   const [activeFilter, setActiveFilter] = React.useState<RecipesFilter>('expiryDay');
   const [recipes, setRecipes] = React.useState<any[]>([]);
@@ -102,9 +101,8 @@ export default function RecipesScreen() {
     const load = async () => {
       setIsLoading(true);
       try {
-        const payload = await fetchRecipesSuggestions(activeFilter);
+        const rawRecipes = await fetchSuggestions(activeFilter);
         if (cancelled) return;
-        const rawRecipes = Array.isArray(payload?.recipes) ? payload.recipes : [];
         const scopedRecipesBeforeDedupe = filterRecipesByTargetIngredients(rawRecipes, targetIngredientNames);
         const scopedRecipes = scopeAndDedupeRecipes(rawRecipes, targetIngredientNames);
         const antiWasteRecipes = scopedRecipes.slice(0, 2);
@@ -133,7 +131,7 @@ export default function RecipesScreen() {
     return () => {
       cancelled = true;
     };
-  }, [activeFilter, activeItems.length, activeStockCount, items.length, storeItems.length, targetIngredientNames, targetItems.length]);
+  }, [activeFilter, activeItems.length, activeStockCount, fetchSuggestions, items.length, storeItems.length, targetIngredientNames, targetItems.length]);
 
   const filters = useMemo(
     () =>

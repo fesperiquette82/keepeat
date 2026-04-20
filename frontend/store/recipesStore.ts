@@ -4,6 +4,12 @@ import { buildApiUrl } from '../utils/config';
 import { useAuthStore } from './authStore';
 import { logger } from '../utils/logger';
 import { formatFrenchRecipeText } from '../utils/recipeFrenchTypography';
+import {
+  buildRecipeAssociationsSnapshot,
+  type StockMutationRefreshSource,
+} from '../utils/recipeAssociations';
+import type { DashboardStockItem } from '../data/mockDashboardData';
+import type { RecipeCandidate } from '../utils/stockItemRecipes';
 
 export type RecipesFilter = 'stock' | 'expiryDay' | 'expiryWeek' | 'expiryMonth';
 
@@ -37,11 +43,17 @@ export interface BackendRecipeSuggestion {
 interface RecipesStoreState {
   suggestionsByFilter: Record<RecipesFilter, BackendRecipeSuggestion[]>;
   suggestLaterByFilter: Record<RecipesFilter, boolean>;
+  associationsByStockItemId: Record<string, RecipeCandidate[]>;
   isLoading: boolean;
   error: string | null;
   fetchSuggestions: (filter: RecipesFilter) => Promise<BackendRecipeSuggestion[]>;
+  refreshRecipeAssociationsForStockMutation: (input: {
+    source: StockMutationRefreshSource;
+    stockItems: DashboardStockItem[];
+  }) => Promise<Record<string, RecipeCandidate[]>>;
   fetchRecipeById: (id: string) => Promise<BackendRecipeSuggestion | null>;
   getRecipeById: (id: string) => BackendRecipeSuggestion | null;
+  getRecipesForStockItem: (stockItemId: string) => RecipeCandidate[];
 }
 
 const FILTER_TO_API: Record<RecipesFilter, string> = {
@@ -130,6 +142,7 @@ export const useRecipesStore = create<RecipesStoreState>((set, get) => ({
     expiryWeek: false,
     expiryMonth: false,
   },
+  associationsByStockItemId: {},
   isLoading: false,
   error: null,
   fetchSuggestions: async (filter) => {
@@ -160,6 +173,22 @@ export const useRecipesStore = create<RecipesStoreState>((set, get) => ({
       set({ isLoading: false });
     }
   },
+  refreshRecipeAssociationsForStockMutation: async ({ source, stockItems }) => {
+    const filters: RecipesFilter[] = ['stock', 'expiryDay', 'expiryWeek', 'expiryMonth'];
+    const recipeBatches = await Promise.all(filters.map((filter) => get().fetchSuggestions(filter)));
+    const snapshot = buildRecipeAssociationsSnapshot(
+      stockItems,
+      recipeBatches.flat() as BackendRecipeSuggestion[],
+    );
+    set({ associationsByStockItemId: snapshot.associationsByStockItemId });
+    logger.info('[RECIPES_MATCH] recipe associations refreshed', {
+      source,
+      stockItemsCount: stockItems.length,
+      recipesCount: snapshot.recipes.length,
+      associatedStockItemsCount: Object.keys(snapshot.associationsByStockItemId).length,
+    });
+    return snapshot.associationsByStockItemId;
+  },
   fetchRecipeById: async (id) => {
     const cached = get().getRecipeById(id);
     if (cached) return cached;
@@ -178,5 +207,8 @@ export const useRecipesStore = create<RecipesStoreState>((set, get) => ({
       if (found) return found;
     }
     return null;
+  },
+  getRecipesForStockItem: (stockItemId) => {
+    return get().associationsByStockItemId[stockItemId] ?? [];
   },
 }));
