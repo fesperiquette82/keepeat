@@ -22,6 +22,38 @@ export interface MonitoringDashboardResponse {
   top_api_issues: Array<Record<string, unknown>>;
   top_service_usage: Array<Record<string, unknown>>;
   estimated_cost_summary?: Record<string, number>;
+  external_service_quotas?: {
+    generated_at?: string;
+    services?: Array<{
+      service_key: string;
+      display_name: string;
+      category?: string;
+      enabled?: boolean;
+      configured?: boolean;
+      free_tier_limited?: boolean;
+      quota_limit_value?: number | null;
+      quota_period?: string | null;
+      quota_unit?: string | null;
+      usage_current_period?: number | null;
+      usage_remaining?: number | null;
+      usage_percent?: number | null;
+      source_of_truth?: string;
+      usage_window?: string;
+      pricing_note?: string | null;
+      upgrade_note?: string | null;
+      status?: 'ok' | 'warning' | 'critical' | 'unknown' | string;
+    }>;
+    comparison_chart?: Array<{
+      service_key: string;
+      display_name: string;
+      capacity_max?: number | null;
+      capacity_used?: number | null;
+      capacity_remaining?: number | null;
+      usage_percent?: number | null;
+      status?: string;
+    }>;
+    notes?: Record<string, string>;
+  };
 }
 
 export interface MonitoringApisResponse {
