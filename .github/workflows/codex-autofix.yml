@@ -37,8 +37,9 @@ jobs:
         run: npm install -g @openai/codex
 
       - name: Run Codex to fix CI
+        if: ${{ secrets.GEMINI_GLOBAL_PURPOSE_API_KEY != '' }}
         env:
-          OPENAI_API_KEY: ${{ secrets.OPENAI_API_KEY }}
+          GEMINI_GLOBAL_PURPOSE_API_KEY: ${{ secrets.GEMINI_GLOBAL_PURPOSE_API_KEY }}
         run: |
           codex exec "
           The CI workflow failed.
@@ -50,12 +51,14 @@ jobs:
           "
 
       - name: Re-run frontend checks
+        if: ${{ secrets.GEMINI_GLOBAL_PURPOSE_API_KEY != '' }}
         working-directory: frontend
         run: |
           npm run lint
           npm run test:ci
 
       - name: Create pull request
+        if: ${{ secrets.GEMINI_GLOBAL_PURPOSE_API_KEY != '' }}
         uses: peter-evans/create-pull-request@v7
         with:
           token: ${{ secrets.GH_PAT }}
