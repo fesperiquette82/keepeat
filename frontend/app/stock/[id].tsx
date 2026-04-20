@@ -16,6 +16,11 @@ import {
   buildRecipeDetailRoute,
   type RecipeCandidate,
 } from '../../utils/stockItemRecipes';
+import {
+  buildProductEditRoute,
+  STOCK_DETAIL_EDIT_ICON,
+  STOCK_DETAIL_EDIT_LABEL,
+} from '../../utils/productEditNavigation';
 import type { DashboardStockItem } from '../../data/mockDashboardData';
 
 type BlockState = 'loading' | 'error' | 'success';
@@ -168,6 +173,15 @@ export default function StockItemDetailScreen() {
           <Ionicons name="chevron-back" size={20} color={C.text} />
         </TouchableOpacity>
         <Text style={styles.headerTitle}>Détail produit</Text>
+        <TouchableOpacity
+          style={styles.editButton}
+          onPress={() => router.push(buildProductEditRoute(selectedItem.id))}
+          accessibilityRole="button"
+          accessibilityLabel="Modifier le produit"
+        >
+          <Ionicons name={STOCK_DETAIL_EDIT_ICON} size={15} color={C.textMid} />
+          <Text style={styles.editButtonLabel}>{STOCK_DETAIL_EDIT_LABEL}</Text>
+        </TouchableOpacity>
       </View>
 
       <ScrollView contentContainerStyle={styles.content}>
@@ -220,7 +234,19 @@ const createStyles = (C: ReturnType<typeof getThemeColors>, T: ReturnType<typeof
   backButtonLabel: { color: '#fff', fontWeight: '700' },
   headerRow: { flexDirection: 'row', alignItems: 'center', gap: 10, paddingHorizontal: 16, paddingTop: 8, paddingBottom: 8 },
   backIcon: { width: 34, height: 34, borderRadius: 17, backgroundColor: C.card, alignItems: 'center', justifyContent: 'center' },
-  headerTitle: { color: C.text, fontSize: 22, fontWeight: '800' },
+  headerTitle: { color: C.text, fontSize: 22, fontWeight: '800', flex: 1 },
+  editButton: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 4,
+    paddingVertical: 5,
+    paddingHorizontal: 8,
+    borderRadius: 10,
+    borderWidth: 1,
+    borderColor: C.border,
+    backgroundColor: C.card,
+  },
+  editButtonLabel: { color: C.textMid, fontSize: 13, fontWeight: '700' },
   content: { paddingHorizontal: 16, paddingBottom: 28, gap: 12 },
   productCard: { backgroundColor: '#fff', borderRadius: 14, borderWidth: 1, borderColor: C.border, padding: 12, flexDirection: 'row', gap: 12 },
   productImageWrap: { width: 72, height: 72, borderRadius: 12, backgroundColor: '#F3F4F6', alignItems: 'center', justifyContent: 'center', overflow: 'hidden' },

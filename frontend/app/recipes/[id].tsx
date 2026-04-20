@@ -19,6 +19,7 @@ import {
 } from '../../utils/recipeIngredients';
 import { resolveRecipeIngredients } from '../../utils/recipeIngredientsResolver';
 import { formatFrenchRecipeText } from '../../utils/recipeFrenchTypography';
+import { buildProductEditRoute } from '../../utils/productEditNavigation';
 
 function resolveSteps(recipe: BackendRecipeSuggestion | null): string[] {
   if (!recipe) return [];
@@ -284,7 +285,7 @@ export default function RecipeDetailScreen() {
                   key={rowKey}
                   style={styles.ingredientRow}
                   activeOpacity={0.7}
-                  onPress={() => router.push({ pathname: '/edit-product', params: { id: row.matchedStockItemId! } })}
+                  onPress={() => router.push(buildProductEditRoute(row.matchedStockItemId!))}
                 >
                   {rowContent}
                 </TouchableOpacity>

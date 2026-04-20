@@ -21,6 +21,7 @@ import { useOcrDatePicker } from '../utils/useOcrDatePicker';
 import { DatePickerModal, CameraModal } from '../component/CameraDateModal';
 import { useAppSettingsStore } from '../store/appSettingsStore';
 import { getThemeColors } from '../utils/theme';
+import { persistProductEdit, toApiExpiryDate } from '../utils/productEditFlow';
 
 type DateInputMode = 'duration' | 'date' | 'camera';
 
@@ -89,15 +90,21 @@ export default function EditProductScreen() {
 
     setIsSaving(true);
     try {
-      await updateItem(params.id!, {
+      const didPersist = await persistProductEdit({
+        itemId: params.id!,
+        updateItem,
+        fetchStock,
+        updates: {
         name: name.trim(),
         brand: brand.trim() || undefined,
         quantity: quantity.trim() || undefined,
-        expiry_date: expiryDate ? format(expiryDate, 'yyyy-MM-dd') : undefined,
+        expiry_date: toApiExpiryDate(expiryDate),
         notes: notes.trim() || undefined,
+        },
       });
-
-      await fetchStock();
+      if (!didPersist) {
+        throw new Error('update_failed');
+      }
 
       Alert.alert(
         t('updateProductSuccessTitle'),
