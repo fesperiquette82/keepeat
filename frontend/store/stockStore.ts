@@ -16,6 +16,7 @@ import { usePremiumUiStore } from './premiumUiStore';
 import { useRecipesStore } from './recipesStore';
 import type { DashboardStockItem } from '../data/mockDashboardData';
 import type { AxiosError, AxiosRequestConfig } from 'axios';
+import { shouldSkipStockFetch } from '../utils/stockFetchPolicy';
 
 const authHeaders = () => {
   const token = useAuthStore.getState().token;
@@ -134,8 +135,9 @@ interface StockStore {
   isOnline: boolean;
   isSyncing: boolean;
   isRefreshingPriorityItems: boolean;
+  lastStockFetchAt: number | null;
 
-  fetchStock: () => Promise<void>;
+  fetchStock: (options?: { force?: boolean; reason?: string }) => Promise<void>;
   fetchPriorityItems: () => Promise<void>;
   refreshPriorityItems: (leadDays: 1 | 2 | 3, remindersEnabled: boolean) => Promise<PriorityRefreshResult | null>;
   fetchStats: () => Promise<void>;
@@ -189,6 +191,7 @@ export const useStockStore = create<StockStore>()(
       isOnline: true,
       isSyncing: false,
       isRefreshingPriorityItems: false,
+      lastStockFetchAt: null,
 
       setOnline: (online: boolean) => {
         const { isOnline, pendingMutations, flushPendingMutations, fetchStock } = get();
@@ -251,18 +254,37 @@ export const useStockStore = create<StockStore>()(
         await Promise.all([s.fetchStock(), s.fetchPriorityItems(), s.fetchStats()]);
       },
 
-      fetchStock: async () => {
+      fetchStock: async (options) => {
+        const state = get();
+        if (
+          shouldSkipStockFetch({
+            hasItemsInStore: state.items.length > 0,
+            lastFetchAt: state.lastStockFetchAt,
+            force: options?.force,
+          })
+        ) {
+          logger.debug('[STOCK] fetch skipped (fresh cache)', {
+            reason: options?.reason ?? 'unspecified',
+            itemsCount: state.items.length,
+            lastStockFetchAt: state.lastStockFetchAt,
+          });
+          useRecipesStore.getState().recomputeRecipeAssociationsFromCache(state.items as DashboardStockItem[]);
+          return;
+        }
+
+        logger.debug('[STOCK] fetch request', {
+          reason: options?.reason ?? 'unspecified',
+          force: options?.force === true,
+          hasItemsInStore: state.items.length > 0,
+        });
         set(state => ({ loadingCount: state.loadingCount + 1, isLoading: true, error: null }));
         try {
           const res = await axios.get(buildApiUrl('/api/stock?status=active'), authRequestConfig());
           const items: StockItem[] = Array.isArray(res.data)
             ? res.data.map((item) => normalizeStockItemImage(item as StockItem))
             : [];
-          set({ items });
-          await useRecipesStore.getState().refreshRecipeAssociationsForStockMutation({
-            source: 'stock.fetch',
-            stockItems: items as DashboardStockItem[],
-          });
+          set({ items, lastStockFetchAt: Date.now() });
+          useRecipesStore.getState().recomputeRecipeAssociationsFromCache(items as DashboardStockItem[]);
           rescheduleAllNotifications(items);
         } catch (err: any) {
           if (handlePremiumOrQuotaError(err)) {

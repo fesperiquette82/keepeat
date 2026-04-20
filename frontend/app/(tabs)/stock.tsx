@@ -63,7 +63,7 @@ export default function StockScreen() {
   const styles = useMemo(() => createStyles(C, T), [C, T]);
 
   useEffect(() => {
-    fetchStock();
+    fetchStock({ reason: 'stock.tab.mount' });
   }, [fetchStock]);
 
   const { items, isMock } = useMemo(() => resolveStockItems(storeItems, { useMockFallback: false }), [storeItems]);
