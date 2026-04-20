@@ -1,4 +1,4 @@
-import React, { useEffect, useMemo, useState } from 'react';
+import React, { useEffect, useMemo, useRef, useState } from 'react';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { View, Text, StyleSheet, TouchableOpacity, ScrollView, Alert, Image } from 'react-native';
 import Ionicons from '@expo/vector-icons/Ionicons';
@@ -20,6 +20,7 @@ import {
 import { resolveRecipeIngredients } from '../../utils/recipeIngredientsResolver';
 import { formatFrenchRecipeText } from '../../utils/recipeFrenchTypography';
 import { buildProductEditRoute } from '../../utils/productEditNavigation';
+import { shouldSkipStockFetch } from '../../utils/stockFetchPolicy';
 
 function resolveSteps(recipe: BackendRecipeSuggestion | null): string[] {
   if (!recipe) return [];
@@ -43,7 +44,7 @@ export default function RecipeDetailScreen() {
   const params = useLocalSearchParams<{ id?: string }>();
   const recipeId = typeof params.id === 'string' ? params.id : '';
 
-  const { items: storeItems, fetchStock } = useStockStore();
+  const { items: storeItems, fetchStock, lastStockFetchAt } = useStockStore();
   const householdSize = useAppSettingsStore((state) => state.householdSize);
   const themeMode = useAppSettingsStore((state) => state.themeMode);
   const C = getThemeColors(themeMode);
@@ -59,11 +60,40 @@ export default function RecipeDetailScreen() {
   const [undoItems, setUndoItems] = useState<typeof storeItems>([]);
   const [banner, setBanner] = useState<{ message: string; canUndo: boolean; variant: 'success' | 'error' } | null>(null);
   const [imageErrors, setImageErrors] = useState<Record<string, boolean>>({});
+  const renderCountRef = useRef(0);
+  const openStartedAtRef = useRef<number | null>(null);
+  const openLoggedRef = useRef(false);
+
+  renderCountRef.current += 1;
+  logger.debug('[RECIPES_DETAIL_PERF] render', {
+    recipeId,
+    renderCount: renderCountRef.current,
+    isScreenLoading,
+    hasRecipe: !!baseRecipe,
+  });
+
+  useEffect(() => {
+    openStartedAtRef.current = Date.now();
+    openLoggedRef.current = false;
+    renderCountRef.current = 0;
+  }, [recipeId]);
 
   useFocusEffect(
     React.useCallback(() => {
-      logger.debug('[RECIPES_MATCH] detail screen focused - refreshing stock', { recipeId: params.id ?? null });
-      fetchStock();
+      const hasItemsInStore = useStockStore.getState().items.length > 0;
+      const shouldRefreshStock = !shouldSkipStockFetch({
+        hasItemsInStore,
+        lastFetchAt: useStockStore.getState().lastStockFetchAt,
+      });
+      logger.debug('[RECIPES_DETAIL_PERF] focus', {
+        recipeId: params.id ?? null,
+        shouldRefreshStock,
+        hasItemsInStore,
+        lastStockFetchAt: useStockStore.getState().lastStockFetchAt,
+      });
+      if (shouldRefreshStock) {
+        fetchStock({ reason: 'recipes.detail.focus' });
+      }
     }, [fetchStock, params.id]),
   );
 
@@ -75,15 +105,52 @@ export default function RecipeDetailScreen() {
     setServings(baseServings);
   }, [baseServings]);
 
-  const recipeIngredients = useMemo(() => resolveRecipeIngredients(baseRecipe, baseServings), [baseRecipe, baseServings]);
-  const scaledIngredients = useMemo(() => scaleIngredients(recipeIngredients, servings, baseServings), [baseServings, recipeIngredients, servings]);
-  const ingredientRows = useMemo(() => buildRecipeIngredientDisplayRows(items, scaledIngredients), [items, scaledIngredients]);
+  const recipeIngredients = useMemo(() => {
+    const startedAt = Date.now();
+    const resolved = resolveRecipeIngredients(baseRecipe, baseServings);
+    logger.debug('[RECIPES_DETAIL_PERF] resolve ingredients', {
+      recipeId,
+      durationMs: Date.now() - startedAt,
+      count: resolved.length,
+    });
+    return resolved;
+  }, [baseRecipe, baseServings, recipeId]);
+  const scaledIngredients = useMemo(() => {
+    const startedAt = Date.now();
+    const scaled = scaleIngredients(recipeIngredients, servings, baseServings);
+    logger.debug('[RECIPES_DETAIL_PERF] scale ingredients', {
+      recipeId,
+      durationMs: Date.now() - startedAt,
+      count: scaled.length,
+      servings,
+      baseServings,
+    });
+    return scaled;
+  }, [baseServings, recipeId, recipeIngredients, servings]);
+  const ingredientRows = useMemo(() => {
+    const startedAt = Date.now();
+    const rows = buildRecipeIngredientDisplayRows(items, scaledIngredients);
+    logger.debug('[RECIPES_DETAIL_PERF] ingredient availability mapping', {
+      recipeId,
+      durationMs: Date.now() - startedAt,
+      stockItemsCount: items.length,
+      rowsCount: rows.length,
+    });
+    return rows;
+  }, [items, recipeId, scaledIngredients]);
 
   const ingredientAvailability = useMemo(() => {
+    const startedAt = Date.now();
     const matchedCount = ingredientRows.filter((row) => row.isAvailable).length;
     const missingCount = Math.max(0, ingredientRows.length - matchedCount);
+    logger.debug('[RECIPES_DETAIL_PERF] compute availability summary', {
+      recipeId,
+      durationMs: Date.now() - startedAt,
+      matchedCount,
+      missingCount,
+    });
     return { matchedCount, missingCount };
-  }, [ingredientRows]);
+  }, [ingredientRows, recipeId]);
   const recipeSteps = useMemo(() => resolveSteps(baseRecipe), [baseRecipe]);
   const totalTime = useMemo(() => {
     if (!baseRecipe) return 15;
@@ -106,6 +173,9 @@ export default function RecipeDetailScreen() {
   useEffect(() => {
     let cancelled = false;
     const load = async () => {
+      if (openStartedAtRef.current === null) {
+        openStartedAtRef.current = Date.now();
+      }
       if (!recipeId) {
         setScreenError('Recette introuvable');
         setIsScreenLoading(false);
@@ -114,7 +184,13 @@ export default function RecipeDetailScreen() {
       setIsScreenLoading(true);
       setScreenError(null);
       try {
+        const fetchStartedAt = Date.now();
         const recipe = await fetchRecipeById(recipeId);
+        logger.debug('[RECIPES_DETAIL_PERF] fetchRecipeById finished', {
+          recipeId,
+          durationMs: Date.now() - fetchStartedAt,
+          found: !!recipe,
+        });
         if (cancelled) return;
         if (!recipe) {
           setBaseRecipe(null);
@@ -136,6 +212,18 @@ export default function RecipeDetailScreen() {
       cancelled = true;
     };
   }, [fetchRecipeById, recipeId]);
+
+  useEffect(() => {
+    if (openLoggedRef.current || isScreenLoading || !baseRecipe || openStartedAtRef.current === null) return;
+    openLoggedRef.current = true;
+    logger.info('[RECIPES_DETAIL_PERF] open completed', {
+      recipeId,
+      totalOpenMs: Date.now() - openStartedAtRef.current,
+      renderCount: renderCountRef.current,
+      usedLocalStockItemsCount: items.length,
+      lastStockFetchAt,
+    });
+  }, [baseRecipe, isScreenLoading, items.length, lastStockFetchAt, recipeId]);
 
   const handleValidateRecipe = async () => {
     if (isValidating || !baseRecipe) return;
