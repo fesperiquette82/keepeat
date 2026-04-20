@@ -8,6 +8,7 @@ import {
   buildRecipeAssociationsSnapshot,
   type StockMutationRefreshSource,
 } from '../utils/recipeAssociations';
+import { resolveRecipeDetailLoadPolicy } from '../utils/recipeDetailLoadPolicy';
 import type { DashboardStockItem } from '../data/mockDashboardData';
 import type { RecipeCandidate } from '../utils/stockItemRecipes';
 
@@ -44,6 +45,7 @@ interface RecipesStoreState {
   suggestionsByFilter: Record<RecipesFilter, BackendRecipeSuggestion[]>;
   suggestLaterByFilter: Record<RecipesFilter, boolean>;
   associationsByStockItemId: Record<string, RecipeCandidate[]>;
+  recipesById: Record<string, BackendRecipeSuggestion>;
   isLoading: boolean;
   error: string | null;
   fetchSuggestions: (filter: RecipesFilter) => Promise<BackendRecipeSuggestion[]>;
@@ -63,6 +65,8 @@ const FILTER_TO_API: Record<RecipesFilter, string> = {
   expiryMonth: 'expiryMonth',
   stock: 'stock',
 };
+
+const inFlightRecipeDetailRequests: Record<string, Promise<BackendRecipeSuggestion | null>> = {};
 
 function authHeaders() {
   const token = useAuthStore.getState().token;
@@ -144,6 +148,7 @@ export const useRecipesStore = create<RecipesStoreState>((set, get) => ({
     expiryMonth: false,
   },
   associationsByStockItemId: {},
+  recipesById: {},
   isLoading: false,
   error: null,
   fetchSuggestions: async (filter) => {
@@ -159,10 +164,15 @@ export const useRecipesStore = create<RecipesStoreState>((set, get) => ({
           ? response.data.recipes
           : [];
       const suggestLater = response.data?.meta?.suggest_later === true;
-      const sanitized = payload.map((item: unknown, index: number) => sanitizeRecipe(item, index));
+      const sanitized: BackendRecipeSuggestion[] = payload.map((item: unknown, index: number) => sanitizeRecipe(item, index));
+      const recipesByIdFromBatch: Record<string, BackendRecipeSuggestion> = sanitized.reduce((acc, recipe) => {
+        acc[recipe.id] = recipe;
+        return acc;
+      }, {} as Record<string, BackendRecipeSuggestion>);
       set((state) => ({
         suggestionsByFilter: { ...state.suggestionsByFilter, [filter]: sanitized },
         suggestLaterByFilter: { ...state.suggestLaterByFilter, [filter]: suggestLater },
+        recipesById: { ...state.recipesById, ...recipesByIdFromBatch },
       }));
       return sanitized;
     } catch (error: any) {
@@ -203,17 +213,58 @@ export const useRecipesStore = create<RecipesStoreState>((set, get) => ({
   },
   fetchRecipeById: async (id) => {
     const cached = get().getRecipeById(id);
-    if (cached) return cached;
+    const decision = resolveRecipeDetailLoadPolicy({
+      hasRecipeInCache: !!cached,
+      hasInFlightRequest: !!inFlightRecipeDetailRequests[id],
+    });
 
-    const filtersToScan: RecipesFilter[] = ['expiryDay', 'expiryWeek', 'expiryMonth', 'stock'];
-    for (const filter of filtersToScan) {
-      const recipes = await get().fetchSuggestions(filter);
-      const found = recipes.find((recipe) => recipe.id === id);
-      if (found) return found;
+    if (decision.useCacheFirst && cached) {
+      logger.debug('[RECIPES_DETAIL_PERF] recipe resolved from local cache', { recipeId: id });
+      return cached;
     }
+
+    if (decision.shouldAwaitInFlight) {
+      logger.debug('[RECIPES_DETAIL_PERF] awaiting in-flight recipe detail request', { recipeId: id });
+      return inFlightRecipeDetailRequests[id];
+    }
+
+    logger.debug('[RECIPES_DETAIL_PERF] recipe missing in cache, requesting backend by id', { recipeId: id });
+    inFlightRecipeDetailRequests[id] = (async () => {
+      try {
+        const response = await axios.get(buildApiUrl(`/api/recipes/${encodeURIComponent(id)}`), {
+          headers: authHeaders(),
+        });
+        const recipe = sanitizeRecipe(response.data, 0);
+        set((state) => ({
+          recipesById: { ...state.recipesById, [recipe.id]: recipe },
+          suggestionsByFilter: {
+            ...state.suggestionsByFilter,
+            stock: [recipe, ...state.suggestionsByFilter.stock.filter((item) => item.id !== recipe.id)],
+          },
+        }));
+        logger.debug('[RECIPES_DETAIL_PERF] recipe fetched by id and cached', { recipeId: recipe.id });
+        return recipe;
+      } catch (error: any) {
+        logger.warn('[RECIPES_DETAIL_PERF] recipe by id request failed', {
+          recipeId: id,
+          message: error?.message ?? String(error),
+        });
+        return null;
+      } finally {
+        delete inFlightRecipeDetailRequests[id];
+      }
+    })();
+
+    const fetched = await inFlightRecipeDetailRequests[id];
+    if (fetched) return fetched;
+
+    const fallbackCached = get().recipesById[id] ?? null;
+    if (fallbackCached) return fallbackCached;
     return null;
   },
   getRecipeById: (id) => {
+    const byId = get().recipesById[id];
+    if (byId) return byId;
     for (const recipeList of Object.values(get().suggestionsByFilter)) {
       const found = recipeList.find((recipe) => recipe.id === id);
       if (found) return found;
