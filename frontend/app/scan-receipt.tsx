@@ -206,7 +206,7 @@ export default function ScanReceiptScreen() {
             food_category: p.food_category,
             expiry_date:   computeReceiptItemExpiry(p, storageZone),
             storageZone:   storageZone === 'fridge' ? 'frigo' : storageZone === 'freezer' ? 'congelateur' : 'placard',
-          }),
+          }, { source: 'receipt_ocr' }),
         ),
       );
       await fetchHistory();

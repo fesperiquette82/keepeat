@@ -13,6 +13,8 @@ import { logger } from '../utils/logger';
 import { extractPremiumErrorDetail } from '../utils/premiumErrors';
 import { resolveStockItemImageUrlWithFallback } from '../utils/stockItemImage';
 import { usePremiumUiStore } from './premiumUiStore';
+import { useRecipesStore } from './recipesStore';
+import type { DashboardStockItem } from '../data/mockDashboardData';
 import type { AxiosError, AxiosRequestConfig } from 'axios';
 
 const authHeaders = () => {
@@ -142,7 +144,10 @@ interface StockStore {
   markThrown: (itemId: string) => Promise<void>;
   restoreItem: (itemId: string) => Promise<boolean>;
   lookupProduct: (barcode: string) => Promise<any>;
-  addItem: (item: Partial<StockItem>) => Promise<StockItem | null>;
+  addItem: (
+    item: Partial<StockItem>,
+    options?: { source?: 'manual' | 'barcode' | 'receipt_ocr' | 'import' },
+  ) => Promise<StockItem | null>;
   updateItem: (itemId: string, updates: Partial<StockItem>) => Promise<StockItem | null>;
   setOnline: (online: boolean) => void;
   flushPendingMutations: () => Promise<void>;
@@ -254,6 +259,10 @@ export const useStockStore = create<StockStore>()(
             ? res.data.map((item) => normalizeStockItemImage(item as StockItem))
             : [];
           set({ items });
+          await useRecipesStore.getState().refreshRecipeAssociationsForStockMutation({
+            source: 'stock.fetch',
+            stockItems: items as DashboardStockItem[],
+          });
           rescheduleAllNotifications(items);
         } catch (err: any) {
           if (handlePremiumOrQuotaError(err)) {
@@ -383,6 +392,10 @@ export const useStockStore = create<StockStore>()(
             consumed_this_week: state.stats.consumed_this_week + 1,
           },
         }));
+        await useRecipesStore.getState().refreshRecipeAssociationsForStockMutation({
+          source: 'stock.consume',
+          stockItems: get().items as DashboardStockItem[],
+        });
         cancelExpiryNotification(itemId);
 
         if (!isOnline) {
@@ -410,6 +423,10 @@ export const useStockStore = create<StockStore>()(
           } else {
             // Rollback sur erreur API
             set({ items, priorityItems, stats, error: err.message });
+            await useRecipesStore.getState().refreshRecipeAssociationsForStockMutation({
+              source: 'stock.consume',
+              stockItems: items as DashboardStockItem[],
+            });
             scheduleExpiryNotification(items.find(i => i.id === itemId)!);
           }
         }
@@ -431,6 +448,10 @@ export const useStockStore = create<StockStore>()(
             thrown_this_week: state.stats.thrown_this_week + 1,
           },
         }));
+        await useRecipesStore.getState().refreshRecipeAssociationsForStockMutation({
+          source: 'stock.throw',
+          stockItems: get().items as DashboardStockItem[],
+        });
         cancelExpiryNotification(itemId);
 
         if (!isOnline) {
@@ -457,6 +478,10 @@ export const useStockStore = create<StockStore>()(
             }));
           } else {
             set({ items, priorityItems, stats, error: err.message });
+            await useRecipesStore.getState().refreshRecipeAssociationsForStockMutation({
+              source: 'stock.throw',
+              stockItems: items as DashboardStockItem[],
+            });
             scheduleExpiryNotification(items.find(i => i.id === itemId)!);
           }
         }
@@ -487,8 +512,16 @@ export const useStockStore = create<StockStore>()(
         }
       },
 
-      addItem: async (item) => {
+      addItem: async (item, options) => {
         const { isOnline } = get();
+        const source = options?.source ?? 'manual';
+        const refreshSource = source === 'barcode'
+          ? 'stock.add.barcode'
+          : source === 'receipt_ocr'
+            ? 'stock.add.receipt_ocr'
+            : source === 'import'
+              ? 'stock.add.import'
+              : 'stock.add.manual';
 
         if (!isOnline) {
           const tempId = `temp_${uuid()}`;
@@ -513,6 +546,10 @@ export const useStockStore = create<StockStore>()(
               { id: uuid(), type: 'ADD', payload: item, tempId, timestamp: Date.now() },
             ],
           }));
+          await useRecipesStore.getState().refreshRecipeAssociationsForStockMutation({
+            source: refreshSource,
+            stockItems: get().items as DashboardStockItem[],
+          });
           scheduleExpiryNotification(tempItem);
           return tempItem;
         }
@@ -549,6 +586,10 @@ export const useStockStore = create<StockStore>()(
                 { id: uuid(), type: 'ADD', payload: item, tempId, timestamp: Date.now() },
               ],
             }));
+            await useRecipesStore.getState().refreshRecipeAssociationsForStockMutation({
+              source: refreshSource,
+              stockItems: get().items as DashboardStockItem[],
+            });
             scheduleExpiryNotification(tempItem);
             return tempItem;
           }
@@ -569,6 +610,10 @@ export const useStockStore = create<StockStore>()(
               { id: uuid(), type: 'UPDATE', payload: { itemId, updates }, timestamp: Date.now() },
             ],
           }));
+          await useRecipesStore.getState().refreshRecipeAssociationsForStockMutation({
+            source: 'stock.update',
+            stockItems: get().items as DashboardStockItem[],
+          });
           const updated = get().items.find(i => i.id === itemId);
           if (updated) {
             cancelExpiryNotification(itemId);
