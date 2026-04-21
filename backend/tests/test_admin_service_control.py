@@ -1,14 +1,19 @@
-"""Tests de non-régression — admin_service_control.
+"""Tests de non-régression — admin_service_control + endpoint reset logs API.
 
 Couvre les changements de migration OpenAI → Gemini :
 - ocr_engine utilise désormais GEMINI_OCR_API_KEY (plus KEEPEAT_OPENAI_TOKEN)
 - gemini_recipes est un nouveau service tracké (GEMINI_RECIPES_API_KEY)
 - build_cost_recommendations retourne "Gemini 2.5-flash (Free)" comme plan OCR par défaut
+
+Couvre également le nouvel endpoint DELETE /admin/monitoring/logs/api-requests.
 """
 import asyncio
+import importlib
+import json
 import sys
 from pathlib import Path
-from unittest.mock import AsyncMock
+from unittest.mock import AsyncMock, MagicMock
+from fastapi.testclient import TestClient
 
 BACKEND_DIR = Path(__file__).resolve().parents[1]
 if str(BACKEND_DIR) not in sys.path:
@@ -100,3 +105,71 @@ class TestBuildCostRecommendations:
         result = asyncio.run(build_cost_recommendations(usage_payload=usage))
         ocr_cost = next(c for c in result["costs"] if c["service_id"] == "ocr_engine")
         assert ocr_cost["current_plan"] == "My Custom Plan"
+
+
+# ---------------------------------------------------------------------------
+# DELETE /admin/monitoring/logs/api-requests — endpoint reset logs
+# ---------------------------------------------------------------------------
+
+def _load_server(monkeypatch):
+    monkeypatch.setenv("MONGO_URL", "mongodb://localhost:27017/keepeat-test")
+    monkeypatch.setenv("JWT_SECRET_KEY", "test-secret")
+    for mod in ("server", "models"):
+        sys.modules.pop(mod, None)
+    return importlib.import_module("server")
+
+
+class TestAdminResetApiLogsEndpoint:
+    def test_correct_password_deletes_logs(self, monkeypatch):
+        server = _load_server(monkeypatch)
+        from auth_utils import hash_password
+
+        hashed = hash_password("goodpassword")
+        server.users_col.find_one = AsyncMock(return_value={"hashed_password": hashed})
+        delete_result = MagicMock()
+        delete_result.deleted_count = 42
+        server.api_request_logs_col.delete_many = AsyncMock(return_value=delete_result)
+        server.app.dependency_overrides[server._require_admin_user] = lambda: {
+            "id": "507f1f77bcf86cd799439011", "email": "admin@test.com", "is_admin": True
+        }
+
+        client = TestClient(server.app)
+        resp = client.request(
+            "DELETE",
+            "/api/admin/monitoring/logs/api-requests",
+            json={"confirm_password": "goodpassword"},
+        )
+        assert resp.status_code == 200
+        assert resp.json()["deleted_count"] == 42
+        server.api_request_logs_col.delete_many.assert_awaited_once()
+        server.app.dependency_overrides.clear()
+
+    def test_wrong_password_returns_403(self, monkeypatch):
+        server = _load_server(monkeypatch)
+        from auth_utils import hash_password
+
+        hashed = hash_password("goodpassword")
+        server.users_col.find_one = AsyncMock(return_value={"hashed_password": hashed})
+        server.app.dependency_overrides[server._require_admin_user] = lambda: {
+            "id": "507f1f77bcf86cd799439011", "email": "admin@test.com", "is_admin": True
+        }
+
+        client = TestClient(server.app)
+        resp = client.request(
+            "DELETE",
+            "/api/admin/monitoring/logs/api-requests",
+            json={"confirm_password": "wrongpassword"},
+        )
+        assert resp.status_code == 403
+        assert "mot de passe" in resp.json()["detail"].lower()
+        server.app.dependency_overrides.clear()
+
+    def test_unauthenticated_returns_4xx(self, monkeypatch):
+        server = _load_server(monkeypatch)
+        client = TestClient(server.app)
+        resp = client.request(
+            "DELETE",
+            "/api/admin/monitoring/logs/api-requests",
+            json={"confirm_password": "any"},
+        )
+        assert resp.status_code in (401, 403)

@@ -4463,6 +4463,26 @@ async def admin_monitoring_costs(
     return await build_cost_recommendations(usage_payload=usage_payload)
 
 
+class _ResetLogsBody(BaseModel):
+    confirm_password: str
+
+
+@api_router.delete("/admin/monitoring/logs/api-requests", status_code=200)
+async def admin_reset_api_logs(
+    body: _ResetLogsBody,
+    admin_user: Dict[str, Any] = Depends(_require_admin_user),
+):
+    """Vide la collection api_request_logs après vérification du mot de passe admin."""
+    user_doc = await users_col.find_one(
+        {"_id": ObjectId(admin_user["id"])}, {"hashed_password": 1}
+    )
+    if not user_doc or not verify_password(body.confirm_password, user_doc["hashed_password"]):
+        raise HTTPException(status_code=403, detail="Mot de passe incorrect")
+    result = await api_request_logs_col.delete_many({})
+    logger.info("ADMIN_RESET_API_LOGS deleted=%d user=%s", result.deleted_count, admin_user.get("id"))
+    return {"deleted_count": result.deleted_count, "message": "Logs API réinitialisés."}
+
+
 @api_router.get("/admin/monitoring/events")
 async def admin_monitoring_events(
     start_date: str | None = Query(None),
@@ -5586,6 +5606,17 @@ _ADMIN_DASHBOARD_HTML = """<!DOCTYPE html>
   .severity-badge.ok{background:#dcfce7;color:#166534}
   .severity-badge.degraded{background:#fef3c7;color:#92400e}
   .severity-badge.critical{background:#fee2e2;color:#991b1b}
+  .danger-card{background:#fff5f5;border:1.5px solid #fca5a5;border-radius:14px;padding:18px 22px;margin-top:24px}
+  .danger-card .card-title{color:#991b1b}
+  .btn-danger{background:#dc2626;color:#fff;border:none;border-radius:8px;padding:9px 18px;font-size:13px;font-weight:600;cursor:pointer}
+  .btn-danger:hover{background:#b91c1c}
+  #reset-modal{display:none;position:fixed;inset:0;background:rgba(0,0,0,.45);z-index:9999;align-items:center;justify-content:center}
+  #reset-modal.open{display:flex}
+  .reset-modal-box{background:#fff;border-radius:14px;padding:28px 32px;min-width:340px;max-width:460px;box-shadow:0 8px 32px rgba(0,0,0,.18)}
+  .reset-modal-box h3{margin:0 0 10px;color:#991b1b;font-size:16px}
+  .reset-modal-box p{font-size:13px;color:#374151;margin:0 0 16px}
+  .reset-modal-box input{width:100%;box-sizing:border-box;padding:9px 12px;border:1px solid #d1d5db;border-radius:8px;font-size:14px;margin-bottom:16px}
+  .reset-modal-actions{display:flex;gap:10px;justify-content:flex-end}
 </style>
 </head>
 <body>
@@ -5702,7 +5733,29 @@ _ADMIN_DASHBOARD_HTML = """<!DOCTYPE html>
       </div>
     </div>
 
+    <!-- Zone Danger -->
+    <div class="danger-card">
+      <div class="card-title">⚠️ Zone Danger</div>
+      <p style="font-size:13px;color:#6b7280;margin:0 0 12px">Ces actions sont irréversibles. Une confirmation de mot de passe est requise.</p>
+      <button class="btn-danger" onclick="openResetModal()">🗑 Réinitialiser les logs API</button>
+      <div id="reset-result" style="margin-top:10px;font-size:13px"></div>
+    </div>
+
     <div class="refresh-note" id="last-updated"></div>
+  </div>
+</div>
+
+<!-- RESET LOGS MODAL -->
+<div id="reset-modal">
+  <div class="reset-modal-box">
+    <h3>⚠️ Confirmer la réinitialisation</h3>
+    <p>Cette action supprimera <strong>tous les logs API</strong> de la base de données. Elle est irréversible. Entrez votre mot de passe pour confirmer.</p>
+    <input type="password" id="reset-confirm-pwd" placeholder="Votre mot de passe admin" />
+    <div class="reset-modal-actions">
+      <button onclick="closeResetModal()" style="background:#f3f4f6;border:none;border-radius:8px;padding:9px 18px;font-size:13px;cursor:pointer">Annuler</button>
+      <button class="btn-danger" onclick="doResetApiLogs()" id="btn-confirm-reset">Confirmer</button>
+    </div>
+    <div id="reset-modal-error" style="color:#dc2626;font-size:12px;margin-top:8px"></div>
   </div>
 </div>
 
@@ -6212,6 +6265,47 @@ function renderExternalServiceQuotas(payload) {
 }
 
 document.getElementById('password').addEventListener('keydown', e => { if (e.key==='Enter') doLogin(); });
+
+function openResetModal() {
+  document.getElementById('reset-confirm-pwd').value = '';
+  document.getElementById('reset-modal-error').textContent = '';
+  document.getElementById('reset-result').innerHTML = '';
+  document.getElementById('reset-modal').classList.add('open');
+  document.getElementById('reset-confirm-pwd').focus();
+}
+
+function closeResetModal() {
+  document.getElementById('reset-modal').classList.remove('open');
+}
+
+async function doResetApiLogs() {
+  const pwd = document.getElementById('reset-confirm-pwd').value;
+  const errEl = document.getElementById('reset-modal-error');
+  const btn = document.getElementById('btn-confirm-reset');
+  if (!pwd) { errEl.textContent = 'Mot de passe requis.'; return; }
+  btn.disabled = true;
+  btn.textContent = 'Suppression...';
+  errEl.textContent = '';
+  try {
+    const r = await fetch('/api/admin/monitoring/logs/api-requests', {
+      method: 'DELETE',
+      headers: {'Authorization': 'Bearer ' + token, 'Content-Type': 'application/json'},
+      body: JSON.stringify({confirm_password: pwd}),
+    });
+    const data = await r.json();
+    if (!r.ok) { errEl.textContent = data.detail || 'Erreur ' + r.status; return; }
+    closeResetModal();
+    document.getElementById('reset-result').innerHTML = '<span style="color:#16a34a">\u2713 ' + (data.deleted_count || 0) + ' logs supprim\u00e9s.</span>';
+    loadAll();
+  } catch(e) {
+    errEl.textContent = 'Erreur r\u00e9seau\u00a0: ' + e.message;
+  } finally {
+    btn.disabled = false;
+    btn.textContent = 'Confirmer';
+  }
+}
+
+document.getElementById('reset-confirm-pwd').addEventListener('keydown', e => { if (e.key === 'Enter') doResetApiLogs(); });
 </script>
 </body>
 </html>"""
