@@ -13,7 +13,7 @@ sys.path.insert(0, str(Path(__file__).resolve().parents[1] / "backend"))
 import server
 from fastapi import HTTPException
 
-from server import get_ai_recipes, get_monthly_stats, get_predictions, ocr_receipt_route
+from server import OcrReceiptRequest, get_ai_recipes, get_monthly_stats, get_predictions, ocr_receipt_route
 
 
 class _FakeAppStateCol:
@@ -85,16 +85,16 @@ class PremiumGuardsV1Tests(unittest.TestCase):
         fake_state = _FakeAppStateCol()
 
         async def _run():
-            async def _fake_ocr(request, current_user):
-                _ = (request, current_user)
+            async def _fake_ocr(*_args, **_kwargs):
                 return []
 
+            payload = OcrReceiptRequest(image="data:image/jpeg;base64,AAA=")
             with patch("server.app_state_col", fake_state), patch("server.ocr_receipt", side_effect=_fake_ocr):
-                await ocr_receipt_route(request=None, current_user={"id": "u1", "is_premium": False})
+                await ocr_receipt_route(payload=payload, current_user={"id": "u1", "is_premium": False})
                 with self.assertRaises(HTTPException) as cm:
                     # quota free OCR = 10 ; on force rapidement en bouclant
                     for _ in range(11):
-                        await ocr_receipt_route(request=None, current_user={"id": "u1", "is_premium": False})
+                        await ocr_receipt_route(payload=payload, current_user={"id": "u1", "is_premium": False})
                 self.assertEqual(cm.exception.status_code, 429)
                 self.assertEqual(cm.exception.detail.get("code"), "QUOTA_EXCEEDED")
 
