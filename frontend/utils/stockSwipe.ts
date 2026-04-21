@@ -10,7 +10,11 @@ export interface StockRemovalBannerState {
 }
 
 export function resolveSwipeAction(direction: SwipeDirection): StockRemovalAction {
-  return direction === 'right' ? 'used' : 'thrown';
+  return direction === 'left' ? 'used' : 'thrown';
+}
+
+export function resolveSwipeActionFromOpenSide(side: SwipeDirection): StockRemovalAction {
+  return side === 'left' ? 'used' : 'thrown';
 }
 
 export function resolveStockRemovalBanner(action: StockRemovalAction, result: StockRemovalResult): StockRemovalBannerState {

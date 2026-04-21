@@ -1,7 +1,7 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import type { StockItem } from '../store/stockStore';
-import { resolveStockRemovalBanner, resolveSwipeAction } from './stockSwipe';
+import { resolveStockRemovalBanner, resolveSwipeAction, resolveSwipeActionFromOpenSide } from './stockSwipe';
 
 const removedItem: StockItem = {
   id: '1',
@@ -12,12 +12,20 @@ const removedItem: StockItem = {
   status: 'active',
 };
 
-test('resolveSwipeAction mappe correctement le swipe gauche vers thrown', () => {
-  assert.equal(resolveSwipeAction('left'), 'thrown');
+test('resolveSwipeAction mappe correctement la direction de swipe gauche vers used', () => {
+  assert.equal(resolveSwipeAction('left'), 'used');
 });
 
-test('resolveSwipeAction mappe correctement le swipe droit vers used', () => {
-  assert.equal(resolveSwipeAction('right'), 'used');
+test('resolveSwipeAction mappe correctement la direction de swipe droite vers thrown', () => {
+  assert.equal(resolveSwipeAction('right'), 'thrown');
+});
+
+test('resolveSwipeActionFromOpenSide mappe correctement l\'ouverture gauche vers used', () => {
+  assert.equal(resolveSwipeActionFromOpenSide('left'), 'used');
+});
+
+test('resolveSwipeActionFromOpenSide mappe correctement l\'ouverture droite vers thrown', () => {
+  assert.equal(resolveSwipeActionFromOpenSide('right'), 'thrown');
 });
 
 test('resolveStockRemovalBanner garde l\'annulation quand la suppression a réussi', () => {
