@@ -9,6 +9,7 @@
     "android": "expo start --android",
     "ios": "expo start --ios",
     "web": "expo start --web",
+    "validate:deploy-meta": "python ../backend/scripts/validate_frontend_deploy_metadata.py",
     "lint": "expo lint",
     "test": "npm run test:ci",
     "test:ci": "rm -rf .test-dist && tsc -p tsconfig.test.json && node --test .test-dist/**/*.test.js"

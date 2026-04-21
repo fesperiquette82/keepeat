@@ -418,6 +418,11 @@ def _set_frontend_env(monkeypatch, values: dict[str, str | None]):
         "FRONTEND_DEPLOYED_SERVICE_ID",
         "FRONTEND_RENDER_SERVICE_ID",
         "RENDER_API_KEY",
+        "RENDER_GIT_COMMIT",
+        "RENDER_DEPLOY_ID",
+        "RENDER_DEPLOY_CREATED_AT",
+        "RENDER_DEPLOY_FINISHED_AT",
+        "RENDER_SERVICE_ID",
         "FRONTEND_PUBLIC_URL",
         "FRONTEND_BUILD_INFO_URL",
         "FRONTEND_URL",
@@ -579,7 +584,7 @@ def test_dashboard_frontend_deployment_prefers_build_metadata_for_current(monkey
         },
     )
 
-    async def _fake_fetch_frontend_build_info():
+    async def _fake_fetch_frontend_build_info(*_args, **_kwargs):
         return {
             "commit": "from-build-meta",
             "build_time": "2026-04-19T10:00:00Z",
@@ -611,7 +616,7 @@ def test_dashboard_frontend_deployment_build_metadata_missing_fallback_non_block
         },
     )
 
-    async def _fake_fetch_frontend_build_info():
+    async def _fake_fetch_frontend_build_info(*_args, **_kwargs):
         return None
 
     monkeypatch.setattr(server, "_fetch_frontend_build_info", _fake_fetch_frontend_build_info)
@@ -625,6 +630,96 @@ def test_dashboard_frontend_deployment_build_metadata_missing_fallback_non_block
     assert meta["status"] == "up_to_date"
     assert meta["current"]["commit"] == "env-commit"
     assert meta["current"]["source"] == "env:FRONTEND_DEPLOYED_*|EXPO_PUBLIC_*"
+
+
+def test_dashboard_frontend_deployment_populates_current_from_render_api_when_frontend_env_missing(monkeypatch):
+    _patch_dashboard_sources(monkeypatch)
+    _set_frontend_env(
+        monkeypatch,
+        {
+            "RENDER_API_KEY": "render-token",
+            "FRONTEND_RENDER_SERVICE_ID": "srv-frontend",
+        },
+    )
+
+    async def _fake_fetch_render_latest_deploy(service_id: str, api_key: str):
+        assert service_id == "srv-frontend"
+        assert api_key == "render-token"
+        return {
+            "deploy_id": "dep-latest",
+            "commit": "render-commit",
+            "build_time": "2026-04-20T08:30:00Z",
+            "status": "live",
+            "created_at": "2026-04-20T08:25:00Z",
+            "updated_at": "2026-04-20T08:30:00Z",
+            "finished_at": "2026-04-20T08:30:00Z",
+        }
+
+    monkeypatch.setattr(server, "_fetch_render_latest_deploy", _fake_fetch_render_latest_deploy)
+    _with_admin_override()
+
+    response = asyncio.run(_request("/api/admin/monitoring/dashboard?days=7"))
+
+    server.app.dependency_overrides = {}
+    assert response.status_code == 200
+    meta = response.json()["frontend_deployment"]
+    assert meta["status"] == "up_to_date"
+    assert meta["source"] == "Render API"
+    assert meta["current"]["commit"] == "render-commit"
+    assert meta["current"]["source"] == "render_api"
+    assert meta["current"]["deploy_id"] == "dep-latest"
+    assert meta["current"]["build_time"] == "2026-04-20T08:30:00Z"
+    assert meta["current"]["service_id"] == "srv-frontend"
+    assert meta["expected"]["commit"] == "render-commit"
+    assert meta["expected"]["deploy_id"] == "dep-latest"
+    assert meta["expected"]["build_time"] == "2026-04-20T08:30:00Z"
+    assert meta["expected"]["source"] == "render_api"
+
+
+def test_fetch_frontend_build_info_uses_render_service_url_when_public_url_missing(monkeypatch):
+    monkeypatch.setattr(server, "_resolve_frontend_build_info_url", lambda: "")
+
+    async def _fake_fetch_render_service_public_url(service_id: str, api_key: str):
+        assert service_id == "srv-frontend"
+        assert api_key == "render-token"
+        return "https://frontend.example.com"
+
+    monkeypatch.setattr(server, "_fetch_render_service_public_url", _fake_fetch_render_service_public_url)
+
+    class _FakeResponse:
+        def raise_for_status(self):
+            return None
+
+        def json(self):
+            return {
+                "commit": "abc1234",
+                "build_time": "2026-04-21T09:00:00Z",
+                "version": "1.8.0",
+            }
+
+    class _FakeAsyncClient:
+        def __init__(self, *args, **kwargs):
+            _ = args, kwargs
+
+        async def __aenter__(self):
+            return self
+
+        async def __aexit__(self, exc_type, exc, tb):
+            _ = exc_type, exc, tb
+
+        async def get(self, url, headers=None):
+            assert url == "https://frontend.example.com/build-info.json"
+            assert headers == {"Accept": "application/json"}
+            return _FakeResponse()
+
+    monkeypatch.setattr(server.httpx, "AsyncClient", _FakeAsyncClient)
+    info = asyncio.run(server._fetch_frontend_build_info(render_service_id="srv-frontend", render_api_key="render-token"))
+
+    assert info == {
+        "commit": "abc1234",
+        "build_time": "2026-04-21T09:00:00Z",
+        "version": "1.8.0",
+    }
 
 
 def test_dashboard_frontend_deployment_mismatch_with_render_api(monkeypatch):

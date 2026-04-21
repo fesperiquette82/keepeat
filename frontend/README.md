@@ -49,6 +49,19 @@ Join our community of developers creating universal apps.
 - [Expo on GitHub](https://github.com/expo/expo): View our open source platform and contribute.
 - [Discord community](https://chat.expo.dev): Chat with Expo users and ask questions.
 
+## Validation auto métadonnées de déploiement frontend
+
+Pour vérifier automatiquement que les métadonnées utiles au dashboard admin sont bien disponibles :
+
+```bash
+cd frontend
+npm run validate:deploy-meta
+```
+
+Variables d'environnement utilisées par le script:
+- `FRONTEND_BUILD_INFO_URL` (prioritaire), sinon `FRONTEND_PUBLIC_URL` / `FRONTEND_URL`
+- `BACKEND_URL` + `ADMIN_BEARER_TOKEN` (optionnel, active la vérification dashboard)
+
 ## Mesurer la taille Android de façon représentative (release)
 
 Pour éviter de confondre un export JS/assets avec la taille Play finale:
