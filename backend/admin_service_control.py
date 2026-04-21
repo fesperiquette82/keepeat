@@ -38,11 +38,19 @@ SERVICE_REGISTRY: list[dict[str, Any]] = [
     },
     {
         "id": "ocr_engine",
-        "name": "OCR engine (OpenAI Vision)",
+        "name": "OCR engine (Gemini Vision)",
         "type": "external",
         "category": "ocr",
         "verification_source": "env_based+usage_counter",
-        "enabled_env": "KEEPEAT_OPENAI_TOKEN",
+        "enabled_env": "GEMINI_OCR_API_KEY",
+    },
+    {
+        "id": "gemini_recipes",
+        "name": "Gemini Recipes AI",
+        "type": "external",
+        "category": "ai",
+        "verification_source": "env_based",
+        "enabled_env": "GEMINI_RECIPES_API_KEY",
     },
     {
         "id": "frontend_backend_connectivity",
@@ -158,7 +166,12 @@ async def build_services_status(*, db, api_request_logs_col) -> dict[str, Any]:
 
         elif service["id"] == "ocr_engine":
             status = "connected"
-            message = "OCR provider token configured"
+            message = "Gemini OCR API key configured"
+            latency_ms = None
+
+        elif service["id"] == "gemini_recipes":
+            status = "connected"
+            message = "Gemini Recipes API key configured"
             latency_ms = None
 
         elif service["id"] == "frontend_backend_connectivity":
@@ -320,7 +333,7 @@ async def build_cost_recommendations(*, usage_payload: dict[str, Any]) -> dict[s
     mongo_next_plan = os.getenv("MONITORING_MONGO_NEXT_PLAN", "MongoDB Atlas M10")
     mongo_next_cost = float(os.getenv("MONITORING_MONGO_NEXT_PLAN_COST", "57"))
 
-    ocr_plan = os.getenv("MONITORING_OCR_CURRENT_PLAN", "Pay-as-you-go OpenAI")
+    ocr_plan = os.getenv("MONITORING_OCR_CURRENT_PLAN", "Gemini 2.5-flash (Free)")
     ocr_unit_cost = float(os.getenv("OCR_ESTIMATED_COST_EUR", "0.01"))
 
     projected_ocr = float(usage_by_service.get("ocr_engine", {}).get("projected_month_end_usage") or 0.0)
