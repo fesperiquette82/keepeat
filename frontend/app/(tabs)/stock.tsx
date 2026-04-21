@@ -13,7 +13,7 @@ import { removeStockItems, undoRemovedStockItems } from '../../utils/stockRemova
 import { countLabelFr } from '../../utils/uiText';
 import { storageZoneLabel, UI_LABELS } from '../../utils/uiLabels';
 import { expiryColor } from '../../utils/expiryLabels';
-import { resolveSwipeAction } from '../../utils/stockSwipe';
+import { resolveStockRemovalBanner, resolveSwipeAction } from '../../utils/stockSwipe';
 
 type StockFilter = 'tous' | 'urgents' | 'frigo' | 'placard';
 type StockSort = 'expiry' | 'alpha' | 'recent' | 'oldest';
@@ -121,21 +121,9 @@ export default function StockScreen() {
     setProcessingIds((prev) => ({ ...prev, [itemId]: true }));
     try {
       const result = await removeStockItems([itemId], action);
-      if (result.removedItems.length > 0) {
-        setUndoItems(result.removedItems);
-        setBanner({
-          message: action === 'used' ? 'Article retiré du stock (utilisé).' : 'Article retiré du stock (jeté).',
-          canUndo: true,
-          variant: 'success',
-        });
-      } else {
-        setUndoItems([]);
-        setBanner({
-          message: "Impossible de retirer l'article pour le moment.",
-          canUndo: false,
-          variant: 'error',
-        });
-      }
+      const nextBanner = resolveStockRemovalBanner(action, result);
+      setUndoItems(nextBanner.canUndo ? result.removedItems : []);
+      setBanner(nextBanner);
     } catch {
       Alert.alert('Erreur', "Impossible de mettre à jour l'élément.");
     } finally {
