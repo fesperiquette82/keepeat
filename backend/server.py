@@ -284,6 +284,44 @@ async def _fetch_render_latest_deploy(service_id: str, api_key: str) -> dict[str
     return _pick_latest_successful_render_deploy(deploys)
 
 
+async def _fetch_render_service_public_url(service_id: str, api_key: str) -> str:
+    endpoint = f"https://api.render.com/v1/services/{service_id}"
+    headers = {
+        "Authorization": f"Bearer {api_key}",
+        "Accept": "application/json",
+    }
+    try:
+        timeout = httpx.Timeout(6.0, connect=2.0)
+        async with httpx.AsyncClient(timeout=timeout) as http:
+            response = await http.get(endpoint, headers=headers)
+            response.raise_for_status()
+            payload = response.json()
+    except Exception as exc:
+        logger.warning("frontend_deployment render service url unavailable service=%s (%s)", service_id, exc.__class__.__name__)
+        return ""
+    if not isinstance(payload, dict):
+        return ""
+    candidates = [
+        payload.get("url"),
+        (payload.get("serviceDetails") or {}).get("url") if isinstance(payload.get("serviceDetails"), dict) else None,
+    ]
+    service_obj = payload.get("service")
+    if isinstance(service_obj, dict):
+        candidates.extend(
+            [
+                service_obj.get("url"),
+                (service_obj.get("serviceDetails") or {}).get("url")
+                if isinstance(service_obj.get("serviceDetails"), dict)
+                else None,
+            ]
+        )
+    for candidate in candidates:
+        url = _normalize_build_meta(candidate, default="")
+        if url:
+            return url
+    return ""
+
+
 def _resolve_frontend_build_info_url() -> str:
     explicit_url = _normalize_build_meta(os.getenv("FRONTEND_BUILD_INFO_URL"), default="")
     if explicit_url:
@@ -312,8 +350,12 @@ def _extract_frontend_build_info(payload: Any) -> dict[str, str] | None:
     }
 
 
-async def _fetch_frontend_build_info() -> dict[str, str] | None:
+async def _fetch_frontend_build_info(render_service_id: str = "", render_api_key: str = "") -> dict[str, str] | None:
     build_info_url = _resolve_frontend_build_info_url()
+    if not build_info_url and render_service_id and render_api_key:
+        service_url = await _fetch_render_service_public_url(render_service_id, render_api_key)
+        if service_url:
+            build_info_url = f"{service_url.rstrip('/')}/build-info.json"
     if not build_info_url:
         return None
     try:
@@ -329,7 +371,14 @@ async def _fetch_frontend_build_info() -> dict[str, str] | None:
 
 
 async def _build_frontend_deployment_meta() -> dict[str, Any]:
-    frontend_build_info = await _fetch_frontend_build_info()
+    render_api_key = _normalize_build_meta(os.getenv("RENDER_API_KEY"), default="")
+    render_service_id = _normalize_build_meta(
+        os.getenv("FRONTEND_RENDER_SERVICE_ID")
+        or os.getenv("FRONTEND_DEPLOYED_SERVICE_ID")
+        or os.getenv("RENDER_SERVICE_ID"),
+        default="",
+    )
+    frontend_build_info = await _fetch_frontend_build_info(render_service_id=render_service_id, render_api_key=render_api_key)
     current_commit = _normalize_build_meta(
         (frontend_build_info or {}).get("commit")
         or os.getenv("FRONTEND_DEPLOYED_COMMIT")
@@ -377,14 +426,10 @@ async def _build_frontend_deployment_meta() -> dict[str, Any]:
     expected_deploy_id = fallback_expected_deploy_id
     expected_build_time = fallback_expected_build_time
     expected_deploy_time = _normalize_build_meta("unknown")
+    current_source = "build metadata"
+    if frontend_build_info is None:
+        current_source = "env:FRONTEND_DEPLOYED_*|EXPO_PUBLIC_*"
 
-    render_api_key = _normalize_build_meta(os.getenv("RENDER_API_KEY"), default="")
-    render_service_id = _normalize_build_meta(
-        os.getenv("FRONTEND_RENDER_SERVICE_ID")
-        or os.getenv("FRONTEND_DEPLOYED_SERVICE_ID")
-        or os.getenv("RENDER_SERVICE_ID"),
-        default="",
-    )
     if render_api_key and render_service_id:
         render_deploy = await _fetch_render_latest_deploy(render_service_id, render_api_key)
         if render_deploy and render_deploy.get("commit", "unknown") != "unknown":
@@ -393,6 +438,18 @@ async def _build_frontend_deployment_meta() -> dict[str, Any]:
             expected_build_time = _normalize_build_meta(render_deploy.get("build_time"))
             expected_deploy_time = _normalize_build_meta(render_deploy.get("finished_at") or render_deploy.get("updated_at"))
             expected_source = "render_api"
+            if current_commit == "unknown":
+                current_commit = _normalize_build_meta(render_deploy.get("commit"))
+                current_source = "render_api"
+            if current_deploy_id == "unknown":
+                current_deploy_id = _normalize_build_meta(render_deploy.get("deploy_id"))
+                current_source = "render_api"
+            if current_build_time == "unknown":
+                current_build_time = _normalize_build_meta(render_deploy.get("build_time"))
+                current_source = "render_api"
+            if current_service_id == "unknown":
+                current_service_id = _normalize_build_meta(render_service_id)
+                current_source = "render_api"
         elif render_deploy and render_deploy.get("deploy_id", "unknown") != "unknown":
             expected_deploy_id = _normalize_build_meta(render_deploy.get("deploy_id"))
             expected_build_time = _normalize_build_meta(render_deploy.get("build_time"))
@@ -426,10 +483,6 @@ async def _build_frontend_deployment_meta() -> dict[str, Any]:
         message = "Impossible de déterminer l’état de cohérence — métadonnées insuffisantes."
         if comparison_source == "Render API":
             message = "Render API disponible mais aucune métadonnée frontend exploitable n'a été trouvée."
-
-    current_source = "build metadata"
-    if frontend_build_info is None:
-        current_source = "env:FRONTEND_DEPLOYED_*|EXPO_PUBLIC_*"
 
     return {
         "status": status,
