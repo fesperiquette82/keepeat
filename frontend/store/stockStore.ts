@@ -580,7 +580,7 @@ export const useStockStore = create<StockStore>()(
           const res = await axios.post(buildApiUrl('/api/stock'), item, authRequestConfig());
           const newItem: StockItem = normalizeStockItemImage(res.data as StockItem, item);
           const s = get();
-          await Promise.all([s.fetchStock(), s.fetchPriorityItems(), s.fetchStats()]);
+          await Promise.all([s.fetchStock({ force: true }), s.fetchPriorityItems(), s.fetchStats()]);
           return newItem;
         } catch (err: any) {
           if (isNetworkError(err)) {

@@ -59,3 +59,36 @@ test('force=true bypass le cache même avec store hydraté', () => {
 
   assert.equal(skipped, false);
 });
+
+// Régression : suppression silencieuse des items ajoutés via scan ticket OCR
+//
+// Scénario : l'utilisateur scanne un ticket (items sans barcode). addItem() appelle
+// fetchStock() juste après l'insertion. Si ce fetchStock() n'utilise PAS force:true,
+// shouldSkipStockFetch() retourne true (cache encore frais) → les items OCR ne sont
+// jamais chargés dans state.items → removeStockItems() les marque notFound et ne tente
+// aucun appel HTTP → la suppression échoue silencieusement.
+//
+// Fix : addItem() appelle désormais fetchStock({ force: true }) pour garantir que les
+// items OCR sont dans le store avant que l'utilisateur puisse les supprimer.
+test('régression: ajout OCR (sans barcode) — force:true contourne le cache frais pour rendre l\'item supprimable', () => {
+  const now = 5_000_000;
+  const recentFetch = now - 2_000; // cache frais (2 s), dans le TTL de 30 s
+
+  // Sans force: le fetch est sauté → items OCR absents du store → suppression impossible
+  const skippedSansForce = shouldSkipStockFetch({
+    hasItemsInStore: true,
+    lastFetchAt: recentFetch,
+    now,
+  });
+
+  // Avec force (comportement de addItem après le fix): fetch forcé → items présents → suppression OK
+  const skippedAvecForce = shouldSkipStockFetch({
+    hasItemsInStore: true,
+    lastFetchAt: recentFetch,
+    now,
+    force: true,
+  });
+
+  assert.equal(skippedSansForce, true,  'sans force: le cache bloque le fetch → items OCR absents');
+  assert.equal(skippedAvecForce, false, 'avec force: le cache est bypassé → items OCR chargés');
+});
