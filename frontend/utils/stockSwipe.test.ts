@@ -55,3 +55,23 @@ test('resolveStockRemovalBanner désactive l\'annulation quand la suppression a 
     variant: 'error',
   });
 });
+
+// Régression : race condition fetchStock dans markConsumed/markThrown.
+// Avant le correctif, fetchStock() appelé après chaque consume/throw pouvait
+// recevoir une réponse serveur AVANT que le POST d'un autre item concurrent soit
+// terminé — le store était alors réécrit avec cet item encore actif (stillActive=true),
+// ce qui donnait failedCount>0 et supprimait le bouton "Annuler".
+// Le correctif : fetchStock() n'est plus appelé dans markConsumed/markThrown.
+test('resolveStockRemovalBanner désactive l\'annulation quand failedCount > 0 (race condition)', () => {
+  const banner = resolveStockRemovalBanner('used', {
+    removedItems: [],
+    notFoundCount: 0,
+    failedCount: 1,
+  });
+
+  assert.deepEqual(banner, {
+    message: "Impossible de retirer l'article pour le moment.",
+    canUndo: false,
+    variant: 'error',
+  });
+});

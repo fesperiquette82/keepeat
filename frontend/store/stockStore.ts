@@ -432,8 +432,14 @@ export const useStockStore = create<StockStore>()(
 
         try {
           await axios.post(buildApiUrl(`/api/stock/${itemId}/consume`), {}, authRequestConfig());
+          // Ne PAS appeler fetchStock() ici : cela créerait une race condition.
+          // Si l'utilisateur swipe deux items rapidement, le GET de fetchStock() peut
+          // arriver APRÈS l'update optimiste du 2ème item mais AVANT son POST — le serveur
+          // renvoie alors le 2ème item comme encore actif, écrase l'update optimiste, et
+          // rend stillActive=true → failedCount++, pas de bouton Annuler.
+          // L'update optimiste (set ci-dessus) est suffisant : l'item est déjà retiré du store.
           const s = get();
-          await Promise.all([s.fetchStock(), s.fetchPriorityItems(), s.fetchStats()]);
+          await Promise.all([s.fetchPriorityItems(), s.fetchStats()]);
         } catch (err: any) {
           if (isNetworkError(err)) {
             set(state => ({
@@ -488,8 +494,10 @@ export const useStockStore = create<StockStore>()(
 
         try {
           await axios.post(buildApiUrl(`/api/stock/${itemId}/throw`), {}, authRequestConfig());
+          // Même raison que markConsumed : ne pas appeler fetchStock() pour éviter la race
+          // condition qui restaure l'update optimiste d'un autre item supprimé en parallèle.
           const s = get();
-          await Promise.all([s.fetchStock(), s.fetchPriorityItems(), s.fetchStats()]);
+          await Promise.all([s.fetchPriorityItems(), s.fetchStats()]);
         } catch (err: any) {
           if (isNetworkError(err)) {
             set(state => ({
