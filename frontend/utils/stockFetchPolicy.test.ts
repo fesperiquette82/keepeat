@@ -62,26 +62,37 @@ test('force=true bypass le cache même avec store hydraté', () => {
 
 // Régression : suppression silencieuse des items ajoutés via scan ticket OCR
 //
-// Scénario : l'utilisateur scanne un ticket (items sans barcode). addItem() appelle
-// fetchStock() juste après l'insertion. Si ce fetchStock() n'utilise PAS force:true,
-// shouldSkipStockFetch() retourne true (cache encore frais) → les items OCR ne sont
-// jamais chargés dans state.items → removeStockItems() les marque notFound et ne tente
-// aucun appel HTTP → la suppression échoue silencieusement.
+// Historique du bug et des correctifs successifs :
 //
-// Fix : addItem() appelle désormais fetchStock({ force: true }) pour garantir que les
-// items OCR sont dans le store avant que l'utilisateur puisse les supprimer.
-test('régression: ajout OCR (sans barcode) — force:true contourne le cache frais pour rendre l\'item supprimable', () => {
+// v1 (incorrect) : addItem() appelait fetchStock() sans force:true → le cache frais
+//   bloquait le fetch → item OCR absent du store → removeStockItems() le marquait
+//   notFound → suppression silencieuse, banner d'erreur sans bouton "Annuler".
+//
+// v2 (partiellement correct) : addItem() appelait fetchStock({ force: true }).
+//   Corrigeait les cas mono-item mais introduisait une race condition pour les ajouts
+//   OCR parallèles (scan-receipt.tsx fait Promise.all de plusieurs addItem) :
+//   plusieurs GET /api/stock partaient avant que tous les POST soient confirmés →
+//   le dernier GET à répondre pouvait renvoyer une liste incomplète → store incomplet
+//   → seul le premier item était trouvable pour suppression.
+//
+// v3 (solution retenue) : addItem() insère directement newItem dans state.items
+//   après le POST, sans fetchStock(). Même logique que le chemin offline (tempItem).
+//   Plus de race condition possible : chaque addItem() garantit son item dans le store.
+//
+// Ce test vérifie que le mécanisme force:true fonctionne correctement (utile pour
+// d'autres callers comme restoreItem() ou les triggers de navigation).
+test('régression: ajout OCR (sans barcode) — force:true contourne le cache frais (garde-fou pour les callers hors addItem)', () => {
   const now = 5_000_000;
   const recentFetch = now - 2_000; // cache frais (2 s), dans le TTL de 30 s
 
-  // Sans force: le fetch est sauté → items OCR absents du store → suppression impossible
+  // Sans force: le fetch est sauté → items OCR absents du store si fetchStock est la seule source
   const skippedSansForce = shouldSkipStockFetch({
     hasItemsInStore: true,
     lastFetchAt: recentFetch,
     now,
   });
 
-  // Avec force (comportement de addItem après le fix): fetch forcé → items présents → suppression OK
+  // Avec force: le cache est bypassé → fetch serveur garanti
   const skippedAvecForce = shouldSkipStockFetch({
     hasItemsInStore: true,
     lastFetchAt: recentFetch,
@@ -89,6 +100,6 @@ test('régression: ajout OCR (sans barcode) — force:true contourne le cache fr
     force: true,
   });
 
-  assert.equal(skippedSansForce, true,  'sans force: le cache bloque le fetch → items OCR absents');
-  assert.equal(skippedAvecForce, false, 'avec force: le cache est bypassé → items OCR chargés');
+  assert.equal(skippedSansForce, true,  'sans force: le cache bloque le fetch');
+  assert.equal(skippedAvecForce, false, 'avec force: le cache est bypassé');
 });

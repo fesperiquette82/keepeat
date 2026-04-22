@@ -579,8 +579,18 @@ export const useStockStore = create<StockStore>()(
         try {
           const res = await axios.post(buildApiUrl('/api/stock'), item, authRequestConfig());
           const newItem: StockItem = normalizeStockItemImage(res.data as StockItem, item);
+          // Insertion directe : évite la race condition lors d'ajouts OCR parallèles.
+          // Plusieurs addItem() concurrents + fetchStock() concurrents → le GET peut
+          // répondre avant que les autres POST soient confirmés → store incomplet →
+          // removeStockItems() ne trouve pas l'item → suppression silencieusement ratée.
+          set(state => ({ items: [newItem, ...state.items] }));
+          await useRecipesStore.getState().refreshRecipeAssociationsForStockMutation({
+            source: refreshSource,
+            stockItems: get().items as DashboardStockItem[],
+          });
+          scheduleExpiryNotification(newItem);
           const s = get();
-          await Promise.all([s.fetchStock({ force: true }), s.fetchPriorityItems(), s.fetchStats()]);
+          await Promise.all([s.fetchPriorityItems(), s.fetchStats()]);
           return newItem;
         } catch (err: any) {
           if (isNetworkError(err)) {
