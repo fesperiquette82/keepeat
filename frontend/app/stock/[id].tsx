@@ -108,7 +108,7 @@ export default function StockItemDetailScreen() {
   const styles = useMemo(() => createStyles(C, T), [C, T]);
 
   const { items: storeItems, fetchStock } = useStockStore();
-  const recomputeRecipeAssociationsFromCache = useRecipesStore((state) => state.recomputeRecipeAssociationsFromCache);
+  const ensureRecipeAssociationsFromCache = useRecipesStore((state) => state.ensureRecipeAssociationsFromCache);
   const getRecipesForStockItem = useRecipesStore((state) => state.getRecipesForStockItem);
 
   const [isLoading, setIsLoading] = useState(true);
@@ -122,7 +122,7 @@ export default function StockItemDetailScreen() {
       setLoadError(null);
       try {
         await fetchStock({ reason: 'stock.detail.mount' });
-        recomputeRecipeAssociationsFromCache(useStockStore.getState().items as DashboardStockItem[]);
+        await ensureRecipeAssociationsFromCache(useStockStore.getState().items as DashboardStockItem[]);
         if (cancelled) return;
       } catch {
         if (cancelled) return;
@@ -136,7 +136,7 @@ export default function StockItemDetailScreen() {
     return () => {
       cancelled = true;
     };
-  }, [fetchStock, itemId, recomputeRecipeAssociationsFromCache]);
+  }, [ensureRecipeAssociationsFromCache, fetchStock, itemId]);
 
   const { items } = useMemo(() => resolveStockItems(storeItems, { useMockFallback: false }), [storeItems]);
   const selectedItem = useMemo(() => items.find((item) => item.id === itemId) ?? null, [itemId, items]);
