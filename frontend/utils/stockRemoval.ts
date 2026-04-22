@@ -44,7 +44,7 @@ export async function undoRemovedStockItems(items: StockItem[]): Promise<{ resto
   let failedCount = 0;
 
   for (const item of items) {
-    const restored = await useStockStore.getState().restoreItem(item.id);
+    const restored = await useStockStore.getState().restoreItem(item.id, item);
     if (restored) {
       restoredCount += 1;
     } else {

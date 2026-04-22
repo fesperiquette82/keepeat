@@ -197,7 +197,7 @@ export default function RecipesScreen() {
         </View>
       ) : (
         <FlatList
-          data={classicSuggestions}
+          data={classicSuggestions.slice(2)}
           keyExtractor={(item) => item.id}
           contentContainerStyle={styles.listContent}
           ListHeaderComponent={

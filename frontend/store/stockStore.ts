@@ -144,7 +144,7 @@ interface StockStore {
   fetchHistory: () => Promise<void>;
   markConsumed: (itemId: string) => Promise<void>;
   markThrown: (itemId: string) => Promise<void>;
-  restoreItem: (itemId: string) => Promise<boolean>;
+  restoreItem: (itemId: string, restoredItem?: StockItem) => Promise<boolean>;
   lookupProduct: (barcode: string) => Promise<any>;
   addItem: (
     item: Partial<StockItem>,
@@ -517,11 +517,20 @@ export const useStockStore = create<StockStore>()(
         }
       },
 
-      restoreItem: async (itemId: string) => {
+      restoreItem: async (itemId: string, restoredItem?: StockItem) => {
         try {
           await axios.post(buildApiUrl(`/api/stock/${itemId}/restore`), {}, authRequestConfig());
+          // Ne PAS appeler fetchStock() ici : race condition avec un markConsumed/markThrown
+          // concurrent (le GET peut arriver après l'update optimiste du prochain item).
+          // On réinsère directement l'item si on le connaît, puis on rafraîchit les listes
+          // légères (priorités, stats, historique).
+          if (restoredItem) {
+            set(state => ({
+              items: [restoredItem, ...state.items.filter(i => i.id !== restoredItem.id)],
+            }));
+          }
           const s = get();
-          await Promise.all([s.fetchStock(), s.fetchPriorityItems(), s.fetchStats(), s.fetchHistory()]);
+          await Promise.all([s.fetchPriorityItems(), s.fetchStats(), s.fetchHistory()]);
           return true;
         } catch (err: any) {
           if (!isNetworkError(err)) {
