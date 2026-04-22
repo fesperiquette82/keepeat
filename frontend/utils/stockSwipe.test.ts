@@ -28,6 +28,12 @@ test('resolveSwipeActionFromOpenSide mappe correctement l\'ouverture droite vers
   assert.equal(resolveSwipeActionFromOpenSide('right'), 'thrown');
 });
 
+test('régression: deux ouvertures Swipeable consécutives à gauche restent mappées vers used', () => {
+  const sequence = ['left', 'left'] as const;
+  const actions = sequence.map((direction) => resolveSwipeAction(direction));
+
+  assert.deepEqual(actions, ['used', 'used']);
+});
 test('resolveStockRemovalBanner garde l\'annulation quand la suppression a réussi', () => {
   const banner = resolveStockRemovalBanner('used', {
     removedItems: [removedItem],
