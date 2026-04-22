@@ -8,6 +8,7 @@ import {
   buildRecipeAssociationsSnapshot,
   type StockMutationRefreshSource,
 } from '../utils/recipeAssociations';
+import { shouldBootstrapRecipeAssociationsCache } from '../utils/recipeCacheBootstrap';
 import { resolveRecipeDetailLoadPolicy } from '../utils/recipeDetailLoadPolicy';
 import type { DashboardStockItem } from '../data/mockDashboardData';
 import type { RecipeCandidate } from '../utils/stockItemRecipes';
@@ -53,6 +54,7 @@ interface RecipesStoreState {
     source: StockMutationRefreshSource;
     stockItems: DashboardStockItem[];
   }) => Promise<Record<string, RecipeCandidate[]>>;
+  ensureRecipeAssociationsFromCache: (stockItems: DashboardStockItem[]) => Promise<Record<string, RecipeCandidate[]>>;
   recomputeRecipeAssociationsFromCache: (stockItems: DashboardStockItem[]) => Record<string, RecipeCandidate[]>;
   fetchRecipeById: (id: string) => Promise<BackendRecipeSuggestion | null>;
   getRecipeById: (id: string) => BackendRecipeSuggestion | null;
@@ -199,6 +201,14 @@ export const useRecipesStore = create<RecipesStoreState>((set, get) => ({
       associatedStockItemsCount: Object.keys(snapshot.associationsByStockItemId).length,
     });
     return snapshot.associationsByStockItemId;
+  },
+  ensureRecipeAssociationsFromCache: async (stockItems) => {
+    const suggestionsByFilter = get().suggestionsByFilter;
+    if (shouldBootstrapRecipeAssociationsCache(suggestionsByFilter)) {
+      logger.debug('[RECIPES_MATCH] associations cache empty on cold start, bootstrapping stock suggestions');
+      await get().fetchSuggestions('stock');
+    }
+    return get().recomputeRecipeAssociationsFromCache(stockItems);
   },
   recomputeRecipeAssociationsFromCache: (stockItems) => {
     const cachedRecipes = Object.values(get().suggestionsByFilter).flat() as BackendRecipeSuggestion[];

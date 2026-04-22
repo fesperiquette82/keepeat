@@ -99,6 +99,8 @@ class ProductBase(BaseModel):
 
 
 class StockItemCreate(ProductBase):
+    food_category: Optional[str] = None
+    storageZone: Optional[str] = None
     expiry_date: Optional[str] = None
     notes: Optional[str] = None
 
@@ -117,6 +119,8 @@ class StockItemUpdate(BaseModel):
     brand: Optional[str] = None
     image_url: Optional[str] = None
     category: Optional[str] = None
+    food_category: Optional[str] = None
+    storageZone: Optional[str] = None
     quantity: Optional[str] = None
     expiry_date: Optional[str] = None
     notes: Optional[str] = None

@@ -1759,6 +1759,26 @@ async def set_premium(
 # -----------------------------------------------------------------------------
 
 _ALLOWED_STOCK_STATUSES = {"active", "consumed", "thrown", "expired"}
+_ALLOWED_STOCK_FOOD_CATEGORIES = {"frais", "proteines", "legumes", "feculents", "desserts", "boissons", "epicerie", "autres"}
+_ALLOWED_STORAGE_ZONES = {"frigo", "placard", "congelateur"}
+
+
+def _resolve_stock_food_category(item: StockItemCreate) -> str:
+    candidate = str(item.food_category or "").strip().lower()
+    if candidate in _ALLOWED_STOCK_FOOD_CATEGORIES:
+        return candidate
+    return infer_food_category(ProductBase(**item.model_dump()))
+
+
+def _resolve_stock_storage_zone(item: StockItemCreate, food_category: str) -> str | None:
+    zone = str(item.storageZone or "").strip().lower()
+    if zone in _ALLOWED_STORAGE_ZONES:
+        return zone
+    if food_category in _FRIGO_CATS:
+        return "frigo"
+    if food_category in _PLACARD_CATS:
+        return "placard"
+    return None
 
 @api_router.get("/stock", response_model=List[StockItem])
 async def get_stock(
@@ -1777,13 +1797,16 @@ async def add_stock(
     item: StockItemCreate,
     current_user: Dict[str, Any] = Depends(_get_current_user),
 ):
+    resolved_food_category = _resolve_stock_food_category(item)
+    resolved_storage_zone = _resolve_stock_storage_zone(item, resolved_food_category)
     doc = item.model_dump()
     doc["user_id"] = current_user["id"]
     doc["added_date"] = utc_now().isoformat()
     doc["status"] = "active"
     doc["consumed_date"] = None
     doc["thrown_date"] = None
-    doc["food_category"] = infer_food_category(ProductBase(**item.model_dump()))
+    doc["food_category"] = resolved_food_category
+    doc["storageZone"] = resolved_storage_zone
 
     res = await stock_col.insert_one(doc)
     created = await stock_col.find_one({"_id": res.inserted_id})
