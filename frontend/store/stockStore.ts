@@ -17,6 +17,7 @@ import { useRecipesStore } from './recipesStore';
 import type { DashboardStockItem } from '../data/mockDashboardData';
 import type { AxiosError, AxiosRequestConfig } from 'axios';
 import { shouldSkipStockFetch } from '../utils/stockFetchPolicy';
+import { buildRestoredItemsList } from '../utils/stockRestoreInsert';
 
 const authHeaders = () => {
   const token = useAuthStore.getState().token;
@@ -525,9 +526,7 @@ export const useStockStore = create<StockStore>()(
           // On réinsère directement l'item si on le connaît, puis on rafraîchit les listes
           // légères (priorités, stats, historique).
           if (restoredItem) {
-            set(state => ({
-              items: [restoredItem, ...state.items.filter(i => i.id !== restoredItem.id)],
-            }));
+            set(state => ({ items: buildRestoredItemsList(state.items, restoredItem) }));
           }
           const s = get();
           await Promise.all([s.fetchPriorityItems(), s.fetchStats(), s.fetchHistory()]);

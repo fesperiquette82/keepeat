@@ -1,4 +1,5 @@
 import { useStockStore, type StockItem } from '../store/stockStore';
+import { undoRemovalCore } from './undoRemovalCore';
 
 type StockRemovalAction = 'used' | 'thrown';
 
@@ -40,17 +41,5 @@ export async function removeStockItems(itemIds: string[], action: StockRemovalAc
 }
 
 export async function undoRemovedStockItems(items: StockItem[]): Promise<{ restoredCount: number; failedCount: number }> {
-  let restoredCount = 0;
-  let failedCount = 0;
-
-  for (const item of items) {
-    const restored = await useStockStore.getState().restoreItem(item.id, item);
-    if (restored) {
-      restoredCount += 1;
-    } else {
-      failedCount += 1;
-    }
-  }
-
-  return { restoredCount, failedCount };
+  return undoRemovalCore(items, (id, item) => useStockStore.getState().restoreItem(id, item));
 }

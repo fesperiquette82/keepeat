@@ -19,6 +19,7 @@ import {
   getRecipeAvailableIngredients,
   scopeAndDedupeRecipes,
 } from '../../utils/recipesScoping';
+import { splitRecipeDisplay } from '../../utils/recipeListSplit';
 
 const TYPE_LABEL: Record<string, string> = {
   apero: 'Apéro',
@@ -84,6 +85,7 @@ export default function RecipesScreen() {
       })),
     [recipes],
   );
+  const recipeListSplit = useMemo(() => splitRecipeDisplay(classicSuggestions), [classicSuggestions]);
   const hasAnySuggestion = classicSuggestions.length > 0;
   const hasTargetItems = targetItems.length > 0;
 
@@ -197,7 +199,7 @@ export default function RecipesScreen() {
         </View>
       ) : (
         <FlatList
-          data={classicSuggestions.slice(2)}
+          data={recipeListSplit.list}
           keyExtractor={(item) => item.id}
           contentContainerStyle={styles.listContent}
           ListHeaderComponent={
@@ -210,7 +212,7 @@ export default function RecipesScreen() {
                   <Text style={styles.planMeta}>
                     {classicSuggestions.length} recette{classicSuggestions.length > 1 ? 's' : ''} · {countLabelFr(classicSuggestions.reduce((acc, item) => acc + (item.matchedCount ?? 0), 0), 'ingrédient')} couvert{classicSuggestions.length > 1 ? 's' : ''}
                   </Text>
-                  {classicSuggestions.slice(0, 2).map((recipe, index) => (
+                  {recipeListSplit.header.map((recipe, index) => (
                     <TouchableOpacity
                       key={`plan-${recipe.id}`}
                       onPress={() => router.push({ pathname: '/recipes/[id]', params: { id: recipe.id } })}
