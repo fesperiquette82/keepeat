@@ -83,6 +83,8 @@ npm run start
 
 ## Vérifications utiles
 
+Guide complet de stratégie de tests : `docs/testing.md`.
+
 ### Frontend
 
 ```bash
