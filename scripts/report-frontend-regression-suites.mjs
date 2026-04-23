@@ -1,7 +1,11 @@
 import { readdirSync } from 'node:fs';
-import { join } from 'node:path';
+import { dirname, join, resolve } from 'node:path';
+import { fileURLToPath } from 'node:url';
 
-const testsDir = join(process.cwd(), 'frontend', 'utils');
+const scriptDir = dirname(fileURLToPath(import.meta.url));
+const repoRoot = resolve(scriptDir, '..');
+const testsDir = join(repoRoot, 'frontend', 'utils');
+
 const allTestFiles = readdirSync(testsDir)
   .filter((name) => name.endsWith('.test.ts'))
   .sort();
