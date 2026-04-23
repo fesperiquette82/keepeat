@@ -1,10 +1,24 @@
-import { readdirSync } from 'node:fs';
+import { existsSync, readdirSync } from 'node:fs';
 import { dirname, join, resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
 
 const scriptDir = dirname(fileURLToPath(import.meta.url));
 const repoRoot = resolve(scriptDir, '..');
-const testsDir = join(repoRoot, 'frontend', 'utils');
+
+const candidateTestDirs = [
+  join(repoRoot, 'frontend', 'utils'),
+  join(process.cwd(), 'frontend', 'utils'),
+  join(process.cwd(), 'utils'),
+];
+
+const testsDir = candidateTestDirs.find((dirPath) => existsSync(dirPath));
+if (!testsDir) {
+  console.error('Unable to locate frontend test directory. Tried:');
+  for (const candidate of candidateTestDirs) {
+    console.error(`- ${candidate}`);
+  }
+  process.exit(1);
+}
 
 const allTestFiles = readdirSync(testsDir)
   .filter((name) => name.endsWith('.test.ts'))
@@ -30,6 +44,7 @@ for (const file of allTestFiles) {
 
 console.log('Frontend non-regression suites summary');
 console.log('====================================');
+console.log(`Resolved tests directory: ${testsDir}`);
 console.log(`Total test files: ${allTestFiles.length}`);
 for (const [domain, count] of Object.entries(counts)) {
   console.log(`- ${domain}: ${count}`);
