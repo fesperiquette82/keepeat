@@ -7,6 +7,7 @@ import { useLanguageStore } from '../../store/languageStore';
 import FloatingScanButton from '../../component/FloatingScanButton';
 import { useAppSettingsStore } from '../../store/appSettingsStore';
 import { getThemeColors } from '../../utils/theme';
+import { shouldShowScanFab } from '../../utils/tabNavigationGuard';
 
 export default function TabsLayout() {
   const router = useRouter();
@@ -17,10 +18,7 @@ export default function TabsLayout() {
   const isFr = language === 'fr';
   const themeMode = useAppSettingsStore((state) => state.themeMode);
   const colors = getThemeColors(themeMode);
-  const activeLeaf = segments[segments.length - 1];
-  const hideFabRoutes = new Set(['/scan', '/add-product', '/settings']);
-  const shouldHideFabForPath = hideFabRoutes.has(pathname);
-  const showScanFab = !shouldHideFabForPath && (activeLeaf === '(tabs)' || activeLeaf === 'index' || activeLeaf === 'stock');
+  const showScanFab = shouldShowScanFab(pathname, segments);
 
   return (
     <ImageBackground

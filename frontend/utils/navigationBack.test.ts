@@ -16,3 +16,8 @@ test('resolveBackNavigationAction utilise le fallback par défaut si non fourni'
   const action = resolveBackNavigationAction({ canGoBack: false });
   assert.deepEqual(action, { type: 'replace', href: '/(tabs)/recipes' });
 });
+
+test('resolveBackNavigationAction supporte un fallback explicite vers le tab stock', () => {
+  const action = resolveBackNavigationAction({ canGoBack: false, fallbackHref: '/(tabs)/stock' });
+  assert.deepEqual(action, { type: 'replace', href: '/(tabs)/stock' });
+});

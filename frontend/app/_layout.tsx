@@ -18,6 +18,7 @@ import { useNetworkSync } from '../utils/useNetworkSync';
 import { logger } from '../utils/logger';
 import { APP_CONFIG } from '../utils/appConfig';
 import { usePremiumUiStore } from '../store/premiumUiStore';
+import { resolveAuthRedirect } from '../utils/authNavigationGuard';
 
 
 // Garde le splash natif visible tant que le root n'est pas prêt.
@@ -69,8 +70,6 @@ export default function RootLayout() {
 
   // Surveillance de la connectivité réseau + sync automatique
   useNetworkSync();
-
-  const publicScreens = useMemo(() => ['login', 'register', 'email-sent', 'verify-email', 'forgot-password', 'reset-password'], []);
 
   // Barre de navigation Android toujours visible, fond blanc
   useEffect(() => {
@@ -174,17 +173,17 @@ export default function RootLayout() {
 
   // Guard auth : redirige selon l'état de connexion
   useEffect(() => {
-    if (!isLoaded) return;
-
     const segment = segments[0] as string | undefined;
-    const inPublicScreen = publicScreens.includes(segment ?? '');
+    const redirect = resolveAuthRedirect({
+      isLoaded,
+      hasUser: Boolean(user),
+      firstSegment: segment,
+    });
 
-    if (!user && !inPublicScreen) {
-      router.replace('/login');
-    } else if (user && (segment === 'login' || segment === 'register')) {
-      router.replace('/');
+    if (redirect) {
+      router.replace(redirect);
     }
-  }, [isLoaded, publicScreens, router, segments, user]);
+  }, [isLoaded, router, segments, user]);
 
   return (
     <GestureHandlerRootView style={{ flex: 1 }}>

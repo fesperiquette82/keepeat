@@ -22,6 +22,7 @@ import {
   STOCK_DETAIL_EDIT_LABEL,
 } from '../../utils/productEditNavigation';
 import type { DashboardStockItem } from '../../data/mockDashboardData';
+import { resolveBackNavigationAction } from '../../utils/navigationBack';
 
 type BlockState = 'loading' | 'error' | 'success';
 
@@ -153,12 +154,27 @@ export default function StockItemDetailScreen() {
   const blockState: BlockState = isLoading ? 'loading' : loadError ? 'error' : 'success';
   const recipeBlocks = useMemo(() => buildStockItemDetailRecipeBlocks(sections), [sections]);
 
+  const handleBackPress = () => {
+    const action = resolveBackNavigationAction({
+      canGoBack: typeof router.canGoBack === 'function' ? router.canGoBack() : false,
+      fallbackHref: '/(tabs)/stock',
+    });
+
+    if (action.type === 'back') {
+      router.back();
+      return;
+    }
+
+    router.replace(action.href);
+  };
+
+
   if (!selectedItem) {
     return (
       <SafeAreaView style={styles.container}>
         <View style={styles.errorWrap}>
           <Text style={styles.errorTitle}>Article introuvable</Text>
-          <TouchableOpacity style={styles.backButton} onPress={() => router.back()}>
+          <TouchableOpacity style={styles.backButton} onPress={handleBackPress}>
             <Text style={styles.backButtonLabel}>Retour</Text>
           </TouchableOpacity>
         </View>
@@ -169,7 +185,7 @@ export default function StockItemDetailScreen() {
   return (
     <SafeAreaView style={styles.container}>
       <View style={styles.headerRow}>
-        <TouchableOpacity style={styles.backIcon} onPress={() => router.back()}>
+        <TouchableOpacity style={styles.backIcon} onPress={handleBackPress}>
           <Ionicons name="chevron-back" size={20} color={C.text} />
         </TouchableOpacity>
         <Text style={styles.headerTitle}>Détail produit</Text>
