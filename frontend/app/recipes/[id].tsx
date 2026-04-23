@@ -21,7 +21,7 @@ import { resolveRecipeIngredients } from '../../utils/recipeIngredientsResolver'
 import { formatFrenchRecipeText } from '../../utils/recipeFrenchTypography';
 import { buildProductEditRoute } from '../../utils/productEditNavigation';
 import { shouldSkipStockFetch } from '../../utils/stockFetchPolicy';
-import { resolveBackNavigationAction } from '../../utils/navigationBack';
+import { resolveRecipeDetailBackAction } from '../../utils/recipeDetailNavigation';
 
 function resolveSteps(recipe: BackendRecipeSuggestion | null): string[] {
   if (!recipe) return [];
@@ -154,9 +154,7 @@ export default function RecipeDetailScreen() {
   }, [ingredientRows, recipeId]);
   const recipeSteps = useMemo(() => resolveSteps(baseRecipe), [baseRecipe]);
   const handleBack = React.useCallback(() => {
-    const action = resolveBackNavigationAction({
-      canGoBack: typeof router.canGoBack === 'function' ? router.canGoBack() : false,
-    });
+    const action = resolveRecipeDetailBackAction(typeof router.canGoBack === 'function' ? router.canGoBack() : false);
     if (action.type === 'back') {
       router.back();
       return;

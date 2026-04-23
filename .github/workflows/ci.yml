@@ -34,6 +34,9 @@ jobs:
       - name: Unit tests
         run: npm run test
 
+      - name: Frontend non-regression suites report
+        run: node ../scripts/report-frontend-regression-suites.mjs
+
   backend:
     name: Backend tests (pytest)
     runs-on: ubuntu-latest
