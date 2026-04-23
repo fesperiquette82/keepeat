@@ -25,6 +25,7 @@ from ocr_service import (
     _enrich_normalizations,
     _extract_gemini_text,
     _normalize_date,
+    _normalize_receipt_item,
     _parse_receipt_json,
     _strip_data_uri_prefix,
     ocr_receipt,
@@ -612,6 +613,13 @@ class TestParseReceiptJson:
         assert purchase_date is None
         assert items == []
 
+    def test_markdown_single_backtick_no_closing(self):
+        # BUG-005 : une seule ``` d'ouverture sans fermeture → pas d'IndexError
+        text = '```json\n{"purchase_date": "2024-06-01", "items": []}'
+        purchase_date, _, _, items, _ = _parse_receipt_json(text)
+        assert purchase_date == "2024-06-01"
+        assert items == []
+
     def test_invalid_json_raises(self):
         with pytest.raises(OcrApiError) as exc_info:
             _parse_receipt_json("not json {{{")
@@ -692,3 +700,78 @@ class TestEnrichNormalizations:
         assert update_doc["$set"]["normalized_name"] == "Lait bio 1L"
         assert update_doc["$set"]["category"] == "frais"
         assert update_doc["$inc"]["seen_count"] == 1
+
+
+# ── _normalize_receipt_item — brand + quantity ────────────────────────────────
+
+class TestNormalizeReceiptItemBrandQuantity:
+    def _base_item(self, **kwargs) -> dict:
+        base = {
+            "raw_title": "LAIT BIO 1L",
+            "normalized_title": "Lait bio 1L",
+            "is_food": True,
+            "category": "frais",
+        }
+        base.update(kwargs)
+        return base
+
+    def test_brand_extracted_when_present(self):
+        item = self._base_item(brand="Lactel")
+        result = _normalize_receipt_item(item, None)
+        assert result is not None
+        assert result["brand"] == "Lactel"
+
+    def test_brand_stripped(self):
+        item = self._base_item(brand="  Danone  ")
+        result = _normalize_receipt_item(item, None)
+        assert result is not None
+        assert result["brand"] == "Danone"
+
+    def test_brand_absent_returns_none(self):
+        item = self._base_item()
+        result = _normalize_receipt_item(item, None)
+        assert result is not None
+        assert result["brand"] is None
+
+    def test_brand_whitespace_only_returns_none(self):
+        item = self._base_item(brand="   ")
+        result = _normalize_receipt_item(item, None)
+        assert result is not None
+        assert result["brand"] is None
+
+    def test_brand_non_string_returns_none(self):
+        item = self._base_item(brand=42)
+        result = _normalize_receipt_item(item, None)
+        assert result is not None
+        assert result["brand"] is None
+
+    def test_quantity_integer_preserved(self):
+        item = self._base_item(quantity=3)
+        result = _normalize_receipt_item(item, None)
+        assert result is not None
+        assert result["quantity"] == 3
+
+    def test_quantity_float_preserved(self):
+        item = self._base_item(quantity=1.5)
+        result = _normalize_receipt_item(item, None)
+        assert result is not None
+        assert result["quantity"] == 1.5
+
+    def test_quantity_absent_defaults_to_1(self):
+        item = self._base_item()
+        result = _normalize_receipt_item(item, None)
+        assert result is not None
+        assert result["quantity"] == 1
+
+    def test_quantity_invalid_string_defaults_to_1(self):
+        item = self._base_item(quantity="deux")
+        result = _normalize_receipt_item(item, None)
+        assert result is not None
+        assert result["quantity"] == 1
+
+    def test_brand_and_quantity_together(self):
+        item = self._base_item(brand="Yoplait", quantity=4)
+        result = _normalize_receipt_item(item, None)
+        assert result is not None
+        assert result["brand"] == "Yoplait"
+        assert result["quantity"] == 4

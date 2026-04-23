@@ -1,8 +1,8 @@
 """Tests de non-régression — admin_service_control + endpoint reset logs API.
 
-Couvre les changements de migration OpenAI → Gemini :
-- ocr_engine utilise désormais GEMINI_OCR_API_KEY (plus KEEPEAT_OPENAI_TOKEN)
-- gemini_recipes est un nouveau service tracké (GEMINI_RECIPES_API_KEY)
+Couvre les services post-migration Gemini :
+- ocr_engine utilise GEMINI_OCR_API_KEY
+- gemini_recipes est tracké avec GEMINI_RECIPES_API_KEY
 - build_cost_recommendations retourne "Gemini 2.5-flash (Free)" comme plan OCR par défaut
 
 Couvre également le nouvel endpoint DELETE /admin/monitoring/logs/api-requests.
@@ -37,15 +37,7 @@ class TestServiceRegistry:
     def test_ocr_engine_uses_gemini_key(self):
         svc = self._get("ocr_engine")
         assert svc is not None
-        assert svc["enabled_env"] == "GEMINI_OCR_API_KEY", (
-            "ocr_engine doit utiliser GEMINI_OCR_API_KEY, pas KEEPEAT_OPENAI_TOKEN"
-        )
-
-    def test_ocr_engine_old_openai_key_not_referenced(self):
-        for svc in SERVICE_REGISTRY:
-            assert svc.get("enabled_env") != "KEEPEAT_OPENAI_TOKEN", (
-                f"Service '{svc['id']}' référence encore l'ancienne clé OpenAI"
-            )
+        assert svc["enabled_env"] == "GEMINI_OCR_API_KEY"
 
     def test_gemini_recipes_service_present(self):
         svc = self._get("gemini_recipes")

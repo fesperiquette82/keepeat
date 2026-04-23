@@ -18,6 +18,7 @@ import type { DashboardStockItem } from '../data/mockDashboardData';
 import type { AxiosError, AxiosRequestConfig } from 'axios';
 import { shouldSkipStockFetch } from '../utils/stockFetchPolicy';
 import { buildRestoredItemsList } from '../utils/stockRestoreInsert';
+import { buildUpdateItemOfflineState } from '../utils/stockUpdateOffline';
 
 const authHeaders = () => {
   const token = useAuthStore.getState().token;
@@ -55,6 +56,7 @@ export interface StockItem {
   image_url?: string;
   category?: string;
   food_category?: string; // frais/proteines/legumes/feculents/desserts/boissons/epicerie/autres
+  storageZone?: 'frigo' | 'placard' | 'congelateur'; // zone de stockage — inférée ou choisie par l'user
   quantity?: string;
   expiry_date?: string;
   added_date: string;
@@ -650,14 +652,15 @@ export const useStockStore = create<StockStore>()(
         const { isOnline } = get();
         const existingItem = get().items.find((entry) => entry.id === itemId);
 
-        if (!isOnline) {
-          set(state => ({
-            items: state.items.map(i => i.id === itemId ? { ...i, ...updates } : i),
-            pendingMutations: [
-              ...state.pendingMutations,
-              { id: uuid(), type: 'UPDATE', payload: { itemId, updates }, timestamp: Date.now() },
-            ],
-          }));
+        const applyOfflineUpdate = async () => {
+          set(state => buildUpdateItemOfflineState(
+            state.items,
+            state.pendingMutations as any,
+            itemId,
+            updates,
+            uuid() as string,
+            Date.now(),
+          ));
           await useRecipesStore.getState().refreshRecipeAssociationsForStockMutation({
             source: 'stock.update',
             stockItems: get().items as DashboardStockItem[],
@@ -667,7 +670,11 @@ export const useStockStore = create<StockStore>()(
             cancelExpiryNotification(itemId);
             scheduleExpiryNotification(updated);
           }
-          return updated || null;
+          return updated ?? null;
+        };
+
+        if (!isOnline) {
+          return applyOfflineUpdate();
         }
 
         try {
@@ -679,6 +686,9 @@ export const useStockStore = create<StockStore>()(
           await Promise.all([s.fetchStock(), s.fetchPriorityItems(), s.fetchStats()]);
           return updatedItem;
         } catch (err: any) {
+          if (isNetworkError(err)) {
+            return applyOfflineUpdate();
+          }
           set({ error: err.message });
           return null;
         }

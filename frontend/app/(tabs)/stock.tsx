@@ -1,4 +1,4 @@
-import React, { useEffect, useMemo, useState } from 'react';
+import React, { useEffect, useMemo, useRef, useState } from 'react';
 import { SafeAreaView, useSafeAreaInsets } from 'react-native-safe-area-context';
 import { View, Text, StyleSheet, TouchableOpacity, FlatList, Image, Alert, TextInput, ImageBackground } from 'react-native';
 import { useRouter } from 'expo-router';
@@ -55,6 +55,9 @@ export default function StockScreen() {
   const [searchQuery, setSearchQuery] = useState('');
   const [imageErrors, setImageErrors] = useState<Record<string, boolean>>({});
   const [processingIds, setProcessingIds] = useState<Record<string, boolean>>({});
+  // Refs pour fermer chaque Swipeable avant suppression — sans close() le gesture handler
+  // de RNGH reste en état "ouvert" quand l'item se démonte, bloquant les swipes suivants.
+  const swipeableRefs = useRef<Map<string, Swipeable>>(new Map());
   const [undoItems, setUndoItems] = useState<typeof storeItems>([]);
   const [banner, setBanner] = useState<{ message: string; canUndo: boolean; variant: 'success' | 'error' } | null>(null);
   const themeMode = useAppSettingsStore((state) => state.themeMode);
@@ -235,11 +238,21 @@ export default function StockScreen() {
           renderItem={({ item }) => {
             return (
               <Swipeable
+                ref={(ref) => {
+                  if (ref) swipeableRefs.current.set(item.id, ref);
+                  else swipeableRefs.current.delete(item.id);
+                }}
                 overshootLeft={false}
                 overshootRight={false}
                 renderLeftActions={() => renderSwipeAction('Utilisé', '#16A34A', 'restaurant-outline')}
                 renderRightActions={() => renderSwipeAction('Jeté', '#DC2626', 'trash-outline')}
-                onSwipeableOpen={(direction) => handleSwipeAction(item.id, resolveSwipeAction(direction))}
+                onSwipeableOpen={(direction) => {
+                  // Fermer le Swipeable immédiatement pour libérer le gesture handler RNGH.
+                  // Sans ce close(), le composant se démonte en état "ouvert" et bloque
+                  // tous les swipes suivants.
+                  swipeableRefs.current.get(item.id)?.close();
+                  handleSwipeAction(item.id, resolveSwipeAction(direction));
+                }}
               >
                 <TouchableOpacity
                   style={styles.card}

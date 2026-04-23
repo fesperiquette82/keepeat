@@ -2762,47 +2762,41 @@ async def _upsert_recipe_gap(
     )
     used_by_reference = sorted(set(normalized_stock) - set(normalized_uncovered))
     now_iso = utc_now().isoformat()
-    existing = await recipe_gap_requests_col.find_one({"signature": signature})
-    if existing:
-        await recipe_gap_requests_col.update_one(
-            {"_id": existing["_id"]},
-            {
-                "$set": {
-                    "last_seen_at": now_iso,
-                    "status": "pending",
-                    "uncovered_ingredients": normalized_uncovered,
-                    "used_ingredients_in_reference_recipe": used_by_reference,
-                    "reference_recipe_id": reference_recipe.get("id") if reference_recipe else None,
-                    "reference_recipe_title": reference_recipe.get("title") if reference_recipe else None,
-                },
-                "$inc": {"occurrence_count": 1},
-            },
-        )
-        refreshed = await recipe_gap_requests_col.find_one({"_id": existing["_id"]})
-        if refreshed:
-            await _send_recipe_gap_email(refreshed, is_new=False)
-        return True
+    ref_id = reference_recipe.get("id") if reference_recipe else None
+    ref_title = reference_recipe.get("title") if reference_recipe else None
 
-    doc = {
-        "user_id": uid,
-        "filter": recipe_filter,
-        "available_ingredients": [item.get("name") for item in stock_items if item.get("name")],
-        "normalized_ingredients": normalized_stock,
-        "uncovered_ingredients": normalized_uncovered,
-        "used_ingredients_in_reference_recipe": used_by_reference,
-        "reference_recipe_id": reference_recipe.get("id") if reference_recipe else None,
-        "reference_recipe_title": reference_recipe.get("title") if reference_recipe else None,
-        "criteria": criteria,
-        "signature": signature,
-        "status": "pending",
-        "occurrence_count": 1,
-        "created_at": now_iso,
-        "last_seen_at": now_iso,
-        "resolved_at": None,
-        "resolved_by_recipe_ids": [],
-    }
-    await recipe_gap_requests_col.insert_one(doc)
-    await _send_recipe_gap_email(doc, is_new=True)
+    # update_one upsert=True : opération atomique — élimine la race condition
+    # entre find_one et insert_one (BUG-2026-04-10-04 : DuplicateKeyError en charge).
+    result = await recipe_gap_requests_col.update_one(
+        {"signature": signature},
+        {
+            "$set": {
+                "last_seen_at": now_iso,
+                "status": "pending",
+                "uncovered_ingredients": normalized_uncovered,
+                "used_ingredients_in_reference_recipe": used_by_reference,
+                "reference_recipe_id": ref_id,
+                "reference_recipe_title": ref_title,
+            },
+            "$inc": {"occurrence_count": 1},
+            "$setOnInsert": {
+                "user_id": uid,
+                "filter": recipe_filter,
+                "available_ingredients": [item.get("name") for item in stock_items if item.get("name")],
+                "normalized_ingredients": normalized_stock,
+                "criteria": criteria,
+                "signature": signature,
+                "created_at": now_iso,
+                "resolved_at": None,
+                "resolved_by_recipe_ids": [],
+            },
+        },
+        upsert=True,
+    )
+    is_new = result.upserted_id is not None
+    refreshed = await recipe_gap_requests_col.find_one({"signature": signature})
+    if refreshed:
+        await _send_recipe_gap_email(refreshed, is_new=is_new)
     return True
 
 
@@ -3464,11 +3458,12 @@ async def get_monthly_stats(
     effective_months = min(months, 24 if plan == PREMIUM_PLAN else 6)
 
     # Générer la liste des N derniers mois (YYYY-MM)
+    # Arithmétique exacte sur les mois (évite les dérives de timedelta(days=30*i))
     today = utc_now().date()
     month_list = []
     for i in range(effective_months - 1, -1, -1):
-        target = today.replace(day=1) - timedelta(days=i * 30)
-        month_list.append(target.strftime("%Y-%m"))
+        total = today.year * 12 + (today.month - 1) - i
+        month_list.append(f"{total // 12:04d}-{total % 12 + 1:02d}")
 
     # Agrégation consommés par mois (+ catégorie pour estimer les économies)
     consumed_pipeline = [

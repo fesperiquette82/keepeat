@@ -24,6 +24,13 @@ import { useAppSettingsStore } from '../store/appSettingsStore';
 import { getThemeColors } from '../utils/theme';
 
 type DateInputMode = 'auto' | 'duration' | 'date' | 'camera';
+type StorageZoneKey = 'frigo' | 'placard' | 'congelateur';
+
+const STORAGE_ZONES: { key: StorageZoneKey; fr: string; en: string; icon: string }[] = [
+  { key: 'frigo',       fr: 'Frigo',       en: 'Fridge',  icon: '🧊' },
+  { key: 'placard',     fr: 'Placard',      en: 'Pantry',  icon: '📦' },
+  { key: 'congelateur', fr: 'Congélateur',  en: 'Freezer', icon: '❄️' },
+];
 
 function paramToString(value: string | string[] | undefined): string {
   if (Array.isArray(value)) return value[0] ?? '';
@@ -72,6 +79,7 @@ export default function AddProductScreen() {
   const [isSaving, setIsSaving] = useState(false);
   const [dateInputMode, setDateInputMode] = useState<DateInputMode>('auto');
   const [durationDays, setDurationDays] = useState('');
+  const [storageZone, setStorageZone] = useState<StorageZoneKey | null>(null);
 
   // Product metadata — initially from params, updated after async lookup
   const [productFound, setProductFound] = useState(paramToString(params.found) !== 'false');
@@ -171,18 +179,18 @@ export default function AddProductScreen() {
   const hasAutoSuggestions = !!(shelfLifeFridge || shelfLifeFreezer || shelfLifePantry);
 
   const autoSuggestions = useMemo(() => {
-    const out: { label: string; days: number; icon: keyof typeof Ionicons.glyphMap; color: string }[] = [];
+    const out: { label: string; days: number; icon: keyof typeof Ionicons.glyphMap; color: string; zone: StorageZoneKey }[] = [];
     if (shelfLifeFridge) out.push({
       label: t('suggestionRefrigerator', { days: shelfLifeFridge }),
-      days: shelfLifeFridge, icon: 'snow-outline', color: '#3b82f6',
+      days: shelfLifeFridge, icon: 'snow-outline', color: '#3b82f6', zone: 'frigo',
     });
     if (shelfLifePantry) out.push({
       label: t('suggestionPantry', { days: shelfLifePantry }),
-      days: shelfLifePantry, icon: 'cube-outline', color: '#f59e0b',
+      days: shelfLifePantry, icon: 'cube-outline', color: '#f59e0b', zone: 'placard',
     });
     if (shelfLifeFreezer) out.push({
       label: t('suggestionFreezer', { days: shelfLifeFreezer }),
-      days: shelfLifeFreezer, icon: 'thermometer-outline', color: '#8b5cf6',
+      days: shelfLifeFreezer, icon: 'thermometer-outline', color: '#8b5cf6', zone: 'congelateur',
     });
     return out;
   }, [shelfLifeFridge, shelfLifePantry, shelfLifeFreezer, t]);
@@ -198,8 +206,9 @@ export default function AddProductScreen() {
     }
   };
 
-  const handleAutoSuggestion = (days: number) => {
+  const handleAutoSuggestion = (days: number, zone: StorageZoneKey) => {
     setExpiryDate(addDays(new Date(), days));
+    setStorageZone(zone);
   };
 
   // Quick save — no expiry date, navigate immediately
@@ -208,12 +217,13 @@ export default function AddProductScreen() {
     setIsSaving(true);
     try {
       await addItem({
-        barcode:   normalizedBarcode || undefined,
-        name:      name.trim(),
-        brand:     brand.trim()    || undefined,
-        image_url: imageUrl        || undefined,
-        category:  foodCategory    || undefined,
-        quantity:  quantity.trim() || undefined,
+        barcode:     normalizedBarcode || undefined,
+        name:        name.trim(),
+        brand:       brand.trim()    || undefined,
+        image_url:   imageUrl        || undefined,
+        category:    foodCategory    || undefined,
+        quantity:    quantity.trim() || undefined,
+        storageZone: storageZone     ?? undefined,
       }, { source: normalizedBarcode ? 'barcode' : 'manual' });
       router.replace('/');
     } catch {
@@ -240,6 +250,7 @@ export default function AddProductScreen() {
         image_url:   imageUrl        || undefined,
         category:    foodCategory    || undefined,
         quantity:    quantity.trim() || undefined,
+        storageZone: storageZone     ?? undefined,
         expiry_date: expiryDate ? format(expiryDate, 'yyyy-MM-dd') : undefined,
         notes:       notes.trim()    || undefined,
       }, { source: normalizedBarcode ? 'barcode' : 'manual' });
@@ -367,7 +378,7 @@ export default function AddProductScreen() {
                   <TouchableOpacity
                     key={i}
                     style={[styles.suggestionCard, { borderColor: s.color }]}
-                    onPress={() => handleAutoSuggestion(s.days)}
+                    onPress={() => handleAutoSuggestion(s.days, s.zone)}
                   >
                     <View style={[styles.suggestionIcon, { backgroundColor: s.color + '20' }]}>
                       <Ionicons name={s.icon} size={24} color={s.color} />
@@ -436,6 +447,27 @@ export default function AddProductScreen() {
             placeholder={t('additionalNotesPlaceholder')}
             placeholderTextColor={C.textMid} multiline
           />
+        </View>
+
+        {/* Zone de stockage */}
+        <View style={styles.inputGroup}>
+          <Text style={styles.label}>{language === 'fr' ? 'Zone de stockage' : 'Storage zone'}</Text>
+          <View style={styles.zoneRow}>
+            {STORAGE_ZONES.map(z => {
+              const active = storageZone === z.key;
+              return (
+                <TouchableOpacity
+                  key={z.key}
+                  style={[styles.zoneChip, active && styles.zoneChipActive]}
+                  onPress={() => setStorageZone(prev => prev === z.key ? null : z.key)}
+                >
+                  <Text style={[styles.zoneChipText, active && styles.zoneChipTextActive]}>
+                    {z.icon} {language === 'fr' ? z.fr : z.en}
+                  </Text>
+                </TouchableOpacity>
+              );
+            })}
+          </View>
         </View>
 
         {/* Quick save — no expiry date required */}
@@ -583,6 +615,15 @@ const createStyles = (C: ReturnType<typeof getThemeColors>) => StyleSheet.create
     borderRadius: 10, paddingHorizontal: 10, paddingVertical: 8,
   },
   selectedDateText: { color: C.primary, fontSize: 13, fontWeight: '600' },
+
+  zoneRow: { flexDirection: 'row', gap: 8, flexWrap: 'wrap' },
+  zoneChip: {
+    paddingVertical: 8, paddingHorizontal: 14, borderRadius: 999,
+    backgroundColor: C.surfaceMuted, borderWidth: 1, borderColor: C.border,
+  },
+  zoneChipActive: { backgroundColor: C.primaryLight, borderColor: C.primary },
+  zoneChipText: { color: C.textMid, fontSize: 13, fontWeight: '600' },
+  zoneChipTextActive: { color: C.primary },
 
   quickSaveBtn: {
     marginTop: 4, marginBottom: 10, borderRadius: 12,

@@ -17,6 +17,14 @@ Une tâche est considérée comme **INCOMPLÈTE** tant que :
 
 **Aucune exception n'est acceptée** sauf raison technique explicitement documentée dans le commit.
 
+> **RÈGLE DE COMMIT/PUSH — NON NÉGOCIABLE**
+> Aucun `commit` ni `push` ne doit être effectué tant que :
+> - le test de non-régression du bug corrigé ou de la fonctionnalité implémentée n'a **pas été écrit**,
+> - la suite de tests complète (backend **et** frontend selon le périmètre touché) n'a **pas été exécutée localement et passée en totalité**,
+> - le pipeline CI GitHub (Actions) n'a **pas été vérifié vert** après le push.
+>
+> En cas d'échec CI après push, le fix doit être apporté **immédiatement** avant toute autre tâche.
+
 ### Localisation des tests
 
 | Périmètre | Répertoire | Commande |

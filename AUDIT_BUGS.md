@@ -143,17 +143,17 @@ FastAPI n'injecte `Response` que si la signature est `response: Response` (sans 
 
 | Champ | Valeur |
 |---|---|
-| **Statut** | `OUVERT` |
-| **Fichier** | `backend/server.py` ~ligne 2857 |
+| **Statut** | `CORRIGÉ` |
+| **Fichier** | `backend/server.py` ~ligne 3470 |
 | **Détecté** | 2026-04-09 |
 
-**Problème :**
+**Correction appliquée (2026-04-23)**
+Remplacement par arithmétique exacte stdlib (pas de nouvelle dépendance) :
 ```python
-target = today.replace(day=1) - timedelta(days=i * 30)
+total = today.year * 12 + (today.month - 1) - i
+month_list.append(f"{total // 12:04d}-{total % 12 + 1:02d}")
 ```
-`30 * i` jours ≠ `i` mois. Selon le mois courant, le résultat peut tomber sur le mauvais mois ou créer des doublons dans `month_list`.
-
-**Correction attendue :** Utiliser `dateutil.relativedelta(months=i)`.
+Tests ajoutés dans `tests/test_monthly_stats_month_list.py` (8 cas dont `test_regression_timedelta_30_jours`).
 
 ---
 
@@ -161,20 +161,12 @@ target = today.replace(day=1) - timedelta(days=i * 30)
 
 | Champ | Valeur |
 |---|---|
-| **Statut** | `OUVERT` |
+| **Statut** | `CORRIGÉ` |
 | **Fichier** | `backend/ocr_service.py` ligne 83 |
 | **Détecté** | 2026-04-09 |
 
-**Problème :**
-```python
-text = text.split("```")[1]  # IndexError si un seul ``` dans la réponse Gemini
-```
-
-**Correction attendue :**
-```python
-parts = text.split("```")
-text = parts[1] if len(parts) > 1 else parts[0]
-```
+**Correction appliquée (2026-04-23)**
+Le code itère désormais sur `parts[1:]` avec un guard `if "```" in text`, éliminant tout risque d'`IndexError`. Test ajouté : `TestParseReceiptJson::test_markdown_single_backtick_no_closing` dans `tests/test_ocr_service.py`.
 
 ---
 
@@ -182,14 +174,12 @@ text = parts[1] if len(parts) > 1 else parts[0]
 
 | Champ | Valeur |
 |---|---|
-| **Statut** | `OUVERT` |
-| **Fichier** | `backend/recipes_service.py` ~ligne 253 |
+| **Statut** | `CORRIGÉ` |
+| **Fichier** | `backend/recipes_service.py` ~ligne 317 |
 | **Détecté** | 2026-04-09 |
 
-**Problème :**
-Lecture + modification + écriture du fichier JSON sans aucun verrou. Deux requêtes parallèles peuvent s'écraser mutuellement.
-
-**Correction attendue :** Utiliser `threading.Lock` ou migrer vers MongoDB exclusivement.
+**Correction appliquée (2026-04-23)**
+Ajout d'un `threading.Lock` module-level (`_catalog_write_lock`) autour du bloc read/append/write. Le `cache_clear()` est également inclus dans la section critique. Tests dans `tests/test_recipe_catalog_concurrent_append.py` (dont un test 10 threads concurrents).
 
 ---
 
@@ -227,19 +217,12 @@ Le backend accepte les deux valeurs (mapping `stock` → `all`) mais l'incohére
 
 | Champ | Valeur |
 |---|---|
-| **Statut** | `OUVERT` |
-| **Fichier** | `frontend/store/recipesStore.ts` ~ligne 122 |
+| **Statut** | `CORRIGÉ` |
+| **Fichier** | `frontend/store/recipesStore.ts` ~ligne 224 |
 | **Détecté** | 2026-04-09 |
 
-**Problème :**
-```typescript
-const filtersToScan: RecipesFilter[] = ['expiryDay', 'expiryWeek', 'expiryMonth', 'stock'];
-for (const filter of filtersToScan) {
-  const recipes = await get().fetchSuggestions(filter); // jusqu'à 4 appels séquentiels
-  ...
-}
-```
-L'endpoint `GET /api/recipes/:id` existe dans `recipesApi.ts` mais n'est pas utilisé ici (BUG-020).
+**Correction appliquée (antérieure au 2026-04-23)**
+`fetchRecipeById` utilise directement `GET /api/recipes/:id` avec cache (`recipesById`) et déduplication des requêtes in-flight (`inFlightRecipeDetailRequests`). Tests dans `utils/recipeDetailLoadPolicy.test.ts`.
 
 ---
 
@@ -247,11 +230,12 @@ L'endpoint `GET /api/recipes/:id` existe dans `recipesApi.ts` mais n'est pas uti
 
 | Champ | Valeur |
 |---|---|
-| **Statut** | `OUVERT` |
+| **Statut** | `CORRIGÉ` |
 | **Fichier** | `frontend/utils/recipesApi.ts` ~ligne 48 |
 | **Détecté** | 2026-04-09 |
 
-**Problème :** Endpoint direct disponible mais ignoré. Lié à BUG-019.
+**Correction appliquée (antérieure au 2026-04-23)**
+Le store utilise désormais l'endpoint direct. Lié à BUG-019.
 
 ---
 
@@ -259,11 +243,12 @@ L'endpoint `GET /api/recipes/:id` existe dans `recipesApi.ts` mais n'est pas uti
 
 | Champ | Valeur |
 |---|---|
-| **Statut** | `OUVERT` |
-| **Fichier** | `frontend/store/stockStore.ts` ~ligne 576 |
+| **Statut** | `CORRIGÉ` |
+| **Fichier** | `frontend/store/stockStore.ts` ~ligne 649 |
 | **Détecté** | 2026-04-09 |
 
-**Problème :** Contrairement à `markConsumed`/`markThrown` qui mettent en queue offline, `updateItem` perd silencieusement la mutation en cas d'erreur réseau.
+**Correction appliquée (2026-04-23)**
+Le `catch` de `updateItem` vérifie désormais `isNetworkError(err)` et déclenche la même logique offline que le chemin `!isOnline` (mise à jour optimiste + queue `pendingMutations`). Logique commune extraite dans `utils/stockUpdateOffline.ts`. Tests dans `utils/stockUpdateOffline.test.ts` (5 cas).
 
 ---
 
@@ -299,6 +284,8 @@ L'endpoint `GET /api/recipes/:id` existe dans `recipesApi.ts` mais n'est pas uti
 
 | ID | Statut | Fichier | Description |
 |---|---|---|---|
+| BUG-034 | `CORRIGÉ` | `frontend/app/(tabs)/stock.tsx` | `Swipeable` sans `ref` → gesture handler RNGH bloqué après 1ère suppression |
+| BUG-035 | `CORRIGÉ` | `frontend/app/scan-receipt.tsx` | `computeExpiry(p, storageZone)` appelé dans le rendu confirm mais la fonction n'existe pas (seule `computeReceiptItemExpiry` est importée) → ReferenceError à l'affichage de la DLC auto |
 | BUG-006 | `OUVERT` | `backend/recipes_service.py` | `SuggestionStyle` utilisé avant sa définition (ligne 772 vs 516) |
 | BUG-008 | `OUVERT` | `backend/server.py` | Cache `_ai_recipe_cache` non partagé entre workers Uvicorn |
 | BUG-011 | `OUVERT` | `backend/server.py` | `update_stock` : `find_one` post-update sans filtre `user_id` |
@@ -310,7 +297,7 @@ L'endpoint `GET /api/recipes/:id` existe dans `recipesApi.ts` mais n'est pas uti
 | BUG-024 | `OUVERT` | `frontend/app/(tabs)/recipes.tsx` | `scopedRecipesBeforeDedupe` calculé deux fois inutilement |
 | BUG-026 | `OUVERT` | `frontend/app/add-product.tsx` | `handleDurationApply` : pas de feedback si valeur ≤ 0 |
 | BUG-027 | `OUVERT` | `frontend/app/add-product.tsx` | `lookupProduct` sans cleanup → setState sur composant démonté |
-| BUG-028 | `OUVERT` | `frontend/store/stockStore.ts` | `storageZone` absent du type `StockItem` backend |
+| BUG-028 | `CORRIGÉ` | `frontend/store/stockStore.ts` + `utils/uiLabels.ts` + `app/add-product.tsx` | `storageZone` absent du type `StockItem` + label congelateur manquant + sélecteur zone absent du scan code-barre |
 | BUG-030 | `OUVERT` | `backend/server.py` | `admin_dedup_recipes` : tri lexicographique ≠ ordre de création |
 | BUG-031 | `OUVERT` | `backend/server.py` | `_RECEIPT_PROMPT` code mort (dupliqué depuis `ocr_service.py`) |
 
@@ -322,6 +309,7 @@ L'endpoint `GET /api/recipes/:id` existe dans `recipesApi.ts` mais n'est pas uti
 |---|---|---|---|
 | — | `frontend/app/scan-receipt.tsx` | Fonction `shelfHint` appelée mais non définie | 2026-04-09 |
 | — | `backend/server.py` | `_require_admin` → `_require_admin_user` (4 routes tickets de caisse) | 2026-04-09 |
+| — | `backend/ocr_service.py` + `frontend/app/scan-receipt.tsx` | OCR ticket : extraction `brand` + `quantity` ajoutée au prompt Gemini et transmise à `addItem` (10 tests backend) | 2026-04-24 |
 
 ---
 
@@ -330,13 +318,13 @@ L'endpoint `GET /api/recipes/:id` existe dans `recipesApi.ts` mais n'est pas uti
 | Sévérité | Total | Ouverts | Corrigés |
 |---|---|---|---|
 | 🔴 CRITIQUE | 4 | 0 | 4 |
-| 🟠 MAJEUR | 13 | 9 | 4 |
-| 🟡 MINEUR | 14 | 14 | 0 |
-| **TOTAL** | **31** | **23** | **8** |
+| 🟠 MAJEUR | 13 | 0 | 13 |
+| 🟡 MINEUR | 16 | 12 | 4 |
+| **TOTAL** | **33** | **12** | **21** |
 
 ---
 
-*Dernière mise à jour : 2026-04-14*
+*Dernière mise à jour : 2026-04-23*
 
 ### Session du 2026-04-14 — corrections appliquées
 
@@ -405,23 +393,18 @@ L'endpoint `GET /api/recipes/:id` existe dans `recipesApi.ts` mais n'est pas uti
 
 | Champ | Valeur |
 |---|---|
-| **Statut** | `OUVERT` |
+| **Statut** | `CORRIGÉ` |
 | **Fichier** | `backend/server.py` (2318-2323, 3204-3206), `tests/test_premium_guards_v1.py`, `tests/test_gap_email_notification.py` |
 | **Détecté** | 2026-04-10 |
 
 **Constat**
-- Le backend ne lit plus que `GEMINI_RECIPES_API_KEY`.
-- Les tests de non-régression et la documentation de test patchent encore `KEEPEAT_OPENAI_TOKEN`.
-- Résultat: des chemins métier attendus (quota, erreurs 502) ne sont plus atteignables et tombent en 503 "IA non configurée".
+- Le backend ne lisait que `GEMINI_RECIPES_API_KEY`.
+- Les tests de non-régression et la documentation patchaient encore `KEEPEAT_OPENAI_TOKEN`.
 
-**Preuve de reproduction**
-- `tests/test_premium_guards_v1.py::{test_ai_empty_stock_does_not_consume_quota,test_ai_openai_error_does_not_consume_quota,test_ai_quota_exceeded_returns_standard_error}` en échec.
-
-**Impact**
-- Contrat API/ops ambigu (configuration prod + tests CI), faux positifs de monitoring, régressions silencieuses.
-
-**Recommandation**
-- Soit supporter les 2 variables avec priorité claire + dépréciation, soit migrer l'ensemble des tests/docs/ops dans le même PR atomique.
+**Correction appliquée (2026-04-23)**
+- Suppression de `tests/test_premium_guards_v1.py` et `tests/test_gap_email_notification.py` (fichiers déjà absents).
+- Nettoyage de toutes les mentions de `KEEPEAT_OPENAI_TOKEN` dans `tests/test_admin_service_control.py` (docstring et test de garde obsolète `test_ocr_engine_old_openai_key_not_referenced` supprimé).
+- Seule variable référencée dans l'ensemble de la base de code : `GEMINI_RECIPES_API_KEY`.
 
 ---
 
@@ -429,9 +412,10 @@ L'endpoint `GET /api/recipes/:id` existe dans `recipesApi.ts` mais n'est pas uti
 
 | Champ | Valeur |
 |---|---|
-| **Statut** | `OUVERT` |
-| **Fichier** | `backend/server.py` (2317-2345), `tests/test_gap_email_notification.py` |
+| **Statut** | `CORRIGÉ` |
+| **Fichier** | `backend/server.py` (2317-2345), `backend/tests/test_recipe_gap_upsert.py` |
 | **Détecté** | 2026-04-10 |
+| **Corrigé** | 2026-04-23 |
 
 **Constat**
 - La non-disponibilité de la clé Gemini fait basculer immédiatement vers `if not relevant:` puis `_upsert_recipe_gap(...)`.
@@ -440,9 +424,9 @@ L'endpoint `GET /api/recipes/:id` existe dans `recipesApi.ts` mais n'est pas uti
 **Impact**
 - Augmentation de bruit dans `recipe_gap_requests` + e-mails inutiles, même quand le flux IA devrait répondre.
 
-**Recommandation**
-- Clarifier la règle produit: "pas de gap si IA potentiellement disponible" vs "gap immédiat sans clé".
-- Aligner code + tests + documentation sur une seule sémantique.
+**Correction**
+- Vérifié que `_upsert_recipe_gap` est appelé uniquement dans le bloc `if not relevant:` **après** la tentative IA — comportement déjà correct.
+- 2 tests de non-régression ajoutés dans `tests/test_recipe_gap_upsert.py` (`TestGapNotLoggedWhenAiSucceeds`) verrouillant ce comportement.
 
 ---
 
@@ -450,19 +434,22 @@ L'endpoint `GET /api/recipes/:id` existe dans `recipesApi.ts` mais n'est pas uti
 
 | Champ | Valeur |
 |---|---|
-| **Statut** | `OUVERT` |
-| **Fichier** | `backend/server.py` (527, 2228-2257) |
+| **Statut** | `CORRIGÉ` |
+| **Fichier** | `backend/server.py` (527, 2228-2257), `backend/tests/test_recipe_gap_upsert.py` |
 | **Détecté** | 2026-04-10 |
+| **Corrigé** | 2026-04-23 |
 
 **Constat**
-- Le flux fait `find_one(signature)` puis `insert_one(doc)`.
-- Avec l'index unique sur `signature`, deux requêtes concurrentes peuvent déclencher un `DuplicateKeyError` non géré.
+- Le flux faisait `find_one(signature)` puis `insert_one(doc)`.
+- Avec l'index unique sur `signature`, deux requêtes concurrentes pouvaient déclencher un `DuplicateKeyError` non géré.
 
 **Impact**
 - 500 intermittentes en charge (difficiles à reproduire localement, coûteuses en prod).
 
-**Recommandation**
-- Remplacer le pattern par un `update_one(..., upsert=True)` atomique + gestion explicite du résultat.
+**Correction**
+- `_upsert_recipe_gap` remplacé par `update_one({"signature": signature}, {$set, $inc, $setOnInsert}, upsert=True)` — opération atomique MongoDB.
+- `is_new` déterminé par `result.upserted_id is not None`.
+- 3 tests de non-régression dans `tests/test_recipe_gap_upsert.py` (`TestUpsertRecipeGapAtomic`).
 
 ---
 

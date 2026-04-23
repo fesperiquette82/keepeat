@@ -4,6 +4,7 @@ import hashlib
 import json
 import os
 import re
+import threading
 import unicodedata as _ud
 from dataclasses import dataclass
 from functools import lru_cache
@@ -20,6 +21,7 @@ _FRIGO_CATS = ["frais", "proteines", "legumes", "boissons"]
 _PLACARD_CATS = ["feculents", "desserts", "epicerie", "autres"]
 
 _DEFAULT_CATALOG_PATH = Path(__file__).resolve().parent / "data" / "recipes.catalog.json"
+_catalog_write_lock = threading.Lock()
 _MIN_SCORE_MAIN_SUGGESTION = 0.55
 _MIN_SCORE_NEAR_SUGGESTION = 0.35
 _DEFAULT_GEMINI_RECIPES_MODEL = "gemini-2.0-flash-lite"
@@ -316,16 +318,17 @@ def clear_recipe_catalog_cache() -> None:
 def append_recipe_to_catalog(recipe_dict: dict, catalog_path: str | os.PathLike[str] | None = None) -> None:
     """Ajoute une nouvelle recette au fichier JSON du catalogue et invalide le cache mémoire."""
     path = Path(catalog_path) if catalog_path else _DEFAULT_CATALOG_PATH
-    try:
-        raw: list = json.loads(path.read_text(encoding="utf-8"))
-    except Exception as exc:
-        raise RecipeCatalogError(f"Impossible de lire le catalogue pour l'ajout : {exc}") from exc
-    raw.append(recipe_dict)
-    try:
-        path.write_text(json.dumps(raw, ensure_ascii=False, indent=2), encoding="utf-8")
-    except Exception as exc:
-        raise RecipeCatalogError(f"Impossible d'écrire le catalogue après ajout : {exc}") from exc
-    load_local_recipes.cache_clear()
+    with _catalog_write_lock:
+        try:
+            raw: list = json.loads(path.read_text(encoding="utf-8"))
+        except Exception as exc:
+            raise RecipeCatalogError(f"Impossible de lire le catalogue pour l'ajout : {exc}") from exc
+        raw.append(recipe_dict)
+        try:
+            path.write_text(json.dumps(raw, ensure_ascii=False, indent=2), encoding="utf-8")
+        except Exception as exc:
+            raise RecipeCatalogError(f"Impossible d'écrire le catalogue après ajout : {exc}") from exc
+        load_local_recipes.cache_clear()
 
 
 def load_recipe_catalog(catalog_path: str | os.PathLike[str] | None = None) -> list[Recipe]:

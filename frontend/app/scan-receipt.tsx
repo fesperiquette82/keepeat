@@ -33,6 +33,9 @@ interface ReceiptProduct extends ReceiptExpiryProduct {
   purchase_date?: string | null;
   category: string;
   food_category: string;
+  brand?: string | null;
+  quantity?: number | null;
+  unit?: string | null;
   shelf_life_fridge: number | null;
   shelf_life_pantry: number | null;
   shelf_life_freezer: number | null;
@@ -202,8 +205,10 @@ export default function ScanReceiptScreen() {
         toAdd.map(p =>
           addItem({
             name:          p.name,
+            brand:         p.brand ?? undefined,
             category:      p.category,
             food_category: p.food_category,
+            quantity:      p.quantity != null ? String(p.quantity) : undefined,
             expiry_date:   computeReceiptItemExpiry(p, storageZone),
             storageZone:   storageZone === 'fridge' ? 'frigo' : storageZone === 'freezer' ? 'congelateur' : 'placard',
           }, { source: 'receipt_ocr' }),
@@ -456,7 +461,7 @@ export default function ScanReceiptScreen() {
               <View style={styles.productInfo}>
                 <Text style={styles.productName}>{p.name}</Text>
                 {(() => {
-                  const expiry = computeExpiry(p, storageZone);
+                  const expiry = computeReceiptItemExpiry(p, storageZone);
                   if (expiry) {
                     const d = new Date(expiry);
                     const label = d.toLocaleDateString(isFr ? 'fr-FR' : 'en-GB', { day: '2-digit', month: 'short', year: 'numeric' });

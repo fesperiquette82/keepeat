@@ -69,6 +69,7 @@ Schéma obligatoire :
     {
       "raw_title": "libellé exact ticket",
       "normalized_title": "nom normalisé lisible en français",
+      "brand": "marque si lisible sur le ticket sinon null",
       "is_food": true,
       "quantity": 1,
       "unit": "unit|kg|g|l|ml|pack|piece",
@@ -194,6 +195,9 @@ def _normalize_receipt_item(item: dict[str, Any], purchase_date: str | None) -> 
     if not isinstance(unit, str) or not unit.strip():
         unit = "unit"
 
+    brand_raw = item.get("brand")
+    brand = brand_raw.strip() if isinstance(brand_raw, str) and brand_raw.strip() else None
+
     return {
         "name": normalized_title,
         "normalized_title": normalized_title,
@@ -201,6 +205,7 @@ def _normalize_receipt_item(item: dict[str, Any], purchase_date: str | None) -> 
         "purchase_date": purchase_date,
         "category": category,
         "food_category": category,
+        "brand": brand,
         "quantity": quantity,
         "unit": unit.strip(),
         "confidence": confidence,
