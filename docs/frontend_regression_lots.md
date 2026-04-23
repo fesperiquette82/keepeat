@@ -36,7 +36,7 @@ Objectif : industrialiser les tests de non-régression sur les micro-fonctionnal
 - Ajouter des gardes anti-régression sur champs optionnels/absents.
 
 ## Lot 6 — Intégration CI/qualité continue (partiel)
-- Garantir l’exécution systématique lint + tests sur PR et push `main`.
+- Garantir l’exécution systématique lint + tests sur PR et sur tous les pushes.
 - Étendre les garde-fous “tests modifiés requis” aux zones critiques identifiées.
 - Produire un reporting synthétique des suites de non-régression par domaine.
 - Statut : ✅ script de reporting des suites frontend + exécution dans CI.
