@@ -12,7 +12,12 @@
     "validate:deploy-meta": "python ../backend/scripts/validate_frontend_deploy_metadata.py",
     "lint": "expo lint",
     "test": "npm run test:ci",
-    "test:ci": "rm -rf .test-dist && tsc -p tsconfig.test.json && node --test .test-dist/**/*.test.js"
+    "test:build": "rm -rf .test-dist && tsc -p tsconfig.test.json",
+    "test:unit": "npm run test:build && node --test .test-dist/utils/**/*.test.js .test-dist/data/**/*.test.js",
+    "test:integration": "npm run test:build && node --test .test-dist/integration/**/*.test.js",
+    "test:smoke": "npm run test:build && node --test .test-dist/smoke/**/*.test.js",
+    "test:ci": "npm run test:unit && npm run test:integration && npm run test:smoke",
+    "test:full": "npm run test:ci"
   },
   "dependencies": {
     "@expo/metro-runtime": "^6.1.2",
