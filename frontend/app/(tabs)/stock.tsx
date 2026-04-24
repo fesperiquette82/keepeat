@@ -248,15 +248,20 @@ export default function StockScreen() {
                 renderLeftActions={() => renderSwipeAction('Utilisé', '#16A34A', 'restaurant-outline')}
                 renderRightActions={() => renderSwipeAction('Jeté', '#DC2626', 'trash-outline')}
                 onSwipeableLeftOpen={() => {
-                  // Fermer le Swipeable immédiatement pour libérer le gesture handler RNGH.
-                  // Sans ce close(), le composant se démonte en état "ouvert" et bloque
-                  // tous les swipes suivants.
+                  // Fermer tous les autres Swipeable d'abord (pattern std pour FlatList).
+                  // Puis close() le courant pour libérer le gesture handler RNGH après l'action.
+                  swipeableRefs.current.forEach((ref, key) => {
+                    if (key !== item.id) ref?.close();
+                  });
                   swipeableRefs.current.get(item.id)?.close();
                   void swipeActionQueueRef.current.enqueue(
                     () => handleSwipeAction(item.id, resolveSwipeActionFromOpenSide('left')),
                   );
                 }}
                 onSwipeableRightOpen={() => {
+                  swipeableRefs.current.forEach((ref, key) => {
+                    if (key !== item.id) ref?.close();
+                  });
                   swipeableRefs.current.get(item.id)?.close();
                   void swipeActionQueueRef.current.enqueue(
                     () => handleSwipeAction(item.id, resolveSwipeActionFromOpenSide('right')),
