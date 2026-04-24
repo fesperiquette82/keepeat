@@ -162,3 +162,23 @@ test("resolveStockItems garde le placeholder UI quand aucune image valide n'exis
   ]);
   assert.equal(result.items[0]?.image_url, undefined);
 });
+
+test('resolveStockItems conserve les doublons de nom quand les IDs sont différents (cas scan/ajouts multiples)', () => {
+  const result = resolveStockItems([
+    {
+      ...buildItem('dup-1', 'Poivrons mi-séchés ricotta basilic', '2026-04-20'),
+      quantity: '1',
+    },
+    {
+      ...buildItem('dup-2', 'Poivrons mi-séchés ricotta basilic', '2026-04-22'),
+      quantity: '1',
+    },
+  ]);
+
+  assert.equal(result.items.length, 2);
+  assert.deepEqual(result.items.map((item) => item.id), ['dup-1', 'dup-2']);
+  assert.deepEqual(result.items.map((item) => item.name), [
+    'Poivrons mi-séchés ricotta basilic',
+    'Poivrons mi-séchés ricotta basilic',
+  ]);
+});

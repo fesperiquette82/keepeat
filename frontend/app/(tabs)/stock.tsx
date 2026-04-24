@@ -13,7 +13,7 @@ import { removeStockItems, undoRemovedStockItems } from '../../utils/stockRemova
 import { countLabelFr } from '../../utils/uiText';
 import { storageZoneLabel, UI_LABELS } from '../../utils/uiLabels';
 import { expiryColor } from '../../utils/expiryLabels';
-import { resolveStockRemovalBanner, resolveSwipeAction } from '../../utils/stockSwipe';
+import { createSwipeActionQueue, resolveStockRemovalBanner, resolveSwipeActionFromOpenSide } from '../../utils/stockSwipe';
 
 type StockFilter = 'tous' | 'urgents' | 'frigo' | 'placard';
 type StockSort = 'expiry' | 'alpha' | 'recent' | 'oldest';
@@ -55,6 +55,7 @@ export default function StockScreen() {
   const [searchQuery, setSearchQuery] = useState('');
   const [imageErrors, setImageErrors] = useState<Record<string, boolean>>({});
   const [processingIds, setProcessingIds] = useState<Record<string, boolean>>({});
+  const swipeActionQueueRef = useRef(createSwipeActionQueue());
   // Refs pour fermer chaque Swipeable avant suppression — sans close() le gesture handler
   // de RNGH reste en état "ouvert" quand l'item se démonte, bloquant les swipes suivants.
   const swipeableRefs = useRef<Map<string, Swipeable>>(new Map());
@@ -246,12 +247,20 @@ export default function StockScreen() {
                 overshootRight={false}
                 renderLeftActions={() => renderSwipeAction('Utilisé', '#16A34A', 'restaurant-outline')}
                 renderRightActions={() => renderSwipeAction('Jeté', '#DC2626', 'trash-outline')}
-                onSwipeableOpen={(direction) => {
+                onSwipeableLeftOpen={() => {
                   // Fermer le Swipeable immédiatement pour libérer le gesture handler RNGH.
                   // Sans ce close(), le composant se démonte en état "ouvert" et bloque
                   // tous les swipes suivants.
                   swipeableRefs.current.get(item.id)?.close();
-                  handleSwipeAction(item.id, resolveSwipeAction(direction));
+                  void swipeActionQueueRef.current.enqueue(
+                    () => handleSwipeAction(item.id, resolveSwipeActionFromOpenSide('left')),
+                  );
+                }}
+                onSwipeableRightOpen={() => {
+                  swipeableRefs.current.get(item.id)?.close();
+                  void swipeActionQueueRef.current.enqueue(
+                    () => handleSwipeAction(item.id, resolveSwipeActionFromOpenSide('right')),
+                  );
                 }}
               >
                 <TouchableOpacity

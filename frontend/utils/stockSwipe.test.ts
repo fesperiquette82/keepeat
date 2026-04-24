@@ -1,7 +1,7 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import type { StockItem } from '../store/stockStore';
-import { resolveStockRemovalBanner, resolveSwipeAction, resolveSwipeActionFromOpenSide } from './stockSwipe';
+import { createSwipeActionQueue, resolveStockRemovalBanner, resolveSwipeAction, resolveSwipeActionFromOpenSide } from './stockSwipe';
 
 const removedItem: StockItem = {
   id: '1',
@@ -33,6 +33,37 @@ test('régression: deux ouvertures Swipeable consécutives à gauche restent map
   const actions = sequence.map((direction) => resolveSwipeAction(direction));
 
   assert.deepEqual(actions, ['used', 'used']);
+});
+
+test('régression: suppressions consécutives gauche puis droite restent correctement mappées', () => {
+  const openSides = ['left', 'right'] as const;
+  const actions = openSides.map((side) => resolveSwipeActionFromOpenSide(side));
+
+  assert.deepEqual(actions, ['used', 'thrown']);
+});
+
+test('createSwipeActionQueue exécute les suppressions en série même si elles arrivent en rafale', async () => {
+  const queue = createSwipeActionQueue();
+  const executionOrder: string[] = [];
+
+  const first = queue.enqueue(async () => {
+    executionOrder.push('start-1');
+    await new Promise((resolve) => setTimeout(resolve, 5));
+    executionOrder.push('end-1');
+    return 'first';
+  });
+
+  const second = queue.enqueue(async () => {
+    executionOrder.push('start-2');
+    executionOrder.push('end-2');
+    return 'second';
+  });
+
+  const [firstResult, secondResult] = await Promise.all([first, second]);
+
+  assert.equal(firstResult, 'first');
+  assert.equal(secondResult, 'second');
+  assert.deepEqual(executionOrder, ['start-1', 'end-1', 'start-2', 'end-2']);
 });
 test('resolveStockRemovalBanner garde l\'annulation quand la suppression a réussi', () => {
   const banner = resolveStockRemovalBanner('used', {
