@@ -103,6 +103,28 @@ test('monotonie recettes: jour ⊂ semaine ⊂ mois ⊂ toutes', (t) => {
   assert.equal(stockIds.has('r_month'), true);
 });
 
+test('monotonie stricte avec item sans date: day ⊆ week ⊆ month ⊆ stock (inclut sans date uniquement dans stock)', (t) => {
+  t.mock.timers.enable({ apis: ['Date'], now: new Date('2026-04-10T12:00:00.000Z') });
+
+  const items: DashboardStockItem[] = [
+    buildItem('today', 'Oeufs', '2026-04-10'),
+    buildItem('week', 'Lait', '2026-04-13'),
+    buildItem('month', 'Riz', '2026-04-30'),
+    { ...buildItem('nodate', 'Farine', '2026-04-30'), expiry_date: undefined },
+  ];
+
+  const dayNames = new Set(getActiveItemsByScope(items, 'expiryDay').map((item) => item.name));
+  const weekNames = new Set(getActiveItemsByScope(items, 'expiryWeek').map((item) => item.name));
+  const monthNames = new Set(getActiveItemsByScope(items, 'expiryMonth').map((item) => item.name));
+  const stockNames = new Set(getActiveItemsByScope(items, 'stock').map((item) => item.name));
+
+  dayNames.forEach((name) => assert.equal(weekNames.has(name), true));
+  weekNames.forEach((name) => assert.equal(monthNames.has(name), true));
+  monthNames.forEach((name) => assert.equal(stockNames.has(name), true));
+  assert.equal(stockNames.has('Farine'), true);
+  assert.equal(monthNames.has('Farine'), false);
+});
+
 test('filtrage recettes: aucun ingrédient cible normalisable => aucune recette', () => {
   const recipes = [{ id: 'r1', available_ingredients: ['oeufs'] }];
   const filtered = filterRecipesByTargetIngredients(recipes, new Set());

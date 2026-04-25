@@ -190,6 +190,7 @@ export default function StockItemDetailScreen() {
         </TouchableOpacity>
         <Text style={styles.headerTitle}>Détail produit</Text>
         <TouchableOpacity
+          testID="stock-item-edit-button"
           style={styles.editButton}
           onPress={() => router.push(buildProductEditRoute(selectedItem.id))}
           accessibilityRole="button"

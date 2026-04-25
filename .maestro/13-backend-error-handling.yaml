@@ -1,0 +1,8 @@
+appId: com.fesperiquette.keepeat
+---
+- launchApp
+- assertVisible:
+    id: tab-home
+- assertVisible:
+    id: backend-error-message
+    optional: true

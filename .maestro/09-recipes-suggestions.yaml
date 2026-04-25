@@ -1,0 +1,7 @@
+appId: com.fesperiquette.keepeat
+---
+- launchApp
+- tapOn:
+    id: tab-recipes
+- assertVisible:
+    id: recipes-filter-today

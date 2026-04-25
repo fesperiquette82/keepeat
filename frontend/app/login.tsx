@@ -182,6 +182,7 @@ export default function LoginScreen() {
               <View style={styles.inputWrapper}>
                 <Ionicons name="mail-outline" size={18} color="#666" style={styles.inputIcon} />
                 <TextInput
+                  testID="login-email-input"
                   style={styles.input}
                   value={email}
                   onChangeText={setEmail}
@@ -207,6 +208,7 @@ export default function LoginScreen() {
               <View style={styles.inputWrapper}>
                 <Ionicons name="lock-closed-outline" size={18} color="#666" style={styles.inputIcon} />
                 <TextInput
+                  testID="login-password-input"
                   style={[styles.input, styles.inputPassword]}
                   value={password}
                   onChangeText={setPassword}
@@ -223,6 +225,7 @@ export default function LoginScreen() {
             </View>
 
             <TouchableOpacity
+              testID="login-submit-button"
               style={[styles.submitBtn, isLoading && styles.submitBtnDisabled]}
               onPress={handleLogin}
               disabled={isLoading}

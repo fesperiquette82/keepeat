@@ -49,6 +49,7 @@ export default function TabsLayout() {
           name="index"
           options={{
             title: isFr ? 'Accueil' : 'Home',
+            tabBarButtonTestID: 'tab-home',
             tabBarIcon: ({ color, size }) => (
               <Ionicons name="home-outline" size={size} color={color} />
             ),
@@ -58,6 +59,7 @@ export default function TabsLayout() {
           name="stock"
           options={{
             title: isFr ? 'Stock' : 'Stock',
+            tabBarButtonTestID: 'tab-stock',
             tabBarIcon: ({ color, size }) => (
               <Ionicons name="cube-outline" size={size} color={color} />
             ),
@@ -67,6 +69,7 @@ export default function TabsLayout() {
           name="recipes"
           options={{
             title: isFr ? 'Recettes' : 'Recipes',
+            tabBarButtonTestID: 'tab-recipes',
             tabBarIcon: ({ color, size }) => (
               <Ionicons name="restaurant-outline" size={size} color={color} />
             ),
@@ -76,6 +79,7 @@ export default function TabsLayout() {
           name="stats"
           options={{
             title: isFr ? 'Stats' : 'Stats',
+            tabBarButtonTestID: 'tab-stats',
             tabBarIcon: ({ color, size }) => (
               <Ionicons name="person-circle-outline" size={size} color={color} />
             ),

@@ -1,0 +1,9 @@
+appId: com.fesperiquette.keepeat
+---
+- launchApp
+- tapOn:
+    id: tab-stock
+- tapOn:
+    id: stock-item-row
+- assertVisible:
+    id: stock-item-edit-button

@@ -1,0 +1,21 @@
+appId: com.fesperiquette.keepeat
+---
+- launchApp
+- tapOn:
+    id: tab-recipes
+- tapOn:
+    id: recipes-filter-today
+- assertVisible:
+    id: recipes-filter-week
+- tapOn:
+    id: recipes-filter-week
+- assertVisible:
+    id: recipes-filter-month
+- tapOn:
+    id: recipes-filter-month
+- assertVisible:
+    id: recipes-filter-all
+- tapOn:
+    id: recipes-filter-all
+- assertVisible:
+    id: recipes-filter-today

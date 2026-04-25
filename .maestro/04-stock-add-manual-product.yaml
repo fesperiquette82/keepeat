@@ -1,0 +1,16 @@
+appId: com.fesperiquette.keepeat
+---
+- launchApp
+- tapOn:
+    id: tab-scan
+- tapOn:
+    id: scan-add-manual-button
+- assertVisible:
+    id: add-product-name-input
+- tapOn:
+    id: add-product-name-input
+- inputText: Courgette test
+- tapOn:
+    id: add-product-save-button
+- assertVisible:
+    id: tab-stock

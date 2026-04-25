@@ -1,0 +1,15 @@
+appId: com.fesperiquette.keepeat
+---
+- launchApp
+- assertVisible:
+    id: tab-home
+- tapOn:
+    id: tab-stock
+- assertVisible:
+    id: stock-screen-title
+- tapOn:
+    id: tab-recipes
+- assertVisible: "Recettes"
+- tapOn:
+    id: tab-stats
+- assertVisible: "Stats"

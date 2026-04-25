@@ -234,7 +234,7 @@ export default function PremiumScreen() {
   }, [context]);
 
   return (
-    <SafeAreaView style={styles.container}>
+    <SafeAreaView testID="premium-paywall" style={styles.container}>
       <View style={styles.card}>
         <Text style={styles.title}>{copy.heroTitle}</Text>
         <Text style={styles.subtitle}>{copy.heroSubtitle}</Text>

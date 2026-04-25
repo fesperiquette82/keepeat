@@ -1,0 +1,32 @@
+{
+  "users": {
+    "free": {
+      "email": "free-user@keepeat.test",
+      "password": "Password123!",
+      "is_premium": false,
+      "subscription_status": "inactive"
+    },
+    "premium": {
+      "email": "premium-user@keepeat.test",
+      "password": "Password123!",
+      "is_premium": true,
+      "subscription_status": "active"
+    }
+  },
+  "stock_cases": {
+    "empty": [],
+    "expiring_today": ["Yaourt nature"],
+    "expiring_week": ["Carottes"],
+    "expiring_month": ["Pâtes"]
+  },
+  "lookup": {
+    "known_barcode": "3017620422003",
+    "unknown_barcode": "0000000000000",
+    "error_401_barcode": "4010000000000",
+    "error_500_barcode": "5000000000000"
+  },
+  "mocks": {
+    "ocr": "stable",
+    "ai_recipe": "stable"
+  }
+}

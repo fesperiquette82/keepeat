@@ -1,0 +1,11 @@
+appId: com.fesperiquette.keepeat
+---
+- launchApp
+- tapOn:
+    id: tab-stats
+- tapOn:
+    text: "Premium"
+    optional: true
+- assertVisible:
+    id: premium-paywall
+    optional: true
