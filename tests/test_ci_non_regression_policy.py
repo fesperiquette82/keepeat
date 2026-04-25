@@ -111,13 +111,22 @@ def test_maestro_e2e_is_fully_runnable_in_github_actions():
     assert "shell: bash" not in workflow
     assert "bash scripts/run-maestro-e2e.sh" in workflow
     assert 'while IFS= read -r flow_file; do' in maestro_script
+    assert "adb wait-for-device" in maestro_script
+    assert "adb devices -l" in maestro_script
     assert 'mode="seeded"' in maestro_script
     assert 'if [ "$flow_name" = "03-stock-empty-state" ]; then' in maestro_script
+    assert 'adb shell am force-stop "$E2E_ANDROID_APP_ID" || true' in maestro_script
+    assert "adb shell am force-stop dev.mobile.maestro || true" in maestro_script
+    assert "sleep 2" in maestro_script
+    assert "==> Running flow: $flow_name (mode=$mode)" in maestro_script
     assert "E2E_RESET_SEED_BASE_URL" in maestro_script
     assert 'node scripts/e2e-reset-seed.mjs --mode "$mode" --base-url "$E2E_RESET_SEED_BASE_URL"' in maestro_script
     assert "10.0.2.2:8000" not in maestro_script
     assert "find .maestro -maxdepth 1 -name '*.yaml' ! -name 'config.yaml' | sort" in maestro_script
     assert '~/.maestro/bin/maestro test "$flow_file"' in maestro_script
+    assert "❌ Maestro flow failed: $flow_name" in maestro_script
+    assert "find maestro-results -maxdepth 3 -type f | sort || true" in maestro_script
+    assert "tail -n 200 backend-e2e.log || true" in maestro_script
     assert "actions/upload-artifact@v4" in workflow
     assert "adb install -r e2e-apk/app-debug.apk" in maestro_script
 
