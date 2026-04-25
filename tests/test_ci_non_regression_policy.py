@@ -41,8 +41,20 @@ def test_maestro_e2e_is_fully_runnable_in_github_actions():
     assert "MONGO_URL: mongodb://127.0.0.1:27017/keepeat_e2e_test" in workflow
     assert "DB_NAME: keepeat_e2e_test" in workflow
     assert "APP_ENV: test" in workflow
+    assert 'DISABLE_EXTERNAL_SERVICES: "true"' in workflow
+    assert "JWT_SECRET: test-secret" in workflow
+    assert "PYTHONPATH: ${{ github.workspace }}" in workflow
+    assert "pip install -r backend/requirements.txt" in workflow
+    assert "Waiting for MongoDB test service..." in workflow
+    assert "from pymongo import MongoClient" in workflow
+    assert "import backend.server" in workflow
+    assert "python -m uvicorn backend.server:app" in workflow
+    assert "if [ \"$HEALTH_OK\" != \"true\" ]; then" in workflow
+    assert "cat backend-e2e.log" in workflow
+    assert "kill -0 \"$UVICORN_PID\"" in workflow
+    assert "traceback.print_exc()" in workflow
     assert "EXPO_PUBLIC_BACKEND_URL: http://10.0.2.2:8000" in workflow
-    assert "curl --fail http://127.0.0.1:8000/health" in workflow
+    assert "curl --silent --fail http://127.0.0.1:8000/health" in workflow
     assert "POST http://127.0.0.1:8000/api/test/reset" in workflow
     assert "POST http://127.0.0.1:8000/api/test/seed" in workflow
     assert "scripts/e2e-reset-seed.mjs" in workflow
@@ -50,7 +62,6 @@ def test_maestro_e2e_is_fully_runnable_in_github_actions():
     assert 'maestro test "$flow_file"' in workflow
     assert "frontend/android/app/build/outputs/apk/debug/app-debug.apk" in workflow
     assert "actions/upload-artifact@v4" in workflow
-    assert 'DISABLE_EXTERNAL_SERVICES: "true"' in workflow
 
 
 def test_codex_auto_fix_workflow_has_required_guardrails():

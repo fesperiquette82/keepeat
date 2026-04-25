@@ -59,16 +59,79 @@ jobs:
           MOCK_PUSH: "true"
           JWT_SECRET: test-secret
           BACKEND_URL: http://127.0.0.1:8000
+          PYTHONPATH: ${{ github.workspace }}
         run: |
-          nohup python -m uvicorn backend.server:app --host 0.0.0.0 --port 8000 > backend-e2e.log 2>&1 &
-          for i in {1..30}; do
+          set -euo pipefail
+
+          echo "PWD=$(pwd)"
+          echo "Waiting for MongoDB test service..."
+          python - <<'PY'
+          import os
+          import time
+          from pymongo import MongoClient
+
+          mongo_url = os.environ["MONGO_URL"]
+          last_error = None
+          for _ in range(60):
+              try:
+                  client = MongoClient(mongo_url, serverSelectionTimeoutMS=1000)
+                  client.admin.command("ping")
+                  print("MongoDB ping ok")
+                  break
+              except Exception as exc:  # pragma: no cover - CI diagnostics
+                  last_error = exc
+                  time.sleep(1)
+          else:
+              raise SystemExit(f"MongoDB unavailable after timeout: {last_error}")
+          PY
+
+          echo "Verifying Python import path for backend.server..."
+          python - <<'PY'
+          import backend.server
+          print("backend.server import ok")
+          PY
+
+          nohup python -m uvicorn backend.server:app --host 0.0.0.0 --port 8000 --log-level debug > backend-e2e.log 2>&1 &
+          UVICORN_PID=$!
+          echo "uvicorn_pid=$UVICORN_PID"
+
+          HEALTH_OK="false"
+          for i in {1..60}; do
             if curl --silent --fail http://127.0.0.1:8000/health >/tmp/health.json; then
               cat /tmp/health.json
+              HEALTH_OK="true"
               break
             fi
             sleep 1
           done
-          curl --fail http://127.0.0.1:8000/health >/dev/null
+
+          if [ "$HEALTH_OK" != "true" ]; then
+            echo "❌ Backend /health check failed"
+            if [ -f backend-e2e.log ]; then
+              echo "===== backend-e2e.log ====="
+              cat backend-e2e.log
+              echo "===== end backend-e2e.log ====="
+            fi
+            if kill -0 "$UVICORN_PID" 2>/dev/null; then
+              echo "uvicorn process still running (pid=$UVICORN_PID)"
+              ps -fp "$UVICORN_PID" || true
+            else
+              echo "uvicorn process exited before health check (pid=$UVICORN_PID)"
+            fi
+
+            echo "Python import diagnostics:"
+            python - <<'PY'
+            import traceback
+            try:
+                import backend.server  # noqa: F401
+                print("Import backend.server ok (post-failure)")
+            except Exception:  # pragma: no cover - CI diagnostics
+                traceback.print_exc()
+                raise
+            PY
+            exit 1
+          fi
+
           curl --fail -X POST http://127.0.0.1:8000/api/test/reset
           curl --fail -X POST http://127.0.0.1:8000/api/test/seed
 
