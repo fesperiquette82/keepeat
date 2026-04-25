@@ -120,15 +120,7 @@ jobs:
             fi
 
             echo "Python import diagnostics:"
-            python - <<'PY'
-            import traceback
-            try:
-                import backend.server  # noqa: F401
-                print("Import backend.server ok (post-failure)")
-            except Exception:  # pragma: no cover - CI diagnostics
-                traceback.print_exc()
-                raise
-            PY
+            python -c "import importlib; importlib.import_module('backend.server'); print('Import backend.server ok (post-failure)')"
             exit 1
           fi
 

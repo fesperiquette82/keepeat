@@ -52,7 +52,8 @@ def test_maestro_e2e_is_fully_runnable_in_github_actions():
     assert "if [ \"$HEALTH_OK\" != \"true\" ]; then" in workflow
     assert "cat backend-e2e.log" in workflow
     assert "kill -0 \"$UVICORN_PID\"" in workflow
-    assert "traceback.print_exc()" in workflow
+    assert "Python import diagnostics:" in workflow
+    assert "importlib.import_module('backend.server')" in workflow
     assert "EXPO_PUBLIC_BACKEND_URL: http://10.0.2.2:8000" in workflow
     assert "curl --silent --fail http://127.0.0.1:8000/health" in workflow
     assert "POST http://127.0.0.1:8000/api/test/reset" in workflow
@@ -99,3 +100,10 @@ def test_codex_auto_fix_prompt_exists_and_forbids_weakening_tests():
     assert "Ne jamais affaiblir les scénarios Maestro métier" in prompt
     assert "Ne jamais contourner test-policy" in prompt
     assert "Ne jamais désactiver les garde-fous anti-appels externes" in prompt
+
+
+def test_admin_dashboard_workflow_runs_pytest_with_package_pythonpath():
+    workflow = Path(".github/workflows/admin-dashboard-monitoring.yml").read_text(encoding="utf-8")
+
+    assert "PYTHONPATH: ${{ github.workspace }}" in workflow
+    assert "python -m pytest -q backend/tests/test_admin_monitoring.py backend/tests/test_admin_monitoring_dashboard_api.py" in workflow

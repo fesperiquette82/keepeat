@@ -90,6 +90,7 @@ jobs:
           JWT_SECRET: "test_secret_ci"
           GEMINI_OCR_API_KEY: "dummy_for_tests"
           GEMINI_RECIPES_API_KEY: "dummy_for_tests"
+          PYTHONPATH: ${{ github.workspace }}
         run: >
           python -m pytest
           tests/test_ci_non_regression_policy.py
@@ -126,6 +127,7 @@ jobs:
           JWT_SECRET: "test_secret_ci"
           GEMINI_OCR_API_KEY: "dummy_for_tests"
           GEMINI_RECIPES_API_KEY: "dummy_for_tests"
+          PYTHONPATH: ${{ github.workspace }}
         run: python -m pytest tests backend/tests --tb=short -q
 
   test-policy:

@@ -1,21 +1,15 @@
 import asyncio
 import os
-import sys
-from pathlib import Path
 from decimal import Decimal
 
 import httpx
 from bson import ObjectId
 from bson.decimal128 import Decimal128
 
-BACKEND_DIR = Path(__file__).resolve().parents[1]
-if str(BACKEND_DIR) not in sys.path:
-    sys.path.insert(0, str(BACKEND_DIR))
-
 os.environ.setdefault("MONGO_URL", "mongodb://localhost:27017")
 os.environ.setdefault("JWT_SECRET_KEY", "test-secret")
 
-import server
+from backend import server
 
 
 ADMIN_USER = {"id": "507f1f77bcf86cd799439011", "email": "admin@keepeat.app", "is_admin": True}

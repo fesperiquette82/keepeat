@@ -4,13 +4,8 @@ Couvre les fonctions pures utilisées par les endpoints /admin/monitoring/*.
 """
 import importlib
 import sys
-from pathlib import Path
 
-BACKEND_DIR = Path(__file__).resolve().parents[1]
-if str(BACKEND_DIR) not in sys.path:
-    sys.path.insert(0, str(BACKEND_DIR))
-
-from observability import _compute_endpoint_severity, classify_error_type, normalize_endpoint_key
+from backend.observability import _compute_endpoint_severity, classify_error_type, normalize_endpoint_key
 
 
 class TestNormalizeEndpointKey:
@@ -83,9 +78,9 @@ class TestAdminDashboardRouteRegistered:
     def _load(self, monkeypatch):
         monkeypatch.setenv("MONGO_URL", "mongodb://localhost:27017/keepeat-test")
         monkeypatch.setenv("JWT_SECRET_KEY", "test-secret")
-        if "server" in sys.modules:
-            del sys.modules["server"]
-        return importlib.import_module("server")
+        if "backend.server" in sys.modules:
+            del sys.modules["backend.server"]
+        return importlib.import_module("backend.server")
 
     def test_dashboard_route_exists(self, monkeypatch):
         server = self._load(monkeypatch)
