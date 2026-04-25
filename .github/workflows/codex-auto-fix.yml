@@ -1,0 +1,172 @@
+name: Codex Auto-fix
+
+on:
+  workflow_run:
+    workflows:
+      - CI
+      - Mobile E2E (Maestro)
+      - Admin dashboard monitoring tests
+    types:
+      - completed
+
+jobs:
+  codex-auto-fix:
+    if: ${{ github.event.workflow_run.conclusion == 'failure' && github.event.workflow_run.event == 'pull_request' }}
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+      pull-requests: write
+      actions: read
+
+    steps:
+      - name: Resolve PR context
+        id: pr
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          REPO: ${{ github.repository }}
+          PR_NUMBER: ${{ github.event.workflow_run.pull_requests[0].number }}
+        run: |
+          if [ -z "$PR_NUMBER" ] || [ "$PR_NUMBER" = "null" ]; then
+            echo "No PR linked to failing workflow_run."
+            echo "should_run=false" >> "$GITHUB_OUTPUT"
+            exit 0
+          fi
+
+          PR_JSON=$(gh api "repos/$REPO/pulls/$PR_NUMBER")
+          HEAD_REF=$(echo "$PR_JSON" | jq -r '.head.ref')
+          HEAD_REPO=$(echo "$PR_JSON" | jq -r '.head.repo.full_name')
+
+          echo "pr_number=$PR_NUMBER" >> "$GITHUB_OUTPUT"
+          echo "head_ref=$HEAD_REF" >> "$GITHUB_OUTPUT"
+
+          if [ "$HEAD_REPO" != "$REPO" ]; then
+            echo "Untrusted fork PR detected ($HEAD_REPO). Skip auto-fix."
+            echo "should_run=false" >> "$GITHUB_OUTPUT"
+            exit 0
+          fi
+
+          echo "should_run=true" >> "$GITHUB_OUTPUT"
+
+      - name: Count previous auto-fix attempts
+        if: steps.pr.outputs.should_run == 'true'
+        id: attempts
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          REPO: ${{ github.repository }}
+          PR_NUMBER: ${{ steps.pr.outputs.pr_number }}
+        run: |
+          ATTEMPT=$(gh api "repos/$REPO/issues/$PR_NUMBER/comments" --paginate \
+            --jq '[.[].body | capture("<!-- codex-autofix-attempt: (?<n>[0-9]+) -->")?.n // empty | tonumber] | max // 0')
+          NEXT=$((ATTEMPT + 1))
+
+          echo "attempt=$ATTEMPT" >> "$GITHUB_OUTPUT"
+          echo "next_attempt=$NEXT" >> "$GITHUB_OUTPUT"
+
+      - name: Stop after 3 attempts
+        if: steps.pr.outputs.should_run == 'true' && steps.attempts.outputs.next_attempt > '3'
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          REPO: ${{ github.repository }}
+          PR_NUMBER: ${{ steps.pr.outputs.pr_number }}
+        run: |
+          gh pr comment "$PR_NUMBER" --repo "$REPO" --body "<!-- codex-autofix-attempt: 3 -->
+          ⚠️ Codex auto-fix arrêté : 3 tentatives déjà effectuées.
+
+          Diagnostic : merci d'analyser manuellement les logs du run en échec (cause racine persistante)."
+
+      - name: Checkout PR head branch
+        if: steps.pr.outputs.should_run == 'true' && steps.attempts.outputs.next_attempt <= '3'
+        uses: actions/checkout@v5
+        with:
+          ref: ${{ steps.pr.outputs.head_ref }}
+
+      - name: Download failing run artifacts (best effort)
+        if: steps.pr.outputs.should_run == 'true' && steps.attempts.outputs.next_attempt <= '3'
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          RUN_ID: ${{ github.event.workflow_run.id }}
+        run: |
+          mkdir -p failed-run-artifacts
+          gh run download "$RUN_ID" --dir failed-run-artifacts || true
+
+      - name: Run Codex auto-fix
+        if: steps.pr.outputs.should_run == 'true' && steps.attempts.outputs.next_attempt <= '3'
+        uses: openai/codex-action@v1
+        env:
+          OPENAI_API_KEY: ${{ secrets.OPENAI_API_KEY }}
+        with:
+          prompt-file: .github/codex/prompts/auto-fix-ci.md
+          sandbox: workspace-write
+          safety-strategy: drop-sudo
+
+      - name: Setup Python
+        if: steps.pr.outputs.should_run == 'true' && steps.attempts.outputs.next_attempt <= '3'
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+
+      - name: Run required fast validation
+        if: steps.pr.outputs.should_run == 'true' && steps.attempts.outputs.next_attempt <= '3'
+        run: |
+          python -m pytest tests/test_ci_non_regression_policy.py -q
+          python -m py_compile backend/server.py backend/test_mode.py
+
+      - name: Setup Node for frontend validation
+        if: steps.pr.outputs.should_run == 'true' && steps.attempts.outputs.next_attempt <= '3'
+        uses: actions/setup-node@v5
+        with:
+          node-version: 22
+          cache: npm
+          cache-dependency-path: frontend/package-lock.json
+
+      - name: Run frontend validation when frontend changed
+        if: steps.pr.outputs.should_run == 'true' && steps.attempts.outputs.next_attempt <= '3'
+        run: |
+          if git diff --name-only | grep -q '^frontend/'; then
+            cd frontend
+            npm ci
+            npm run lint
+            npm run test:ci
+          else
+            echo "No frontend diff detected, skip frontend validation."
+          fi
+
+      - name: Commit and push fixes if any
+        if: steps.pr.outputs.should_run == 'true' && steps.attempts.outputs.next_attempt <= '3'
+        id: commit
+        run: |
+          if git diff --quiet; then
+            echo "changed=false" >> "$GITHUB_OUTPUT"
+            exit 0
+          fi
+
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add -A
+          git commit -m "chore: codex auto-fix CI failure (attempt ${{ steps.attempts.outputs.next_attempt }})"
+          git push origin "${{ steps.pr.outputs.head_ref }}"
+          echo "changed=true" >> "$GITHUB_OUTPUT"
+
+      - name: Comment PR summary
+        if: steps.pr.outputs.should_run == 'true' && steps.attempts.outputs.next_attempt <= '3'
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          REPO: ${{ github.repository }}
+          PR_NUMBER: ${{ steps.pr.outputs.pr_number }}
+        run: |
+          RESULT="✅ Correctif poussé"
+          if [ "${{ steps.commit.outputs.changed }}" != "true" ]; then
+            RESULT="ℹ️ Aucun changement à pousser"
+          fi
+
+          gh pr comment "$PR_NUMBER" --repo "$REPO" --body "<!-- codex-autofix-attempt: ${{ steps.attempts.outputs.next_attempt }} -->
+          🤖 Codex auto-fix — tentative #${{ steps.attempts.outputs.next_attempt }}
+
+          - Cause probable : premier échec réel extrait des logs du run en échec.
+          - Fichiers modifiés : voir commit de la tentative si présent.
+          - Tests exécutés :
+            - python -m pytest tests/test_ci_non_regression_policy.py -q
+            - python -m py_compile backend/server.py backend/test_mode.py
+            - frontend lint/test:ci si fichiers frontend modifiés
+          - Résultat : $RESULT
+          - Prochaine étape en cas d'échec : revue manuelle de la cause racine et correctif ciblé."
