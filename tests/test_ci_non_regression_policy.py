@@ -19,17 +19,32 @@ def test_ci_executes_backend_non_regression_test_suites():
     workflow = Path(".github/workflows/ci.yml").read_text(encoding="utf-8")
 
     assert "tests/test_verify_tests_added_policy_script.py" in workflow
-    assert "python -m pytest tests backend/tests --tb=short -q" in workflow
+    assert "backend/tests/test_recipe_suggestions_contract.py" in workflow
 
 
-def test_ci_defines_fast_and_full_layers():
+def test_ci_defines_pr_check_layers():
     workflow = Path(".github/workflows/ci.yml").read_text(encoding="utf-8")
 
-    assert "frontend-fast" in workflow
-    assert "backend-fast" in workflow
-    assert "frontend-full" in workflow
-    assert "backend-full" in workflow
+    assert "frontend-pr-checks" in workflow
+    assert "backend-pr-checks" in workflow
+    assert "policy-pr-checks" in workflow
     assert "npm run test:ci" in workflow
+    assert "python -m pytest" in workflow
+
+
+def test_main_release_post_merge_workflow_keeps_full_suites():
+    workflow = Path(".github/workflows/main-release-post-merge.yml").read_text(encoding="utf-8")
+
+    assert "push:" in workflow
+    assert "branches:" in workflow
+    assert "- main" in workflow
+    assert "tags:" in workflow
+    assert "workflow_dispatch:" in workflow
+    assert "frontend-main-release-full" in workflow
+    assert "backend-main-release-full" in workflow
+    assert "npm run test:full" in workflow
+    assert "npm run build" in workflow
+    assert "python -m pytest tests backend/tests --tb=short -q" in workflow
 
 
 def test_maestro_e2e_is_fully_runnable_in_github_actions():
