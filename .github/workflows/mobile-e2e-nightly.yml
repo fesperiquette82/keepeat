@@ -1,0 +1,145 @@
+name: Mobile E2E Nightly (Maestro full)
+
+on:
+  schedule:
+    - cron: '30 2 * * *'
+  workflow_dispatch:
+
+jobs:
+  build-android-debug-apk:
+    name: Mobile E2E nightly / Build Android debug APK
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v5
+
+      - name: Setup Node
+        uses: actions/setup-node@v5
+        with:
+          node-version: 22
+          cache: npm
+          cache-dependency-path: frontend/package-lock.json
+
+      - name: Install frontend dependencies
+        working-directory: frontend
+        run: npm ci
+
+      - name: Setup Java
+        uses: actions/setup-java@v5
+        with:
+          distribution: temurin
+          java-version: "17"
+          cache: gradle
+
+      - name: Prebuild Android app
+        working-directory: frontend
+        env:
+          EXPO_PUBLIC_BACKEND_URL: http://10.0.2.2:8000
+          CI: "1"
+          EXPO_NO_TELEMETRY: "1"
+        run: npx expo prebuild --platform android --clean
+
+      - name: Build debug APK
+        working-directory: frontend/android
+        run: |
+          chmod +x ./gradlew
+          ./gradlew assembleDebug --no-daemon
+
+      - name: Upload Android debug APK artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: android-debug-apk
+          path: frontend/android/app/build/outputs/apk/debug/app-debug.apk
+
+  maestro-e2e-full:
+    name: Mobile E2E nightly / Full Maestro suite
+    needs: build-android-debug-apk
+    runs-on: ubuntu-latest
+    services:
+      mongodb:
+        image: mongo:7
+        ports:
+          - 27017:27017
+        options: >-
+          --health-cmd "mongosh --eval 'db.adminCommand({ ping: 1 })'"
+          --health-interval 10s
+          --health-timeout 5s
+          --health-retries 10
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v5
+
+      - name: Setup Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+          cache: pip
+          cache-dependency-path: backend/requirements.txt
+
+      - name: Install backend dependencies
+        run: pip install -r backend/requirements.txt
+
+      - name: Start backend in test mode
+        env:
+          MONGO_URL: mongodb://127.0.0.1:27017/keepeat_e2e_test
+          DB_NAME: keepeat_e2e_test
+          APP_ENV: test
+          DISABLE_EXTERNAL_SERVICES: "true"
+          MOCK_AI: "true"
+          MOCK_OCR: "true"
+          MOCK_OPEN_FOOD_FACTS: "true"
+          MOCK_BILLING: "true"
+          MOCK_EMAILS: "true"
+          MOCK_PUSH: "true"
+          JWT_SECRET: test-secret
+          BACKEND_URL: http://127.0.0.1:8000
+          PYTHONPATH: ${{ github.workspace }}
+        run: |
+          set -euo pipefail
+          nohup python -m uvicorn backend.server:app --host 0.0.0.0 --port 8000 --log-level debug > backend-e2e.log 2>&1 &
+          for _ in {1..60}; do
+            if curl --silent --fail http://127.0.0.1:8000/health >/dev/null; then
+              break
+            fi
+            sleep 1
+          done
+          curl --fail http://127.0.0.1:8000/health
+
+      - name: Download Android debug APK artifact
+        uses: actions/download-artifact@v4
+        with:
+          name: android-debug-apk
+          path: e2e-apk
+
+      - name: Setup Node (for E2E reset/seed helper)
+        uses: actions/setup-node@v5
+        with:
+          node-version: 22
+
+      - name: Install Maestro CLI
+        run: curl -Ls "https://get.maestro.mobile.dev" | bash
+
+      - name: Run nightly full Maestro suite
+        uses: reactivecircus/android-emulator-runner@v2
+        env:
+          E2E_RESET_SEED_BASE_URL: http://127.0.0.1:8000
+          MAESTRO_SUITE: full
+        with:
+          api-level: 34
+          arch: x86_64
+          script: |
+            bash scripts/run-maestro-e2e.sh --suite "$MAESTRO_SUITE"
+
+      - name: Upload nightly E2E artifacts
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: mobile-e2e-nightly-artifacts
+          path: |
+            e2e-apk/app-debug.apk
+            maestro-results
+            backend-e2e.log
+            emulator-logcat.txt
+            ~/.maestro/tests

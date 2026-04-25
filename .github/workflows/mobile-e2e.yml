@@ -118,7 +118,7 @@ jobs:
           path: frontend/android/app/build/outputs/apk/debug/app-debug.apk
 
   maestro-e2e:
-    name: Mobile E2E / Maestro E2E suite
+    name: Mobile E2E / PR smoke Maestro suite
     needs:
       - changes
       - build-android-debug-apk
@@ -270,11 +270,12 @@ jobs:
         uses: reactivecircus/android-emulator-runner@v2
         env:
           E2E_RESET_SEED_BASE_URL: http://127.0.0.1:8000
+          MAESTRO_SUITE: smoke
         with:
           api-level: 34
           arch: x86_64
           script: |
-            bash scripts/run-maestro-e2e.sh
+            bash scripts/run-maestro-e2e.sh --suite "$MAESTRO_SUITE"
 
       - name: Upload E2E artifacts
         if: always()

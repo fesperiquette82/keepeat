@@ -74,7 +74,7 @@ def test_maestro_e2e_is_fully_runnable_in_github_actions():
     assert "Mobile E2E / Not required (changes filter)" in workflow
     assert "needs.changes.outputs.mobile_e2e_required == 'false'" in workflow
     assert "Mobile E2E / Build Android debug APK" in workflow
-    assert "Mobile E2E / Maestro E2E suite" in workflow
+    assert "Mobile E2E / PR smoke Maestro suite" in workflow
     assert "name: android-debug-apk" in workflow
     assert "uses: actions/download-artifact@v4" in workflow
     assert "name: android-debug-apk" in workflow
@@ -109,8 +109,16 @@ def test_maestro_e2e_is_fully_runnable_in_github_actions():
     assert "scripts/e2e-reset-seed.mjs" in maestro_script
     assert "reactivecircus/android-emulator-runner@v2" in workflow
     assert "shell: bash" not in workflow
-    assert "bash scripts/run-maestro-e2e.sh" in workflow
-    assert 'while IFS= read -r flow_file; do' in maestro_script
+    assert "bash scripts/run-maestro-e2e.sh --suite \"$MAESTRO_SUITE\"" in workflow
+    assert 'MAESTRO_SUITE="full"' in maestro_script
+    assert '--suite' in maestro_script
+    assert 'if [ "$MAESTRO_SUITE" != "smoke" ] && [ "$MAESTRO_SUITE" != "full" ]; then' in maestro_script
+    assert 'FLOW_FILES=()' in maestro_script
+    assert 'if [ "$MAESTRO_SUITE" = "smoke" ]; then' in maestro_script
+    assert '".maestro/00-smoke-launch.yaml"' in maestro_script
+    assert '".maestro/01-auth-session.yaml"' in maestro_script
+    assert '".maestro/02-navigation-main-tabs.yaml"' in maestro_script
+    assert 'for flow_file in "${FLOW_FILES[@]}"; do' in maestro_script
     assert "adb wait-for-device" in maestro_script
     assert "adb devices -l" in maestro_script
     assert 'mode="seeded"' in maestro_script
@@ -129,6 +137,21 @@ def test_maestro_e2e_is_fully_runnable_in_github_actions():
     assert "tail -n 200 backend-e2e.log || true" in maestro_script
     assert "actions/upload-artifact@v4" in workflow
     assert "adb install -r e2e-apk/app-debug.apk" in maestro_script
+
+
+def test_mobile_e2e_nightly_runs_full_suite():
+    workflow = Path(".github/workflows/mobile-e2e-nightly.yml").read_text(encoding="utf-8")
+
+    assert "name: Mobile E2E Nightly (Maestro full)" in workflow
+    assert "schedule:" in workflow
+    assert "cron: '30 2 * * *'" in workflow
+    assert "workflow_dispatch:" in workflow
+    assert "build-android-debug-apk:" in workflow
+    assert "maestro-e2e-full:" in workflow
+    assert "Mobile E2E nightly / Full Maestro suite" in workflow
+    assert "MONGO_URL: mongodb://127.0.0.1:27017/keepeat_e2e_test" in workflow
+    assert 'MAESTRO_SUITE: full' in workflow
+    assert 'bash scripts/run-maestro-e2e.sh --suite "$MAESTRO_SUITE"' in workflow
 
 
 def test_codex_auto_fix_workflow_has_required_guardrails():
@@ -180,7 +203,7 @@ def test_auto_merge_workflow_requires_explicit_critical_success_checks():
     assert "MOBILE_NOT_REQUIRED_CHECK" in workflow
     assert "Mobile E2E / Not required (changes filter)" in workflow
     assert "Mobile E2E / Build Android debug APK" in workflow
-    assert "Mobile E2E / Maestro E2E suite" in workflow
+    assert "Mobile E2E / PR smoke Maestro suite" in workflow
     assert "either explicit \"not required\" success OR both build+maestro success" in workflow
     assert "if [ \"$STATUS\" = \"completed\" ] && [ \"$CONCLUSION\" = \"success\" ];" in workflow
     assert "Critical checks gate failed" in workflow

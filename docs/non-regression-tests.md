@@ -58,6 +58,12 @@ En cas de doute (ex. `workflow_dispatch` manuel), le workflow **force l’exécu
 
 Le filtre est maintenu manuellement. Donc si un jour un nouveau dossier ou fichier impactant l’application mobile est ajouté, il faudra l’ajouter explicitement à la liste des chemins qui déclenchent Mobile E2E.
 
+## Stratégie PR / Nightly / Release
+- **PR** : rapide, fiable, bloquant.  
+  Si changement mobile détecté, on lance **build APK + smoke Maestro uniquement** (`00-smoke-launch`, `01-auth-session`, `02-navigation-main-tabs`).
+- **Nightly** : workflow dédié `.github/workflows/mobile-e2e-nightly.yml` avec **suite Maestro complète**.
+- **Release** : exiger la suite Maestro complète + checklist manuelle réelle (compte gratuit/premium, permissions caméra, validation courte sur téléphone réel) avant publication Play Store.
+
 ## Reset/seed par scénario
 - Script CI : `scripts/e2e-reset-seed.mjs`.
 - Mode `seeded` : reset + seed fixtures.

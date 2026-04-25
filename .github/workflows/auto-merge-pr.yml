@@ -146,7 +146,7 @@ jobs:
           # Mobile checks: either explicit "not required" success OR both build+maestro success.
           MOBILE_NOT_REQUIRED_CHECK="Mobile E2E / Not required (changes filter)"
           MOBILE_BUILD_CHECK="Mobile E2E / Build Android debug APK"
-          MOBILE_MAESTRO_CHECK="Mobile E2E / Maestro E2E suite"
+          MOBILE_MAESTRO_CHECK="Mobile E2E / PR smoke Maestro suite"
 
           MOBILE_NOT_REQUIRED_INFO=$(echo "$CHECK_RUNS" | jq --arg name "$MOBILE_NOT_REQUIRED_CHECK" '[.check_runs[] | select(.name == $name)] | sort_by(.started_at // "") | last')
           if [ "$MOBILE_NOT_REQUIRED_INFO" != "null" ] && [ -n "$MOBILE_NOT_REQUIRED_INFO" ]; then
