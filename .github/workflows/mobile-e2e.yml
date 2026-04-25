@@ -249,11 +249,27 @@ jobs:
         with:
           node-version: 22
 
+      - name: Verify host-side backend health before Maestro
+        env:
+          E2E_RESET_SEED_BASE_URL: http://127.0.0.1:8000
+        run: |
+          if ! curl --fail "$E2E_RESET_SEED_BASE_URL/health"; then
+            echo "❌ Backend unreachable from runner at $E2E_RESET_SEED_BASE_URL"
+            if [ -f backend-e2e.log ]; then
+              echo "===== backend-e2e.log ====="
+              cat backend-e2e.log
+              echo "===== end backend-e2e.log ====="
+            fi
+            exit 1
+          fi
+
       - name: Install Maestro CLI
         run: curl -Ls "https://get.maestro.mobile.dev" | bash
 
       - name: Run Maestro E2E suite
         uses: reactivecircus/android-emulator-runner@v2
+        env:
+          E2E_RESET_SEED_BASE_URL: http://127.0.0.1:8000
         with:
           api-level: 34
           arch: x86_64

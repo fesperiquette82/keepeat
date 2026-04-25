@@ -101,6 +101,8 @@ def test_maestro_e2e_is_fully_runnable_in_github_actions():
     assert "Python import diagnostics:" in workflow
     assert "importlib.import_module('backend.server')" in workflow
     assert "EXPO_PUBLIC_BACKEND_URL: http://10.0.2.2:8000" in workflow
+    assert "E2E_RESET_SEED_BASE_URL: http://127.0.0.1:8000" in workflow
+    assert "curl --fail \"$E2E_RESET_SEED_BASE_URL/health\"" in workflow
     assert "curl --silent --fail http://127.0.0.1:8000/health" in workflow
     assert "POST http://127.0.0.1:8000/api/test/reset" in workflow
     assert "POST http://127.0.0.1:8000/api/test/seed" in workflow
@@ -111,7 +113,9 @@ def test_maestro_e2e_is_fully_runnable_in_github_actions():
     assert 'while IFS= read -r flow_file; do' in maestro_script
     assert 'mode="seeded"' in maestro_script
     assert 'if [ "$flow_name" = "03-stock-empty-state" ]; then' in maestro_script
-    assert 'node scripts/e2e-reset-seed.mjs --mode="$mode" --base-url=http://10.0.2.2:8000' in maestro_script
+    assert "E2E_RESET_SEED_BASE_URL" in maestro_script
+    assert 'node scripts/e2e-reset-seed.mjs --mode "$mode" --base-url "$E2E_RESET_SEED_BASE_URL"' in maestro_script
+    assert "10.0.2.2:8000" not in maestro_script
     assert "find .maestro -maxdepth 1 -name '*.yaml' ! -name 'config.yaml' | sort" in maestro_script
     assert '~/.maestro/bin/maestro test "$flow_file"' in maestro_script
     assert "actions/upload-artifact@v4" in workflow
