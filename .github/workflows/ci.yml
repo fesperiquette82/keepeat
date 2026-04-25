@@ -7,7 +7,7 @@ on:
 
 jobs:
   frontend-pr-checks:
-    name: PR checks / Frontend lint + tests
+    name: Frontend regression tests
     runs-on: ubuntu-latest
 
     defaults:
@@ -38,7 +38,7 @@ jobs:
         run: node ../scripts/report-frontend-regression-suites.mjs
 
   backend-pr-checks:
-    name: PR checks / Backend pytest
+    name: Backend regression tests
     runs-on: ubuntu-latest
 
     steps:
@@ -74,7 +74,7 @@ jobs:
           --tb=short -q
 
   policy-pr-checks:
-    name: PR checks / Policy & test-change guard
+    name: Non-regression policy checks
     runs-on: ubuntu-latest
 
     steps:

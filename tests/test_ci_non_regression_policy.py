@@ -28,6 +28,9 @@ def test_ci_defines_pr_check_layers():
     assert "frontend-pr-checks" in workflow
     assert "backend-pr-checks" in workflow
     assert "policy-pr-checks" in workflow
+    assert "Frontend regression tests" in workflow
+    assert "Backend regression tests" in workflow
+    assert "Non-regression policy checks" in workflow
     assert "npm run test:ci" in workflow
     assert "python -m pytest" in workflow
 
@@ -50,6 +53,7 @@ def test_main_release_post_merge_workflow_keeps_full_suites():
 def test_maestro_e2e_is_fully_runnable_in_github_actions():
     workflow = Path(".github/workflows/mobile-e2e.yml").read_text(encoding="utf-8")
 
+    assert "Mobile E2E user regression tests" in workflow
     assert "services:" in workflow
     assert "mongodb:" in workflow
     assert "mongo:7" in workflow

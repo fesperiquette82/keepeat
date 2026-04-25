@@ -19,6 +19,7 @@ on:
 
 jobs:
   android-maestro-e2e:
+    name: Mobile E2E user regression tests
     runs-on: ubuntu-latest
     services:
       mongodb:
