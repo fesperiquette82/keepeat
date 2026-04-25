@@ -1002,7 +1002,7 @@ def _ensure_test_mode_route() -> None:
         raise HTTPException(status_code=404, detail="Not found")
 
 
-@api_router.post("/test/reset")
+@app.post("/api/test/reset")
 async def test_reset_data():
     _ensure_test_mode_route()
     collections = [stock_col, products_cache_col, receipt_tickets_col, business_events_col, service_usage_logs_col]
@@ -1012,7 +1012,7 @@ async def test_reset_data():
     return {"ok": True, "action": "reset"}
 
 
-@api_router.post("/test/seed")
+@app.post("/api/test/seed")
 async def test_seed_data():
     _ensure_test_mode_route()
     free_fixture = TEST_FIXTURES["users"]["free"]

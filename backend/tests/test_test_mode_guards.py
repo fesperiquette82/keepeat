@@ -28,8 +28,8 @@ def test_test_mode_blocks_external_calls_when_disabled(monkeypatch):
 def test_server_declares_test_seed_and_reset_routes():
     content = Path("backend/server.py").read_text(encoding="utf-8")
 
-    assert '@api_router.post("/test/reset")' in content
-    assert '@api_router.post("/test/seed")' in content
+    assert '@app.post("/api/test/reset")' in content
+    assert '@app.post("/api/test/seed")' in content
     assert "if not is_test_env():" in content
 
 
