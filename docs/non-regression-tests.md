@@ -56,6 +56,8 @@ Si les changements ne touchent que des zones non mobiles (ex. backend pur, docs)
 
 En cas de doute (ex. `workflow_dispatch` manuel), le workflow **force l’exécution** de Mobile E2E.
 
+Le filtre est maintenu manuellement. Donc si un jour un nouveau dossier ou fichier impactant l’application mobile est ajouté, il faudra l’ajouter explicitement à la liste des chemins qui déclenchent Mobile E2E.
+
 ## Reset/seed par scénario
 - Script CI : `scripts/e2e-reset-seed.mjs`.
 - Mode `seeded` : reset + seed fixtures.
