@@ -36,15 +36,25 @@ Les scénarios Maestro sont dans `.maestro/` :
 Workflow : `.github/workflows/mobile-e2e.yml`.
 
 Schéma :
-1. Démarrage d’un **MongoDB dédié au job E2E** (`mongo:7`, DB `keepeat_e2e_test`).
-2. Démarrage backend FastAPI en `APP_ENV=test` avec blocage des services externes.
-3. Vérification explicite de disponibilité backend via `/health`.
-4. Build APK Android avec `EXPO_PUBLIC_BACKEND_URL=http://10.0.2.2:8000` (URL émulateur → host runner).
-5. Installation APK sur émulateur.
-6. Exécution de chaque flow Maestro **individuellement** avec reset/seed déterministe avant flow.
-7. Upload artifacts de diagnostic.
+1. **Changes detection gate** décide si Mobile E2E est requis (`mobile_e2e_required=true/false`).
+2. Si requis : build APK Android dédié (job `Build Android debug APK`), upload artifact APK.
+3. Si requis : job `Maestro E2E suite` (Mongo test + backend test-mode + download APK + flows Maestro).
+4. Si non requis : job `Not required (changes filter)` avec raison explicite dans les logs.
 
 Le backend écoute sur `0.0.0.0:8000` en CI, et l’émulateur Android l’atteint via `10.0.2.2:8000`.
+
+## Quand Mobile E2E est lancé
+Le build APK + Maestro sont lancés si un fichier mobile est modifié, notamment :
+- `frontend/**`
+- `.maestro/**`
+- `.github/workflows/mobile-e2e.yml`
+- `package.json` / `package-lock.json` (racine et frontend)
+- `app.json`, `app.config.*`, `eas.json`, `android/**`
+- `scripts/e2e-*`
+
+Si les changements ne touchent que des zones non mobiles (ex. backend pur, docs), Mobile E2E est volontairement sauté pour économiser ~20–25 min de build APK.
+
+En cas de doute (ex. `workflow_dispatch` manuel), le workflow **force l’exécution** de Mobile E2E.
 
 ## Reset/seed par scénario
 - Script CI : `scripts/e2e-reset-seed.mjs`.

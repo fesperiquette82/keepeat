@@ -54,9 +54,24 @@ def test_maestro_e2e_is_fully_runnable_in_github_actions():
     workflow = Path(".github/workflows/mobile-e2e.yml").read_text(encoding="utf-8")
     build_job_block = workflow.split("maestro-e2e:")[0]
 
+    assert "Mobile E2E / Changes detection gate" in workflow
+    assert "mobile_e2e_required" in workflow
+    assert "reason=" in workflow
+    assert "dorny/paths-filter@v3" in workflow
+    assert "mobile_e2e_required:" in workflow
+    assert "'frontend/**'" in workflow
+    assert "'.maestro/**'" in workflow
+    assert "'.github/workflows/mobile-e2e.yml'" in workflow
+    assert "'scripts/e2e-*'" in workflow
+    assert "'backend/**'" not in workflow.split("filters: |")[1].split("Build Android debug APK")[0]
+    assert "'docs/**'" not in workflow.split("filters: |")[1].split("Build Android debug APK")[0]
     assert "build-android-debug-apk:" in workflow
     assert "maestro-e2e:" in workflow
-    assert "needs: build-android-debug-apk" in workflow
+    assert "needs:" in workflow
+    assert "- build-android-debug-apk" in workflow
+    assert "needs.changes.outputs.mobile_e2e_required == 'true'" in workflow
+    assert "Mobile E2E / Not required (changes filter)" in workflow
+    assert "needs.changes.outputs.mobile_e2e_required == 'false'" in workflow
     assert "Mobile E2E / Build Android debug APK" in workflow
     assert "Mobile E2E / Maestro E2E suite" in workflow
     assert "name: android-debug-apk" in workflow
@@ -141,8 +156,12 @@ def test_auto_merge_workflow_requires_explicit_critical_success_checks():
     assert "Backend regression tests" in workflow
     assert "Non-regression policy checks" in workflow
     assert "Backend admin dashboard tests" in workflow
+    assert "Mobile E2E / Changes detection gate" in workflow
+    assert "MOBILE_NOT_REQUIRED_CHECK" in workflow
+    assert "Mobile E2E / Not required (changes filter)" in workflow
     assert "Mobile E2E / Build Android debug APK" in workflow
     assert "Mobile E2E / Maestro E2E suite" in workflow
+    assert "either explicit \"not required\" success OR both build+maestro success" in workflow
     assert "if [ \"$STATUS\" = \"completed\" ] && [ \"$CONCLUSION\" = \"success\" ];" in workflow
     assert "Critical checks gate failed" in workflow
     assert "mergeStateStatus" not in workflow

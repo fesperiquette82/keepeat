@@ -102,8 +102,7 @@ jobs:
             "Backend regression tests",
             "Non-regression policy checks",
             "Backend admin dashboard tests",
-            "Mobile E2E / Build Android debug APK",
-            "Mobile E2E / Maestro E2E suite"
+            "Mobile E2E / Changes detection gate"
           ]'
 
           CHECK_RUNS=$(gh api "repos/$REPO/commits/$HEAD_SHA/check-runs?per_page=100")
@@ -114,13 +113,13 @@ jobs:
 
           ALL_OK=true
 
-          while IFS= read -r CHECK_NAME; do
-            CHECK_INFO=$(echo "$CHECK_RUNS" | jq --arg name "$CHECK_NAME" '[.check_runs[] | select(.name == $name)] | sort_by(.started_at // "") | last')
+          check_status() {
+            local check_name="$1"
+            CHECK_INFO=$(echo "$CHECK_RUNS" | jq --arg name "$check_name" '[.check_runs[] | select(.name == $name)] | sort_by(.started_at // "") | last')
 
             if [ "$CHECK_INFO" = "null" ] || [ -z "$CHECK_INFO" ]; then
-              printf "%-55s | %-12s | %-12s | %s\n" "$CHECK_NAME" "missing" "-" "BLOCK"
-              ALL_OK=false
-              continue
+              printf "%-55s | %-12s | %-12s | %s\n" "$check_name" "missing" "-" "BLOCK"
+              return 1
             fi
 
             STATUS=$(echo "$CHECK_INFO" | jq -r '.status // "unknown"')
@@ -130,11 +129,43 @@ jobs:
             if [ "$STATUS" = "completed" ] && [ "$CONCLUSION" = "success" ]; then
               DECISION="OK"
             else
-              ALL_OK=false
+              printf "%-55s | %-12s | %-12s | %s\n" "$check_name" "$STATUS" "$CONCLUSION" "$DECISION"
+              return 1
             fi
 
-            printf "%-55s | %-12s | %-12s | %s\n" "$CHECK_NAME" "$STATUS" "$CONCLUSION" "$DECISION"
+            printf "%-55s | %-12s | %-12s | %s\n" "$check_name" "$STATUS" "$CONCLUSION" "$DECISION"
+            return 0
+          }
+
+          while IFS= read -r CHECK_NAME; do
+            if ! check_status "$CHECK_NAME"; then
+              ALL_OK=false
+            fi
           done < <(echo "$REQUIRED_CHECKS_JSON" | jq -r '.[]')
+
+          # Mobile checks: either explicit "not required" success OR both build+maestro success.
+          MOBILE_NOT_REQUIRED_CHECK="Mobile E2E / Not required (changes filter)"
+          MOBILE_BUILD_CHECK="Mobile E2E / Build Android debug APK"
+          MOBILE_MAESTRO_CHECK="Mobile E2E / Maestro E2E suite"
+
+          MOBILE_NOT_REQUIRED_INFO=$(echo "$CHECK_RUNS" | jq --arg name "$MOBILE_NOT_REQUIRED_CHECK" '[.check_runs[] | select(.name == $name)] | sort_by(.started_at // "") | last')
+          if [ "$MOBILE_NOT_REQUIRED_INFO" != "null" ] && [ -n "$MOBILE_NOT_REQUIRED_INFO" ]; then
+            MNR_STATUS=$(echo "$MOBILE_NOT_REQUIRED_INFO" | jq -r '.status // "unknown"')
+            MNR_CONCLUSION=$(echo "$MOBILE_NOT_REQUIRED_INFO" | jq -r '.conclusion // "none"')
+            if [ "$MNR_STATUS" = "completed" ] && [ "$MNR_CONCLUSION" = "success" ]; then
+              printf "%-55s | %-12s | %-12s | %s\n" "$MOBILE_NOT_REQUIRED_CHECK" "$MNR_STATUS" "$MNR_CONCLUSION" "OK"
+            else
+              printf "%-55s | %-12s | %-12s | %s\n" "$MOBILE_NOT_REQUIRED_CHECK" "$MNR_STATUS" "$MNR_CONCLUSION" "BLOCK"
+              ALL_OK=false
+            fi
+          else
+            if ! check_status "$MOBILE_BUILD_CHECK"; then
+              ALL_OK=false
+            fi
+            if ! check_status "$MOBILE_MAESTRO_CHECK"; then
+              ALL_OK=false
+            fi
+          fi
 
           if [ "$ALL_OK" != "true" ]; then
             echo "Critical checks gate failed: at least one required check is missing or not completed+success."

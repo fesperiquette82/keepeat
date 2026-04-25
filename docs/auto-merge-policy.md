@@ -12,8 +12,11 @@ Le workflow vérifie explicitement, sur le **head SHA** de la PR :
 2. `Backend regression tests`
 3. `Non-regression policy checks`
 4. `Backend admin dashboard tests`
-5. `Mobile E2E / Build Android debug APK`
-6. `Mobile E2E / Maestro E2E suite`
+5. `Mobile E2E / Changes detection gate`
+
+Ensuite, pour la partie Mobile E2E :
+- soit `Mobile E2E / Not required (changes filter)` est en `completed + success` (skip explicitement justifié) ;
+- soit `Mobile E2E / Build Android debug APK` **et** `Mobile E2E / Maestro E2E suite` sont tous les deux en `completed + success`.
 
 ## Règle de décision
 Pour chaque check attendu :
@@ -29,8 +32,9 @@ Donc les états `pending`, `queued`, `in_progress`, `skipped`, `cancelled`, `tim
 - Le workflow ignore les forks non fiables (head repo différent du repo cible).
 - Le workflow n'exécute aucun push direct sur `main` et n'altère pas la branch protection.
 
-## Cas Mobile E2E en cours
-Si `Mobile E2E / Build Android debug APK` ou `Mobile E2E / Maestro E2E suite` est encore en cours (`in_progress`/`queued`), l'auto-merge n'est pas activé.
+## Cas Mobile E2E en cours / skip
+- Si Mobile E2E est requis, et qu'un des checks build/maestro est encore en cours (`in_progress`/`queued`) ou non-success, l'auto-merge n'est pas activé.
+- Si Mobile E2E est skip **sans** check explicite `Not required (changes filter)` en succès, l'auto-merge est bloqué.
 
 ## Diagnostic en cas de non activation auto-merge
 Les logs affichent un tableau :
