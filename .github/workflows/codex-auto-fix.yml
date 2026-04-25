@@ -17,6 +17,9 @@ jobs:
       contents: write
       pull-requests: write
       actions: read
+    concurrency:
+      group: codex-auto-fix-pr-${{ github.event.workflow_run.pull_requests[0].number || github.event.workflow_run.id }}
+      cancel-in-progress: false
 
     steps:
       - name: Resolve PR context
@@ -63,7 +66,7 @@ jobs:
           echo "next_attempt=$NEXT" >> "$GITHUB_OUTPUT"
 
       - name: Stop after 3 attempts
-        if: steps.pr.outputs.should_run == 'true' && steps.attempts.outputs.next_attempt > '3'
+        if: steps.pr.outputs.should_run == 'true' && fromJSON(steps.attempts.outputs.next_attempt) > 3
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
           REPO: ${{ github.repository }}
@@ -75,13 +78,13 @@ jobs:
           Diagnostic : merci d'analyser manuellement les logs du run en échec (cause racine persistante)."
 
       - name: Checkout PR head branch
-        if: steps.pr.outputs.should_run == 'true' && steps.attempts.outputs.next_attempt <= '3'
+        if: steps.pr.outputs.should_run == 'true' && fromJSON(steps.attempts.outputs.next_attempt) <= 3
         uses: actions/checkout@v5
         with:
           ref: ${{ steps.pr.outputs.head_ref }}
 
       - name: Download failing run artifacts (best effort)
-        if: steps.pr.outputs.should_run == 'true' && steps.attempts.outputs.next_attempt <= '3'
+        if: steps.pr.outputs.should_run == 'true' && fromJSON(steps.attempts.outputs.next_attempt) <= 3
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
           RUN_ID: ${{ github.event.workflow_run.id }}
@@ -90,7 +93,8 @@ jobs:
           gh run download "$RUN_ID" --dir failed-run-artifacts || true
 
       - name: Run Codex auto-fix
-        if: steps.pr.outputs.should_run == 'true' && steps.attempts.outputs.next_attempt <= '3'
+        id: codex
+        if: steps.pr.outputs.should_run == 'true' && fromJSON(steps.attempts.outputs.next_attempt) <= 3
         uses: openai/codex-action@v1
         env:
           OPENAI_API_KEY: ${{ secrets.OPENAI_API_KEY }}
@@ -100,19 +104,20 @@ jobs:
           safety-strategy: drop-sudo
 
       - name: Setup Python
-        if: steps.pr.outputs.should_run == 'true' && steps.attempts.outputs.next_attempt <= '3'
+        if: steps.pr.outputs.should_run == 'true' && fromJSON(steps.attempts.outputs.next_attempt) <= 3
         uses: actions/setup-python@v5
         with:
           python-version: "3.12"
 
       - name: Run required fast validation
-        if: steps.pr.outputs.should_run == 'true' && steps.attempts.outputs.next_attempt <= '3'
+        id: fast_validation
+        if: steps.pr.outputs.should_run == 'true' && fromJSON(steps.attempts.outputs.next_attempt) <= 3
         run: |
           python -m pytest tests/test_ci_non_regression_policy.py -q
           python -m py_compile backend/server.py backend/test_mode.py
 
       - name: Setup Node for frontend validation
-        if: steps.pr.outputs.should_run == 'true' && steps.attempts.outputs.next_attempt <= '3'
+        if: steps.pr.outputs.should_run == 'true' && fromJSON(steps.attempts.outputs.next_attempt) <= 3
         uses: actions/setup-node@v5
         with:
           node-version: 22
@@ -120,7 +125,8 @@ jobs:
           cache-dependency-path: frontend/package-lock.json
 
       - name: Run frontend validation when frontend changed
-        if: steps.pr.outputs.should_run == 'true' && steps.attempts.outputs.next_attempt <= '3'
+        id: frontend_validation
+        if: steps.pr.outputs.should_run == 'true' && fromJSON(steps.attempts.outputs.next_attempt) <= 3
         run: |
           if git diff --name-only | grep -q '^frontend/'; then
             cd frontend
@@ -132,7 +138,7 @@ jobs:
           fi
 
       - name: Commit and push fixes if any
-        if: steps.pr.outputs.should_run == 'true' && steps.attempts.outputs.next_attempt <= '3'
+        if: steps.pr.outputs.should_run == 'true' && fromJSON(steps.attempts.outputs.next_attempt) <= 3
         id: commit
         run: |
           if git diff --quiet; then
@@ -148,14 +154,16 @@ jobs:
           echo "changed=true" >> "$GITHUB_OUTPUT"
 
       - name: Comment PR summary
-        if: steps.pr.outputs.should_run == 'true' && steps.attempts.outputs.next_attempt <= '3'
+        if: always() && steps.pr.outputs.should_run == 'true' && fromJSON(steps.attempts.outputs.next_attempt) <= 3
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
           REPO: ${{ github.repository }}
           PR_NUMBER: ${{ steps.pr.outputs.pr_number }}
         run: |
           RESULT="✅ Correctif poussé"
-          if [ "${{ steps.commit.outputs.changed }}" != "true" ]; then
+          if [ "${{ steps.codex.outcome }}" != "success" ] || [ "${{ steps.fast_validation.outcome }}" != "success" ] || [ "${{ steps.frontend_validation.outcome }}" != "success" ]; then
+            RESULT="❌ Échec pendant la tentative automatique (voir logs du job Codex Auto-fix)"
+          elif [ "${{ steps.commit.outputs.changed }}" != "true" ]; then
             RESULT="ℹ️ Aucun changement à pousser"
           fi
 

@@ -1,52 +1,50 @@
 # Boucle Codex Auto-fix CI
 
-## Fonctionnement
-Le workflow `.github/workflows/codex-auto-fix.yml` se déclenche sur `workflow_run: completed` pour les workflows critiques (`CI`, `Mobile E2E (Maestro)`, `Admin dashboard monitoring tests`).
+## Fonctionnement exact
+Le workflow `.github/workflows/codex-auto-fix.yml` se déclenche sur `workflow_run: completed` pour les workflows critiques :
+- `CI`
+- `Mobile E2E (Maestro)`
+- `Admin dashboard monitoring tests`
 
-Il continue uniquement si :
-- la conclusion du run est `failure`,
-- l'événement source du run est `pull_request`.
+Le job continue uniquement si :
+- la conclusion du run est `failure` ;
+- l'événement source est `pull_request`.
 
-Ensuite, il :
-1. retrouve la PR concernée,
-2. refuse les forks non fiables,
-3. checkout la branche HEAD de la PR (jamais `main`),
-4. lit le nombre de tentatives précédentes via le marqueur commentaire :
-   `<!-- codex-autofix-attempt: N -->`,
-5. lance Codex avec le prompt versionné,
-6. exécute une validation rapide,
-7. commit/push sur la branche de PR si nécessaire,
-8. commente la PR avec le résultat.
+Ensuite, la boucle exécute les étapes suivantes :
+1. résoudre le contexte PR depuis `workflow_run.pull_requests[0]` ;
+2. refuser les forks non fiables (`head.repo.full_name` différent du repo cible) ;
+3. compter les tentatives précédentes via les commentaires PR marqués `<!-- codex-autofix-attempt: N -->` ;
+4. stopper au-delà de 3 tentatives ;
+5. checkout explicite de la branche HEAD de la PR ;
+6. lancer `openai/codex-action@v1` avec le prompt versionné ;
+7. exécuter une validation rapide obligatoire ;
+8. commit + push uniquement si diff, et uniquement sur la branche PR ;
+9. commenter la PR avec le résultat (succès, aucun changement, ou échec de tentative).
 
-## Limite de tentatives
+## Limite anti-boucle infinie
 - Maximum 3 tentatives automatiques par PR.
-- Au-delà, la boucle s'arrête et poste un diagnostic clair.
+- Le compteur repose sur un marqueur de commentaire immuable `codex-autofix-attempt`.
+- Après la 3e tentative, la boucle s'arrête et publie un diagnostic de reprise manuelle.
+- Une clé de `concurrency` empêche l'exécution concurrente de plusieurs auto-fix pour la même PR.
 
-## Secret utilisé
-- `OPENAI_API_KEY` est requis pour `openai/codex-action@v1`.
-- Le secret n'est jamais affiché dans les logs.
+## Garde-fous sécurité
+- Déclenchement en `workflow_run` (pas de `pull_request_target`).
+- Permissions minimales (`contents: write`, `pull-requests: write`, `actions: read`).
+- Refus des forks non fiables avant toute action de correction.
+- Push interdit hors branche PR (`git push origin <head_ref>`).
+- Prompt strict : interdiction de désactiver tests/policies/guardrails externes.
 
-## Lecture des commentaires Codex
-Chaque tentative ajoute un commentaire structuré avec :
-- numéro de tentative,
-- cause probable,
-- tests exécutés,
-- résultat,
-- prochaine étape.
+## Prompt et secret requis
+- Prompt versionné : `.github/codex/prompts/auto-fix-ci.md`.
+- Secret requis : `OPENAI_API_KEY` (injecté uniquement dans l'étape `openai/codex-action@v1`).
 
-## Arrêter la boucle
-La boucle s'arrête automatiquement :
-- si 3 tentatives ont déjà été faites,
-- si la PR vient d'un fork non fiable,
-- si aucun run `pull_request` en échec n'est détecté.
+## Validation rapide avant commit
+Toujours rejouée avant commit/push :
+- `python -m pytest tests/test_ci_non_regression_policy.py -q`
+- `python -m py_compile backend/server.py backend/test_mode.py`
+- `frontend`: `npm ci && npm run lint && npm run test:ci` uniquement si des fichiers `frontend/` sont modifiés.
 
-## Gouvernance / garde-fous
-- Jamais de push direct sur `main`.
-- Jamais de `pull_request_target`.
-- Permissions GitHub minimales (`contents`, `pull-requests`, `actions`).
-- Interdiction de désactiver les tests, d'affaiblir Maestro, de contourner test-policy, ou de désactiver les garde-fous anti-appels externes.
-
-## Risques connus
-- Les logs/artifacts d'un run échoué peuvent être partiels (téléchargement best-effort).
-- Certains échecs intermittents nécessitent une intervention humaine malgré 3 tentatives.
-- Le workflow n'utilise pas le texte libre des commentaires externes comme prompt pour éviter l'injection.
+## Risques / limites restantes
+- Le téléchargement des artifacts/logs du run en échec est best-effort (`gh run download ... || true`).
+- Les pannes intermittentes peuvent dépasser 3 tentatives et nécessiter une reprise humaine.
+- La qualité du correctif dépend de la lisibilité des logs du run source.
