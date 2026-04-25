@@ -18,8 +18,55 @@ on:
   workflow_dispatch:
 
 jobs:
-  android-maestro-e2e:
+  build-android-debug-apk:
+    name: Mobile E2E / Build Android debug APK
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v5
+
+      - name: Setup Node
+        uses: actions/setup-node@v5
+        with:
+          node-version: 22
+          cache: npm
+          cache-dependency-path: frontend/package-lock.json
+
+      - name: Install frontend dependencies
+        working-directory: frontend
+        run: npm ci
+
+      - name: Setup Java
+        uses: actions/setup-java@v5
+        with:
+          distribution: temurin
+          java-version: "17"
+          cache: gradle
+
+      - name: Prebuild Android app
+        working-directory: frontend
+        env:
+          EXPO_PUBLIC_BACKEND_URL: http://10.0.2.2:8000
+          CI: "1"
+          EXPO_NO_TELEMETRY: "1"
+        run: npx expo prebuild --platform android --clean
+
+      - name: Build debug APK
+        working-directory: frontend/android
+        run: |
+          chmod +x ./gradlew
+          ./gradlew assembleDebug --no-daemon
+
+      - name: Upload Android debug APK artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: android-debug-apk
+          path: frontend/android/app/build/outputs/apk/debug/app-debug.apk
+
+  maestro-e2e:
     name: Mobile E2E user regression tests
+    needs: build-android-debug-apk
     runs-on: ubuntu-latest
     services:
       mongodb:
@@ -128,37 +175,23 @@ jobs:
           curl --fail -X POST http://127.0.0.1:8000/api/test/reset
           curl --fail -X POST http://127.0.0.1:8000/api/test/seed
 
-      - name: Setup Node
+      - name: Download Android debug APK artifact
+        uses: actions/download-artifact@v4
+        with:
+          name: android-debug-apk
+          path: e2e-apk
+
+      - name: Fail if APK artifact is missing
+        run: |
+          if [ ! -f e2e-apk/app-debug.apk ]; then
+            echo "❌ Missing required artifact: e2e-apk/app-debug.apk"
+            exit 1
+          fi
+
+      - name: Setup Node (for E2E reset/seed helper)
         uses: actions/setup-node@v5
         with:
           node-version: 22
-          cache: npm
-          cache-dependency-path: frontend/package-lock.json
-
-      - name: Install frontend dependencies
-        working-directory: frontend
-        run: npm ci
-
-      - name: Setup Java
-        uses: actions/setup-java@v5
-        with:
-          distribution: temurin
-          java-version: "17"
-          cache: gradle
-
-      - name: Prebuild Android app
-        working-directory: frontend
-        env:
-          EXPO_PUBLIC_BACKEND_URL: http://10.0.2.2:8000
-          CI: "1"
-          EXPO_NO_TELEMETRY: "1"
-        run: npx expo prebuild --platform android --clean
-
-      - name: Build debug APK
-        working-directory: frontend/android
-        run: |
-          chmod +x ./gradlew
-          ./gradlew assembleDebug --no-daemon
 
       - name: Install Maestro CLI
         run: curl -Ls "https://get.maestro.mobile.dev" | bash
@@ -169,7 +202,7 @@ jobs:
           api-level: 34
           arch: x86_64
           script: |
-            adb install -r frontend/android/app/build/outputs/apk/debug/app-debug.apk
+            adb install -r e2e-apk/app-debug.apk
             mkdir -p maestro-results
             while IFS= read -r flow_file; do
               flow_name="$(basename "$flow_file" .yaml)"
@@ -189,8 +222,8 @@ jobs:
         with:
           name: mobile-e2e-artifacts
           path: |
+            e2e-apk/app-debug.apk
             maestro-results
             backend-e2e.log
             emulator-logcat.txt
             ~/.maestro/tests
-            frontend/android/app/build/outputs/apk/debug/app-debug.apk

@@ -52,8 +52,19 @@ def test_main_release_post_merge_workflow_keeps_full_suites():
 
 def test_maestro_e2e_is_fully_runnable_in_github_actions():
     workflow = Path(".github/workflows/mobile-e2e.yml").read_text(encoding="utf-8")
+    build_job_block = workflow.split("maestro-e2e:")[0]
 
+    assert "build-android-debug-apk:" in workflow
+    assert "maestro-e2e:" in workflow
+    assert "needs: build-android-debug-apk" in workflow
+    assert "Mobile E2E / Build Android debug APK" in workflow
     assert "Mobile E2E user regression tests" in workflow
+    assert "name: android-debug-apk" in workflow
+    assert "uses: actions/download-artifact@v4" in workflow
+    assert "name: android-debug-apk" in workflow
+    assert "Fail if APK artifact is missing" in workflow
+    assert "e2e-apk/app-debug.apk" in workflow
+    assert 'maestro test "$flow_file"' not in build_job_block
     assert "services:" in workflow
     assert "mongodb:" in workflow
     assert "mongo:7" in workflow
@@ -80,8 +91,8 @@ def test_maestro_e2e_is_fully_runnable_in_github_actions():
     assert "scripts/e2e-reset-seed.mjs" in workflow
     assert "reactivecircus/android-emulator-runner@v2" in workflow
     assert 'maestro test "$flow_file"' in workflow
-    assert "frontend/android/app/build/outputs/apk/debug/app-debug.apk" in workflow
     assert "actions/upload-artifact@v4" in workflow
+    assert "adb install -r e2e-apk/app-debug.apk" in workflow
 
 
 def test_codex_auto_fix_workflow_has_required_guardrails():
