@@ -90,6 +90,7 @@ def test_maestro_e2e_is_fully_runnable_in_github_actions():
     assert "POST http://127.0.0.1:8000/api/test/seed" in workflow
     assert "scripts/e2e-reset-seed.mjs" in workflow
     assert "reactivecircus/android-emulator-runner@v2" in workflow
+    assert "shell: bash" in workflow
     assert 'maestro test "$flow_file"' in workflow
     assert "actions/upload-artifact@v4" in workflow
     assert "adb install -r e2e-apk/app-debug.apk" in workflow

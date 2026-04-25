@@ -201,6 +201,7 @@ jobs:
         with:
           api-level: 34
           arch: x86_64
+          shell: bash
           script: |
             adb install -r e2e-apk/app-debug.apk
             mkdir -p maestro-results
