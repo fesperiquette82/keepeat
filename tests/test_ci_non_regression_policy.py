@@ -52,6 +52,7 @@ def test_main_release_post_merge_workflow_keeps_full_suites():
 
 def test_maestro_e2e_is_fully_runnable_in_github_actions():
     workflow = Path(".github/workflows/mobile-e2e.yml").read_text(encoding="utf-8")
+    maestro_script = Path("scripts/run-maestro-e2e.sh").read_text(encoding="utf-8")
     build_job_block = workflow.split("maestro-e2e:")[0]
 
     assert "Mobile E2E / Changes detection gate" in workflow
@@ -103,12 +104,18 @@ def test_maestro_e2e_is_fully_runnable_in_github_actions():
     assert "curl --silent --fail http://127.0.0.1:8000/health" in workflow
     assert "POST http://127.0.0.1:8000/api/test/reset" in workflow
     assert "POST http://127.0.0.1:8000/api/test/seed" in workflow
-    assert "scripts/e2e-reset-seed.mjs" in workflow
+    assert "scripts/e2e-reset-seed.mjs" in maestro_script
     assert "reactivecircus/android-emulator-runner@v2" in workflow
-    assert "shell: bash" in workflow
-    assert 'maestro test "$flow_file"' in workflow
+    assert "shell: bash" not in workflow
+    assert "bash scripts/run-maestro-e2e.sh" in workflow
+    assert 'while IFS= read -r flow_file; do' in maestro_script
+    assert 'mode="seeded"' in maestro_script
+    assert 'if [ "$flow_name" = "03-stock-empty-state" ]; then' in maestro_script
+    assert 'node scripts/e2e-reset-seed.mjs --mode="$mode" --base-url=http://10.0.2.2:8000' in maestro_script
+    assert "find .maestro -maxdepth 1 -name '*.yaml' ! -name 'config.yaml' | sort" in maestro_script
+    assert '~/.maestro/bin/maestro test "$flow_file"' in maestro_script
     assert "actions/upload-artifact@v4" in workflow
-    assert "adb install -r e2e-apk/app-debug.apk" in workflow
+    assert "adb install -r e2e-apk/app-debug.apk" in maestro_script
 
 
 def test_codex_auto_fix_workflow_has_required_guardrails():
