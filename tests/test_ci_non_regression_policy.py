@@ -58,7 +58,7 @@ def test_maestro_e2e_is_fully_runnable_in_github_actions():
     assert "maestro-e2e:" in workflow
     assert "needs: build-android-debug-apk" in workflow
     assert "Mobile E2E / Build Android debug APK" in workflow
-    assert "Mobile E2E user regression tests" in workflow
+    assert "Mobile E2E / Maestro E2E suite" in workflow
     assert "name: android-debug-apk" in workflow
     assert "uses: actions/download-artifact@v4" in workflow
     assert "name: android-debug-apk" in workflow
@@ -120,6 +120,34 @@ def test_codex_auto_fix_workflow_has_required_guardrails():
     assert 'git push origin "${{ steps.pr.outputs.head_ref }}"' in workflow
     assert "gh pr comment" in workflow
     assert "pull_request_target" not in workflow
+
+
+def test_auto_merge_workflow_requires_explicit_critical_success_checks():
+    workflow = Path(".github/workflows/auto-merge-pr.yml").read_text(encoding="utf-8")
+
+    assert "name: Enable auto-merge on PRs to main" in workflow
+    assert "pull_request_target:" in workflow
+    assert "check_suite:" in workflow
+    assert "workflow_run:" in workflow
+    assert "workflows:" in workflow
+    assert "- CI" in workflow
+    assert "- Admin dashboard monitoring tests" in workflow
+    assert "- Mobile E2E (Maestro)" in workflow
+    assert "should_run=false" in workflow
+    assert "Skip: untrusted fork PR" in workflow
+    assert "REQUIRED_CHECKS_JSON" in workflow
+    assert "Frontend regression tests" in workflow
+    assert "Backend regression tests" in workflow
+    assert "Non-regression policy checks" in workflow
+    assert "Backend admin dashboard tests" in workflow
+    assert "Mobile E2E / Build Android debug APK" in workflow
+    assert "Mobile E2E / Maestro E2E suite" in workflow
+    assert "if [ \"$STATUS\" = \"completed\" ] && [ \"$CONCLUSION\" = \"success\" ];" in workflow
+    assert "Critical checks gate failed" in workflow
+    assert "mergeStateStatus" not in workflow
+    assert "Ready to merge" not in workflow
+    assert "--auto --squash" in workflow
+    assert "git push origin" not in workflow
 
 
 def test_codex_auto_fix_prompt_exists_and_forbids_weakening_tests():

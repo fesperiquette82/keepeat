@@ -65,7 +65,7 @@ jobs:
           path: frontend/android/app/build/outputs/apk/debug/app-debug.apk
 
   maestro-e2e:
-    name: Mobile E2E user regression tests
+    name: Mobile E2E / Maestro E2E suite
     needs: build-android-debug-apk
     runs-on: ubuntu-latest
     services:
