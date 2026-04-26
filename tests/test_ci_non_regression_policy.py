@@ -125,6 +125,8 @@ def test_maestro_e2e_is_fully_runnable_in_github_actions():
     assert 'if [ "$flow_name" = "03-stock-empty-state" ]; then' in maestro_script
     assert 'adb shell am force-stop "$E2E_ANDROID_APP_ID" || true' in maestro_script
     assert "adb shell am force-stop dev.mobile.maestro || true" in maestro_script
+    assert 'adb shell pm clear "$E2E_ANDROID_APP_ID"' in maestro_script
+    assert "==> Clearing local app state for $E2E_ANDROID_APP_ID" in maestro_script
     assert "sleep 2" in maestro_script
     assert "==> Running flow: $flow_name (mode=$mode)" in maestro_script
     assert "E2E_RESET_SEED_BASE_URL" in maestro_script
@@ -133,6 +135,7 @@ def test_maestro_e2e_is_fully_runnable_in_github_actions():
     assert "find .maestro -maxdepth 1 -name '*.yaml' ! -name 'config.yaml' | sort" in maestro_script
     assert '~/.maestro/bin/maestro test "$flow_file"' in maestro_script
     assert "❌ Maestro flow failed: $flow_name" in maestro_script
+    assert 'adb exec-out screencap -p > "maestro-results/${flow_name}-failure.png" || true' in maestro_script
     assert "find maestro-results -maxdepth 3 -type f | sort || true" in maestro_script
     assert "tail -n 200 backend-e2e.log || true" in maestro_script
     assert "actions/upload-artifact@v4" in workflow
