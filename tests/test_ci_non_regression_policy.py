@@ -121,6 +121,9 @@ def test_maestro_e2e_is_fully_runnable_in_github_actions():
     assert 'for flow_file in "${FLOW_FILES[@]}"; do' in maestro_script
     assert "adb wait-for-device" in maestro_script
     assert "adb devices -l" in maestro_script
+    assert "sys.boot_completed" in maestro_script
+    assert "pm list packages \"$E2E_ANDROID_APP_ID\"" in maestro_script
+    assert "sleep 8" in maestro_script
     assert "pm clear" not in maestro_script
     assert 'mode="seeded"' in maestro_script
     assert 'if [ "$flow_name" = "03-stock-empty-state" ]; then' in maestro_script

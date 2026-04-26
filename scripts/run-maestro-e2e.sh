@@ -29,6 +29,45 @@ if [ "$MAESTRO_SUITE" != "smoke" ] && [ "$MAESTRO_SUITE" != "full" ]; then
 fi
 
 adb install -r e2e-apk/app-debug.apk
+
+ensure_emulator_ready() {
+  echo "==> Verifying emulator connectivity"
+  adb wait-for-device
+  adb devices -l || true
+}
+
+wait_for_boot_completed() {
+  echo "==> Waiting for Android boot completion (sys.boot_completed=1)"
+  local boot_completed=""
+  for _ in $(seq 1 30); do
+    boot_completed="$(adb shell getprop sys.boot_completed 2>/dev/null | tr -d '\r')"
+    if [ "$boot_completed" = "1" ]; then
+      echo "==> Android boot completed"
+      return 0
+    fi
+    sleep 2
+  done
+
+  echo "Android emulator did not report sys.boot_completed=1 in time" >&2
+  adb devices -l || true
+  adb logcat -d | tail -n 200 || true
+  return 1
+}
+
+ensure_apk_installed() {
+  echo "==> Verifying APK installation for $E2E_ANDROID_APP_ID"
+  if ! adb shell pm list packages "$E2E_ANDROID_APP_ID" | tr -d '\r' | grep -q "package:$E2E_ANDROID_APP_ID"; then
+    echo "APK package $E2E_ANDROID_APP_ID is not installed" >&2
+    adb shell pm list packages | head -n 50 || true
+    return 1
+  fi
+}
+
+ensure_emulator_ready
+wait_for_boot_completed
+ensure_apk_installed
+sleep 8
+
 mkdir -p maestro-results
 
 FLOW_FILES=()
@@ -48,12 +87,6 @@ if [ "${#FLOW_FILES[@]}" -eq 0 ]; then
   echo "No Maestro flows selected for suite=$MAESTRO_SUITE" >&2
   exit 1
 fi
-
-ensure_emulator_ready() {
-  echo "==> Verifying emulator connectivity"
-  adb wait-for-device
-  adb devices -l || true
-}
 
 stabilize_between_flows() {
   ensure_emulator_ready
