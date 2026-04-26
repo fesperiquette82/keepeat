@@ -47,7 +47,7 @@ Schéma :
 2. Si `mobile_apk_required=true` et `maestro_required=true` : build APK Android dédié (job `Build Android debug APK`), upload artifact APK.
 3. Si `mobile_apk_required=true` et `maestro_required=true` : job `PR smoke Maestro suite` (Mongo test + backend test-mode + download APK + flows smoke).
 4. Si `maestro_required=true` et `mobile_apk_required=false`, la CI tente de **réutiliser** un artifact `android-debug-apk` existant.
-5. Si un artifact valide est trouvé : upload local `android-debug-apk` puis exécution du smoke Maestro sans rebuild.
+5. Si un artifact valide est trouvé : exécution du smoke Maestro en téléchargeant l’APK depuis le `source_run_id` (sans rebuild local).
 6. Si aucun artifact valide n’est trouvé : job `Not required (changes filter)` avec message de skip explicite.
 
 Le backend écoute sur `0.0.0.0:8000` en CI, et l’émulateur Android l’atteint via `10.0.2.2:8000`.

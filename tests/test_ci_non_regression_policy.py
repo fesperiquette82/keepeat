@@ -94,6 +94,7 @@ def test_maestro_e2e_is_fully_runnable_in_github_actions():
     assert "maestro-e2e:" in workflow
     assert "needs:" in workflow
     assert "- build-android-debug-apk" in workflow
+    assert workflow.index("Try reusing existing PR APK artifact") < workflow.index("Build debug APK")
     assert "needs.changes.outputs.maestro_required == 'true'" in workflow
     assert "Try reusing existing PR APK artifact" in workflow
     assert 'gh api "repos/$REPO/actions/runs?event=pull_request&status=success&per_page=100"' in workflow
@@ -128,12 +129,16 @@ def test_maestro_e2e_is_fully_runnable_in_github_actions():
     assert "No valid reusable APK was found for this PR/head SHA and rebuild was not required." in workflow
     assert "force_mobile_apk_build=true" in workflow
     assert "Mobile E2E / Build Android debug APK" in workflow
+    assert "if: needs.changes.outputs.mobile_apk_required == 'true'" in workflow
     assert "Mobile E2E / PR smoke Maestro suite" in workflow
     assert "name: android-debug-apk" in workflow
     assert "uses: actions/download-artifact@v4" in workflow
+    assert "Download Android debug APK artifact (built in current run)" in workflow
+    assert "Download reusable Android debug APK artifact (source run)" in workflow
     assert "name: android-debug-apk" in workflow
     assert "Fail if APK artifact is missing" in workflow
     assert "e2e-apk/app-debug.apk" in workflow
+    assert "if: steps.apk_decision.outputs.apk_source == 'built'" in workflow
     assert 'maestro test "$flow_file"' not in build_job_block
     assert "services:" in workflow
     assert "mongodb:" in workflow
@@ -160,6 +165,9 @@ def test_maestro_e2e_is_fully_runnable_in_github_actions():
     assert "curl --silent --fail http://127.0.0.1:8000/health" in workflow
     assert "POST http://127.0.0.1:8000/api/test/reset" in workflow
     assert "POST http://127.0.0.1:8000/api/test/seed" in workflow
+    assert "try_reuse_apk=" in workflow
+    assert "reuse_apk_success=" in workflow
+    assert "build_apk_step_should_run=" in workflow
     assert "scripts/e2e-reset-seed.mjs" in maestro_script
     assert "reactivecircus/android-emulator-runner@v2" in workflow
     assert "shell: bash" not in workflow
