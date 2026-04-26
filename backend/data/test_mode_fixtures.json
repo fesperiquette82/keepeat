@@ -1,8 +1,8 @@
 {
   "users": {
     "free": {
-      "email": "free-user@keepeat.test",
-      "password": "Password123!",
+      "email": "e2e.free@keepeat.test",
+      "password": "TestPassword123!",
       "is_premium": false,
       "subscription_status": "inactive"
     },

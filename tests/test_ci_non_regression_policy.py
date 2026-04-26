@@ -121,6 +121,7 @@ def test_maestro_e2e_is_fully_runnable_in_github_actions():
     assert 'for flow_file in "${FLOW_FILES[@]}"; do' in maestro_script
     assert "adb wait-for-device" in maestro_script
     assert "adb devices -l" in maestro_script
+    assert "pm clear" not in maestro_script
     assert 'mode="seeded"' in maestro_script
     assert 'if [ "$flow_name" = "03-stock-empty-state" ]; then' in maestro_script
     assert 'adb shell am force-stop "$E2E_ANDROID_APP_ID" || true' in maestro_script
@@ -137,6 +138,31 @@ def test_maestro_e2e_is_fully_runnable_in_github_actions():
     assert "tail -n 200 backend-e2e.log || true" in maestro_script
     assert "actions/upload-artifact@v4" in workflow
     assert "adb install -r e2e-apk/app-debug.apk" in maestro_script
+
+
+def test_smoke_flows_use_seeded_e2e_account_and_are_independent():
+    auth_flow = Path(".maestro/01-auth-session.yaml").read_text(encoding="utf-8")
+    tabs_flow = Path(".maestro/02-navigation-main-tabs.yaml").read_text(encoding="utf-8")
+    runner_script = Path("scripts/run-maestro-e2e.sh").read_text(encoding="utf-8")
+
+    assert 'id: login-email-input' in auth_flow
+    assert 'runFlow:' in auth_flow
+    assert 'when:' in auth_flow
+    assert 'inputText: e2e.free@keepeat.test' in auth_flow
+    assert 'inputText: TestPassword123!' in auth_flow
+    assert 'id: tab-home' in auth_flow
+
+    assert 'id: login-email-input' in tabs_flow
+    assert 'runFlow:' in tabs_flow
+    assert 'inputText: e2e.free@keepeat.test' in tabs_flow
+    assert 'inputText: TestPassword123!' in tabs_flow
+    assert 'id: tab-home' in tabs_flow
+    assert 'id: tab-stock' in tabs_flow
+    assert 'id: tab-recipes' in tabs_flow
+
+    assert '".maestro/00-smoke-launch.yaml"' in runner_script
+    assert '".maestro/01-auth-session.yaml"' in runner_script
+    assert '".maestro/02-navigation-main-tabs.yaml"' in runner_script
 
 
 def test_mobile_e2e_nightly_runs_full_suite():

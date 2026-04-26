@@ -41,3 +41,19 @@ def test_server_blocks_external_services_in_test_mode():
     assert 'ensure_external_allowed("openfoodfacts")' in content
     assert 'ensure_external_allowed("ocr")' in content
     assert "mock_push_enabled()" in content
+
+
+def test_test_mode_fixtures_define_deterministic_e2e_free_account():
+    content = Path("backend/test_mode.py").read_text(encoding="utf-8")
+
+    assert '"email": "e2e.free@keepeat.test"' in content
+    assert '"password": "TestPassword123!"' in content
+    assert '"is_premium": False' in content
+    assert '"subscription_status": "inactive"' in content
+
+
+def test_test_seed_route_upserts_verified_test_users():
+    content = Path("backend/server.py").read_text(encoding="utf-8")
+
+    assert 'free_fixture = TEST_FIXTURES["users"]["free"]' in content
+    assert '{"$set": {"email": free_fixture["email"], "password_hash": free_password_hash, "is_premium": False, "subscription_status": "inactive", "email_verified": True}}' in content
