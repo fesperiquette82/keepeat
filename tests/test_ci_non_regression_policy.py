@@ -127,6 +127,7 @@ def test_maestro_e2e_is_fully_runnable_in_github_actions():
     assert "Mobile E2E / Not required (changes filter)" in workflow
     assert "needs.changes.outputs.maestro_required == 'false' || needs.build-android-debug-apk.outputs.apk_ready != 'true'" in workflow
     assert "No valid reusable APK was found for this PR/head SHA and rebuild was not required." in workflow
+    assert "Use workflow_dispatch with force_mobile_apk_build=true to force an APK rebuild then rerun smoke Maestro." in workflow
     assert "force_mobile_apk_build=true" in workflow
     assert "Mobile E2E / Build Android debug APK" in workflow
     assert "if: needs.changes.outputs.mobile_apk_required == 'true'" in workflow
@@ -225,9 +226,13 @@ def test_smoke_flows_use_seeded_e2e_account_and_are_independent():
     assert "when:\n      visible:\n        id: tab-home" in auth_flow
     assert 'id: tab-home' in auth_flow
     assert "assertVisible:\n    id: login-email-input" not in auth_flow
+    assert "assertNotVisible:\n          id: login-email-input" in auth_flow
     assert "extendedWaitUntil:\n    visible:\n      id: tab-home" in auth_flow
+    assert "takeScreenshot: 01-auth-session-login-still-visible-after-submit" in auth_flow
+    assert "takeScreenshot: 01-auth-session-login-still-visible-after-retry" in auth_flow
     assert 'inputText: e2e.free@keepeat.test' in auth_flow
     assert 'inputText: TestPassword123!' in auth_flow
+    assert "hideKeyboard" in auth_flow
 
     assert 'id: login-email-input' in tabs_flow
     assert 'runFlow:' in tabs_flow
@@ -261,6 +266,8 @@ def test_codex_auto_fix_workflow_has_required_guardrails():
     workflow = Path(".github/workflows/codex-auto-fix.yml").read_text(encoding="utf-8")
 
     assert "workflow_run:" in workflow
+    assert "workflow_dispatch:" in workflow
+    assert "run_id:" in workflow
     assert "types:" in workflow
     assert "completed" in workflow
     assert "- CI" in workflow
@@ -269,8 +276,9 @@ def test_codex_auto_fix_workflow_has_required_guardrails():
     assert "conclusion == 'failure'" in workflow
     assert "event == 'pull_request'" in workflow
     assert "label" in workflow
-    assert "codex" in workflow
-    assert "auto-fix" in workflow
+    assert "codex-autofix" in workflow
+    assert "HAS_CODEX_AUTOFIX_LABEL" in workflow
+    assert '[.labels[].name] | index("codex-autofix") != null' in workflow
     assert "WATCHED_CHECKS_JSON" in workflow
     assert "Non-regression policy checks" in workflow
     assert "Mobile E2E / PR smoke Maestro suite" in workflow
@@ -278,6 +286,7 @@ def test_codex_auto_fix_workflow_has_required_guardrails():
     assert "Backend admin dashboard tests" in workflow
     assert "Vercel" in workflow
     assert "ALLOWED_BASE_REGEX" in workflow
+    assert "master-production" in workflow
     assert "head.repo.full_name" in workflow
     assert "<!-- codex-autodebug: sha=" in workflow
     assert "MAX_ATTEMPTS_PER_SHA" in workflow
@@ -290,6 +299,7 @@ def test_codex_auto_fix_workflow_has_required_guardrails():
     assert "auto-fix triggered: comment posted" in workflow
     assert "gh run view" in workflow
     assert "gh run download" in workflow
+    assert "Failed step:" in workflow
     assert "maestro-results" in workflow or "codex-auto-debug" in workflow
     assert "@codex" in workflow
     assert "gh pr comment" in workflow
@@ -303,6 +313,42 @@ def test_codex_auto_fix_workflow_has_required_guardrails():
     assert 'maestro test "' not in workflow
     assert "android-emulator-runner" not in workflow
     assert "pull_request_target" not in workflow
+
+
+def test_codex_autofix_docs_require_real_github_label_and_pr_template():
+    ci_autofix_doc = Path("docs/ci-autofix.md").read_text(encoding="utf-8")
+    codex_autofix_doc = Path("docs/codex-auto-fix.md").read_text(encoding="utf-8")
+    codex_prompt = Path(".github/codex/prompts/auto-fix-ci.md").read_text(encoding="utf-8")
+    non_reg_doc = Path("docs/non-regression-tests.md").read_text(encoding="utf-8")
+
+    for content in (ci_autofix_doc, codex_autofix_doc, codex_prompt):
+        assert "label GitHub" in content
+        assert "codex-autofix" in content
+        assert "gh pr edit <PR_NUMBER> --add-label codex-autofix" in content
+        assert "gh pr view <PR_NUMBER> --json labels" in content
+        assert "gh label create codex-autofix --color 5319E7 --description \"Enable Codex CI auto-fix loop\"" in content
+        assert (
+            "si impossible faute de permissions" in content.lower()
+            or "si impossible faute de permission" in content.lower()
+            or "faute de permission" in content.lower()
+            or "permissions insuffisantes" in content.lower()
+        )
+
+    for content in (ci_autofix_doc, codex_prompt):
+        assert "## Objectif" in content
+        assert "## Changements" in content
+        assert "## Label auto-fix" in content
+        assert "codex-autofix requis : oui" in content
+        assert "label GitHub appliqué : oui/non" in content
+        assert "## Garde-fous" in content
+        assert "pas d’auto-merge" in content
+        assert "pas de retry infini" in content
+        assert "pas de masquage d’échec Maestro" in content
+        assert "## Validation" in content
+        assert "## Limites restantes" in content
+
+    assert "pas de masquage de skip Maestro" in non_reg_doc
+    assert "No valid reusable APK was found for this PR/head SHA and rebuild was not required." in non_reg_doc
 
 
 def test_codex_autofix_is_isolated_from_auto_merge_and_release_workflows():
@@ -357,6 +403,11 @@ def test_codex_auto_fix_prompt_exists_and_forbids_weakening_tests():
     assert "Ne jamais affaiblir les scénarios Maestro métier" in prompt
     assert "Ne jamais contourner test-policy" in prompt
     assert "Ne jamais désactiver les garde-fous anti-appels externes" in prompt
+    assert "gh pr create ... --label codex-autofix" in prompt
+    assert "gh pr edit <PR_NUMBER_OR_URL> --add-label codex-autofix" in prompt
+    assert "`gh pr view <PR_NUMBER> --json labels`" in prompt
+    assert "PR créée : oui/non" in prompt
+    assert "label `codex-autofix` appliqué : oui/non" in prompt
 
 
 def test_codex_auto_fix_docs_describe_labels_watchlist_and_limits():

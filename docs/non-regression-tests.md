@@ -68,8 +68,9 @@ Maestro smoke est requis si un changement touche :
 - **ou** `scripts/run-maestro-e2e.sh` / `scripts/e2e-*`,
 - **ou** `.github/workflows/mobile-e2e.yml`.
 
-Si `maestro_required=true` mais `mobile_apk_required=false`, le workflow **ne recompile pas** l’APK ; sans mécanisme d’APK réutilisable configuré, il skippe proprement avec le message :
+Si `maestro_required=true` mais `mobile_apk_required=false`, le workflow **ne recompile pas** l’APK ; s’il ne trouve aucune APK compatible à réutiliser, il skippe proprement avec le message :
 `No valid reusable APK was found for this PR/head SHA and rebuild was not required.`
+Ce skip doit rester explicite dans les logs CI (pas de masquage de skip Maestro).
 
 ### Critères de validité pour réutiliser une APK
 - run GitHub Actions `Mobile E2E (Maestro)` en succès ;
