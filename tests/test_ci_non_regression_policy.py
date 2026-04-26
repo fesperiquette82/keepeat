@@ -284,6 +284,8 @@ def test_codex_auto_fix_workflow_has_required_guardrails():
     assert "auto-fix skipped: no PR" in workflow
     assert "auto-fix skipped: missing label" in workflow
     assert "auto-fix skipped: fork PR" in workflow
+    assert "auto-fix skipped: bot actor" in workflow
+    assert "auto-fix skipped: run marked as autofix commit" in workflow
     assert "auto-fix skipped: already attempted for this SHA" in workflow
     assert "auto-fix triggered: comment posted" in workflow
     assert "gh run view" in workflow
@@ -301,6 +303,18 @@ def test_codex_auto_fix_workflow_has_required_guardrails():
     assert 'maestro test "' not in workflow
     assert "android-emulator-runner" not in workflow
     assert "pull_request_target" not in workflow
+
+
+def test_codex_autofix_is_isolated_from_auto_merge_and_release_workflows():
+    codex_workflow = Path(".github/workflows/codex-auto-fix.yml").read_text(encoding="utf-8")
+    auto_merge_workflow = Path(".github/workflows/auto-merge-pr.yml").read_text(encoding="utf-8")
+    release_workflow = Path(".github/workflows/main-release-post-merge.yml").read_text(encoding="utf-8")
+
+    assert "codex-autodebug" in codex_workflow
+    assert "codex-autodebug" not in auto_merge_workflow
+    assert "codex-autodebug" not in release_workflow
+    assert "@codex" not in auto_merge_workflow
+    assert "@codex" not in release_workflow
 
 
 def test_auto_merge_workflow_requires_explicit_critical_success_checks():
@@ -357,6 +371,8 @@ def test_codex_auto_fix_docs_describe_labels_watchlist_and_limits():
     assert "Backend admin dashboard tests" in docs
     assert "Vercel" in docs
     assert "MAX_ATTEMPTS_PER_SHA" in docs
+    assert "github-actions[bot]" in docs
+    assert "codex auto-fix" in docs
     assert "ne build pas l’APK" in docs
     assert "ne lance pas Maestro" in docs
     assert "ne fait jamais d’auto-merge" in docs

@@ -31,6 +31,8 @@ Liste centralisée dans `WATCHED_CHECKS_JSON` :
 - marqueur unique : `<!-- codex-autodebug: sha=... workflow=... job=... -->`
 - un seul commentaire auto-debug par combinaison PR + workflow + job + SHA
 - max `2` tentatives par SHA (`MAX_ATTEMPTS_PER_SHA`)
+- skip si acteur bot (`codex`, `github-actions[bot]`)
+- skip si commit déjà marqué autofix (`codex auto-fix` / `codex-autodebug`)
 - skip explicite dans les logs :
   - `auto-fix skipped: no PR`
   - `auto-fix skipped: missing label`
@@ -50,6 +52,7 @@ Liste centralisée dans `WATCHED_CHECKS_JSON` :
 - ne démarre pas d’émulateur
 - ne pousse pas de code
 - ne fait jamais d’auto-merge
+- n’altère pas les workflows `auto-merge`, `release` ou `mobile-e2e` (isolation dans `codex-auto-fix.yml`)
 
 ## Permissions GitHub minimales
 - `actions: read`
