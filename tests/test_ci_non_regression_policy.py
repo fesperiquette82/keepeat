@@ -136,7 +136,7 @@ def test_maestro_e2e_is_fully_runnable_in_github_actions():
     assert "force_mobile_apk_build=true" in workflow
     assert "force_mobile_apk_build=true" in workflow
     assert "Mobile E2E / Build Android debug APK" in workflow
-    assert "if: needs.changes.outputs.mobile_apk_required == 'true'" in workflow
+    assert "if: steps.decide_build.outputs.build_apk_step_should_run == 'true'" in workflow
     assert "Mobile E2E / PR smoke Maestro suite" in workflow
     assert "name: android-debug-apk" in workflow
     assert "uses: actions/download-artifact@v4" in workflow
@@ -176,6 +176,11 @@ def test_maestro_e2e_is_fully_runnable_in_github_actions():
     assert "reuse_apk_success=" in workflow
     assert "build_apk_step_should_run=" in workflow
     assert "scripts/e2e-reset-seed.mjs" in maestro_script
+    assert "Decide whether to build APK" in workflow
+    assert "build_apk_step_should_run=" in workflow.split("Decide whether to build APK")[1].split("Setup Node")[0]
+    assert "Maestro required but no reusable APK found" in workflow
+    assert "steps.decide_build.outputs.build_apk_step_should_run == 'true'" in workflow
+    assert workflow.count("steps.decide_build.outputs.build_apk_step_should_run == 'true'") >= 5, "Setup Node, Install deps, Setup Java, Prebuild, Build APK should all use decide_build condition"
     assert "reactivecircus/android-emulator-runner@v2" in workflow
     assert "shell: bash" not in workflow
     assert 'MAESTRO_SUITE: smoke' in workflow
@@ -440,3 +445,45 @@ def test_admin_dashboard_workflow_runs_pytest_with_package_pythonpath():
 
     assert "PYTHONPATH: ${{ github.workspace }}" in workflow
     assert "python -m pytest -q backend/tests/test_admin_monitoring.py backend/tests/test_admin_monitoring_dashboard_api.py" in workflow
+
+
+def test_mobile_e2e_builds_apk_automatically_when_maestro_required_without_apk_changes():
+    """
+    Regression: maestro_required=true, mobile_apk_required=false, reuse_apk_success=false
+    must trigger automatic APK build rather than blocking with manual re-run message.
+
+    Scenario:
+    - PR modifies .maestro/ or scripts/run-maestro-e2e.sh only
+    - No frontend/** or android/** changes
+    - No previous APK artifacts available for reuse
+    Expected: Workflow builds APK automatically, then runs Maestro
+    """
+    workflow = Path(".github/workflows/mobile-e2e.yml").read_text(encoding="utf-8")
+
+    decide_build_block = workflow.split("Decide whether to build APK")[1].split("Setup Node")[0]
+    assert "BUILD_APK_STEP_SHOULD_RUN=\"false\"" in decide_build_block
+    assert "if [ \"${{ needs.changes.outputs.mobile_apk_required }}\" = \"true\" ]; then" in decide_build_block
+    assert "BUILD_APK_STEP_SHOULD_RUN=\"true\"" in decide_build_block
+    assert "elif [ \"${{ needs.changes.outputs.maestro_required }}\" = \"true\" ] && [ \"$REUSE_APK_SUCCESS\" = \"false\" ]; then" in decide_build_block
+    assert "will build APK automatically" in decide_build_block
+    assert "echo \"build_apk_step_should_run=$BUILD_APK_STEP_SHOULD_RUN\"" in decide_build_block
+
+    # Verify all build steps are conditioned on decide_build output
+    assert "if: steps.decide_build.outputs.build_apk_step_should_run == 'true'" in workflow.split("Setup Node")[1].split("Install frontend dependencies")[0]
+    assert "if: steps.decide_build.outputs.build_apk_step_should_run == 'true'" in workflow.split("Install frontend dependencies")[1].split("Setup Java")[0]
+    assert "if: steps.decide_build.outputs.build_apk_step_should_run == 'true'" in workflow.split("Setup Java")[1].split("Prebuild Android app")[0]
+    assert "if: steps.decide_build.outputs.build_apk_step_should_run == 'true'" in workflow.split("Prebuild Android app")[1].split("Build debug APK")[0]
+    assert "if: steps.decide_build.outputs.build_apk_step_should_run == 'true'" in workflow.split("Build debug APK")[1].split("Decide APK availability")[0]
+
+    # Verify the decision logic in "Decide APK availability" is simplified and uses decide_build output
+    apk_decision_block = workflow.split("Decide APK availability")[1].split("Upload Android debug APK artifact")[0]
+    assert "steps.decide_build.outputs.build_apk_step_should_run" in apk_decision_block
+    assert "[ -f e2e-apk/app-debug.apk ]" in apk_decision_block
+    assert 'APK_SOURCE="built"' in apk_decision_block or 'APK_SOURCE=built' in apk_decision_block
+    assert 'APK_SOURCE="reused"' in apk_decision_block or 'APK_SOURCE=reused' in apk_decision_block
+
+    # Verify the new scenario doesn't fall into "missing APK" gate failure anymore
+    not_required_gate = workflow.split("mobile-e2e-not-required:")[1].split("maestro-e2e:")[0]
+    assert "Maestro is required but no compatible APK artifact was found" in not_required_gate
+    assert "force_mobile_apk_build=true" in not_required_gate
+    # But the new logic prevents this gate from being reached in the auto-build scenario

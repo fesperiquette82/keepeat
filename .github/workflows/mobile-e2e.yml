@@ -257,8 +257,26 @@ jobs:
 
           echo "No valid reusable APK found after evaluating PR artifacts."
 
+      - name: Decide whether to build APK
+        id: decide_build
+        run: |
+          set -euo pipefail
+
+          BUILD_APK_STEP_SHOULD_RUN="false"
+          REUSE_APK_SUCCESS="${{ steps.reuse_apk.outputs.found || 'false' }}"
+
+          if [ "${{ needs.changes.outputs.mobile_apk_required }}" = "true" ]; then
+            BUILD_APK_STEP_SHOULD_RUN="true"
+          elif [ "${{ needs.changes.outputs.maestro_required }}" = "true" ] && [ "$REUSE_APK_SUCCESS" = "false" ]; then
+            echo "ℹ️  Maestro required but no reusable APK found — will build APK automatically"
+            BUILD_APK_STEP_SHOULD_RUN="true"
+          fi
+
+          echo "build_apk_step_should_run=$BUILD_APK_STEP_SHOULD_RUN" >> "$GITHUB_OUTPUT"
+          echo "APK build decision: build_apk_step_should_run=$BUILD_APK_STEP_SHOULD_RUN (mobile_apk_required=${{ needs.changes.outputs.mobile_apk_required }} maestro_required=${{ needs.changes.outputs.maestro_required }} reuse_apk_success=$REUSE_APK_SUCCESS)"
+
       - name: Setup Node
-        if: needs.changes.outputs.mobile_apk_required == 'true'
+        if: steps.decide_build.outputs.build_apk_step_should_run == 'true'
         uses: actions/setup-node@v5
         with:
           node-version: 22
@@ -266,12 +284,12 @@ jobs:
           cache-dependency-path: frontend/package-lock.json
 
       - name: Install frontend dependencies
-        if: needs.changes.outputs.mobile_apk_required == 'true'
+        if: steps.decide_build.outputs.build_apk_step_should_run == 'true'
         working-directory: frontend
         run: npm ci
 
       - name: Setup Java
-        if: needs.changes.outputs.mobile_apk_required == 'true'
+        if: steps.decide_build.outputs.build_apk_step_should_run == 'true'
         uses: actions/setup-java@v5
         with:
           distribution: temurin
@@ -279,7 +297,7 @@ jobs:
           cache: gradle
 
       - name: Prebuild Android app
-        if: needs.changes.outputs.mobile_apk_required == 'true'
+        if: steps.decide_build.outputs.build_apk_step_should_run == 'true'
         working-directory: frontend
         env:
           EXPO_PUBLIC_BACKEND_URL: http://10.0.2.2:8000
@@ -288,7 +306,7 @@ jobs:
         run: npx expo prebuild --platform android --clean
 
       - name: Build debug APK
-        if: needs.changes.outputs.mobile_apk_required == 'true'
+        if: steps.decide_build.outputs.build_apk_step_should_run == 'true'
         working-directory: frontend/android
         run: |
           chmod +x ./gradlew
@@ -306,13 +324,13 @@ jobs:
           SOURCE_RUN_ID=""
           SOURCE_HEAD_SHA=""
 
-          if [ "${{ needs.changes.outputs.mobile_apk_required }}" = "true" ]; then
-            if [ -f e2e-apk/app-debug.apk ]; then
-              APK_READY="true"
-              APK_SOURCE="built"
-              SOURCE_RUN_ID="${{ github.run_id }}"
-              SOURCE_HEAD_SHA="${{ github.sha }}"
-            fi
+          # Check if APK was built in current run
+          if [ "${{ steps.decide_build.outputs.build_apk_step_should_run }}" = "true" ] && [ -f e2e-apk/app-debug.apk ]; then
+            APK_READY="true"
+            APK_SOURCE="built"
+            SOURCE_RUN_ID="${{ github.run_id }}"
+            SOURCE_HEAD_SHA="${{ github.sha }}"
+          # Check if APK was reused from a previous run
           elif [ "${{ steps.reuse_apk.outputs.found || 'false' }}" = "true" ] && [ -f e2e-apk/app-debug.apk ]; then
             APK_READY="true"
             APK_SOURCE="reused"
@@ -325,6 +343,7 @@ jobs:
           echo "source_run_id=$SOURCE_RUN_ID" >> "$GITHUB_OUTPUT"
           echo "source_head_sha=$SOURCE_HEAD_SHA" >> "$GITHUB_OUTPUT"
 
+          # Compute diagnostic flags for logging
           TRY_REUSE_APK="false"
           if [ "${{ needs.changes.outputs.mobile_apk_required }}" = "false" ] && [ "${{ needs.changes.outputs.maestro_required }}" = "true" ]; then
             TRY_REUSE_APK="true"
@@ -333,16 +352,12 @@ jobs:
           if [ "$APK_SOURCE" = "reused" ]; then
             REUSE_APK_SUCCESS="true"
           fi
-          BUILD_APK_STEP_SHOULD_RUN="false"
-          if [ "${{ needs.changes.outputs.mobile_apk_required }}" = "true" ]; then
-            BUILD_APK_STEP_SHOULD_RUN="true"
-          fi
 
           echo "try_reuse_apk=$TRY_REUSE_APK"
           echo "reuse_apk_success=$REUSE_APK_SUCCESS"
-          echo "build_apk_step_should_run=$BUILD_APK_STEP_SHOULD_RUN"
-          echo "APK decision: mobile_apk_required=${{ needs.changes.outputs.mobile_apk_required }} maestro_required=${{ needs.changes.outputs.maestro_required }} apk_ready=$APK_READY apk_source=$APK_SOURCE source_run_id=$SOURCE_RUN_ID source_head_sha=$SOURCE_HEAD_SHA"
-          echo "try_reuse_apk=$TRY_REUSE_APK reuse_apk_success=$REUSE_APK_SUCCESS build_apk_step_should_run=$BUILD_APK_STEP_SHOULD_RUN"
+          echo "build_apk_step_should_run=${{ steps.decide_build.outputs.build_apk_step_should_run }}"
+          echo "APK final decision: mobile_apk_required=${{ needs.changes.outputs.mobile_apk_required }} maestro_required=${{ needs.changes.outputs.maestro_required }} apk_ready=$APK_READY apk_source=$APK_SOURCE source_run_id=$SOURCE_RUN_ID source_head_sha=$SOURCE_HEAD_SHA"
+          echo "try_reuse_apk=$TRY_REUSE_APK reuse_apk_success=$REUSE_APK_SUCCESS build_apk_step_should_run=${{ steps.decide_build.outputs.build_apk_step_should_run }}"
 
       - name: Upload Android debug APK artifact
         if: steps.apk_decision.outputs.apk_source == 'built'
