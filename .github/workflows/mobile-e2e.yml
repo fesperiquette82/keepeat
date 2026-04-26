@@ -120,6 +120,8 @@ jobs:
     steps:
       - name: Checkout
         uses: actions/checkout@v5
+        with:
+          fetch-depth: 0
 
       - name: Setup Node
         if: needs.changes.outputs.mobile_apk_required == 'true'
@@ -167,7 +169,7 @@ jobs:
           GH_TOKEN: ${{ github.token }}
           REPO: ${{ github.repository }}
           PR_NUMBER: ${{ github.event.pull_request.number }}
-          HEAD_SHA: ${{ github.event.pull_request.head.sha }}
+          CURRENT_HEAD_SHA: ${{ github.event.pull_request.head.sha }}
           CURRENT_RUN_ID: ${{ github.run_id }}
         run: |
           set -euo pipefail
@@ -182,45 +184,99 @@ jobs:
             exit 0
           fi
 
-          echo "Looking for reusable android-debug-apk artifact for PR #$PR_NUMBER and head SHA $HEAD_SHA"
+          echo "Looking for reusable android-debug-apk artifact for PR #$PR_NUMBER"
+          echo "current_head_sha=$CURRENT_HEAD_SHA"
 
-          CANDIDATE_RUN_ID="$(gh api "repos/$REPO/actions/runs?event=pull_request&status=success&per_page=100" \
+          CANDIDATE_RUNS_JSON="$(gh api "repos/$REPO/actions/runs?event=pull_request&status=success&per_page=100" \
             --jq '.workflow_runs
               | map(select(.name == "Mobile E2E (Maestro)"))
               | map(select(.id != ('"$CURRENT_RUN_ID"'|tonumber)))
-              | map(select(.head_sha == "'"$HEAD_SHA"'"))
               | map(select(any(.pull_requests[]?; .number == ('"$PR_NUMBER"'|tonumber))))
-              | .[0].id // empty')"
+              | map({id: .id, head_sha: .head_sha})')"
 
-          if [ -z "$CANDIDATE_RUN_ID" ]; then
-            echo "No reusable run found for same PR/head SHA."
+          if [ "$CANDIDATE_RUNS_JSON" = "[]" ]; then
+            echo "No reusable run found for PR #$PR_NUMBER."
             exit 0
           fi
 
-          ARTIFACT_ID="$(gh api "repos/$REPO/actions/runs/$CANDIDATE_RUN_ID/artifacts?per_page=100" \
-            --jq '.artifacts
-              | map(select(.name == "android-debug-apk" and .expired == false))
-              | .[0].id // empty')"
+          for RUN_ID in $(echo "$CANDIDATE_RUNS_JSON" | jq -r '.[].id'); do
+            RUN_HEAD_SHA="$(echo "$CANDIDATE_RUNS_JSON" | jq -r '.[] | select(.id == ('"$RUN_ID"'|tonumber)) | .head_sha')"
+            [ -z "$RUN_HEAD_SHA" ] && continue
 
-          if [ -z "$ARTIFACT_ID" ]; then
-            echo "Run $CANDIDATE_RUN_ID has no valid android-debug-apk artifact."
+            BUILD_JOB_OK="$(gh api "repos/$REPO/actions/runs/$RUN_ID/jobs?per_page=100" \
+              --jq '.jobs | map(select(.name == "Mobile E2E / Build Android debug APK" and .conclusion == "success")) | length')"
+            if [ "$BUILD_JOB_OK" = "0" ]; then
+              echo "Skip run_id=$RUN_ID: build job was not successful."
+              continue
+            fi
+
+            ARTIFACT_ID="$(gh api "repos/$REPO/actions/runs/$RUN_ID/artifacts?per_page=100" \
+              --jq '.artifacts
+                | map(select(.name == "android-debug-apk" and .expired == false))
+                | .[0].id // empty')"
+            if [ -z "$ARTIFACT_ID" ]; then
+              echo "Skip run_id=$RUN_ID: no valid android-debug-apk artifact."
+              continue
+            fi
+
+            SAME_SHA="false"
+            if [ "$RUN_HEAD_SHA" = "$CURRENT_HEAD_SHA" ]; then
+              SAME_SHA="true"
+            fi
+
+            echo "artifact_source_run_id=$RUN_ID"
+            echo "artifact_source_head_sha=$RUN_HEAD_SHA"
+            echo "source_head_sha_equals_current=$SAME_SHA"
+
+            APK_RELEVANT_CHANGED="unknown"
+            if [ "$SAME_SHA" = "true" ]; then
+              APK_RELEVANT_CHANGED="false"
+            else
+              if git cat-file -e "${RUN_HEAD_SHA}^{commit}" 2>/dev/null; then
+                CHANGED_APK_FILES="$(git diff --name-only "$RUN_HEAD_SHA" "$CURRENT_HEAD_SHA" -- \
+                  frontend/** \
+                  android/** \
+                  assets/** \
+                  app.json \
+                  app.config.* \
+                  eas.json \
+                  package.json \
+                  package-lock.json \
+                  babel.config.* \
+                  metro.config.* \
+                  tsconfig*.json)"
+                if [ -n "$CHANGED_APK_FILES" ]; then
+                  APK_RELEVANT_CHANGED="true"
+                else
+                  APK_RELEVANT_CHANGED="false"
+                fi
+              else
+                echo "Cannot verify diff: source SHA $RUN_HEAD_SHA is unavailable locally."
+              fi
+            fi
+
+            echo "apk_relevant_files_changed_since_source=$APK_RELEVANT_CHANGED"
+            if [ "$APK_RELEVANT_CHANGED" != "false" ]; then
+              echo "Skip run_id=$RUN_ID: cannot prove APK compatibility."
+              continue
+            fi
+
+            gh run download "$RUN_ID" --name android-debug-apk --dir e2e-apk
+            if [ ! -f e2e-apk/app-debug.apk ]; then
+              echo "Downloaded artifact is invalid: missing e2e-apk/app-debug.apk"
+              rm -rf e2e-apk
+              mkdir -p e2e-apk
+              continue
+            fi
+
+            echo "✅ Reusing APK: e2e-apk/app-debug.apk (run_id=$RUN_ID source_head_sha=$RUN_HEAD_SHA)"
+            echo "found=true" >> "$GITHUB_OUTPUT"
+            echo "source_run_id=$RUN_ID" >> "$GITHUB_OUTPUT"
+            echo "source_head_sha=$RUN_HEAD_SHA" >> "$GITHUB_OUTPUT"
             exit 0
-          fi
+          done
 
-          echo "Reusable artifact found: run_id=$CANDIDATE_RUN_ID artifact_id=$ARTIFACT_ID head_sha=$HEAD_SHA"
-          gh run download "$CANDIDATE_RUN_ID" --name android-debug-apk --dir e2e-apk
-
-          if [ ! -f e2e-apk/app-debug.apk ]; then
-            echo "Downloaded artifact is invalid: missing e2e-apk/app-debug.apk"
-            rm -rf e2e-apk
-            mkdir -p e2e-apk
-            exit 0
-          fi
-
-          echo "✅ Reusing APK: e2e-apk/app-debug.apk"
-          echo "found=true" >> "$GITHUB_OUTPUT"
-          echo "source_run_id=$CANDIDATE_RUN_ID" >> "$GITHUB_OUTPUT"
-          echo "source_head_sha=$HEAD_SHA" >> "$GITHUB_OUTPUT"
+          echo "No valid reusable APK found after evaluating PR artifacts."
 
       - name: Decide APK availability
         id: apk_decision

@@ -97,9 +97,30 @@ def test_maestro_e2e_is_fully_runnable_in_github_actions():
     assert "needs.changes.outputs.maestro_required == 'true'" in workflow
     assert "Try reusing existing PR APK artifact" in workflow
     assert 'gh api "repos/$REPO/actions/runs?event=pull_request&status=success&per_page=100"' in workflow
-    assert "head_sha == " in workflow
+    assert "current_head_sha=" in workflow
+    assert "artifact_source_head_sha=" in workflow
+    assert "source_head_sha_equals_current=" in workflow
+    assert "apk_relevant_files_changed_since_source=" in workflow
+    assert "if [ \"$RUN_HEAD_SHA\" = \"$CURRENT_HEAD_SHA\" ];" in workflow
+    assert "git diff --name-only \"$RUN_HEAD_SHA\" \"$CURRENT_HEAD_SHA\"" in workflow
+    assert "Cannot verify diff: source SHA $RUN_HEAD_SHA is unavailable locally." in workflow
+    assert "Skip run_id=$RUN_ID: cannot prove APK compatibility." in workflow
+    assert "frontend/**" in workflow
+    assert "android/**" in workflow
+    assert "assets/**" in workflow
+    assert "app.json" in workflow
+    assert "app.config.*" in workflow
+    assert "eas.json" in workflow
+    assert "package.json" in workflow
+    assert "package-lock.json" in workflow
+    assert "babel.config.*" in workflow
+    assert "metro.config.*" in workflow
+    assert "tsconfig*.json" in workflow
+    assert "scripts/run-maestro-e2e.sh" not in workflow.split("git diff --name-only")[1].split("if [ -n \"$CHANGED_APK_FILES\" ]")[0]
+    assert ".github/workflows/mobile-e2e.yml" not in workflow.split("git diff --name-only")[1].split("if [ -n \"$CHANGED_APK_FILES\" ]")[0]
     assert "pull_requests[]?" in workflow
-    assert 'gh run download "$CANDIDATE_RUN_ID" --name android-debug-apk --dir e2e-apk' in workflow
+    assert 'gh run download "$RUN_ID" --name android-debug-apk --dir e2e-apk' in workflow
+    assert "Build Android debug APK\" and .conclusion == \"success" in workflow
     assert "Downloaded artifact is invalid: missing e2e-apk/app-debug.apk" in workflow
     assert "needs.changes.outputs.maestro_required == 'true' && needs.build-android-debug-apk.outputs.apk_ready == 'true'" in workflow
     assert "Mobile E2E / Not required (changes filter)" in workflow

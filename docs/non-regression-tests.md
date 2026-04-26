@@ -74,9 +74,12 @@ Si `maestro_required=true` mais `mobile_apk_required=false`, le workflow **ne re
 ### Critères de validité pour réutiliser une APK
 - run GitHub Actions `Mobile E2E (Maestro)` en succès ;
 - même PR (`pull_request.number`) ;
-- même `head_sha` ;
+- `Mobile E2E / Build Android debug APK` en succès dans le run source ;
 - artifact `android-debug-apk` non expiré ;
 - présence effective de `e2e-apk/app-debug.apk` après téléchargement.
+- si `source_head_sha != current_head_sha`, réutilisation autorisée **uniquement** si `git diff` ne trouve aucun changement APK-relevant (`frontend/**`, `android/**`, `assets/**`, configs Expo/build, lockfiles).
+- si la preuve est impossible (SHA source indisponible localement, diff non prouvable), l’APK n’est pas réutilisée.
+- les changements `.github/workflows/**`, `scripts/run-maestro-e2e.sh`, `tests/test_ci_non_regression_policy.py`, `docs/**` ou `.maestro/**` n’invalident pas à eux seuls l’APK.
 
 Les changements purement backend/docs/policy ne doivent pas déclencher de build APK.
 
