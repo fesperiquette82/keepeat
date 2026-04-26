@@ -55,18 +55,11 @@ ensure_emulator_ready() {
   adb devices -l || true
 }
 
-reset_local_app_state() {
-  echo "==> Clearing local app state for $E2E_ANDROID_APP_ID"
-  adb shell pm clear "$E2E_ANDROID_APP_ID"
-}
-
 stabilize_between_flows() {
   ensure_emulator_ready
   adb shell input keyevent 3 || true
   adb shell am force-stop "$E2E_ANDROID_APP_ID" || true
   adb shell am force-stop dev.mobile.maestro || true
-  reset_local_app_state
-  adb shell am force-stop "$E2E_ANDROID_APP_ID" || true
   sleep 2
 }
 
@@ -86,8 +79,6 @@ for flow_file in "${FLOW_FILES[@]}"; do
     echo "❌ Maestro flow failed: $flow_name"
     echo "==> adb devices state on failure"
     adb devices -l || true
-    echo "==> Capturing emulator screenshot on failure"
-    adb exec-out screencap -p > "maestro-results/${flow_name}-failure.png" || true
     echo "==> Capturing emulator logcat on failure"
     adb logcat -d > emulator-logcat.txt || true
     echo "==> Current Maestro results tree"
