@@ -268,19 +268,38 @@ def test_codex_auto_fix_workflow_has_required_guardrails():
     assert "- Admin dashboard monitoring tests" in workflow
     assert "conclusion == 'failure'" in workflow
     assert "event == 'pull_request'" in workflow
-    assert "head_ref" in workflow
+    assert "label" in workflow
+    assert "codex" in workflow
+    assert "auto-fix" in workflow
+    assert "WATCHED_CHECKS_JSON" in workflow
+    assert "Non-regression policy checks" in workflow
+    assert "Mobile E2E / PR smoke Maestro suite" in workflow
+    assert "Mobile E2E / Build Android debug APK" in workflow
+    assert "Backend admin dashboard tests" in workflow
+    assert "Vercel" in workflow
+    assert "ALLOWED_BASE_REGEX" in workflow
     assert "head.repo.full_name" in workflow
-    assert 'OPENAI_API_KEY: ${{ secrets.OPENAI_API_KEY }}' in workflow
-    assert "fromJSON(steps.attempts.outputs.next_attempt) > 3" in workflow
-    assert "<!-- codex-autofix-attempt:" in workflow
-    assert "openai/codex-action@v1" in workflow
-    assert "prompt-file: .github/codex/prompts/auto-fix-ci.md" in workflow
-    assert "sandbox: workspace-write" in workflow
-    assert "safety-strategy: drop-sudo" in workflow
-    assert "python -m pytest tests/test_ci_non_regression_policy.py -q" in workflow
-    assert "python -m py_compile backend/server.py backend/test_mode.py" in workflow
-    assert 'git push origin "${{ steps.pr.outputs.head_ref }}"' in workflow
+    assert "<!-- codex-autodebug: sha=" in workflow
+    assert "MAX_ATTEMPTS_PER_SHA" in workflow
+    assert "auto-fix skipped: no PR" in workflow
+    assert "auto-fix skipped: missing label" in workflow
+    assert "auto-fix skipped: fork PR" in workflow
+    assert "auto-fix skipped: already attempted for this SHA" in workflow
+    assert "auto-fix triggered: comment posted" in workflow
+    assert "gh run view" in workflow
+    assert "gh run download" in workflow
+    assert "maestro-results" in workflow or "codex-auto-debug" in workflow
+    assert "@codex" in workflow
     assert "gh pr comment" in workflow
+    assert "actions: read" in workflow
+    assert "checks: read" in workflow
+    assert "contents: read" in workflow
+    assert "pull-requests: write" in workflow
+    assert "openai/codex-action@v1" not in workflow
+    assert "./gradlew" not in workflow
+    assert "npx expo prebuild" not in workflow
+    assert 'maestro test "' not in workflow
+    assert "android-emulator-runner" not in workflow
     assert "pull_request_target" not in workflow
 
 
@@ -324,6 +343,23 @@ def test_codex_auto_fix_prompt_exists_and_forbids_weakening_tests():
     assert "Ne jamais affaiblir les scénarios Maestro métier" in prompt
     assert "Ne jamais contourner test-policy" in prompt
     assert "Ne jamais désactiver les garde-fous anti-appels externes" in prompt
+
+
+def test_codex_auto_fix_docs_describe_labels_watchlist_and_limits():
+    docs = Path("docs/codex-auto-fix.md").read_text(encoding="utf-8")
+
+    assert "codex" in docs
+    assert "auto-fix" in docs
+    assert "WATCHED_CHECKS_JSON" in docs
+    assert "Non-regression policy checks" in docs
+    assert "Mobile E2E / PR smoke Maestro suite" in docs
+    assert "Mobile E2E / Build Android debug APK" in docs
+    assert "Backend admin dashboard tests" in docs
+    assert "Vercel" in docs
+    assert "MAX_ATTEMPTS_PER_SHA" in docs
+    assert "ne build pas l’APK" in docs
+    assert "ne lance pas Maestro" in docs
+    assert "ne fait jamais d’auto-merge" in docs
 
 
 def test_admin_dashboard_workflow_runs_pytest_with_package_pythonpath():

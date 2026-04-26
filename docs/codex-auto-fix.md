@@ -1,50 +1,69 @@
-# Boucle Codex Auto-fix CI
+# Boucle CI auto-debug Codex
 
-## Fonctionnement exact
-Le workflow `.github/workflows/codex-auto-fix.yml` se déclenche sur `workflow_run: completed` pour les workflows critiques :
+## Objectif
+Quand un check CI critique échoue sur une PR, publier automatiquement un commentaire `@codex` avec diagnostic (logs + artifacts), sans copier/coller manuel côté développeur.
+
+## Déclenchement
+Workflow : `.github/workflows/codex-auto-fix.yml`.
+
+Il se déclenche sur `workflow_run: completed` pour :
 - `CI`
 - `Mobile E2E (Maestro)`
 - `Admin dashboard monitoring tests`
 
-Le job continue uniquement si :
-- la conclusion du run est `failure` ;
-- l'événement source est `pull_request`.
+Conditions strictes :
+- conclusion `failure`
+- run lié à une PR
+- label PR `codex` ou `auto-fix`
+- branche cible autorisée (`main` / `release/*`)
+- PR non-fork non fiable
+- check échoué dans la liste surveillée
 
-Ensuite, la boucle exécute les étapes suivantes :
-1. résoudre le contexte PR depuis `workflow_run.pull_requests[0]` ;
-2. refuser les forks non fiables (`head.repo.full_name` différent du repo cible) ;
-3. compter les tentatives précédentes via les commentaires PR marqués `<!-- codex-autofix-attempt: N -->` ;
-4. stopper au-delà de 3 tentatives ;
-5. checkout explicite de la branche HEAD de la PR ;
-6. lancer `openai/codex-action@v1` avec le prompt versionné ;
-7. exécuter une validation rapide obligatoire ;
-8. commit + push uniquement si diff, et uniquement sur la branche PR ;
-9. commenter la PR avec le résultat (succès, aucun changement, ou échec de tentative).
+## Checks surveillés
+Liste centralisée dans `WATCHED_CHECKS_JSON` :
+- `Non-regression policy checks`
+- `Mobile E2E / PR smoke Maestro suite`
+- `Mobile E2E / Build Android debug APK`
+- `Backend admin dashboard tests`
+- `Vercel` (si présent via check-runs)
 
-## Limite anti-boucle infinie
-- Maximum 3 tentatives automatiques par PR.
-- Le compteur repose sur un marqueur de commentaire immuable `codex-autofix-attempt`.
-- Après la 3e tentative, la boucle s'arrête et publie un diagnostic de reprise manuelle.
-- Une clé de `concurrency` empêche l'exécution concurrente de plusieurs auto-fix pour la même PR.
+## Anti-boucle
+- marqueur unique : `<!-- codex-autodebug: sha=... workflow=... job=... -->`
+- un seul commentaire auto-debug par combinaison PR + workflow + job + SHA
+- max `2` tentatives par SHA (`MAX_ATTEMPTS_PER_SHA`)
+- skip explicite dans les logs :
+  - `auto-fix skipped: no PR`
+  - `auto-fix skipped: missing label`
+  - `auto-fix skipped: fork PR`
+  - `auto-fix skipped: already attempted for this SHA`
 
-## Garde-fous sécurité
-- Déclenchement en `workflow_run` (pas de `pull_request_target`).
-- Permissions minimales (`contents: write`, `pull-requests: write`, `actions: read`).
-- Refus des forks non fiables avant toute action de correction.
-- Push interdit hors branche PR (`git push origin <head_ref>`).
-- Prompt strict : interdiction de désactiver tests/policies/guardrails externes.
+## Données collectées
+- logs du job échoué (`gh run view --job ... --log`)
+- artifacts du run en échec (`gh run download ...`, best effort)
+- diagnostic markdown synthétique + extraits tronqués
+- classification heuristique (Maestro driver/emulator vs assertion métier, reset/seed, etc.)
 
-## Prompt et secret requis
-- Prompt versionné : `.github/codex/prompts/auto-fix-ci.md`.
-- Secret requis : `OPENAI_API_KEY` (injecté uniquement dans l'étape `openai/codex-action@v1`).
+## Ce que la boucle ne fait pas
+- ne build pas l’APK
+- ne lance pas Gradle / Expo prebuild
+- ne lance pas Maestro
+- ne démarre pas d’émulateur
+- ne pousse pas de code
+- ne fait jamais d’auto-merge
 
-## Validation rapide avant commit
-Toujours rejouée avant commit/push :
-- `python -m pytest tests/test_ci_non_regression_policy.py -q`
-- `python -m py_compile backend/server.py backend/test_mode.py`
-- `frontend`: `npm ci && npm run lint && npm run test:ci` uniquement si des fichiers `frontend/` sont modifiés.
+## Permissions GitHub minimales
+- `actions: read`
+- `checks: read`
+- `contents: read`
+- `pull-requests: write`
 
-## Risques / limites restantes
-- Le téléchargement des artifacts/logs du run en échec est best-effort (`gh run download ... || true`).
-- Les pannes intermittentes peuvent dépasser 3 tentatives et nécessiter une reprise humaine.
-- La qualité du correctif dépend de la lisibilité des logs du run source.
+## Désactiver l’auto-debug sur une PR
+- retirer les labels `codex` / `auto-fix`
+- ou utiliser une branche cible non autorisée
+
+## Lire les sorties
+- commentaire `@codex` sur la PR
+- artifact du workflow `codex-auto-debug-<run_id>` contenant :
+  - `diagnostic.md`
+  - logs sanitizés
+  - artifacts téléchargés (si disponibles)
