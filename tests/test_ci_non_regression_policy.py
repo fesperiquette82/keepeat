@@ -148,9 +148,12 @@ def test_smoke_flows_use_seeded_e2e_account_and_are_independent():
     assert 'id: login-email-input' in auth_flow
     assert 'runFlow:' in auth_flow
     assert 'when:' in auth_flow
+    assert 'notVisible:' in auth_flow
+    assert 'id: tab-home' in auth_flow
+    assert "assertVisible:\n    id: login-email-input" not in auth_flow
+    assert "extendedWaitUntil:\n    visible:\n      id: tab-home" in auth_flow
     assert 'inputText: e2e.free@keepeat.test' in auth_flow
     assert 'inputText: TestPassword123!' in auth_flow
-    assert 'id: tab-home' in auth_flow
 
     assert 'id: login-email-input' in tabs_flow
     assert 'runFlow:' in tabs_flow

@@ -3,9 +3,13 @@ appId: com.fesperiquette.keepeat
 - launchApp
 - runFlow:
     when:
-      visible:
-        id: login-email-input
+      notVisible:
+        id: tab-home
     commands:
+      - extendedWaitUntil:
+          visible:
+            id: login-email-input
+          timeout: 20000
       - tapOn:
           id: login-email-input
       - inputText: e2e.free@keepeat.test
@@ -14,5 +18,7 @@ appId: com.fesperiquette.keepeat
       - inputText: TestPassword123!
       - tapOn:
           id: login-submit-button
-- assertVisible:
-    id: tab-home
+- extendedWaitUntil:
+    visible:
+      id: tab-home
+    timeout: 20000
