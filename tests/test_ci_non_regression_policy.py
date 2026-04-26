@@ -222,6 +222,7 @@ def test_smoke_flows_use_seeded_e2e_account_and_are_independent():
     assert 'runFlow:' in auth_flow
     assert 'when:' in auth_flow
     assert 'notVisible:' in auth_flow
+    assert "when:\n      visible:\n        id: tab-home" in auth_flow
     assert 'id: tab-home' in auth_flow
     assert "assertVisible:\n    id: login-email-input" not in auth_flow
     assert "extendedWaitUntil:\n    visible:\n      id: tab-home" in auth_flow
