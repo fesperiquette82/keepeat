@@ -124,10 +124,16 @@ def test_maestro_e2e_is_fully_runnable_in_github_actions():
     assert "Build Android debug APK\" and .conclusion == \"success" in workflow
     assert "Downloaded artifact is invalid: missing e2e-apk/app-debug.apk" in workflow
     assert "needs.changes.outputs.maestro_required == 'true' && needs.build-android-debug-apk.outputs.apk_ready == 'true'" in workflow
-    assert "Mobile E2E / Not required (changes filter)" in workflow
+    assert "Mobile E2E / Not required or missing required APK" in workflow
     assert "needs.changes.outputs.maestro_required == 'false' || needs.build-android-debug-apk.outputs.apk_ready != 'true'" in workflow
-    assert "No valid reusable APK was found for this PR/head SHA and rebuild was not required." in workflow
-    assert "Use workflow_dispatch with force_mobile_apk_build=true to force an APK rebuild then rerun smoke Maestro." in workflow
+    assert "Fail when Maestro is required but no compatible APK is available" in workflow
+    assert "Maestro is required but no compatible APK artifact was found. Re-run with workflow_dispatch force_mobile_apk_build=true or provide a compatible APK artifact." in workflow
+    assert "Upload Mobile E2E gate diagnostics" in workflow
+    assert "name: mobile-e2e-gate-diagnostics" in workflow
+    assert "ci-diagnostics/mobile-e2e-gate.txt" in workflow
+    assert "Explain skip reason when Maestro is not required" in workflow
+    assert "Mobile E2E skipped: Maestro is not required for this change set." in workflow
+    assert "force_mobile_apk_build=true" in workflow
     assert "force_mobile_apk_build=true" in workflow
     assert "Mobile E2E / Build Android debug APK" in workflow
     assert "if: needs.changes.outputs.mobile_apk_required == 'true'" in workflow
@@ -348,7 +354,7 @@ def test_codex_autofix_docs_require_real_github_label_and_pr_template():
         assert "## Limites restantes" in content
 
     assert "pas de masquage de skip Maestro" in non_reg_doc
-    assert "No valid reusable APK was found for this PR/head SHA and rebuild was not required." in non_reg_doc
+    assert "Maestro is required but no compatible APK artifact was found." in non_reg_doc
 
 
 def test_codex_autofix_is_isolated_from_auto_merge_and_release_workflows():
