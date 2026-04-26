@@ -46,7 +46,9 @@ Schéma :
    - `maestro_required=true/false` (lancer Maestro ?)
 2. Si `mobile_apk_required=true` et `maestro_required=true` : build APK Android dédié (job `Build Android debug APK`), upload artifact APK.
 3. Si `mobile_apk_required=true` et `maestro_required=true` : job `PR smoke Maestro suite` (Mongo test + backend test-mode + download APK + flows smoke).
-4. Si `maestro_required=false` **ou** `maestro_required=true` mais `mobile_apk_required=false` : job `Not required (changes filter)` avec raison explicite dans les logs.
+4. Si `maestro_required=true` et `mobile_apk_required=false`, la CI tente de **réutiliser** un artifact `android-debug-apk` existant.
+5. Si un artifact valide est trouvé : upload local `android-debug-apk` puis exécution du smoke Maestro sans rebuild.
+6. Si aucun artifact valide n’est trouvé : job `Not required (changes filter)` avec message de skip explicite.
 
 Le backend écoute sur `0.0.0.0:8000` en CI, et l’émulateur Android l’atteint via `10.0.2.2:8000`.
 
@@ -67,11 +69,23 @@ Maestro smoke est requis si un changement touche :
 - **ou** `.github/workflows/mobile-e2e.yml`.
 
 Si `maestro_required=true` mais `mobile_apk_required=false`, le workflow **ne recompile pas** l’APK ; sans mécanisme d’APK réutilisable configuré, il skippe proprement avec le message :
-`No APK rebuild required and no reusable APK configured: skipping Maestro for this run.`
+`No valid reusable APK was found for this PR/head SHA and rebuild was not required.`
+
+### Critères de validité pour réutiliser une APK
+- run GitHub Actions `Mobile E2E (Maestro)` en succès ;
+- même PR (`pull_request.number`) ;
+- même `head_sha` ;
+- artifact `android-debug-apk` non expiré ;
+- présence effective de `e2e-apk/app-debug.apk` après téléchargement.
 
 Les changements purement backend/docs/policy ne doivent pas déclencher de build APK.
 
-En cas de doute (ex. `workflow_dispatch` manuel), le workflow force `mobile_apk_required=true` et `maestro_required=true`.
+### Forcer manuellement un rebuild APK
+`workflow_dispatch` expose `force_mobile_apk_build` :
+- `true` : force `mobile_apk_required=true` + build APK + smoke Maestro ;
+- `false` : conserve la détection automatique.
+
+Si aucun artifact réutilisable n’est trouvé, relancer manuellement avec `force_mobile_apk_build=true`.
 
 Le filtre est maintenu manuellement. Donc si un jour un nouveau dossier ou fichier impactant l’application mobile est ajouté, il faudra l’ajouter explicitement à la liste des chemins qui déclenchent Mobile E2E.
 

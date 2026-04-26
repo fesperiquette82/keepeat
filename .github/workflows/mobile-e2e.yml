@@ -20,6 +20,12 @@ on:
       - "scripts/run-maestro-e2e.sh"
       - ".github/workflows/mobile-e2e.yml"
   workflow_dispatch:
+    inputs:
+      force_mobile_apk_build:
+        description: "Force Android debug APK rebuild before running Maestro"
+        type: boolean
+        required: false
+        default: false
 
 jobs:
   changes:
@@ -76,12 +82,13 @@ jobs:
 
           APK_REQUIRED="${{ steps.filter.outputs.mobile_apk_required }}"
           MAESTRO_REQUIRED="${{ steps.filter.outputs.maestro_required }}"
+          FORCE_BUILD="${{ github.event_name == 'workflow_dispatch' && inputs.force_mobile_apk_build || false }}"
           REASON=""
 
-          if [ "${{ github.event_name }}" = "workflow_dispatch" ]; then
+          if [ "$FORCE_BUILD" = "true" ]; then
             APK_REQUIRED="true"
             MAESTRO_REQUIRED="true"
-            REASON="workflow_dispatch_force_full"
+            REASON="workflow_dispatch_force_mobile_apk_build"
           elif [ "$MAESTRO_REQUIRED" != "true" ]; then
             REASON="only_non_mobile_changes_detected"
           elif [ "$APK_REQUIRED" = "true" ]; then
@@ -94,19 +101,28 @@ jobs:
           echo "maestro_required=$MAESTRO_REQUIRED" >> "$GITHUB_OUTPUT"
           echo "reason=$REASON" >> "$GITHUB_OUTPUT"
 
-          echo "Mobile E2E decision: mobile_apk_required=$APK_REQUIRED maestro_required=$MAESTRO_REQUIRED reason=$REASON"
+          echo "Mobile E2E decision: mobile_apk_required=$APK_REQUIRED maestro_required=$MAESTRO_REQUIRED reason=$REASON force_mobile_apk_build=$FORCE_BUILD"
 
   build-android-debug-apk:
     name: Mobile E2E / Build Android debug APK
     needs: changes
-    if: needs.changes.outputs.maestro_required == 'true' && needs.changes.outputs.mobile_apk_required == 'true'
+    if: needs.changes.outputs.maestro_required == 'true'
     runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      actions: read
+    outputs:
+      apk_ready: ${{ steps.apk_decision.outputs.apk_ready }}
+      apk_source: ${{ steps.apk_decision.outputs.apk_source }}
+      source_run_id: ${{ steps.apk_decision.outputs.source_run_id }}
+      source_head_sha: ${{ steps.apk_decision.outputs.source_head_sha }}
 
     steps:
       - name: Checkout
         uses: actions/checkout@v5
 
       - name: Setup Node
+        if: needs.changes.outputs.mobile_apk_required == 'true'
         uses: actions/setup-node@v5
         with:
           node-version: 22
@@ -114,10 +130,12 @@ jobs:
           cache-dependency-path: frontend/package-lock.json
 
       - name: Install frontend dependencies
+        if: needs.changes.outputs.mobile_apk_required == 'true'
         working-directory: frontend
         run: npm ci
 
       - name: Setup Java
+        if: needs.changes.outputs.mobile_apk_required == 'true'
         uses: actions/setup-java@v5
         with:
           distribution: temurin
@@ -125,6 +143,7 @@ jobs:
           cache: gradle
 
       - name: Prebuild Android app
+        if: needs.changes.outputs.mobile_apk_required == 'true'
         working-directory: frontend
         env:
           EXPO_PUBLIC_BACKEND_URL: http://10.0.2.2:8000
@@ -133,23 +152,120 @@ jobs:
         run: npx expo prebuild --platform android --clean
 
       - name: Build debug APK
+        if: needs.changes.outputs.mobile_apk_required == 'true'
         working-directory: frontend/android
         run: |
           chmod +x ./gradlew
           ./gradlew assembleDebug --no-daemon
+          mkdir -p "$GITHUB_WORKSPACE/e2e-apk"
+          cp app/build/outputs/apk/debug/app-debug.apk "$GITHUB_WORKSPACE/e2e-apk/app-debug.apk"
+
+      - name: Try reusing existing PR APK artifact
+        if: needs.changes.outputs.mobile_apk_required == 'false'
+        id: reuse_apk
+        env:
+          GH_TOKEN: ${{ github.token }}
+          REPO: ${{ github.repository }}
+          PR_NUMBER: ${{ github.event.pull_request.number }}
+          HEAD_SHA: ${{ github.event.pull_request.head.sha }}
+          CURRENT_RUN_ID: ${{ github.run_id }}
+        run: |
+          set -euo pipefail
+
+          mkdir -p e2e-apk
+          echo "found=false" >> "$GITHUB_OUTPUT"
+          echo "source_run_id=" >> "$GITHUB_OUTPUT"
+          echo "source_head_sha=" >> "$GITHUB_OUTPUT"
+
+          if [ "${{ github.event_name }}" != "pull_request" ]; then
+            echo "Skip reusable APK lookup: event=${{ github.event_name }} (requires pull_request)."
+            exit 0
+          fi
+
+          echo "Looking for reusable android-debug-apk artifact for PR #$PR_NUMBER and head SHA $HEAD_SHA"
+
+          CANDIDATE_RUN_ID="$(gh api "repos/$REPO/actions/runs?event=pull_request&status=success&per_page=100" \
+            --jq '.workflow_runs
+              | map(select(.name == "Mobile E2E (Maestro)"))
+              | map(select(.id != ('"$CURRENT_RUN_ID"'|tonumber)))
+              | map(select(.head_sha == "'"$HEAD_SHA"'"))
+              | map(select(any(.pull_requests[]?; .number == ('"$PR_NUMBER"'|tonumber))))
+              | .[0].id // empty')"
+
+          if [ -z "$CANDIDATE_RUN_ID" ]; then
+            echo "No reusable run found for same PR/head SHA."
+            exit 0
+          fi
+
+          ARTIFACT_ID="$(gh api "repos/$REPO/actions/runs/$CANDIDATE_RUN_ID/artifacts?per_page=100" \
+            --jq '.artifacts
+              | map(select(.name == "android-debug-apk" and .expired == false))
+              | .[0].id // empty')"
+
+          if [ -z "$ARTIFACT_ID" ]; then
+            echo "Run $CANDIDATE_RUN_ID has no valid android-debug-apk artifact."
+            exit 0
+          fi
+
+          echo "Reusable artifact found: run_id=$CANDIDATE_RUN_ID artifact_id=$ARTIFACT_ID head_sha=$HEAD_SHA"
+          gh run download "$CANDIDATE_RUN_ID" --name android-debug-apk --dir e2e-apk
+
+          if [ ! -f e2e-apk/app-debug.apk ]; then
+            echo "Downloaded artifact is invalid: missing e2e-apk/app-debug.apk"
+            rm -rf e2e-apk
+            mkdir -p e2e-apk
+            exit 0
+          fi
+
+          echo "✅ Reusing APK: e2e-apk/app-debug.apk"
+          echo "found=true" >> "$GITHUB_OUTPUT"
+          echo "source_run_id=$CANDIDATE_RUN_ID" >> "$GITHUB_OUTPUT"
+          echo "source_head_sha=$HEAD_SHA" >> "$GITHUB_OUTPUT"
+
+      - name: Decide APK availability
+        id: apk_decision
+        run: |
+          set -euo pipefail
+
+          APK_READY="false"
+          APK_SOURCE="none"
+          SOURCE_RUN_ID=""
+          SOURCE_HEAD_SHA=""
+
+          if [ "${{ needs.changes.outputs.mobile_apk_required }}" = "true" ]; then
+            if [ -f e2e-apk/app-debug.apk ]; then
+              APK_READY="true"
+              APK_SOURCE="built"
+              SOURCE_RUN_ID="${{ github.run_id }}"
+              SOURCE_HEAD_SHA="${{ github.sha }}"
+            fi
+          elif [ "${{ steps.reuse_apk.outputs.found || 'false' }}" = "true" ] && [ -f e2e-apk/app-debug.apk ]; then
+            APK_READY="true"
+            APK_SOURCE="reused"
+            SOURCE_RUN_ID="${{ steps.reuse_apk.outputs.source_run_id }}"
+            SOURCE_HEAD_SHA="${{ steps.reuse_apk.outputs.source_head_sha }}"
+          fi
+
+          echo "apk_ready=$APK_READY" >> "$GITHUB_OUTPUT"
+          echo "apk_source=$APK_SOURCE" >> "$GITHUB_OUTPUT"
+          echo "source_run_id=$SOURCE_RUN_ID" >> "$GITHUB_OUTPUT"
+          echo "source_head_sha=$SOURCE_HEAD_SHA" >> "$GITHUB_OUTPUT"
+
+          echo "APK decision: mobile_apk_required=${{ needs.changes.outputs.mobile_apk_required }} maestro_required=${{ needs.changes.outputs.maestro_required }} apk_ready=$APK_READY apk_source=$APK_SOURCE source_run_id=$SOURCE_RUN_ID source_head_sha=$SOURCE_HEAD_SHA"
 
       - name: Upload Android debug APK artifact
+        if: steps.apk_decision.outputs.apk_ready == 'true'
         uses: actions/upload-artifact@v4
         with:
           name: android-debug-apk
-          path: frontend/android/app/build/outputs/apk/debug/app-debug.apk
+          path: e2e-apk/app-debug.apk
 
   maestro-e2e:
     name: Mobile E2E / PR smoke Maestro suite
     needs:
       - changes
       - build-android-debug-apk
-    if: needs.changes.outputs.maestro_required == 'true' && needs.changes.outputs.mobile_apk_required == 'true'
+    if: needs.changes.outputs.maestro_required == 'true' && needs.build-android-debug-apk.outputs.apk_ready == 'true'
     runs-on: ubuntu-latest
     services:
       mongodb:
@@ -319,16 +435,23 @@ jobs:
 
   mobile-e2e-not-required:
     name: Mobile E2E / Not required (changes filter)
-    needs: changes
-    if: needs.changes.outputs.maestro_required == 'false' || (needs.changes.outputs.maestro_required == 'true' && needs.changes.outputs.mobile_apk_required == 'false')
+    needs:
+      - changes
+      - build-android-debug-apk
+    if: needs.changes.outputs.maestro_required == 'false' || needs.build-android-debug-apk.outputs.apk_ready != 'true'
     runs-on: ubuntu-latest
     steps:
       - name: Explain skip decision
         run: |
-          echo "Mobile E2E skipped by changes filter or no reusable APK strategy."
+          echo "Mobile E2E skipped by changes filter or reusable APK policy."
           echo "mobile_apk_required=${{ needs.changes.outputs.mobile_apk_required }}"
           echo "maestro_required=${{ needs.changes.outputs.maestro_required }}"
           echo "reason=${{ needs.changes.outputs.reason }}"
-          if [ "${{ needs.changes.outputs.maestro_required }}" = "true" ] && [ "${{ needs.changes.outputs.mobile_apk_required }}" = "false" ]; then
-            echo "No APK rebuild required and no reusable APK configured: skipping Maestro for this run."
+          echo "apk_ready=${{ needs.build-android-debug-apk.outputs.apk_ready }}"
+          echo "apk_source=${{ needs.build-android-debug-apk.outputs.apk_source }}"
+          echo "source_run_id=${{ needs.build-android-debug-apk.outputs.source_run_id }}"
+          echo "source_head_sha=${{ needs.build-android-debug-apk.outputs.source_head_sha }}"
+          if [ "${{ needs.changes.outputs.maestro_required }}" = "true" ] && [ "${{ needs.build-android-debug-apk.outputs.apk_ready }}" != "true" ]; then
+            echo "No valid reusable APK was found for this PR/head SHA and rebuild was not required."
+            echo "Use workflow_dispatch with force_mobile_apk_build=true to force an APK rebuild then rerun smoke Maestro."
           fi

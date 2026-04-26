@@ -61,6 +61,8 @@ def test_maestro_e2e_is_fully_runnable_in_github_actions():
     assert "mobile_apk_required" in workflow
     assert "maestro_required" in workflow
     assert "reason=" in workflow
+    assert "force_mobile_apk_build" in workflow
+    assert "workflow_dispatch_force_mobile_apk_build" in workflow
     assert "dorny/paths-filter@v3" in workflow
     assert "mobile_apk_required:" in workflow
     assert "maestro_required:" in workflow
@@ -92,10 +94,18 @@ def test_maestro_e2e_is_fully_runnable_in_github_actions():
     assert "maestro-e2e:" in workflow
     assert "needs:" in workflow
     assert "- build-android-debug-apk" in workflow
-    assert "needs.changes.outputs.maestro_required == 'true' && needs.changes.outputs.mobile_apk_required == 'true'" in workflow
+    assert "needs.changes.outputs.maestro_required == 'true'" in workflow
+    assert "Try reusing existing PR APK artifact" in workflow
+    assert 'gh api "repos/$REPO/actions/runs?event=pull_request&status=success&per_page=100"' in workflow
+    assert "head_sha == " in workflow
+    assert "pull_requests[]?" in workflow
+    assert 'gh run download "$CANDIDATE_RUN_ID" --name android-debug-apk --dir e2e-apk' in workflow
+    assert "Downloaded artifact is invalid: missing e2e-apk/app-debug.apk" in workflow
+    assert "needs.changes.outputs.maestro_required == 'true' && needs.build-android-debug-apk.outputs.apk_ready == 'true'" in workflow
     assert "Mobile E2E / Not required (changes filter)" in workflow
-    assert "needs.changes.outputs.maestro_required == 'false' || (needs.changes.outputs.maestro_required == 'true' && needs.changes.outputs.mobile_apk_required == 'false')" in workflow
-    assert "No APK rebuild required and no reusable APK configured: skipping Maestro for this run." in workflow
+    assert "needs.changes.outputs.maestro_required == 'false' || needs.build-android-debug-apk.outputs.apk_ready != 'true'" in workflow
+    assert "No valid reusable APK was found for this PR/head SHA and rebuild was not required." in workflow
+    assert "force_mobile_apk_build=true" in workflow
     assert "Mobile E2E / Build Android debug APK" in workflow
     assert "Mobile E2E / PR smoke Maestro suite" in workflow
     assert "name: android-debug-apk" in workflow
