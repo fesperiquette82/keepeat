@@ -1,0 +1,19 @@
+appId: com.fesperiquette.keepeat
+---
+- launchApp
+- tapOn:
+    id: tab-stock
+- tapOn:
+    id: stock-item-row
+- assertVisible:
+    id: stock-item-edit-button
+- tapOn:
+    id: stock-item-edit-button
+- tapOn:
+    id: edit-product-name-input
+- eraseText
+- inputText: Courgette éditée
+- tapOn:
+    id: edit-product-save-button
+- assertVisible:
+    id: stock-item-edit-button

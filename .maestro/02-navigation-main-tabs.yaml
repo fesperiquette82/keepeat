@@ -1,0 +1,28 @@
+appId: com.fesperiquette.keepeat
+---
+- launchApp
+- runFlow:
+    when:
+      visible:
+        id: login-email-input
+    commands:
+      - tapOn:
+          id: login-email-input
+      - inputText: e2e.free@keepeat.test
+      - tapOn:
+          id: login-password-input
+      - inputText: TestPassword123!
+      - tapOn:
+          id: login-submit-button
+- assertVisible:
+    id: tab-home
+- tapOn:
+    id: tab-stock
+- assertVisible:
+    id: stock-screen-title
+- tapOn:
+    id: tab-recipes
+- assertVisible: "Recettes"
+- tapOn:
+    id: tab-stats
+- assertVisible: "Stats"

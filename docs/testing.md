@@ -45,6 +45,19 @@ Limiter les régressions produit avec une exécution **rapide en PR** et **compl
   - Frontend `npm run test:full` + `npm run build`
   - Backend complet `pytest tests backend/tests`
 
+## E2E mobile Maestro (sans installation locale)
+
+- Workflow dédié : `.github/workflows/mobile-e2e.yml`.
+- Le pipeline CI :
+  1. démarre un MongoDB dédié E2E (`keepeat_e2e_test`),
+  2. démarre le backend FastAPI en `APP_ENV=test` avec services externes mockés,
+  3. vérifie `/health`, puis reset/seed les fixtures,
+  4. build un APK debug Android (`EXPO_PUBLIC_BACKEND_URL=http://10.0.2.2:8000`),
+  5. lance chaque flow Maestro sur émulateur avec reset/seed déterministe avant scénario,
+  6. publie logs backend, résultats Maestro, logcat émulateur et APK en artifacts.
+- Le développeur n’a pas besoin d’installer Maestro localement : un push suffit pour exécuter les scénarios.
+- Flows versionnés : `.maestro/*.yaml`.
+
 ## Règle de non-régression obligatoire
 
 Script : `scripts/verify-tests-added.mjs`.

@@ -149,6 +149,7 @@ export default function EditProductScreen() {
           <View style={styles.inputGroup}>
             <Text style={styles.label}>{t('productName')} *</Text>
             <TextInput
+              testID="edit-product-name-input"
               style={styles.input}
               value={name}
               onChangeText={setName}
@@ -275,6 +276,7 @@ export default function EditProductScreen() {
 
       <View style={styles.footer}>
         <TouchableOpacity
+          testID="edit-product-save-button"
           style={[styles.saveButton, isSaving && styles.saveButtonDisabled]}
           onPress={handleSave}
           disabled={isSaving}

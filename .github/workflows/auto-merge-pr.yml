@@ -13,167 +13,174 @@ on:
   workflow_run:
     workflows:
       - CI
+      - Admin dashboard monitoring tests
+      - Mobile E2E (Maestro)
     types:
       - completed
 
 jobs:
-  enable-automerge-pr:
-    if: >
-      github.event_name == 'pull_request_target' &&
-      github.event.pull_request.draft == false &&
-      github.event.pull_request.base.ref == 'main'
+  enable-automerge:
     runs-on: ubuntu-latest
     permissions:
       contents: write
       pull-requests: write
+      checks: read
 
     steps:
-      - name: Try to enable auto-merge from pull_request_target
-        env:
-          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-          PR_NUMBER: ${{ github.event.pull_request.number }}
-          REPO: ${{ github.repository }}
-        run: |
-          set -e
-
-          PR_INFO=$(gh pr view "$PR_NUMBER" --repo "$REPO" --json mergeStateStatus,isDraft)
-          echo "$PR_INFO"
-
-          MERGE_STATE=$(echo "$PR_INFO" | jq -r '.mergeStateStatus')
-          IS_DRAFT=$(echo "$PR_INFO" | jq -r '.isDraft')
-
-          if [ "$IS_DRAFT" = "true" ]; then
-            echo "PR is draft. Skip."
-            exit 0
-          fi
-
-          case "$MERGE_STATE" in
-            CLEAN|HAS_HOOKS)
-              ;;
-            *)
-              echo "PR not ready for auto-merge yet. mergeStateStatus=$MERGE_STATE"
-              exit 0
-              ;;
-          esac
-
-          gh pr merge "$PR_NUMBER" --repo "$REPO" --auto --squash
-
-  enable-automerge-checksuite:
-    if: >
-      github.event_name == 'check_suite' &&
-      github.event.check_suite.conclusion == 'success'
-    runs-on: ubuntu-latest
-    permissions:
-      contents: write
-      pull-requests: write
-
-    steps:
-      - name: Find PR linked to completed check suite
-        env:
-          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-          HEAD_SHA: ${{ github.event.check_suite.head_sha }}
-          REPO: ${{ github.repository }}
-        run: |
-          PR_NUMBER=$(gh api \
-            repos/$REPO/commits/$HEAD_SHA/pulls \
-            --jq 'map(select(.base.ref == "main" and .draft == false))[0].number')
-
-          if [ -z "$PR_NUMBER" ] || [ "$PR_NUMBER" = "null" ]; then
-            echo "No eligible PR found for this check suite."
-            exit 0
-          fi
-
-          echo "PR_NUMBER=$PR_NUMBER" >> "$GITHUB_ENV"
-
-      - name: Check PR state and enable auto-merge
-        if: env.PR_NUMBER != ''
+      - name: Resolve eligible PR context
+        id: pr
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
           REPO: ${{ github.repository }}
         run: |
-          set -e
+          set -euo pipefail
 
-          PR_INFO=$(gh pr view "$PR_NUMBER" --repo "$REPO" --json mergeStateStatus,isDraft)
-          echo "$PR_INFO"
+          EVENT="${{ github.event_name }}"
+          PR_NUMBER=""
 
-          MERGE_STATE=$(echo "$PR_INFO" | jq -r '.mergeStateStatus')
-          IS_DRAFT=$(echo "$PR_INFO" | jq -r '.isDraft')
-
-          if [ "$IS_DRAFT" = "true" ]; then
-            echo "PR is draft. Skip."
-            exit 0
-          fi
-
-          case "$MERGE_STATE" in
-            CLEAN|HAS_HOOKS)
-              ;;
-            *)
-              echo "PR not ready for auto-merge yet. mergeStateStatus=$MERGE_STATE"
-              exit 0
-              ;;
-          esac
-
-          gh pr merge "$PR_NUMBER" --repo "$REPO" --auto --squash
-
-  enable-automerge-workflow-run:
-    if: >
-      github.event_name == 'workflow_run' &&
-      github.event.workflow_run.conclusion == 'success' &&
-      github.event.workflow_run.event == 'pull_request'
-    runs-on: ubuntu-latest
-    permissions:
-      contents: write
-      pull-requests: write
-
-    steps:
-      - name: Find PR linked to completed CI workflow
-        env:
-          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-          REPO: ${{ github.repository }}
-          PR_NUMBER_FROM_EVENT: ${{ github.event.workflow_run.pull_requests[0].number }}
-          HEAD_SHA: ${{ github.event.workflow_run.head_sha }}
-        run: |
-          PR_NUMBER="$PR_NUMBER_FROM_EVENT"
-
-          if [ -z "$PR_NUMBER" ] || [ "$PR_NUMBER" = "null" ]; then
-            PR_NUMBER=$(gh api \
-              repos/$REPO/commits/$HEAD_SHA/pulls \
-              --jq 'map(select(.base.ref == "main" and .draft == false))[0].number')
+          if [ "$EVENT" = "pull_request_target" ]; then
+            PR_NUMBER="${{ github.event.pull_request.number }}"
+          elif [ "$EVENT" = "check_suite" ]; then
+            HEAD_SHA="${{ github.event.check_suite.head_sha }}"
+            PR_NUMBER=$(gh api "repos/$REPO/commits/$HEAD_SHA/pulls" \
+              --jq 'map(select(.base.ref == "main" and .draft == false))[0].number // empty')
+          elif [ "$EVENT" = "workflow_run" ]; then
+            PR_NUMBER="${{ github.event.workflow_run.pull_requests[0].number }}"
+            if [ -z "$PR_NUMBER" ] || [ "$PR_NUMBER" = "null" ]; then
+              HEAD_SHA="${{ github.event.workflow_run.head_sha }}"
+              PR_NUMBER=$(gh api "repos/$REPO/commits/$HEAD_SHA/pulls" \
+                --jq 'map(select(.base.ref == "main" and .draft == false))[0].number // empty')
+            fi
           fi
 
           if [ -z "$PR_NUMBER" ] || [ "$PR_NUMBER" = "null" ]; then
-            echo "No eligible PR found for this CI run."
+            echo "No eligible PR linked to this event."
+            echo "should_run=false" >> "$GITHUB_OUTPUT"
             exit 0
           fi
 
-          echo "PR_NUMBER=$PR_NUMBER" >> "$GITHUB_ENV"
+          PR_JSON=$(gh api "repos/$REPO/pulls/$PR_NUMBER")
+          BASE_REF=$(echo "$PR_JSON" | jq -r '.base.ref')
+          IS_DRAFT=$(echo "$PR_JSON" | jq -r '.draft')
+          HEAD_SHA=$(echo "$PR_JSON" | jq -r '.head.sha')
+          HEAD_REPO=$(echo "$PR_JSON" | jq -r '.head.repo.full_name')
 
-      - name: Check PR state and enable auto-merge after CI
-        if: env.PR_NUMBER != ''
+          if [ "$BASE_REF" != "main" ]; then
+            echo "Skip: PR base is not main (base=$BASE_REF)."
+            echo "should_run=false" >> "$GITHUB_OUTPUT"
+            exit 0
+          fi
+
+          if [ "$IS_DRAFT" = "true" ]; then
+            echo "Skip: PR is draft."
+            echo "should_run=false" >> "$GITHUB_OUTPUT"
+            exit 0
+          fi
+
+          if [ "$HEAD_REPO" != "$REPO" ]; then
+            echo "Skip: untrusted fork PR ($HEAD_REPO)."
+            echo "should_run=false" >> "$GITHUB_OUTPUT"
+            exit 0
+          fi
+
+          echo "should_run=true" >> "$GITHUB_OUTPUT"
+          echo "pr_number=$PR_NUMBER" >> "$GITHUB_OUTPUT"
+          echo "head_sha=$HEAD_SHA" >> "$GITHUB_OUTPUT"
+
+      - name: Verify critical checks are completed + success
+        if: steps.pr.outputs.should_run == 'true'
+        id: gate
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
           REPO: ${{ github.repository }}
+          HEAD_SHA: ${{ steps.pr.outputs.head_sha }}
         run: |
-          set -e
+          set -euo pipefail
 
-          PR_INFO=$(gh pr view "$PR_NUMBER" --repo "$REPO" --json mergeStateStatus,isDraft)
-          echo "$PR_INFO"
+          REQUIRED_CHECKS_JSON='[
+            "Frontend regression tests",
+            "Backend regression tests",
+            "Non-regression policy checks",
+            "Backend admin dashboard tests",
+            "Mobile E2E / Changes detection gate"
+          ]'
 
-          MERGE_STATE=$(echo "$PR_INFO" | jq -r '.mergeStateStatus')
-          IS_DRAFT=$(echo "$PR_INFO" | jq -r '.isDraft')
+          CHECK_RUNS=$(gh api "repos/$REPO/commits/$HEAD_SHA/check-runs?per_page=100")
 
-          if [ "$IS_DRAFT" = "true" ]; then
-            echo "PR is draft. Skip."
+          echo "Expected critical checks vs actual status:"
+          printf "%-55s | %-12s | %-12s | %s\n" "check" "status" "conclusion" "decision"
+          printf '%0.s-' {1..110}; echo
+
+          ALL_OK=true
+
+          check_status() {
+            local check_name="$1"
+            CHECK_INFO=$(echo "$CHECK_RUNS" | jq --arg name "$check_name" '[.check_runs[] | select(.name == $name)] | sort_by(.started_at // "") | last')
+
+            if [ "$CHECK_INFO" = "null" ] || [ -z "$CHECK_INFO" ]; then
+              printf "%-55s | %-12s | %-12s | %s\n" "$check_name" "missing" "-" "BLOCK"
+              return 1
+            fi
+
+            STATUS=$(echo "$CHECK_INFO" | jq -r '.status // "unknown"')
+            CONCLUSION=$(echo "$CHECK_INFO" | jq -r '.conclusion // "none"')
+            DECISION="BLOCK"
+
+            if [ "$STATUS" = "completed" ] && [ "$CONCLUSION" = "success" ]; then
+              DECISION="OK"
+            else
+              printf "%-55s | %-12s | %-12s | %s\n" "$check_name" "$STATUS" "$CONCLUSION" "$DECISION"
+              return 1
+            fi
+
+            printf "%-55s | %-12s | %-12s | %s\n" "$check_name" "$STATUS" "$CONCLUSION" "$DECISION"
+            return 0
+          }
+
+          while IFS= read -r CHECK_NAME; do
+            if ! check_status "$CHECK_NAME"; then
+              ALL_OK=false
+            fi
+          done < <(echo "$REQUIRED_CHECKS_JSON" | jq -r '.[]')
+
+          # Mobile checks: either explicit "not required" success OR both build+maestro success.
+          MOBILE_NOT_REQUIRED_CHECK="Mobile E2E / Not required (changes filter)"
+          MOBILE_BUILD_CHECK="Mobile E2E / Build Android debug APK"
+          MOBILE_MAESTRO_CHECK="Mobile E2E / PR smoke Maestro suite"
+
+          MOBILE_NOT_REQUIRED_INFO=$(echo "$CHECK_RUNS" | jq --arg name "$MOBILE_NOT_REQUIRED_CHECK" '[.check_runs[] | select(.name == $name)] | sort_by(.started_at // "") | last')
+          if [ "$MOBILE_NOT_REQUIRED_INFO" != "null" ] && [ -n "$MOBILE_NOT_REQUIRED_INFO" ]; then
+            MNR_STATUS=$(echo "$MOBILE_NOT_REQUIRED_INFO" | jq -r '.status // "unknown"')
+            MNR_CONCLUSION=$(echo "$MOBILE_NOT_REQUIRED_INFO" | jq -r '.conclusion // "none"')
+            if [ "$MNR_STATUS" = "completed" ] && [ "$MNR_CONCLUSION" = "success" ]; then
+              printf "%-55s | %-12s | %-12s | %s\n" "$MOBILE_NOT_REQUIRED_CHECK" "$MNR_STATUS" "$MNR_CONCLUSION" "OK"
+            else
+              printf "%-55s | %-12s | %-12s | %s\n" "$MOBILE_NOT_REQUIRED_CHECK" "$MNR_STATUS" "$MNR_CONCLUSION" "BLOCK"
+              ALL_OK=false
+            fi
+          else
+            if ! check_status "$MOBILE_BUILD_CHECK"; then
+              ALL_OK=false
+            fi
+            if ! check_status "$MOBILE_MAESTRO_CHECK"; then
+              ALL_OK=false
+            fi
+          fi
+
+          if [ "$ALL_OK" != "true" ]; then
+            echo "Critical checks gate failed: at least one required check is missing or not completed+success."
+            echo "all_ok=false" >> "$GITHUB_OUTPUT"
             exit 0
           fi
 
-          case "$MERGE_STATE" in
-            CLEAN|HAS_HOOKS)
-              ;;
-            *)
-              echo "PR not ready for auto-merge yet. mergeStateStatus=$MERGE_STATE"
-              exit 0
-              ;;
-          esac
+          echo "all_ok=true" >> "$GITHUB_OUTPUT"
 
+      - name: Enable auto-merge after strict critical checks gate
+        if: steps.pr.outputs.should_run == 'true' && steps.gate.outputs.all_ok == 'true'
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          REPO: ${{ github.repository }}
+          PR_NUMBER: ${{ steps.pr.outputs.pr_number }}
+        run: |
+          set -euo pipefail
           gh pr merge "$PR_NUMBER" --repo "$REPO" --auto --squash

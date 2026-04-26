@@ -1,0 +1,15 @@
+flows:
+  - 00-smoke-launch.yaml
+  - 01-auth-session.yaml
+  - 02-navigation-main-tabs.yaml
+  - 03-stock-empty-state.yaml
+  - 04-stock-add-manual-product.yaml
+  - 05-stock-edit-product.yaml
+  - 06-scan-known-product.yaml
+  - 07-scan-unknown-product.yaml
+  - 08-scan-401-does-not-logout.yaml
+  - 09-recipes-suggestions.yaml
+  - 10-recipes-filters-monotonic.yaml
+  - 11-product-detail-associated-recipes.yaml
+  - 12-premium-paywall.yaml
+  - 13-backend-error-handling.yaml

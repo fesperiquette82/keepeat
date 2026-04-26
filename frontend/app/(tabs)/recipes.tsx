@@ -39,6 +39,12 @@ const FILTER_LABEL_KEYS: Record<RecipesFilter, string> = {
   expiryMonth: 'recipesFilterExpiryMonth',
   stock: 'recipesFilterAll',
 };
+const FILTER_TEST_IDS: Record<RecipesFilter, string> = {
+  expiryDay: 'recipes-filter-today',
+  expiryWeek: 'recipes-filter-week',
+  expiryMonth: 'recipes-filter-month',
+  stock: 'recipes-filter-all',
+};
 
 const EMPTY_FILTER_LABEL_KEYS: Record<RecipesFilter, string> = {
   stock: 'recipesEmptyAll',
@@ -179,6 +185,7 @@ export default function RecipesScreen() {
             return (
               <TouchableOpacity
                 key={filter.key}
+                testID={FILTER_TEST_IDS[filter.key]}
                 style={[styles.filterChip, selected && styles.filterChipActive]}
                 onPress={() => setActiveFilter(filter.key)}
               >

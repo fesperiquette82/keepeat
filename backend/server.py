@@ -38,7 +38,7 @@ from slowapi import Limiter, _rate_limit_exceeded_handler
 from slowapi.errors import RateLimitExceeded
 from slowapi.util import get_remote_address
 
-from alerts import (
+from backend.alerts import (
     AlertDependencies,
     alert_loop,
     check_daily_expiry_alert,
@@ -49,9 +49,9 @@ from alerts import (
     seed_default_user,
     send_expo_push,
 )
-from app_core import days_until, logger, redirect_html, serialize_mongo, utc_now
-from auth_utils import create_token, get_current_user, hash_password, http_bearer, validate_password, verify_password
-from models import (
+from backend.app_core import days_until, logger, redirect_html, serialize_mongo, utc_now
+from backend.auth_utils import create_token, get_current_user, hash_password, http_bearer, validate_password, verify_password
+from backend.models import (
     BillingEntitlementsResponse,
     BillingRestoreResponse,
     BillingUsageResponse,
@@ -81,7 +81,7 @@ from models import (
     UserResponse,
     VerifyEmailBody,
 )
-from entitlements import (
+from backend.entitlements import (
     FEATURE_AI,
     FEATURE_OCR,
     FEATURE_PREDICTIONS,
@@ -94,9 +94,9 @@ from entitlements import (
     feature_policy,
     resolve_plan,
 )
-from ocr_service import OcrApiError, ocr_receipt
-from priority_refresh import build_priority_refresh_state
-from observability import (
+from backend.ocr_service import OcrApiError, ocr_receipt
+from backend.priority_refresh import build_priority_refresh_state
+from backend.observability import (
     build_operational_overview,
     build_monitoring_kpis,
     extract_user_id_from_auth_header,
@@ -107,10 +107,10 @@ from observability import (
     track_business_event,
     track_service_usage,
 )
-from admin_service_control import build_cost_recommendations, build_services_status, build_usage_metrics
-from service_limits import build_external_services_quota_snapshot
-from product_catalog import infer_food_category, infer_shelf_life, lookup_product_openfoodfacts
-from recipes_service import (
+from backend.admin_service_control import build_cost_recommendations, build_services_status, build_usage_metrics
+from backend.service_limits import build_external_services_quota_snapshot
+from backend.product_catalog import infer_food_category, infer_shelf_life, lookup_product_openfoodfacts
+from backend.recipes_service import (
     _FRIGO_CATS,
     _PLACARD_CATS,
     append_recipe_to_catalog,
@@ -123,6 +123,19 @@ from recipes_service import (
     resolve_suggestion_style,
     suggest_recipe_groups_from_catalog,
     suggest_recipes_from_catalog,
+)
+from backend.test_mode import (
+    build_seed_stock,
+    clone_fixtures,
+    ensure_external_allowed,
+    external_services_disabled,
+    is_test_env,
+    mock_ai_enabled,
+    mock_billing_enabled,
+    mock_emails_enabled,
+    mock_ocr_enabled,
+    mock_openfoodfacts_enabled,
+    mock_push_enabled,
 )
 
 MONGO_URL = os.getenv("MONGO_URL")
@@ -150,6 +163,7 @@ ocr_normalizations_col = db["ocr_normalizations"]
 _BACKEND_URL = os.getenv("BACKEND_URL", "https://keepeat-backend.onrender.com")
 _GOOGLE_ANDROID_PACKAGE = os.getenv("GOOGLE_ANDROID_PACKAGE", "com.fesperiquette.keepeat")
 APP_STARTED_AT = utc_now()
+TEST_FIXTURES = clone_fixtures()
 
 
 def _parse_admin_emails(raw: str | None) -> set[str]:
@@ -983,6 +997,46 @@ async def health_root():
     return {"status": "ok" if mongo_ok else "degraded", "mongo": mongo_ok, "timestamp": utc_now().isoformat()}
 
 
+def _ensure_test_mode_route() -> None:
+    if not is_test_env():
+        raise HTTPException(status_code=404, detail="Not found")
+
+
+@app.post("/api/test/reset")
+async def test_reset_data():
+    _ensure_test_mode_route()
+    collections = [stock_col, products_cache_col, receipt_tickets_col, business_events_col, service_usage_logs_col]
+    for collection in collections:
+        await collection.delete_many({})
+    await users_col.delete_many({"email": {"$regex": "@keepeat\\.test$"}})
+    return {"ok": True, "action": "reset"}
+
+
+@app.post("/api/test/seed")
+async def test_seed_data():
+    _ensure_test_mode_route()
+    free_fixture = TEST_FIXTURES["users"]["free"]
+    premium_fixture = TEST_FIXTURES["users"]["premium"]
+    free_password_hash = hash_password(free_fixture["password"])
+    premium_password_hash = hash_password(premium_fixture["password"])
+    await users_col.update_one(
+        {"email": free_fixture["email"]},
+        {"$set": {"email": free_fixture["email"], "password_hash": free_password_hash, "is_premium": False, "subscription_status": "inactive", "email_verified": True}},
+        upsert=True,
+    )
+    await users_col.update_one(
+        {"email": premium_fixture["email"]},
+        {"$set": {"email": premium_fixture["email"], "password_hash": premium_password_hash, "is_premium": True, "subscription_status": "active", "email_verified": True}},
+        upsert=True,
+    )
+    free_user = await users_col.find_one({"email": free_fixture["email"]}, {"_id": 1})
+    if not free_user:
+        raise HTTPException(status_code=500, detail="Unable to seed test user")
+    await stock_col.delete_many({"user_id": str(free_user["_id"])})
+    await stock_col.insert_many(build_seed_stock(str(free_user["_id"])))
+    return {"ok": True, "action": "seed", "fixtures": TEST_FIXTURES}
+
+
 cors_origins = os.getenv("CORS_ORIGINS", "*").strip()
 if cors_origins == "*":
     logger.warning(
@@ -1092,6 +1146,10 @@ async def api_request_logging_middleware(request: Request, call_next):
 
 
 async def _send_email(to: str, subject: str, html_body: str) -> None:
+    if is_test_env() and (mock_emails_enabled() or external_services_disabled()):
+        logger.info("TEST_MODE email mocked to=%s subject=%s", to, subject)
+        return
+    ensure_external_allowed("emails")
     api_key = os.getenv("BREVO_API_KEY")
     if not api_key:
         logger.warning("Email non envoyé vers %s : BREVO_API_KEY non configuré", to)
@@ -1442,6 +1500,21 @@ async def get_billing_entitlements(
     source: str | None = Query(None),
     current_user: Dict[str, Any] = Depends(_get_current_user),
 ):
+    if is_test_env() and mock_billing_enabled():
+        is_premium = current_user.get("email") == TEST_FIXTURES["users"]["premium"]["email"]
+        return BillingEntitlementsResponse(
+            plan="premium" if is_premium else "free",
+            is_premium=is_premium,
+            subscription_status="active" if is_premium else "inactive",
+            subscription_expires_at=(utc_now() + timedelta(days=30)).isoformat() if is_premium else None,
+            features={
+                FEATURE_OCR: {"allowed": True, "monthly_limit": None},
+                FEATURE_AI: {"allowed": True, "monthly_limit": None},
+                FEATURE_PREDICTIONS: {"allowed": True, "monthly_limit": None},
+                FEATURE_STATS_ADVANCED: {"allowed": is_premium, "monthly_limit": None},
+            },
+            server_time=utc_now().isoformat(),
+        )
     user_doc = await users_col.find_one({"_id": ObjectId(current_user["id"])}) or current_user
     if source == "paywall":
         await track_business_event(
@@ -1459,6 +1532,14 @@ async def get_billing_entitlements(
 async def get_billing_usage(
     current_user: Dict[str, Any] = Depends(_get_current_user),
 ):
+    if is_test_env() and mock_billing_enabled():
+        return BillingUsageResponse(
+            period=_current_period_key(),
+            usage={
+                FEATURE_OCR: {"used": 0, "limit": None, "remaining": 0},
+                FEATURE_AI: {"used": 0, "limit": None, "remaining": 0},
+            },
+        )
     user_doc = await users_col.find_one({"_id": ObjectId(current_user["id"])}) or current_user
     plan = resolve_plan(user_doc)
     period = _current_period_key()
@@ -1569,6 +1650,14 @@ async def verify_google_subscription(
     body: BillingVerifyRequest,
     current_user: Dict[str, Any] = Depends(_get_current_user),
 ):
+    if is_test_env() and mock_billing_enabled():
+        expires_at = (utc_now() + timedelta(days=30)).isoformat()
+        await users_col.update_one(
+            {"_id": ObjectId(current_user["id"])},
+            {"$set": {"is_premium": True, "subscription_status": "active", "subscription_expires_at": expires_at}},
+        )
+        return BillingRestoreResponse(ok=True, plan=PREMIUM_PLAN, subscription_status="active", subscription_expires_at=expires_at)
+    ensure_external_allowed("billing")
     await track_business_event(
         business_events_col=business_events_col,
         user_id=current_user["id"],
@@ -2163,6 +2252,16 @@ async def get_product(
     # Valider le format barcode : chiffres uniquement, 4 à 14 caractères (EAN-8, EAN-13, UPC-A…)
     if not barcode.isdigit() or not (4 <= len(barcode) <= 14):
         raise HTTPException(status_code=422, detail="Format de barcode invalide (4-14 chiffres)")
+    if is_test_env() and mock_openfoodfacts_enabled():
+        if barcode == "4010000000000":
+            raise HTTPException(status_code=401, detail="Mocked lookup unauthorized")
+        if barcode == "5000000000000":
+            raise HTTPException(status_code=500, detail="Mocked lookup internal error")
+        known = TEST_FIXTURES["products"]["known"]
+        product = ProductBase(**known) if barcode == known["barcode"] else None
+        shelf_life = infer_shelf_life(product if product else ProductBase(barcode=barcode))
+        return ProductLookupResponse(found=product is not None, product=product, shelf_life=shelf_life)
+    ensure_external_allowed("openfoodfacts")
     product = await lookup_product_openfoodfacts(barcode, products_cache_col)
     await track_service_usage(
         service_usage_logs_col=service_usage_logs_col,
@@ -2193,6 +2292,9 @@ async def register_push_token(
     current_user: Dict[str, Any] = Depends(_get_current_user),
 ):
     """Enregistre le push token Expo de l'appareil pour l'utilisateur courant."""
+    if is_test_env() and (mock_push_enabled() or external_services_disabled()):
+        logger.info("TEST_MODE push token registration mocked user=%s", current_user["id"])
+        return
     if not body.token.startswith(("ExponentPushToken[", "ExpoPushToken[")):
         raise HTTPException(status_code=400, detail="Invalid Expo push token format")
     await users_col.update_one(
@@ -2207,6 +2309,9 @@ async def unregister_push_token(
     current_user: Dict[str, Any] = Depends(_get_current_user),
 ):
     """Supprime le push token de l'appareil (à appeler lors de la déconnexion)."""
+    if is_test_env() and (mock_push_enabled() or external_services_disabled()):
+        logger.info("TEST_MODE push token unregistration mocked user=%s", current_user["id"])
+        return
     await users_col.update_one(
         {"_id": ObjectId(current_user["id"])},
         {"$pull": {"push_tokens": body.token}},
@@ -2858,7 +2963,15 @@ async def get_recipe_suggestions(
     suggest_later = False
     if not relevant:
         gemini_key = _get_recipes_ai_api_key()
-        if gemini_key and stock_names:
+        if is_test_env() and mock_ai_enabled() and stock_names:
+            ai_raw = {
+                **TEST_FIXTURES["ai_recipe"],
+                "id": "mock-ai-recipe",
+            }
+            ai_scored = await _save_ai_recipe_to_stores(ai_raw, stock_names=stock_names)
+            relevant = [ai_scored]
+            logger.info("TEST_MODE AI recipe fixture used user=%s", uid)
+        elif gemini_key and stock_names:
             try:
                 ai_raw = await asyncio.wait_for(
                     _ai_gap_fill(stock_names, gemini_key),
@@ -3149,61 +3262,66 @@ async def ocr_receipt_route(
         feature=FEATURE_OCR,
         consume_quota=False,
     )
-    try:
-        result = await ocr_receipt(
-            request=None,
-            request_payload=payload.model_dump(),
-            current_user=current_user,
-            normalizations_col=ocr_normalizations_col,
-        )
-    except HTTPException as exc:
-        logger.warning("OCR receipt validation failed for user=%s http=%s detail=%s", current_user["id"], exc.status_code, exc.detail)
-        await track_business_event(
-            business_events_col=business_events_col,
-            user_id=current_user["id"],
-            event_name="ocr_scan_failed",
-            event_category="ocr",
-            metadata_json={"reason": str(exc.detail), "http_status": exc.status_code},
-        )
-        raise
-    except OcrApiError as exc:
-        logger.warning(
-            "OCR receipt failed — user=%s http=%s stage=%s upstream_http=%s mime=%s b64_len=%s cause=%s detail=%s",
-            current_user["id"],
-            exc.http_status,
-            getattr(exc, "stage", None),
-            getattr(exc, "upstream_status", None),
-            getattr(exc, "mime_type", None),
-            getattr(exc, "image_b64_len", None),
-            getattr(exc, "cause", None),
-            exc,
-        )
-        await track_business_event(
-            business_events_col=business_events_col,
-            user_id=current_user["id"],
-            event_name="ocr_scan_failed",
-            event_category="ocr",
-            metadata_json={
-                "reason": str(exc),
-                "http_status": exc.http_status,
-                "failure_stage": getattr(exc, "stage", None),
-                "upstream_http_status": getattr(exc, "upstream_status", None),
-                "mime_type": getattr(exc, "mime_type", None),
-                "image_b64_len": getattr(exc, "image_b64_len", None),
-                "failure_cause": getattr(exc, "cause", None),
-            },
-        )
-        raise HTTPException(status_code=exc.http_status, detail=str(exc))
-    except Exception as exc:
-        logger.exception("OCR receipt unexpected failure user=%s", current_user["id"])
-        await track_business_event(
-            business_events_col=business_events_col,
-            user_id=current_user["id"],
-            event_name="ocr_scan_failed",
-            event_category="ocr",
-            metadata_json={"reason": "internal_unexpected_error", "http_status": 500},
-        )
-        raise HTTPException(status_code=500, detail="Erreur interne OCR") from exc
+    if is_test_env() and mock_ocr_enabled():
+        mock_payload = TEST_FIXTURES["ocr"]
+        result = {"date": mock_payload["receipt_date"], "items": mock_payload["items"], "source": "mock_ocr"}
+    else:
+        ensure_external_allowed("ocr")
+        try:
+            result = await ocr_receipt(
+                request=None,
+                request_payload=payload.model_dump(),
+                current_user=current_user,
+                normalizations_col=ocr_normalizations_col,
+            )
+        except HTTPException as exc:
+            logger.warning("OCR receipt validation failed for user=%s http=%s detail=%s", current_user["id"], exc.status_code, exc.detail)
+            await track_business_event(
+                business_events_col=business_events_col,
+                user_id=current_user["id"],
+                event_name="ocr_scan_failed",
+                event_category="ocr",
+                metadata_json={"reason": str(exc.detail), "http_status": exc.status_code},
+            )
+            raise
+        except OcrApiError as exc:
+            logger.warning(
+                "OCR receipt failed — user=%s http=%s stage=%s upstream_http=%s mime=%s b64_len=%s cause=%s detail=%s",
+                current_user["id"],
+                exc.http_status,
+                getattr(exc, "stage", None),
+                getattr(exc, "upstream_status", None),
+                getattr(exc, "mime_type", None),
+                getattr(exc, "image_b64_len", None),
+                getattr(exc, "cause", None),
+                exc,
+            )
+            await track_business_event(
+                business_events_col=business_events_col,
+                user_id=current_user["id"],
+                event_name="ocr_scan_failed",
+                event_category="ocr",
+                metadata_json={
+                    "reason": str(exc),
+                    "http_status": exc.http_status,
+                    "failure_stage": getattr(exc, "stage", None),
+                    "upstream_http_status": getattr(exc, "upstream_status", None),
+                    "mime_type": getattr(exc, "mime_type", None),
+                    "image_b64_len": getattr(exc, "image_b64_len", None),
+                    "failure_cause": getattr(exc, "cause", None),
+                },
+            )
+            raise HTTPException(status_code=exc.http_status, detail=str(exc))
+        except Exception as exc:
+            logger.exception("OCR receipt unexpected failure user=%s", current_user["id"])
+            await track_business_event(
+                business_events_col=business_events_col,
+                user_id=current_user["id"],
+                event_name="ocr_scan_failed",
+                event_category="ocr",
+                metadata_json={"reason": "internal_unexpected_error", "http_status": 500},
+            )
+            raise HTTPException(status_code=500, detail="Erreur interne OCR") from exc
 
     items = result.get("items", []) if isinstance(result, dict) else []
     # Quota consommé APRÈS l'appel externe réussi

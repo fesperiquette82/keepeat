@@ -16,6 +16,7 @@ export default function FloatingScanButton({ onPress }: FloatingScanButtonProps)
   return (
     <View pointerEvents="box-none" style={StyleSheet.absoluteFill}>
       <Pressable
+        testID="tab-scan"
         accessibilityRole="button"
         accessibilityLabel={t('scanner')}
         onPress={onPress}

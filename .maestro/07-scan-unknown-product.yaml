@@ -1,0 +1,12 @@
+appId: com.fesperiquette.keepeat
+---
+- launchApp
+- tapOn:
+    id: tab-scan
+- tapOn:
+    id: scan-manual-barcode-input
+- inputText: 0000000000000
+- tapOn:
+    id: scan-manual-search-button
+- assertVisible:
+    id: add-product-name-input

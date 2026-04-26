@@ -1,0 +1,9 @@
+appId: com.fesperiquette.keepeat
+---
+- launchApp
+- assertVisible:
+    id: login-email-input
+    optional: true
+- assertVisible:
+    id: tab-home
+    optional: true

@@ -166,7 +166,7 @@ export default function StockScreen() {
     <SafeAreaView style={styles.container}>
       <View style={styles.header}>
         <View style={styles.titleRow}>
-          <Text style={styles.title}>Stock complet</Text>
+          <Text testID="stock-screen-title" style={styles.title}>Stock complet</Text>
           {mostUrgentDays !== null && (
             <View style={[styles.titleDot, { backgroundColor: expiryColor(mostUrgentDays) }]} />
           )}
@@ -227,9 +227,9 @@ export default function StockScreen() {
       </View>
 
       {displayedItems.length === 0 ? (
-        <View style={styles.emptyWrap}>
+        <View testID="stock-empty-state" style={styles.emptyWrap}>
           <Text style={styles.emptyTitle}>{searchQuery.trim() ? 'Aucun résultat' : 'Stock vide'}</Text>
-          <Text style={styles.emptyText}>{emptyLabel}</Text>
+          <Text testID="stock-empty-message" style={styles.emptyText}>{emptyLabel}</Text>
         </View>
       ) : (
         <FlatList
@@ -269,6 +269,8 @@ export default function StockScreen() {
                 }}
               >
                 <TouchableOpacity
+                  testID="stock-item-row"
+                  accessibilityLabel={`stock-item-${item.id}`}
                   style={styles.card}
                   activeOpacity={0.8}
                   onPress={() => router.push({ pathname: '/stock/[id]', params: { id: item.id } })}

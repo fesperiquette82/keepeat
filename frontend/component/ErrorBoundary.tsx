@@ -1,5 +1,5 @@
 import React from "react";
-import { View, Text, ScrollView, StyleSheet } from "react-native";
+import { Text, ScrollView, StyleSheet } from "react-native";
 import { logger } from "../utils/logger";
 
 interface State {
@@ -28,7 +28,7 @@ export default class ErrorBoundary extends React.Component<any, State> {
           <Text style={styles.title}>🚨 JavaScript Error</Text>
 
           <Text style={styles.label}>Message:</Text>
-          <Text style={styles.text}>
+          <Text testID="backend-error-message" style={styles.text}>
             {String(this.state.error?.message || this.state.error)}
           </Text>
 

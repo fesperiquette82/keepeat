@@ -1,0 +1,298 @@
+name: Codex Auto-fix
+
+on:
+  workflow_run:
+    workflows:
+      - CI
+      - Mobile E2E (Maestro)
+      - Admin dashboard monitoring tests
+    types:
+      - completed
+
+jobs:
+  codex-auto-fix:
+    if: ${{ github.event.workflow_run.conclusion == 'failure' && github.event.workflow_run.event == 'pull_request' }}
+    runs-on: ubuntu-latest
+    permissions:
+      actions: read
+      checks: read
+      contents: read
+      pull-requests: write
+    concurrency:
+      group: codex-autodebug-pr-${{ github.event.workflow_run.pull_requests[0].number || github.event.workflow_run.id }}
+      cancel-in-progress: false
+    env:
+      WATCHED_CHECKS_JSON: '["Non-regression policy checks","Mobile E2E / PR smoke Maestro suite","Mobile E2E / Build Android debug APK","Backend admin dashboard tests","Vercel"]'
+      ALLOWED_BASE_REGEX: '^(main|release/.*)$'
+      MAX_ATTEMPTS_PER_SHA: '2'
+
+    steps:
+      - name: Resolve PR context and hard gates
+        id: gate
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          REPO: ${{ github.repository }}
+          RUN_ID: ${{ github.event.workflow_run.id }}
+          WORKFLOW_NAME: ${{ github.event.workflow_run.name }}
+          PR_NUMBER: ${{ github.event.workflow_run.pull_requests[0].number }}
+          RUN_ACTOR: ${{ github.event.workflow_run.actor.login }}
+          HEAD_MESSAGE: ${{ github.event.workflow_run.head_commit.message }}
+        run: |
+          set -euo pipefail
+
+          if [ "$WORKFLOW_NAME" = "Codex Auto-fix" ]; then
+            echo "auto-fix skipped: workflow self-trigger"
+            echo "should_run=false" >> "$GITHUB_OUTPUT"
+            exit 0
+          fi
+
+          if [ -z "$PR_NUMBER" ] || [ "$PR_NUMBER" = "null" ]; then
+            echo "auto-fix skipped: no PR"
+            echo "should_run=false" >> "$GITHUB_OUTPUT"
+            exit 0
+          fi
+
+          if echo "$RUN_ACTOR" | grep -Eiq 'codex|github-actions\\[bot\\]'; then
+            echo "auto-fix skipped: bot actor ($RUN_ACTOR)"
+            echo "should_run=false" >> "$GITHUB_OUTPUT"
+            exit 0
+          fi
+
+          if echo "$HEAD_MESSAGE" | grep -Eiq 'codex auto-fix|codex-autodebug'; then
+            echo "auto-fix skipped: run marked as autofix commit"
+            echo "should_run=false" >> "$GITHUB_OUTPUT"
+            exit 0
+          fi
+
+          PR_JSON=$(gh api "repos/$REPO/pulls/$PR_NUMBER")
+          BASE_REF=$(echo "$PR_JSON" | jq -r '.base.ref')
+          HEAD_REPO=$(echo "$PR_JSON" | jq -r '.head.repo.full_name')
+          HEAD_SHA=$(echo "$PR_JSON" | jq -r '.head.sha')
+          LABELS=$(echo "$PR_JSON" | jq -r '[.labels[].name] | join(",")')
+
+          if ! echo "$BASE_REF" | grep -Eq "$ALLOWED_BASE_REGEX"; then
+            echo "auto-fix skipped: base branch not allowed ($BASE_REF)"
+            echo "should_run=false" >> "$GITHUB_OUTPUT"
+            exit 0
+          fi
+
+          if [ "$HEAD_REPO" != "$REPO" ]; then
+            echo "auto-fix skipped: fork PR"
+            echo "should_run=false" >> "$GITHUB_OUTPUT"
+            exit 0
+          fi
+
+          if ! echo "$LABELS" | grep -Eiq '(^|,)(codex|auto-fix)(,|$)'; then
+            echo "auto-fix skipped: missing label"
+            echo "should_run=false" >> "$GITHUB_OUTPUT"
+            exit 0
+          fi
+
+          echo "should_run=true" >> "$GITHUB_OUTPUT"
+          echo "pr_number=$PR_NUMBER" >> "$GITHUB_OUTPUT"
+          echo "head_sha=$HEAD_SHA" >> "$GITHUB_OUTPUT"
+          echo "workflow_name=$WORKFLOW_NAME" >> "$GITHUB_OUTPUT"
+
+      - name: Detect failed watched check
+        if: steps.gate.outputs.should_run == 'true'
+        id: failing
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          REPO: ${{ github.repository }}
+          RUN_ID: ${{ github.event.workflow_run.id }}
+          HEAD_SHA: ${{ steps.gate.outputs.head_sha }}
+          WATCHED_CHECKS_JSON: ${{ env.WATCHED_CHECKS_JSON }}
+        run: |
+          set -euo pipefail
+
+          RUN_JOBS_JSON=$(gh api "repos/$REPO/actions/runs/$RUN_ID/jobs?per_page=100")
+          FAILED_JOB_NAME=$(echo "$RUN_JOBS_JSON" | jq -r --argjson watched "$WATCHED_CHECKS_JSON" '
+            [.jobs[]
+              | select((.conclusion == "failure" or .conclusion == "timed_out" or .conclusion == "cancelled") and (.name != null))
+              | select(any($watched[]; . == .name))
+            ][0].name // empty')
+
+          FAILED_JOB_ID=$(echo "$RUN_JOBS_JSON" | jq -r --arg name "$FAILED_JOB_NAME" '
+            [.jobs[] | select(.name == $name)][0].id // empty')
+
+          FAILED_VERCEL=$(gh api -H "Accept: application/vnd.github+json" "repos/$REPO/commits/$HEAD_SHA/check-runs?per_page=100" \
+            --jq '.check_runs | map(select((.name | ascii_downcase | contains("vercel")) and (.conclusion != "success"))) | .[0].name // empty')
+
+          if [ -n "$FAILED_JOB_NAME" ]; then
+            echo "failed_check_name=$FAILED_JOB_NAME" >> "$GITHUB_OUTPUT"
+            echo "failed_job_id=$FAILED_JOB_ID" >> "$GITHUB_OUTPUT"
+            echo "failed_check_type=actions_job" >> "$GITHUB_OUTPUT"
+            echo "should_trigger=true" >> "$GITHUB_OUTPUT"
+            exit 0
+          fi
+
+          if [ -n "$FAILED_VERCEL" ] && echo "$WATCHED_CHECKS_JSON" | jq -e '.[] | select(.=="Vercel")' >/dev/null; then
+            echo "failed_check_name=$FAILED_VERCEL" >> "$GITHUB_OUTPUT"
+            echo "failed_job_id=" >> "$GITHUB_OUTPUT"
+            echo "failed_check_type=check_run" >> "$GITHUB_OUTPUT"
+            echo "should_trigger=true" >> "$GITHUB_OUTPUT"
+            exit 0
+          fi
+
+          echo "auto-fix skipped: failing check not in watched list"
+          echo "should_trigger=false" >> "$GITHUB_OUTPUT"
+
+      - name: Guard against repeated attempts for same SHA/check
+        if: steps.gate.outputs.should_run == 'true' && steps.failing.outputs.should_trigger == 'true'
+        id: dedupe
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          REPO: ${{ github.repository }}
+          PR_NUMBER: ${{ steps.gate.outputs.pr_number }}
+          SHA: ${{ steps.gate.outputs.head_sha }}
+          WORKFLOW_NAME: ${{ steps.gate.outputs.workflow_name }}
+          JOB_NAME: ${{ steps.failing.outputs.failed_check_name }}
+          MAX_ATTEMPTS_PER_SHA: ${{ env.MAX_ATTEMPTS_PER_SHA }}
+        run: |
+          set -euo pipefail
+
+          COMMENTS=$(gh api "repos/$REPO/issues/$PR_NUMBER/comments" --paginate --jq '.[].body')
+          MARKER="<!-- codex-autodebug: sha=$SHA workflow=$WORKFLOW_NAME job=$JOB_NAME -->"
+
+          if echo "$COMMENTS" | grep -Fq "$MARKER"; then
+            echo "auto-fix skipped: already attempted for this SHA"
+            echo "should_comment=false" >> "$GITHUB_OUTPUT"
+            exit 0
+          fi
+
+          ATTEMPTS_FOR_SHA=$(echo "$COMMENTS" | grep -F "<!-- codex-autodebug: sha=$SHA " | wc -l | tr -d ' ')
+          if [ "$ATTEMPTS_FOR_SHA" -ge "$MAX_ATTEMPTS_PER_SHA" ]; then
+            echo "auto-fix skipped: max attempts reached for SHA"
+            echo "should_comment=false" >> "$GITHUB_OUTPUT"
+            exit 0
+          fi
+
+          echo "should_comment=true" >> "$GITHUB_OUTPUT"
+          echo "attempt_number=$((ATTEMPTS_FOR_SHA + 1))" >> "$GITHUB_OUTPUT"
+          echo "marker=$MARKER" >> "$GITHUB_OUTPUT"
+
+      - name: Collect diagnostics (logs + artifacts)
+        if: steps.dedupe.outputs.should_comment == 'true'
+        id: collect
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          REPO: ${{ github.repository }}
+          RUN_ID: ${{ github.event.workflow_run.id }}
+          RUN_URL: ${{ github.event.workflow_run.html_url }}
+          FAILED_JOB_ID: ${{ steps.failing.outputs.failed_job_id }}
+          FAILED_CHECK_NAME: ${{ steps.failing.outputs.failed_check_name }}
+          CHECK_TYPE: ${{ steps.failing.outputs.failed_check_type }}
+        run: |
+          set -euo pipefail
+
+          mkdir -p codex-auto-debug/artifacts codex-auto-debug/logs
+
+          if [ -n "$FAILED_JOB_ID" ]; then
+            gh run view "$RUN_ID" --repo "$REPO" --job "$FAILED_JOB_ID" --log > codex-auto-debug/logs/failed-job.log || true
+          fi
+
+          gh run download "$RUN_ID" --repo "$REPO" --dir codex-auto-debug/artifacts || true
+
+          LOG_FILE="codex-auto-debug/logs/failed-job.log"
+          SUMMARY_FILE="codex-auto-debug/diagnostic.md"
+
+          echo "# CI auto-debug diagnostic" > "$SUMMARY_FILE"
+          echo "" >> "$SUMMARY_FILE"
+          echo "- Workflow: ${{ steps.gate.outputs.workflow_name }}" >> "$SUMMARY_FILE"
+          echo "- Check: $FAILED_CHECK_NAME" >> "$SUMMARY_FILE"
+          echo "- Check type: $CHECK_TYPE" >> "$SUMMARY_FILE"
+          echo "- SHA: ${{ steps.gate.outputs.head_sha }}" >> "$SUMMARY_FILE"
+          echo "- Run: $RUN_URL" >> "$SUMMARY_FILE"
+          echo "" >> "$SUMMARY_FILE"
+
+          if [ -f "$LOG_FILE" ]; then
+            SANITIZED="codex-auto-debug/logs/failed-job-sanitized.log"
+            sed -E 's/(ghp_[A-Za-z0-9]+)/[REDACTED_TOKEN]/g; s/(Bearer )[A-Za-z0-9._-]+/\1[REDACTED]/g; s/(OPENAI_API_KEY=)[^ ]+/\1[REDACTED]/g' "$LOG_FILE" > "$SANITIZED"
+
+            echo "## Quick diagnosis" >> "$SUMMARY_FILE"
+            if grep -q "00-smoke-launch" "$SANITIZED"; then
+              echo "- 00-smoke-launch: mention detected in logs." >> "$SUMMARY_FILE"
+            fi
+            if grep -q "01-auth-session" "$SANITIZED"; then
+              echo "- 01-auth-session: mention detected in logs." >> "$SUMMARY_FILE"
+            fi
+            if grep -Eiq "driver did not start up|emulator|dadb.open\(tcp:7001\)" "$SANITIZED"; then
+              echo "- Failure class: likely emulator/driver startup." >> "$SUMMARY_FILE"
+            fi
+            if grep -Eiq "Assertion is false|assertVisible|FAILED" "$SANITIZED"; then
+              echo "- Failure class: likely test assertion / business flow." >> "$SUMMARY_FILE"
+            fi
+            if grep -Eiq "/api/test/reset|/api/test/seed" "$SANITIZED"; then
+              echo "- reset/seed events: present in logs." >> "$SUMMARY_FILE"
+            fi
+            echo "" >> "$SUMMARY_FILE"
+            echo "## Key log excerpts" >> "$SUMMARY_FILE"
+            echo '```text' >> "$SUMMARY_FILE"
+            grep -E "Assertion is false|FAILED|Error:|did not start up|/api/test/reset|/api/test/seed|00-smoke-launch|01-auth-session|assembleDebug|expo prebuild|pytest" "$SANITIZED" | tail -n 80 >> "$SUMMARY_FILE" || true
+            echo '```' >> "$SUMMARY_FILE"
+          else
+            echo "## Quick diagnosis" >> "$SUMMARY_FILE"
+            echo "- No job log could be downloaded (best effort)." >> "$SUMMARY_FILE"
+          fi
+
+          echo "" >> "$SUMMARY_FILE"
+          echo "## Available artifacts (best effort)" >> "$SUMMARY_FILE"
+          find codex-auto-debug/artifacts -maxdepth 3 -type f | sed 's#^#- #' >> "$SUMMARY_FILE" || true
+
+      - name: Post @codex PR comment
+        if: steps.dedupe.outputs.should_comment == 'true'
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          REPO: ${{ github.repository }}
+          PR_NUMBER: ${{ steps.gate.outputs.pr_number }}
+          RUN_URL: ${{ github.event.workflow_run.html_url }}
+          SHA: ${{ steps.gate.outputs.head_sha }}
+          WORKFLOW_NAME: ${{ steps.gate.outputs.workflow_name }}
+          FAILED_CHECK: ${{ steps.failing.outputs.failed_check_name }}
+          ATTEMPT: ${{ steps.dedupe.outputs.attempt_number }}
+          MARKER: ${{ steps.dedupe.outputs.marker }}
+        run: |
+          set -euo pipefail
+
+          BODY_FILE="codex-auto-debug/comment.md"
+          {
+            echo "$MARKER"
+            echo "<!-- codex-autodebug-attempt: $ATTEMPT -->"
+            echo "@codex"
+            echo "Corrige l’échec CI ci-dessous sur cette PR."
+            echo
+            echo "Périmètre autorisé :"
+            echo "- correction minimale ;"
+            echo "- pas de refactor massif ;"
+            echo "- ne touche pas frontend/backend si l’échec est infra CI/Maestro ;"
+            echo "- ne rebuild pas l’APK sauf changement APK-relevant ;"
+            echo "- conserve les assertions métier ;"
+            echo "- ajoute/ajuste les tests policy si workflow/script CI modifié ;"
+            echo "- ne jamais auto-merge."
+            echo
+            echo "Contexte :"
+            echo "- Workflow : $WORKFLOW_NAME"
+            echo "- Job / check : $FAILED_CHECK"
+            echo "- SHA : $SHA"
+            echo "- PR : #$PR_NUMBER"
+            echo "- Lien run : $RUN_URL"
+            echo "- Artifact(s) : voir artifacts du run + diagnostic joint par le workflow Codex Auto-fix"
+            echo
+            cat codex-auto-debug/diagnostic.md
+            echo
+            echo "Attendu :"
+            echo "- Corriger la cause racine ;"
+            echo "- exécuter les tests pertinents ;"
+            echo "- résumer exactement les changements ;"
+            echo "- ne pas transformer un test failed en skipped."
+          } > "$BODY_FILE"
+
+          gh pr comment "$PR_NUMBER" --repo "$REPO" --body-file "$BODY_FILE"
+          echo "auto-fix triggered: comment posted"
+
+      - name: Upload auto-debug artifact bundle
+        if: always() && steps.dedupe.outputs.should_comment == 'true'
+        uses: actions/upload-artifact@v4
+        with:
+          name: codex-auto-debug-${{ github.event.workflow_run.id }}
+          path: codex-auto-debug

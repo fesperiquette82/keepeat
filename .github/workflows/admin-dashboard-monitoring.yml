@@ -27,4 +27,5 @@ jobs:
         env:
           MONGO_URL: "mongodb://localhost:27017/keepeat_test"
           JWT_SECRET_KEY: "test-secret-ci"
-        run: pytest -q backend/tests/test_admin_monitoring.py backend/tests/test_admin_monitoring_dashboard_api.py
+          PYTHONPATH: ${{ github.workspace }}
+        run: python -m pytest -q backend/tests/test_admin_monitoring.py backend/tests/test_admin_monitoring_dashboard_api.py

@@ -143,6 +143,7 @@ export default function ScanScreen() {
       ) : (
         <View style={styles.manualInputContainer}>
           <TextInput
+            testID="scan-manual-barcode-input"
             style={styles.barcodeInput}
             value={manualBarcode}
             onChangeText={setManualBarcode}
@@ -152,6 +153,8 @@ export default function ScanScreen() {
             autoFocus
           />
           <TouchableOpacity
+            testID="scan-manual-search-button"
+            accessibilityLabel="scan-submit-button"
             style={[styles.searchButton, !manualBarcode.trim() && styles.searchButtonDisabled]}
             onPress={handleManualSearch}
             disabled={!manualBarcode.trim()}
@@ -179,7 +182,7 @@ export default function ScanScreen() {
 
         <TouchableOpacity style={styles.actionBtn} onPress={handleManualAdd}>
           <Ionicons name="add-circle-outline" size={22} color="#1F2937" />
-          <Text style={styles.actionBtnText}>{t('addManually')}</Text>
+          <Text testID="scan-add-manual-button" style={styles.actionBtnText}>{t('addManually')}</Text>
         </TouchableOpacity>
 
         <TouchableOpacity style={styles.actionBtn} onPress={() => router.push('/scan-receipt' as any)}>

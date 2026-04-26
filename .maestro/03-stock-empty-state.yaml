@@ -1,0 +1,7 @@
+appId: com.fesperiquette.keepeat
+---
+- launchApp
+- tapOn:
+    id: tab-stock
+- assertVisible:
+    id: stock-empty-message

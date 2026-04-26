@@ -1,0 +1,59 @@
+appId: com.fesperiquette.keepeat
+---
+- launchApp
+- waitForAnimationToEnd
+
+- runFlow:
+    when:
+      visible:
+        id: login-email-input
+    commands:
+      - tapOn:
+          id: login-email-input
+      - inputText: e2e.free@keepeat.test
+      - tapOn:
+          id: login-password-input
+      - inputText: TestPassword123!
+      - tapOn:
+          id: login-submit-button
+      - extendedWaitUntil:
+          visible:
+            id: tab-home
+          timeout: 20000
+
+- runFlow:
+    when:
+      visible:
+        id: tab-home
+    commands:
+      - assertVisible:
+          id: tab-home
+
+- runFlow:
+    when:
+      notVisible:
+        id: tab-home
+    commands:
+      - waitForAnimationToEnd
+      - runFlow:
+          when:
+            visible:
+              id: login-email-input
+          commands:
+            - tapOn:
+                id: login-email-input
+            - inputText: e2e.free@keepeat.test
+            - tapOn:
+                id: login-password-input
+            - inputText: TestPassword123!
+            - tapOn:
+                id: login-submit-button
+            - extendedWaitUntil:
+                visible:
+                  id: tab-home
+                timeout: 20000
+
+- extendedWaitUntil:
+    visible:
+      id: tab-home
+    timeout: 20000

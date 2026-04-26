@@ -301,6 +301,7 @@ export default function AddProductScreen() {
             </View>
           ) : (
             <TextInput
+              testID="add-product-name-input"
               style={styles.input} value={name} onChangeText={setName}
               placeholder={t('exampleProductName')}
               placeholderTextColor={C.textMid} autoFocus={!productFound && !lookupLoading}
@@ -484,6 +485,8 @@ export default function AddProductScreen() {
         )}
 
         <TouchableOpacity
+          testID="add-product-save-button"
+          accessibilityLabel="add-product-submit"
           style={[styles.saveBtn, isSaving && styles.saveBtnDisabled]}
           onPress={handleSave} disabled={isSaving}
         >
