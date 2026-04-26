@@ -14,7 +14,7 @@ Il se déclenche sur `workflow_run: completed` pour :
 Conditions strictes :
 - conclusion `failure`
 - run lié à une PR
-- label PR `codex` ou `auto-fix`
+- label GitHub PR réel `codex-autofix` (vérifié via l’API des labels de la PR)
 - branche cible autorisée (`main` / `release/*`)
 - PR non-fork non fiable
 - check échoué dans la liste surveillée
@@ -60,8 +60,15 @@ Liste centralisée dans `WATCHED_CHECKS_JSON` :
 - `contents: read`
 - `pull-requests: write`
 
+## Gestion du label `codex-autofix`
+- Pour toute PR Codex, créer la PR avec le label : `gh pr create ... --label codex-autofix`
+- Si la PR existe déjà, ajouter le label : `gh pr edit <PR_NUMBER> --add-label codex-autofix`
+- Vérifier le label : `gh pr view <PR_NUMBER> --json labels` puis confirmer `codex-autofix` dans `.labels[].name`
+- Si le label n’existe pas : `gh label create codex-autofix --color 5319E7 --description "Enable Codex CI auto-fix loop"`
+- Si permissions insuffisantes : documenter explicitement l’échec dans la description PR et le résumé final avec PR créée (oui/non), PR (numéro/URL), label appliqué (oui/non), raison exacte et commande manuelle.
+
 ## Désactiver l’auto-debug sur une PR
-- retirer les labels `codex` / `auto-fix`
+- retirer le label `codex-autofix`
 - ou utiliser une branche cible non autorisée
 
 ## Lire les sorties

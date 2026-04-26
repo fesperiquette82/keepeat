@@ -6,6 +6,14 @@ appId: com.fesperiquette.keepeat
 - runFlow:
     when:
       visible:
+        id: tab-home
+    commands:
+      - assertVisible:
+          id: tab-home
+
+- runFlow:
+    when:
+      visible:
         id: login-email-input
     commands:
       - tapOn:
@@ -14,6 +22,7 @@ appId: com.fesperiquette.keepeat
       - tapOn:
           id: login-password-input
       - inputText: TestPassword123!
+      - hideKeyboard
       - tapOn:
           id: login-submit-button
       - extendedWaitUntil:
@@ -24,10 +33,11 @@ appId: com.fesperiquette.keepeat
 - runFlow:
     when:
       visible:
-        id: tab-home
+        id: login-email-input
     commands:
-      - assertVisible:
-          id: tab-home
+      - takeScreenshot: 01-auth-session-login-still-visible-after-submit
+      - assertNotVisible:
+          id: login-email-input
 
 - runFlow:
     when:
@@ -46,12 +56,21 @@ appId: com.fesperiquette.keepeat
             - tapOn:
                 id: login-password-input
             - inputText: TestPassword123!
+            - hideKeyboard
             - tapOn:
                 id: login-submit-button
             - extendedWaitUntil:
                 visible:
                   id: tab-home
                 timeout: 20000
+            - runFlow:
+                when:
+                  visible:
+                    id: login-email-input
+                commands:
+                  - takeScreenshot: 01-auth-session-login-still-visible-after-retry
+                  - assertNotVisible:
+                      id: login-email-input
 
 - extendedWaitUntil:
     visible:
