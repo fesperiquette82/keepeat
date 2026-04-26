@@ -41,25 +41,37 @@ Les scénarios Maestro sont dans `.maestro/` :
 Workflow : `.github/workflows/mobile-e2e.yml`.
 
 Schéma :
-1. **Changes detection gate** décide si Mobile E2E est requis (`mobile_e2e_required=true/false`).
-2. Si requis : build APK Android dédié (job `Build Android debug APK`), upload artifact APK.
-3. Si requis : job `Maestro E2E suite` (Mongo test + backend test-mode + download APK + flows Maestro).
-4. Si non requis : job `Not required (changes filter)` avec raison explicite dans les logs.
+1. **Changes detection gate** calcule deux décisions :
+   - `mobile_apk_required=true/false` (rebuild APK ?)
+   - `maestro_required=true/false` (lancer Maestro ?)
+2. Si `mobile_apk_required=true` et `maestro_required=true` : build APK Android dédié (job `Build Android debug APK`), upload artifact APK.
+3. Si `mobile_apk_required=true` et `maestro_required=true` : job `PR smoke Maestro suite` (Mongo test + backend test-mode + download APK + flows smoke).
+4. Si `maestro_required=false` **ou** `maestro_required=true` mais `mobile_apk_required=false` : job `Not required (changes filter)` avec raison explicite dans les logs.
 
 Le backend écoute sur `0.0.0.0:8000` en CI, et l’émulateur Android l’atteint via `10.0.2.2:8000`.
 
-## Quand Mobile E2E est lancé
-Le build APK + Maestro sont lancés si un fichier mobile est modifié, notamment :
+## Quand l’APK est reconstruite
+Le build APK est lancé seulement si un fichier pouvant modifier le binaire est modifié, notamment :
 - `frontend/**`
-- `.maestro/**`
-- `.github/workflows/mobile-e2e.yml`
+- `android/**`
+- `assets/**`
 - `package.json` / `package-lock.json` (racine et frontend)
-- `app.json`, `app.config.*`, `eas.json`, `android/**`
-- `scripts/e2e-*`
+- `app.json`, `app.config.*`, `eas.json`
+- `babel.config.*`, `metro.config.*`, `tsconfig*.json`
 
-Si les changements ne touchent que des zones non mobiles (ex. backend pur, docs), Mobile E2E est volontairement sauté pour économiser ~20–25 min de build APK.
+## Quand Maestro smoke peut tourner
+Maestro smoke est requis si un changement touche :
+- les fichiers APK (`frontend/**`, configs Expo/natives listées ci-dessus),
+- **ou** `.maestro/**`,
+- **ou** `scripts/run-maestro-e2e.sh` / `scripts/e2e-*`,
+- **ou** `.github/workflows/mobile-e2e.yml`.
 
-En cas de doute (ex. `workflow_dispatch` manuel), le workflow **force l’exécution** de Mobile E2E.
+Si `maestro_required=true` mais `mobile_apk_required=false`, le workflow **ne recompile pas** l’APK ; sans mécanisme d’APK réutilisable configuré, il skippe proprement avec le message :
+`No APK rebuild required and no reusable APK configured: skipping Maestro for this run.`
+
+Les changements purement backend/docs/policy ne doivent pas déclencher de build APK.
+
+En cas de doute (ex. `workflow_dispatch` manuel), le workflow force `mobile_apk_required=true` et `maestro_required=true`.
 
 Le filtre est maintenu manuellement. Donc si un jour un nouveau dossier ou fichier impactant l’application mobile est ajouté, il faudra l’ajouter explicitement à la liste des chemins qui déclenchent Mobile E2E.
 

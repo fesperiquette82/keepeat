@@ -7,6 +7,7 @@ on:
       - "backend/**"
       - ".maestro/**"
       - "scripts/e2e-*"
+      - "scripts/run-maestro-e2e.sh"
       - ".github/workflows/mobile-e2e.yml"
   push:
     branches:
@@ -16,6 +17,7 @@ on:
       - "backend/**"
       - ".maestro/**"
       - "scripts/e2e-*"
+      - "scripts/run-maestro-e2e.sh"
       - ".github/workflows/mobile-e2e.yml"
   workflow_dispatch:
 
@@ -24,7 +26,8 @@ jobs:
     name: Mobile E2E / Changes detection gate
     runs-on: ubuntu-latest
     outputs:
-      mobile_e2e_required: ${{ steps.decision.outputs.mobile_e2e_required }}
+      mobile_apk_required: ${{ steps.decision.outputs.mobile_apk_required }}
+      maestro_required: ${{ steps.decision.outputs.maestro_required }}
       reason: ${{ steps.decision.outputs.reason }}
 
     steps:
@@ -33,46 +36,70 @@ jobs:
         uses: dorny/paths-filter@v3
         with:
           filters: |
-            mobile_e2e_required:
+            mobile_apk_required:
               - 'frontend/**'
-              - '.maestro/**'
-              - '.github/workflows/mobile-e2e.yml'
+              - 'android/**'
+              - 'assets/**'
+              - 'app.json'
+              - 'app.config.*'
+              - 'eas.json'
               - 'package.json'
               - 'package-lock.json'
               - 'frontend/package.json'
               - 'frontend/package-lock.json'
+              - 'babel.config.*'
+              - 'metro.config.*'
+              - 'tsconfig*.json'
+            maestro_required:
+              - 'frontend/**'
+              - 'android/**'
+              - 'assets/**'
               - 'app.json'
               - 'app.config.*'
               - 'eas.json'
-              - 'android/**'
+              - 'package.json'
+              - 'package-lock.json'
+              - 'frontend/package.json'
+              - 'frontend/package-lock.json'
+              - 'babel.config.*'
+              - 'metro.config.*'
+              - 'tsconfig*.json'
+              - '.maestro/**'
+              - '.github/workflows/mobile-e2e.yml'
               - 'scripts/e2e-*'
+              - 'scripts/run-maestro-e2e.sh'
 
-      - name: Decide whether Mobile E2E is required
+      - name: Decide whether APK build / Maestro are required
         id: decision
         run: |
           set -euo pipefail
 
-          REQUIRED="${{ steps.filter.outputs.mobile_e2e_required }}"
+          APK_REQUIRED="${{ steps.filter.outputs.mobile_apk_required }}"
+          MAESTRO_REQUIRED="${{ steps.filter.outputs.maestro_required }}"
           REASON=""
 
           if [ "${{ github.event_name }}" = "workflow_dispatch" ]; then
-            REQUIRED="true"
-            REASON="workflow_dispatch_force_run"
-          elif [ "$REQUIRED" = "true" ]; then
-            REASON="mobile_impacted_files_detected"
-          else
+            APK_REQUIRED="true"
+            MAESTRO_REQUIRED="true"
+            REASON="workflow_dispatch_force_full"
+          elif [ "$MAESTRO_REQUIRED" != "true" ]; then
             REASON="only_non_mobile_changes_detected"
+          elif [ "$APK_REQUIRED" = "true" ]; then
+            REASON="apk_and_maestro_impacted_files_detected"
+          else
+            REASON="maestro_runner_or_flow_change_without_apk_delta"
           fi
 
-          echo "mobile_e2e_required=$REQUIRED" >> "$GITHUB_OUTPUT"
+          echo "mobile_apk_required=$APK_REQUIRED" >> "$GITHUB_OUTPUT"
+          echo "maestro_required=$MAESTRO_REQUIRED" >> "$GITHUB_OUTPUT"
           echo "reason=$REASON" >> "$GITHUB_OUTPUT"
 
-          echo "Mobile E2E decision: mobile_e2e_required=$REQUIRED reason=$REASON"
+          echo "Mobile E2E decision: mobile_apk_required=$APK_REQUIRED maestro_required=$MAESTRO_REQUIRED reason=$REASON"
 
   build-android-debug-apk:
     name: Mobile E2E / Build Android debug APK
     needs: changes
-    if: needs.changes.outputs.mobile_e2e_required == 'true'
+    if: needs.changes.outputs.maestro_required == 'true' && needs.changes.outputs.mobile_apk_required == 'true'
     runs-on: ubuntu-latest
 
     steps:
@@ -122,7 +149,7 @@ jobs:
     needs:
       - changes
       - build-android-debug-apk
-    if: needs.changes.outputs.mobile_e2e_required == 'true'
+    if: needs.changes.outputs.maestro_required == 'true' && needs.changes.outputs.mobile_apk_required == 'true'
     runs-on: ubuntu-latest
     services:
       mongodb:
@@ -271,6 +298,7 @@ jobs:
         env:
           E2E_RESET_SEED_BASE_URL: http://127.0.0.1:8000
           MAESTRO_SUITE: smoke
+          MAESTRO_DRIVER_STARTUP_TIMEOUT: "180000"
         with:
           api-level: 34
           arch: x86_64
@@ -292,11 +320,15 @@ jobs:
   mobile-e2e-not-required:
     name: Mobile E2E / Not required (changes filter)
     needs: changes
-    if: needs.changes.outputs.mobile_e2e_required == 'false'
+    if: needs.changes.outputs.maestro_required == 'false' || (needs.changes.outputs.maestro_required == 'true' && needs.changes.outputs.mobile_apk_required == 'false')
     runs-on: ubuntu-latest
     steps:
       - name: Explain skip decision
         run: |
-          echo "Mobile E2E skipped by changes filter."
-          echo "mobile_e2e_required=${{ needs.changes.outputs.mobile_e2e_required }}"
+          echo "Mobile E2E skipped by changes filter or no reusable APK strategy."
+          echo "mobile_apk_required=${{ needs.changes.outputs.mobile_apk_required }}"
+          echo "maestro_required=${{ needs.changes.outputs.maestro_required }}"
           echo "reason=${{ needs.changes.outputs.reason }}"
+          if [ "${{ needs.changes.outputs.maestro_required }}" = "true" ] && [ "${{ needs.changes.outputs.mobile_apk_required }}" = "false" ]; then
+            echo "No APK rebuild required and no reusable APK configured: skipping Maestro for this run."
+          fi

@@ -1,3 +1,4 @@
+import re
 from pathlib import Path
 
 
@@ -54,25 +55,47 @@ def test_maestro_e2e_is_fully_runnable_in_github_actions():
     workflow = Path(".github/workflows/mobile-e2e.yml").read_text(encoding="utf-8")
     maestro_script = Path("scripts/run-maestro-e2e.sh").read_text(encoding="utf-8")
     build_job_block = workflow.split("maestro-e2e:")[0]
+    filters_block = workflow.split("filters: |")[1].split("Decide whether APK build / Maestro are required")[0]
 
     assert "Mobile E2E / Changes detection gate" in workflow
-    assert "mobile_e2e_required" in workflow
+    assert "mobile_apk_required" in workflow
+    assert "maestro_required" in workflow
     assert "reason=" in workflow
     assert "dorny/paths-filter@v3" in workflow
-    assert "mobile_e2e_required:" in workflow
+    assert "mobile_apk_required:" in workflow
+    assert "maestro_required:" in workflow
     assert "'frontend/**'" in workflow
     assert "'.maestro/**'" in workflow
     assert "'.github/workflows/mobile-e2e.yml'" in workflow
     assert "'scripts/e2e-*'" in workflow
-    assert "'backend/**'" not in workflow.split("filters: |")[1].split("Build Android debug APK")[0]
-    assert "'docs/**'" not in workflow.split("filters: |")[1].split("Build Android debug APK")[0]
+    assert "'scripts/run-maestro-e2e.sh'" in workflow
+    assert "'android/**'" in filters_block
+    assert "'app.json'" in filters_block
+    assert "'app.config.*'" in filters_block
+    assert "'eas.json'" in filters_block
+    assert "'assets/**'" in filters_block
+    assert "'frontend/**'" in filters_block
+    assert "'package.json'" in filters_block
+    assert "'package-lock.json'" in filters_block
+    assert "'backend/**'" not in filters_block
+    assert "'docs/**'" not in filters_block
+
+    apk_filter_block = filters_block.split("mobile_apk_required:")[1].split("maestro_required:")[0]
+    assert "'.maestro/**'" not in apk_filter_block
+    assert "'scripts/run-maestro-e2e.sh'" not in apk_filter_block
+
+    maestro_filter_block = filters_block.split("maestro_required:")[1]
+    assert "'.maestro/**'" in maestro_filter_block
+    assert "'scripts/run-maestro-e2e.sh'" in maestro_filter_block
+
     assert "build-android-debug-apk:" in workflow
     assert "maestro-e2e:" in workflow
     assert "needs:" in workflow
     assert "- build-android-debug-apk" in workflow
-    assert "needs.changes.outputs.mobile_e2e_required == 'true'" in workflow
+    assert "needs.changes.outputs.maestro_required == 'true' && needs.changes.outputs.mobile_apk_required == 'true'" in workflow
     assert "Mobile E2E / Not required (changes filter)" in workflow
-    assert "needs.changes.outputs.mobile_e2e_required == 'false'" in workflow
+    assert "needs.changes.outputs.maestro_required == 'false' || (needs.changes.outputs.maestro_required == 'true' && needs.changes.outputs.mobile_apk_required == 'false')" in workflow
+    assert "No APK rebuild required and no reusable APK configured: skipping Maestro for this run." in workflow
     assert "Mobile E2E / Build Android debug APK" in workflow
     assert "Mobile E2E / PR smoke Maestro suite" in workflow
     assert "name: android-debug-apk" in workflow
@@ -109,8 +132,16 @@ def test_maestro_e2e_is_fully_runnable_in_github_actions():
     assert "scripts/e2e-reset-seed.mjs" in maestro_script
     assert "reactivecircus/android-emulator-runner@v2" in workflow
     assert "shell: bash" not in workflow
+    assert 'MAESTRO_SUITE: smoke' in workflow
+    assert 'MAESTRO_DRIVER_STARTUP_TIMEOUT: "180000"' in workflow
     assert "bash scripts/run-maestro-e2e.sh --suite \"$MAESTRO_SUITE\"" in workflow
     assert 'MAESTRO_SUITE="full"' in maestro_script
+    assert 'MAESTRO_DRIVER_STARTUP_TIMEOUT="${MAESTRO_DRIVER_STARTUP_TIMEOUT:-180000}"' in maestro_script
+    assert 'echo "MAESTRO_DRIVER_STARTUP_TIMEOUT=${MAESTRO_DRIVER_STARTUP_TIMEOUT}"' in maestro_script
+    assert "export MAESTRO_DRIVER_STARTUP_TIMEOUT" in maestro_script
+    timeout_match = re.search(r'MAESTRO_DRIVER_STARTUP_TIMEOUT: "(\d+)"', workflow)
+    assert timeout_match, "MAESTRO_DRIVER_STARTUP_TIMEOUT must be set in workflow"
+    assert int(timeout_match.group(1)) >= 120000
     assert '--suite' in maestro_script
     assert 'if [ "$MAESTRO_SUITE" != "smoke" ] && [ "$MAESTRO_SUITE" != "full" ]; then' in maestro_script
     assert 'FLOW_FILES=()' in maestro_script

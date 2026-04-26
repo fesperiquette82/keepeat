@@ -4,6 +4,7 @@ set -euo pipefail
 E2E_RESET_SEED_BASE_URL="${E2E_RESET_SEED_BASE_URL:-http://127.0.0.1:8000}"
 E2E_ANDROID_APP_ID="${E2E_ANDROID_APP_ID:-com.fesperiquette.keepeat}"
 MAESTRO_SUITE="full"
+MAESTRO_DRIVER_STARTUP_TIMEOUT="${MAESTRO_DRIVER_STARTUP_TIMEOUT:-180000}"
 
 while [ "$#" -gt 0 ]; do
   case "$1" in
@@ -107,7 +108,9 @@ for flow_file in "${FLOW_FILES[@]}"; do
 
   echo "==> Running flow: $flow_name (mode=$mode)"
   echo "==> Preparing state for $flow_name (mode=$mode)"
+  echo "MAESTRO_DRIVER_STARTUP_TIMEOUT=${MAESTRO_DRIVER_STARTUP_TIMEOUT}"
   node scripts/e2e-reset-seed.mjs --mode "$mode" --base-url "$E2E_RESET_SEED_BASE_URL"
+  export MAESTRO_DRIVER_STARTUP_TIMEOUT
   if ! ~/.maestro/bin/maestro test "$flow_file" --format junit --output "maestro-results/$flow_name"; then
     echo "❌ Maestro flow failed: $flow_name"
     echo "==> adb devices state on failure"
