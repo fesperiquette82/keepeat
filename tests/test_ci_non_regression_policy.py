@@ -724,25 +724,25 @@ def test_auth_session_flow_login_not_mandatory_at_start():
 
 def test_mobile_e2e_has_kvm_diagnostics_before_emulator():
     """
-    Regression: mobile-e2e.yml must provide KVM diagnostics but not force risky options.
+    Regression: mobile-e2e.yml must provide KVM diagnostics before emulator.
 
     GitHub Actions runners typically don't have KVM hardware acceleration available,
     causing slow (~3-7 minute) emulator boot times. Without KVM, emulator falls back
     to software TCG emulation.
 
-    Solution: Include diagnostic step that checks KVM availability without forcing
-    incompatible options that can timeout the boot.
+    Solution: Include diagnostic step that checks KVM availability for debugging.
 
     The diagnostic step:
     - Checks if /dev/kvm exists
     - Checks if /dev/kvm is readable/writable
     - Logs the result for debugging
-    - Does NOT force any risky emulator-options (which can break boot)
+    - Does NOT force configuration, just informs
 
-    Emulator configuration remains minimal and stable:
+    Emulator configuration uses correct syntax from action documentation:
     - api-level: 34
     - arch: x86_64
-    - No risky emulator-options that timeout on non-KVM runners
+    - emulator-options: must include all necessary flags with correct syntax
+      (action replaces ALL defaults, so must be explicit)
     - MAESTRO_DRIVER_STARTUP_TIMEOUT: 180000 (sufficient for slow CI)
     """
     workflow = Path(".github/workflows/mobile-e2e.yml").read_text(encoding="utf-8")
@@ -768,12 +768,18 @@ def test_mobile_e2e_has_kvm_diagnostics_before_emulator():
     # Find the actual Maestro runner config
     maestro_step = workflow.split("Run Maestro E2E suite")[1].split("Upload E2E artifacts")[0]
 
-    # Verify Maestro config doesn't have risky options that broke boot
-    assert "emulator-options:" not in maestro_step, \
-        "mobile-e2e.yml must NOT use risky emulator-options (they cause timeout on non-KVM runners)"
+    # Verify emulator-options uses correct syntax (action doc requirements)
+    if "emulator-options:" in maestro_step:
+        # If options are specified, verify correct flag names per action documentation
+        assert "-noaudio" in maestro_step or "noaudio" in maestro_step, \
+            "emulator-options must use '-noaudio' (not '-no-audio') per action documentation"
+        assert "-no-boot-anim" in maestro_step, \
+            "emulator-options must include '-no-boot-anim' from action defaults"
+        assert "-gpu swiftshader_indirect" in maestro_step, \
+            "emulator-options should include '-gpu swiftshader_indirect' for consistent rendering"
 
     assert "disable-linux-hw-accel:" not in maestro_step, \
-        "mobile-e2e.yml must NOT force hardware accel settings (let action default handle it)"
+        "mobile-e2e.yml must NOT use disable-linux-hw-accel parameter (not standard for this action)"
 
     # Verify essential config remains intact
     assert 'MAESTRO_DRIVER_STARTUP_TIMEOUT: "180000"' in maestro_step, \
