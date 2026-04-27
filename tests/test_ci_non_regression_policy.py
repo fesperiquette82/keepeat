@@ -722,46 +722,65 @@ def test_auth_session_flow_login_not_mandatory_at_start():
         "01-auth-session first branch must check if already authenticated (tab-home visible)"
 
 
-def test_mobile_e2e_emulator_configured_for_performance():
+def test_mobile_e2e_has_kvm_diagnostics_before_emulator():
     """
-    Regression: Android emulator must have performance-optimizing options enabled.
+    Regression: mobile-e2e.yml must provide KVM diagnostics but not force risky options.
 
     GitHub Actions runners typically don't have KVM hardware acceleration available,
-    so the emulator falls back to software emulation. Without optimization options,
-    this causes ~7 minute boot times, making CI unacceptably slow.
+    causing slow (~3-7 minute) emulator boot times. Without KVM, emulator falls back
+    to software TCG emulation.
 
-    Performance options applied:
-    - disable-linux-hw-accel: false (let it try hardware accel, don't force disable)
-    - emulator-options: -accel auto -gpu swiftshader_indirect -no-window -no-audio -no-snapshot
+    Solution: Include diagnostic step that checks KVM availability without forcing
+    incompatible options that can timeout the boot.
 
-    Expected result: Boot time ~90-120s (with these options) vs ~440s (without)
+    The diagnostic step:
+    - Checks if /dev/kvm exists
+    - Checks if /dev/kvm is readable/writable
+    - Logs the result for debugging
+    - Does NOT force any risky emulator-options (which can break boot)
+
+    Emulator configuration remains minimal and stable:
+    - api-level: 34
+    - arch: x86_64
+    - No risky emulator-options that timeout on non-KVM runners
+    - MAESTRO_DRIVER_STARTUP_TIMEOUT: 180000 (sufficient for slow CI)
     """
     workflow = Path(".github/workflows/mobile-e2e.yml").read_text(encoding="utf-8")
 
-    # Find the "Run Maestro E2E suite" step
+    # Verify KVM diagnostic step exists before Maestro
+    assert "Diagnose KVM and hardware acceleration" in workflow, \
+        "mobile-e2e.yml must include KVM diagnostics step before emulator"
+
+    kvm_section = workflow.split("Diagnose KVM")[1].split("Run Maestro E2E suite")[0]
+
+    # Verify diagnostic checks /dev/kvm existence
+    assert "/dev/kvm" in kvm_section, \
+        "KVM diagnostic must check /dev/kvm existence"
+
+    # Verify diagnostic checks accessibility (read/write)
+    assert "-r /dev/kvm" in kvm_section or "readable" in kvm_section, \
+        "KVM diagnostic must check if /dev/kvm is readable"
+
+    # Verify diagnostic logs result for debugging
+    assert "HARDWARE_ACCEL=" in kvm_section, \
+        "KVM diagnostic must log hardware acceleration status"
+
+    # Find the actual Maestro runner config
     maestro_step = workflow.split("Run Maestro E2E suite")[1].split("Upload E2E artifacts")[0]
 
-    # Verify disable-linux-hw-accel is set to false (not forced disabled)
-    assert "disable-linux-hw-accel: false" in maestro_step, \
-        "mobile-e2e.yml must not force-disable hardware acceleration (disable-linux-hw-accel should be false)"
+    # Verify Maestro config doesn't have risky options that broke boot
+    assert "emulator-options:" not in maestro_step, \
+        "mobile-e2e.yml must NOT use risky emulator-options (they cause timeout on non-KVM runners)"
 
-    # Verify emulator-options are present with key performance flags
-    assert "emulator-options:" in maestro_step, \
-        "mobile-e2e.yml must specify emulator-options for performance optimization"
+    assert "disable-linux-hw-accel:" not in maestro_step, \
+        "mobile-e2e.yml must NOT force hardware accel settings (let action default handle it)"
 
-    # Verify key performance options
-    required_options = [
-        "-accel auto",    # Try hardware accel, fallback to software
-        "-gpu swiftshader_indirect",  # GPU acceleration with software backend
-        "-no-window",     # No X11 window (faster)
-        "-no-audio",      # No audio (faster)
-        "-no-snapshot",   # No persistent snapshots (faster)
-    ]
-
-    for option in required_options:
-        assert option in maestro_step, \
-            f"mobile-e2e.yml emulator-options must include '{option}' for performance"
-
-    # Verify MAESTRO_DRIVER_STARTUP_TIMEOUT is still set high for slow CI environments
+    # Verify essential config remains intact
     assert 'MAESTRO_DRIVER_STARTUP_TIMEOUT: "180000"' in maestro_step, \
-        "mobile-e2e.yml must maintain high MAESTRO_DRIVER_STARTUP_TIMEOUT despite performance optimizations"
+        "mobile-e2e.yml must maintain MAESTRO_DRIVER_STARTUP_TIMEOUT for slow emulator boots"
+
+    assert "api-level: 34" in maestro_step, \
+        "mobile-e2e.yml must use api-level 34 for consistent Maestro compatibility"
+
+    assert "arch: x86_64" in maestro_step, \
+        "mobile-e2e.yml must use x86_64 architecture for consistent emulation"

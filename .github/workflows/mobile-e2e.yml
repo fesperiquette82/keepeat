@@ -534,6 +534,25 @@ jobs:
       - name: Install Maestro CLI
         run: curl -Ls "https://get.maestro.mobile.dev" | bash
 
+      - name: Diagnose KVM and hardware acceleration availability
+        run: |
+          echo "=== KVM and Hardware Acceleration Diagnostics ==="
+          if [ -e /dev/kvm ]; then
+            echo "✓ /dev/kvm exists"
+            if [ -r /dev/kvm ] && [ -w /dev/kvm ]; then
+              echo "✓ /dev/kvm is readable and writable (KVM available)"
+              HARDWARE_ACCEL="enabled"
+            else
+              echo "✗ /dev/kvm not readable/writable (KVM not usable)"
+              HARDWARE_ACCEL="disabled"
+            fi
+          else
+            echo "✗ /dev/kvm does not exist (KVM not available on this runner)"
+            HARDWARE_ACCEL="disabled"
+          fi
+          echo "Hardware acceleration: $HARDWARE_ACCEL"
+          echo "Note: Emulator may run slowly without KVM. Expected boot time: 3-7 minutes."
+
       - name: Run Maestro E2E suite
         uses: reactivecircus/android-emulator-runner@v2
         env:
@@ -543,8 +562,6 @@ jobs:
         with:
           api-level: 34
           arch: x86_64
-          disable-linux-hw-accel: false
-          emulator-options: -accel auto -gpu swiftshader_indirect -no-window -no-audio -no-snapshot
           script: |
             bash scripts/run-maestro-e2e.sh --suite "$MAESTRO_SUITE"
 
