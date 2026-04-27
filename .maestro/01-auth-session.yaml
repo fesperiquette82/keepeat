@@ -2,6 +2,7 @@ appId: com.fesperiquette.keepeat
 ---
 - launchApp
 - waitForAnimationToEnd
+- takeScreenshot: 01-auth-session-initial-state
 
 - runFlow:
     when:
@@ -27,6 +28,7 @@ appId: com.fesperiquette.keepeat
       - tapOn:
           id: login-submit-button
       - waitForAnimationToEnd
+      - takeScreenshot: 01-auth-session-after-submit
       - extendedWaitUntil:
           visible:
             id: tab-home
@@ -75,6 +77,15 @@ appId: com.fesperiquette.keepeat
                 visible:
                   id: tab-home
                 timeout: 30000
+
+- runFlow:
+    when:
+      notVisible:
+        id: login-email-input
+    commands:
+      - takeScreenshot: 01-auth-session-unknown-state
+      - assertVisible:
+          id: tab-home
 
 - extendedWaitUntil:
     visible:

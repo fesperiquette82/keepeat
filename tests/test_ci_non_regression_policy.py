@@ -589,3 +589,74 @@ def test_mobile_e2e_reuses_apk_even_if_maestro_workflow_failed():
     # Verify: the job filtering logic exists and is correct
     assert '.name == "Mobile E2E / Build Android debug APK" and .conclusion == "success"' in reuse_step, \
         "APK reuse must filter runs where the Build job specifically succeeded."
+
+
+def test_auth_session_flow_captures_initial_state_and_unknown_state():
+    """
+    Regression: 01-auth-session must capture diagnostic screenshots
+    to identify when app is in an unexpected state (neither home nor login visible).
+
+    This prevents silent failures where the flow times out without explanation,
+    making debugging difficult.
+
+    Expected screenshots:
+    - 01-auth-session-initial-state: right after launchApp + waitForAnimationToEnd
+    - 01-auth-session-after-submit: after login submit, before waiting for home
+    - 01-auth-session-unknown-state: if app is not on home and not on login screen
+    """
+    auth_flow = Path(".maestro/01-auth-session.yaml").read_text(encoding="utf-8")
+
+    # Verify initial screenshot is captured right after launchApp
+    assert 'takeScreenshot: 01-auth-session-initial-state' in auth_flow, \
+        "01-auth-session must capture initial state after launchApp for debugging"
+
+    # Verify after-submit screenshot is captured
+    assert 'takeScreenshot: 01-auth-session-after-submit' in auth_flow, \
+        "01-auth-session must capture state after login submit for debugging"
+
+    # Verify unknown-state diagnostic screenshot is captured
+    assert 'takeScreenshot: 01-auth-session-unknown-state' in auth_flow, \
+        "01-auth-session must capture unknown state screenshot if neither home nor login is visible"
+
+    # Verify the unknown-state branch exists and has proper logic
+    flow_lines = auth_flow.split('\n')
+    unknown_state_found = False
+    for i, line in enumerate(flow_lines):
+        if '01-auth-session-unknown-state' in line:
+            # Check that this screenshot is followed by an assertion (assertVisible or assertNotVisible)
+            remaining = '\n'.join(flow_lines[i:i+10])
+            assert 'assertVisible' in remaining, \
+                "Unknown state screenshot must be followed by an assertion for clear diagnostics"
+            unknown_state_found = True
+            break
+
+    assert unknown_state_found, \
+        "01-auth-session must have a branch that captures unknown state with diagnostic assertion"
+
+
+def test_auth_session_flow_handles_three_states_explicitly():
+    """
+    Regression: 01-auth-session must explicitly handle three distinct scenarios:
+    1. Already connected (tab-home visible)
+    2. Login required (login-email-input visible)
+    3. Unknown state (neither visible) → diagnostic + assertion
+
+    The flow must not silently skip or timeout without indication of state.
+    """
+    auth_flow = Path(".maestro/01-auth-session.yaml").read_text(encoding="utf-8")
+
+    # State 1: Already connected
+    assert 'when:\n      visible:\n        id: tab-home' in auth_flow, \
+        "01-auth-session must have explicit branch: if tab-home visible, already connected"
+
+    # State 2: Login required
+    assert 'when:\n      visible:\n        id: login-email-input' in auth_flow, \
+        "01-auth-session must have explicit branch: if login-email-input visible, perform login"
+
+    # State 3: Unknown state - check for the notVisible branch after retry
+    assert 'when:\n      notVisible:\n        id: login-email-input' in auth_flow, \
+        "01-auth-session must have explicit branch: if neither tab-home nor login visible, capture diagnostic"
+
+    # Final assertions
+    assert 'assertVisible:\n          id: tab-home' in auth_flow, \
+        "01-auth-session must have strong final assertion on tab-home"
