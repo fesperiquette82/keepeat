@@ -1,10 +1,21 @@
 #!/usr/bin/env node
 
 const args = process.argv.slice(2);
-const modeArg = args.find((arg) => arg.startsWith('--mode='));
-const mode = (modeArg ? modeArg.split('=')[1] : 'seeded').trim();
-const baseUrlArg = args.find((arg) => arg.startsWith('--base-url='));
-const baseUrl = (baseUrlArg ? baseUrlArg.split('=')[1] : process.env.E2E_BACKEND_URL || 'http://127.0.0.1:8000').replace(/\/$/, '');
+
+function getArgValue(argName) {
+  const withEquals = args.find((arg) => arg.startsWith(`${argName}=`));
+  if (withEquals) {
+    return withEquals.split('=')[1];
+  }
+  const idx = args.indexOf(argName);
+  if (idx >= 0 && idx + 1 < args.length && !args[idx + 1].startsWith('--')) {
+    return args[idx + 1];
+  }
+  return null;
+}
+
+const mode = (getArgValue('--mode') || 'seeded').trim();
+const baseUrl = (getArgValue('--base-url') || process.env.E2E_BACKEND_URL || 'http://127.0.0.1:8000').replace(/\/$/, '');
 
 if (!['empty', 'seeded'].includes(mode)) {
   console.error(`[e2e-reset-seed] Unsupported mode: ${mode}`);
