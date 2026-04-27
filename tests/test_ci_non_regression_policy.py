@@ -602,7 +602,7 @@ def test_auth_session_flow_captures_initial_state_and_unknown_state():
     Expected screenshots:
     - 01-auth-session-initial-state: right after launchApp + waitForAnimationToEnd
     - 01-auth-session-after-submit: after login submit, before waiting for home
-    - 01-auth-session-unknown-state: if app is not on home and not on login screen
+    - 01-auth-session-before-final-assert: diagnostic before final assertion
     """
     auth_flow = Path(".maestro/01-auth-session.yaml").read_text(encoding="utf-8")
 
@@ -614,24 +614,24 @@ def test_auth_session_flow_captures_initial_state_and_unknown_state():
     assert 'takeScreenshot: 01-auth-session-after-submit' in auth_flow, \
         "01-auth-session must capture state after login submit for debugging"
 
-    # Verify unknown-state diagnostic screenshot is captured
-    assert 'takeScreenshot: 01-auth-session-unknown-state' in auth_flow, \
-        "01-auth-session must capture unknown state screenshot if neither home nor login is visible"
+    # Verify final diagnostic screenshot is captured
+    assert 'takeScreenshot: 01-auth-session-before-final-assert' in auth_flow, \
+        "01-auth-session must capture state before final assertion for clear diagnostics"
 
-    # Verify the unknown-state branch exists and has proper logic
+    # Verify the final diagnostic branch exists and has proper logic
     flow_lines = auth_flow.split('\n')
-    unknown_state_found = False
+    final_diagnostic_found = False
     for i, line in enumerate(flow_lines):
-        if '01-auth-session-unknown-state' in line:
-            # Check that this screenshot is followed by an assertion (assertVisible or assertNotVisible)
+        if '01-auth-session-before-final-assert' in line:
+            # Check that this screenshot is followed by an assertion (assertVisible)
             remaining = '\n'.join(flow_lines[i:i+10])
             assert 'assertVisible' in remaining, \
-                "Unknown state screenshot must be followed by an assertion for clear diagnostics"
-            unknown_state_found = True
+                "Final diagnostic screenshot must be followed by an assertion for clear diagnostics"
+            final_diagnostic_found = True
             break
 
-    assert unknown_state_found, \
-        "01-auth-session must have a branch that captures unknown state with diagnostic assertion"
+    assert final_diagnostic_found, \
+        "01-auth-session must have a final diagnostic branch that captures state with assertion"
 
 
 def test_auth_session_flow_handles_three_states_explicitly():
@@ -660,3 +660,63 @@ def test_auth_session_flow_handles_three_states_explicitly():
     # Final assertions
     assert 'assertVisible:\n          id: tab-home' in auth_flow, \
         "01-auth-session must have strong final assertion on tab-home"
+
+
+def test_auth_session_flow_has_complete_diagnostic_screenshots():
+    """
+    Regression: 01-auth-session must capture diagnostic screenshots at every branch point
+    and state transition. This allows CI failure investigation without guessing.
+
+    Required screenshots (must be named exactly as follows):
+    - 01-auth-session-initial-state: right after launchApp + waitForAnimationToEnd
+    - 01-auth-session-already-authenticated: if tab-home visible at start
+    - 01-auth-session-login-screen-visible: before attempting login
+    - 01-auth-session-after-submit: immediately after login submit tap
+    - 01-auth-session-retry-login-visible: if login screen visible after initial not-home
+    - 01-auth-session-retry-after-submit: after retry login submit
+    - 01-auth-session-before-final-assert: final diagnostic before assertion
+    """
+    auth_flow = Path(".maestro/01-auth-session.yaml").read_text(encoding="utf-8")
+
+    required_screenshots = [
+        "01-auth-session-initial-state",
+        "01-auth-session-already-authenticated",
+        "01-auth-session-login-screen-visible",
+        "01-auth-session-after-submit",
+        "01-auth-session-retry-login-visible",
+        "01-auth-session-retry-after-submit",
+        "01-auth-session-before-final-assert",
+    ]
+
+    for screenshot_name in required_screenshots:
+        assert f"takeScreenshot: {screenshot_name}" in auth_flow, \
+            f"01-auth-session must capture '{screenshot_name}' screenshot for diagnostics"
+
+    # Verify no invalid sleep: command
+    lines = auth_flow.split("\n")
+    for i, line in enumerate(lines, 1):
+        assert not line.strip().startswith("- sleep:"), \
+            f"Line {i}: invalid 'sleep:' command in 01-auth-session. Use Maestro commands only."
+
+
+def test_auth_session_flow_login_not_mandatory_at_start():
+    """
+    Regression: 01-auth-session must not start with a mandatory assertion on login-email-input.
+
+    The flow must first check if tab-home is visible (already authenticated),
+    then check if login-email-input is visible, then handle unknown state.
+
+    Invalid: Starting with assertVisible: login-email-input
+    Valid: Starting with conditional runFlow when: visible: tab-home
+    """
+    auth_flow = Path(".maestro/01-auth-session.yaml").read_text(encoding="utf-8")
+
+    # Check that flow doesn't start by asserting on login-email-input
+    flow_start = auth_flow.split("- launchApp")[1][:500]
+    assert "assertVisible:\n          id: login-email-input" not in flow_start, \
+        "01-auth-session must NOT start with mandatory assertion on login-email-input"
+
+    # Check that first branch after screenshot is conditional on tab-home
+    branch_text = auth_flow.split("01-auth-session-initial-state")[1][:300]
+    assert "when:\n      visible:\n        id: tab-home" in branch_text, \
+        "01-auth-session first branch must check if already authenticated (tab-home visible)"

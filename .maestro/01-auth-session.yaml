@@ -4,19 +4,23 @@ appId: com.fesperiquette.keepeat
 - waitForAnimationToEnd
 - takeScreenshot: 01-auth-session-initial-state
 
+# Branch 1: User already authenticated (tab-home visible)
 - runFlow:
     when:
       visible:
         id: tab-home
     commands:
+      - takeScreenshot: 01-auth-session-already-authenticated
       - assertVisible:
           id: tab-home
 
+# Branch 2: Login screen visible - perform login
 - runFlow:
     when:
       visible:
         id: login-email-input
     commands:
+      - takeScreenshot: 01-auth-session-login-screen-visible
       - tapOn:
           id: login-email-input
       - inputText: e2e.free@keepeat.test
@@ -34,6 +38,7 @@ appId: com.fesperiquette.keepeat
             id: tab-home
           timeout: 30000
 
+# Check: Login still visible after submit (means login failed)
 - runFlow:
     when:
       visible:
@@ -43,6 +48,7 @@ appId: com.fesperiquette.keepeat
       - assertNotVisible:
           id: login-email-input
 
+# Branch 3: Tab not visible (not authenticated) - retry login if screen becomes visible
 - runFlow:
     when:
       notVisible:
@@ -54,6 +60,7 @@ appId: com.fesperiquette.keepeat
             visible:
               id: login-email-input
           commands:
+            - takeScreenshot: 01-auth-session-retry-login-visible
             - tapOn:
                 id: login-email-input
             - inputText: e2e.free@keepeat.test
@@ -65,6 +72,7 @@ appId: com.fesperiquette.keepeat
             - tapOn:
                 id: login-submit-button
             - waitForAnimationToEnd
+            - takeScreenshot: 01-auth-session-retry-after-submit
             - runFlow:
                 when:
                   visible:
@@ -78,19 +86,22 @@ appId: com.fesperiquette.keepeat
                   id: tab-home
                 timeout: 30000
 
+# Branch 4: Neither home nor login visible (unknown state - must fail with diagnostics)
 - runFlow:
     when:
       notVisible:
         id: login-email-input
     commands:
-      - takeScreenshot: 01-auth-session-unknown-state
+      - takeScreenshot: 01-auth-session-before-final-assert
       - assertVisible:
           id: tab-home
 
+# Final safety net: Wait for home with extended timeout
 - extendedWaitUntil:
     visible:
       id: tab-home
     timeout: 20000
 
+# Final assertion: Home must be visible
 - assertVisible:
     id: tab-home
