@@ -511,3 +511,48 @@ def test_maestro_flows_do_not_use_invalid_sleep_command():
         for i, line in enumerate(lines, 1):
             assert not line.strip().startswith("- sleep:"), \
                 f"{flow_file.name}:{i} contains invalid 'sleep:' command. Use 'extendedWaitUntil' or 'waitForAnimationToEnd' instead."
+
+
+def test_auth_session_flow_protects_login_actions_with_conditions():
+    """
+    Regression: 01-auth-session must not impose unconditional assertions on login-email-input.
+
+    If app is already connected (tab-home visible) or in intermediate state,
+    login UI may not appear. The flow must handle both cases:
+    - Case 1: tab-home already visible → skip login, assert home at end
+    - Case 2: tab-home not visible → wait for login UI with CONDITIONAL runFlow when: visible
+
+    Invalid structure (causes false positives):
+    - runFlow:
+        when: notVisible: tab-home
+        commands:
+          - extendedWaitUntil: visible: login-email-input  # ← UNCONDITIONAL assertion
+          - runFlow: ...
+
+    Valid structure (handles both cases):
+    - runFlow:
+        when: notVisible: tab-home
+        commands:
+          - runFlow:
+              when: visible: login-email-input  # ← CONDITIONAL protection
+              commands: ...
+    """
+    auth_flow = Path(".maestro/01-auth-session.yaml").read_text(encoding="utf-8")
+
+    # Extract the "notVisible: tab-home" branch
+    assert 'when:\n      notVisible:\n        id: tab-home' in auth_flow
+    retry_branch = auth_flow.split('when:\n      notVisible:\n        id: tab-home')[1]
+    retry_commands = retry_branch.split('commands:')[1].split('- runFlow:')[1]
+
+    # Verify: first runFlow after "notVisible: tab-home" must have a "when:" condition
+    # (not an unconditional extendedWaitUntil assertion)
+    lines_after_notvisible = '\n'.join(retry_commands.split('\n')[:20])
+
+    # Should NOT have extendedWaitUntil directly after commands:
+    assert not lines_after_notvisible.strip().startswith('- extendedWaitUntil'), \
+        "01-auth-session: 'notVisible: tab-home' branch has unconditional extendedWaitUntil. " \
+        "Login actions must be protected by 'when: visible: login-email-input'."
+
+    # Should have conditional runFlow
+    assert 'when:\n            visible:\n              id: login-email-input' in retry_branch, \
+        "01-auth-session: 'notVisible: tab-home' branch must contain 'when: visible: login-email-input' to conditionally protect login actions."

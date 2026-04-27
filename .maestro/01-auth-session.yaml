@@ -46,10 +46,7 @@ appId: com.fesperiquette.keepeat
       notVisible:
         id: tab-home
     commands:
-      - extendedWaitUntil:
-          visible:
-            id: login-email-input
-          timeout: 10000
+      - waitForAnimationToEnd
       - runFlow:
           when:
             visible:
