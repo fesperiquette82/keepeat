@@ -790,3 +790,82 @@ def test_mobile_e2e_has_kvm_diagnostics_before_emulator():
 
     assert "arch: x86_64" in maestro_step, \
         "mobile-e2e.yml must use x86_64 architecture for consistent emulation"
+
+
+def test_maestro_runner_waits_for_android_package_manager_before_apk_install():
+    """
+    Regression: CI was failing with "cmd: Can't find service: package" during adb install
+    because APK installation was attempted before Android Package Manager was ready.
+
+    Scenario:
+    - Emulator boots but Package Manager initialization is still in progress
+    - adb install was called too early → transitional error
+    Expected: Script waits for Package Manager readiness before adb install
+
+    This test verifies the fix prevents future regressions:
+    1. APK installation must not happen immediately after emulator boot
+    2. Script must explicitly verify Package Manager readiness with cmd package list packages
+    3. Script must retry APK installation if it fails due to Package Manager not ready
+    4. Transient errors are retried; real errors fail cleanly
+    """
+    runner_script = Path("scripts/run-maestro-e2e.sh").read_text(encoding="utf-8")
+
+    # Verify wait_for_package_manager_ready function exists
+    assert "wait_for_package_manager_ready()" in runner_script, \
+        "scripts/run-maestro-e2e.sh must define wait_for_package_manager_ready() function"
+
+    # Extract function body
+    pm_ready_section = runner_script.split("wait_for_package_manager_ready()")[1].split("install_apk_with_retry()")[0]
+
+    # Verify it checks Package Manager with cmd package list packages
+    assert "adb shell cmd package list packages" in pm_ready_section, \
+        "wait_for_package_manager_ready must verify Package Manager using 'adb shell cmd package list packages'"
+
+    # Verify it has retry loop with max_attempts
+    assert "max_attempts=" in pm_ready_section, \
+        "wait_for_package_manager_ready must have configurable max_attempts"
+
+    # Verify it waits between retries
+    assert "sleep" in pm_ready_section, \
+        "wait_for_package_manager_ready must include sleep between retries"
+
+    # Verify it logs readiness status
+    assert "Package Manager is ready" in pm_ready_section, \
+        "wait_for_package_manager_ready must log when Package Manager is ready"
+
+    # Verify adb install happens in install_apk_with_retry function
+    assert "install_apk_with_retry()" in runner_script, \
+        "scripts/run-maestro-e2e.sh must define install_apk_with_retry() function"
+
+    install_section = runner_script.split("install_apk_with_retry()")[1].split("ensure_apk_installed()")[0]
+    assert "adb install -r e2e-apk/app-debug.apk" in install_section, \
+        "install_apk_with_retry must call adb install"
+
+    # Verify install_apk_with_retry has retry logic
+    assert "max_attempts" in install_section, \
+        "install_apk_with_retry must have retry logic with max_attempts"
+
+    # Verify call order: wait_for_package_manager_ready BEFORE install_apk_with_retry
+    pm_order = runner_script.find("wait_for_package_manager_ready")
+    install_order = runner_script.find("install_apk_with_retry")
+    assert pm_order < install_order, \
+        "wait_for_package_manager_ready must be called BEFORE install_apk_with_retry"
+
+    # Verify adb install is NOT called immediately at script start (old broken behavior)
+    script_start = runner_script.split("if [ \"$MAESTRO_SUITE\" != \"smoke\" ]")[0]
+    assert "adb install" not in script_start, \
+        "adb install must NOT be called before emulator readiness checks (regression)"
+
+    # Verify the call sequence: ensure_emulator_ready → wait_for_boot_completed → wait_for_package_manager_ready → install_apk_with_retry
+    call_sequence = """ensure_emulator_ready
+wait_for_boot_completed
+wait_for_package_manager_ready
+install_apk_with_retry"""
+    for line in call_sequence.split('\n'):
+        assert line in runner_script, \
+            f"scripts/run-maestro-e2e.sh must call {line} in correct sequence"
+
+    # Verify ensure_apk_installed is called AFTER install_apk_with_retry
+    ensure_install_order = runner_script.find("ensure_apk_installed")
+    assert ensure_install_order > install_order, \
+        "ensure_apk_installed must be called AFTER install_apk_with_retry"

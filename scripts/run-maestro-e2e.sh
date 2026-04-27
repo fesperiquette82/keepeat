@@ -29,8 +29,6 @@ if [ "$MAESTRO_SUITE" != "smoke" ] && [ "$MAESTRO_SUITE" != "full" ]; then
   exit 2
 fi
 
-adb install -r e2e-apk/app-debug.apk
-
 ensure_emulator_ready() {
   echo "==> Verifying emulator connectivity"
   adb wait-for-device
@@ -55,6 +53,60 @@ wait_for_boot_completed() {
   return 1
 }
 
+wait_for_package_manager_ready() {
+  echo "==> Waiting for Android Package Manager to be ready"
+  local max_attempts=30
+  local attempt=1
+
+  while [ $attempt -le $max_attempts ]; do
+    if adb shell cmd package list packages >/dev/null 2>&1; then
+      echo "==> Android Package Manager is ready"
+      return 0
+    fi
+
+    local attempt_msg="(attempt $attempt/$max_attempts)"
+    if [ $((attempt % 5)) -eq 0 ]; then
+      echo "  Package Manager not ready yet $attempt_msg, retrying..."
+    fi
+
+    sleep 1
+    attempt=$((attempt + 1))
+  done
+
+  echo "Package Manager did not become ready within timeout ($max_attempts attempts)" >&2
+  echo "Diagnostics:" >&2
+  adb devices -l || true
+  adb shell getprop sys.boot_completed 2>/dev/null || echo "  (sys.boot_completed unavailable)" >&2
+  return 1
+}
+
+install_apk_with_retry() {
+  echo "==> Installing APK $E2E_ANDROID_APP_ID"
+  local max_attempts=3
+  local attempt=1
+
+  while [ $attempt -le $max_attempts ]; do
+    if adb install -r e2e-apk/app-debug.apk; then
+      echo "==> APK installation succeeded"
+      return 0
+    fi
+
+    if [ $attempt -lt $max_attempts ]; then
+      echo "APK installation attempt $attempt failed, retrying in 2s..." >&2
+      sleep 2
+
+      if ! wait_for_package_manager_ready; then
+        echo "Package Manager not ready on retry attempt $attempt" >&2
+      fi
+    fi
+
+    attempt=$((attempt + 1))
+  done
+
+  echo "APK installation failed after $max_attempts attempts" >&2
+  return 1
+}
+
 ensure_apk_installed() {
   echo "==> Verifying APK installation for $E2E_ANDROID_APP_ID"
   if ! adb shell pm list packages "$E2E_ANDROID_APP_ID" | tr -d '\r' | grep -q "package:$E2E_ANDROID_APP_ID"; then
@@ -66,6 +118,8 @@ ensure_apk_installed() {
 
 ensure_emulator_ready
 wait_for_boot_completed
+wait_for_package_manager_ready
+install_apk_with_retry
 ensure_apk_installed
 sleep 8
 
