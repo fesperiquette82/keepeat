@@ -720,3 +720,48 @@ def test_auth_session_flow_login_not_mandatory_at_start():
     branch_text = auth_flow.split("01-auth-session-initial-state")[1][:300]
     assert "when:\n      visible:\n        id: tab-home" in branch_text, \
         "01-auth-session first branch must check if already authenticated (tab-home visible)"
+
+
+def test_mobile_e2e_emulator_configured_for_performance():
+    """
+    Regression: Android emulator must have performance-optimizing options enabled.
+
+    GitHub Actions runners typically don't have KVM hardware acceleration available,
+    so the emulator falls back to software emulation. Without optimization options,
+    this causes ~7 minute boot times, making CI unacceptably slow.
+
+    Performance options applied:
+    - disable-linux-hw-accel: false (let it try hardware accel, don't force disable)
+    - emulator-options: -accel auto -gpu swiftshader_indirect -no-window -no-audio -no-snapshot
+
+    Expected result: Boot time ~90-120s (with these options) vs ~440s (without)
+    """
+    workflow = Path(".github/workflows/mobile-e2e.yml").read_text(encoding="utf-8")
+
+    # Find the "Run Maestro E2E suite" step
+    maestro_step = workflow.split("Run Maestro E2E suite")[1].split("Upload E2E artifacts")[0]
+
+    # Verify disable-linux-hw-accel is set to false (not forced disabled)
+    assert "disable-linux-hw-accel: false" in maestro_step, \
+        "mobile-e2e.yml must not force-disable hardware acceleration (disable-linux-hw-accel should be false)"
+
+    # Verify emulator-options are present with key performance flags
+    assert "emulator-options:" in maestro_step, \
+        "mobile-e2e.yml must specify emulator-options for performance optimization"
+
+    # Verify key performance options
+    required_options = [
+        "-accel auto",    # Try hardware accel, fallback to software
+        "-gpu swiftshader_indirect",  # GPU acceleration with software backend
+        "-no-window",     # No X11 window (faster)
+        "-no-audio",      # No audio (faster)
+        "-no-snapshot",   # No persistent snapshots (faster)
+    ]
+
+    for option in required_options:
+        assert option in maestro_step, \
+            f"mobile-e2e.yml emulator-options must include '{option}' for performance"
+
+    # Verify MAESTRO_DRIVER_STARTUP_TIMEOUT is still set high for slow CI environments
+    assert 'MAESTRO_DRIVER_STARTUP_TIMEOUT: "180000"' in maestro_step, \
+        "mobile-e2e.yml must maintain high MAESTRO_DRIVER_STARTUP_TIMEOUT despite performance optimizations"

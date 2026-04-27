@@ -543,6 +543,8 @@ jobs:
         with:
           api-level: 34
           arch: x86_64
+          disable-linux-hw-accel: false
+          emulator-options: -accel auto -gpu swiftshader_indirect -no-window -no-audio -no-snapshot
           script: |
             bash scripts/run-maestro-e2e.sh --suite "$MAESTRO_SUITE"
 
