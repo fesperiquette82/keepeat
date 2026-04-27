@@ -151,6 +151,10 @@ stabilize_between_flows() {
   sleep 2
 }
 
+declare -a FLOW_RESULTS
+FLOW_RESULTS_PASSED=0
+FLOW_RESULTS_FAILED=0
+
 for flow_file in "${FLOW_FILES[@]}"; do
   stabilize_between_flows
 
@@ -165,8 +169,15 @@ for flow_file in "${FLOW_FILES[@]}"; do
   echo "MAESTRO_DRIVER_STARTUP_TIMEOUT=${MAESTRO_DRIVER_STARTUP_TIMEOUT}"
   node scripts/e2e-reset-seed.mjs --mode "$mode" --base-url "$E2E_RESET_SEED_BASE_URL"
   export MAESTRO_DRIVER_STARTUP_TIMEOUT
-  if ! ~/.maestro/bin/maestro test "$flow_file" --format junit --output "maestro-results/$flow_name"; then
+
+  if ~/.maestro/bin/maestro test "$flow_file" --format junit --output "maestro-results/$flow_name"; then
+    echo "✅ Maestro flow passed: $flow_name"
+    FLOW_RESULTS+=("PASSED|$flow_name")
+    FLOW_RESULTS_PASSED=$((FLOW_RESULTS_PASSED + 1))
+  else
     echo "❌ Maestro flow failed: $flow_name"
+    FLOW_RESULTS+=("FAILED|$flow_name")
+    FLOW_RESULTS_FAILED=$((FLOW_RESULTS_FAILED + 1))
     echo "==> adb devices state on failure"
     adb devices -l || true
     echo "==> Capturing emulator logcat on failure"
@@ -177,8 +188,33 @@ for flow_file in "${FLOW_FILES[@]}"; do
       echo "==> backend-e2e.log tail"
       tail -n 200 backend-e2e.log || true
     fi
-    exit 1
   fi
 done
 
 adb logcat -d > emulator-logcat.txt || true
+
+echo ""
+echo "=========================================="
+echo "Maestro E2E Suite Summary (suite=$MAESTRO_SUITE)"
+echo "=========================================="
+for result in "${FLOW_RESULTS[@]}"; do
+  IFS="|" read -r status flow_name <<< "$result"
+  if [ "$status" = "PASSED" ]; then
+    echo "✅ $flow_name: PASSED"
+  else
+    echo "❌ $flow_name: FAILED"
+  fi
+done
+echo "=========================================="
+echo "Total: $FLOW_RESULTS_PASSED passed, $FLOW_RESULTS_FAILED failed"
+echo "=========================================="
+
+if [ $FLOW_RESULTS_FAILED -gt 0 ]; then
+  echo ""
+  echo "❌ Maestro suite failed: $FLOW_RESULTS_FAILED flow(s) failed"
+  exit 1
+else
+  echo ""
+  echo "✅ Maestro suite passed: all flows succeeded"
+  exit 0
+fi

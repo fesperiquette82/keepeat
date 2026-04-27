@@ -869,3 +869,147 @@ install_apk_with_retry"""
     ensure_install_order = runner_script.find("ensure_apk_installed")
     assert ensure_install_order > install_order, \
         "ensure_apk_installed must be called AFTER install_apk_with_retry"
+
+
+def test_maestro_runner_aggregates_flow_results_before_exit():
+    """
+    Regression: Runner must not exit immediately on first flow failure.
+    Instead, it should execute all flows and aggregate results before final exit.
+
+    This allows collecting diagnostics from all failing flows, not just the first,
+    and provides a complete picture of test suite health in a single CI run.
+
+    Expected behavior:
+    1. Loop through all flows without early exit
+    2. Capture PASSED/FAILED status for each
+    3. Generate summary showing all results
+    4. Exit with non-zero only if at least one flow failed
+    """
+    runner_script = Path("scripts/run-maestro-e2e.sh").read_text(encoding="utf-8")
+
+    # Verify flow result aggregation structure
+    assert "FLOW_RESULTS" in runner_script, \
+        "scripts/run-maestro-e2e.sh must declare FLOW_RESULTS array for aggregating results"
+
+    assert "FLOW_RESULTS_PASSED" in runner_script, \
+        "scripts/run-maestro-e2e.sh must track FLOW_RESULTS_PASSED counter"
+
+    assert "FLOW_RESULTS_FAILED" in runner_script, \
+        "scripts/run-maestro-e2e.sh must track FLOW_RESULTS_FAILED counter"
+
+    # Verify that flow execution appends to results array instead of exiting
+    flow_loop_section = runner_script.split("for flow_file in")[1].split("adb logcat -d > emulator-logcat.txt")[0]
+
+    # Maestro test command should NOT immediately exit on failure
+    assert "if ~/.maestro/bin/maestro test" in flow_loop_section, \
+        "Flow execution must check maestro test result without immediate exit"
+
+    # Should append to results instead of exit 1
+    assert "FLOW_RESULTS+=(\"PASSED" in flow_loop_section or "FLOW_RESULTS+=" in flow_loop_section, \
+        "On flow success, script must append to FLOW_RESULTS array"
+
+    assert "FLOW_RESULTS+=(\"FAILED" in flow_loop_section or "FLOW_RESULTS+=" in flow_loop_section, \
+        "On flow failure, script must append to FLOW_RESULTS array (not exit)"
+
+    # Should NOT have exit 1 inside the flow loop
+    lines_before_final_summary = flow_loop_section.split("Maestro E2E Suite Summary")[0]
+    flow_loop_only = lines_before_final_summary
+    # Count how many times we see "exit 1" in the loop (should be 0)
+    exit_count_in_loop = flow_loop_only.count("exit 1")
+    assert exit_count_in_loop == 0, \
+        "Flow loop must NOT call 'exit 1' on failure; must continue to next flow"
+
+    # Verify final summary section exists
+    assert "Maestro E2E Suite Summary" in runner_script, \
+        "scripts/run-maestro-e2e.sh must display summary after all flows"
+
+    # Verify summary shows results for all flows
+    summary_section = runner_script.split("Maestro E2E Suite Summary")[1].split("if [ $FLOW_RESULTS_FAILED -gt 0 ]")[0]
+    assert "for result in" in summary_section or 'for result in "${FLOW_RESULTS' in summary_section, \
+        "Summary must loop through FLOW_RESULTS to display each flow's status"
+
+    # Verify final exit logic: fail only if flows failed
+    final_section = runner_script.split("if [ $FLOW_RESULTS_FAILED -gt 0 ]")[1]
+    assert "exit 1" in final_section, \
+        "Script must exit 1 if FLOW_RESULTS_FAILED > 0"
+
+    assert "exit 0" in final_section, \
+        "Script must exit 0 if all flows passed (FLOW_RESULTS_FAILED == 0)"
+
+    # Verify results are printed with status
+    assert "PASSED" in summary_section, \
+        "Summary must display PASSED status for successful flows"
+
+    assert "FAILED" in summary_section, \
+        "Summary must display FAILED status for failed flows"
+
+    # Verify counters are shown in summary
+    assert "passed," in final_section or "FLOW_RESULTS_PASSED" in summary_section, \
+        "Summary must show count of passed flows"
+
+    assert "failed" in final_section or "FLOW_RESULTS_FAILED" in summary_section, \
+        "Summary must show count of failed flows"
+
+
+def test_maestro_runner_no_early_exit_on_failure():
+    """
+    Regression: Must not use 'exit 1' inside the flow loop,
+    which would prevent subsequent flows from running.
+
+    Validates the specific structure: if-else with append, no exit inside loop.
+    """
+    runner_script = Path("scripts/run-maestro-e2e.sh").read_text(encoding="utf-8")
+
+    # Extract the main flow execution loop
+    loop_start = runner_script.find("for flow_file in")
+    loop_end = runner_script.find("adb logcat -d > emulator-logcat.txt || true", loop_start)
+    loop_section = runner_script[loop_start:loop_end]
+
+    # Verify maestro test is inside an if without immediate exit
+    assert "if ~/.maestro/bin/maestro test" in loop_section or \
+           "if ~/.maestro/bin/maestro test \"$flow_file\"" in loop_section, \
+        "Flow execution must use if to check maestro exit code"
+
+    # Count exit statements in loop (should be 0)
+    exit_count = loop_section.count("exit 1")
+    assert exit_count == 0, \
+        f"Loop must not call 'exit 1' (found {exit_count} occurrences)"
+
+    # Verify that on failure, code appends to array instead of exiting
+    failure_section = loop_section.split("then")[1].split("else")[0] if "else" in loop_section else loop_section.split("if ~/.maestro/bin/maestro test")[1].split("fi")[0]
+
+    # After maestro test in if block, should have PASSED append
+    assert "FLOW_RESULTS+=" in loop_section, \
+        "Script must append to FLOW_RESULTS array (both success and failure cases)"
+
+
+def test_maestro_runner_gate_remains_blocking():
+    """
+    Regression: Workflow gate must remain blocking even with aggregated results.
+
+    Validates that:
+    1. No continue-on-error is used in the maestro runner script
+    2. Final exit code is 1 if any flow failed
+    3. No permissive patterns that mask failure
+    """
+    runner_script = Path("scripts/run-maestro-e2e.sh").read_text(encoding="utf-8")
+
+    # Verify no continue-on-error in script (that's GitHub Actions syntax, not bash)
+    # But check for any pattern that might mask errors
+    assert "|| true" not in runner_script.split("# Verify flow")[1] if "# Verify flow" in runner_script else True, \
+        "Flow verification section must not use '|| true' to suppress errors"
+
+    # Verify final exit is conditional on failures
+    final_section = runner_script.split("if [ $FLOW_RESULTS_FAILED -gt 0 ]")[1]
+    assert "exit 1" in final_section, \
+        "Must exit 1 if flows failed"
+
+    # Verify the logic is: if failed > 0, exit 1; else exit 0
+    assert "FLOW_RESULTS_FAILED -gt 0" in runner_script, \
+        "Final exit must check if FLOW_RESULTS_FAILED > 0"
+
+    # Check workflow file doesn't have permissive continue-on-error on maestro job
+    workflow = Path(".github/workflows/mobile-e2e.yml").read_text(encoding="utf-8")
+    maestro_job = workflow.split("maestro-e2e:")[1].split("\n  ")[0]
+    assert "continue-on-error: true" not in maestro_job, \
+        "maestro-e2e job must NOT have continue-on-error: true"
