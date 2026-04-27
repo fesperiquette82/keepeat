@@ -487,3 +487,27 @@ def test_mobile_e2e_builds_apk_automatically_when_maestro_required_without_apk_c
     assert "Maestro is required but no compatible APK artifact was found" in not_required_gate
     assert "force_mobile_apk_build=true" in not_required_gate
     # But the new logic prevents this gate from being reached in the auto-build scenario
+
+
+def test_maestro_flows_do_not_use_invalid_sleep_command():
+    """
+    Regression: Maestro flows must not use 'sleep:' which is not a valid Maestro command.
+    Valid timing strategies: waitForAnimationToEnd, extendedWaitUntil, tapOn, etc.
+
+    Invalid:
+    - sleep: 3000
+
+    Valid alternatives:
+    - extendedWaitUntil with timeout
+    - waitForAnimationToEnd
+    """
+    maestro_files = Path(".maestro").glob("*.yaml")
+
+    for flow_file in maestro_files:
+        content = flow_file.read_text(encoding="utf-8")
+
+        # Ensure no sleep: command appears in Maestro flows
+        lines = content.split("\n")
+        for i, line in enumerate(lines, 1):
+            assert not line.strip().startswith("- sleep:"), \
+                f"{flow_file.name}:{i} contains invalid 'sleep:' command. Use 'extendedWaitUntil' or 'waitForAnimationToEnd' instead."

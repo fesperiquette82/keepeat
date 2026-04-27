@@ -2,7 +2,6 @@ appId: com.fesperiquette.keepeat
 ---
 - launchApp
 - waitForAnimationToEnd
-- sleep: 3000
 
 - runFlow:
     when:
@@ -25,15 +24,13 @@ appId: com.fesperiquette.keepeat
       - inputText: TestPassword123!
       - hideKeyboard
       - waitForAnimationToEnd
-      - sleep: 500
       - tapOn:
           id: login-submit-button
       - waitForAnimationToEnd
-      - sleep: 3000
       - extendedWaitUntil:
           visible:
             id: tab-home
-          timeout: 25000
+          timeout: 30000
 
 - runFlow:
     when:
@@ -49,8 +46,10 @@ appId: com.fesperiquette.keepeat
       notVisible:
         id: tab-home
     commands:
-      - waitForAnimationToEnd
-      - sleep: 2000
+      - extendedWaitUntil:
+          visible:
+            id: login-email-input
+          timeout: 10000
       - runFlow:
           when:
             visible:
@@ -64,11 +63,9 @@ appId: com.fesperiquette.keepeat
             - inputText: TestPassword123!
             - hideKeyboard
             - waitForAnimationToEnd
-            - sleep: 500
             - tapOn:
                 id: login-submit-button
             - waitForAnimationToEnd
-            - sleep: 3000
             - runFlow:
                 when:
                   visible:
@@ -80,12 +77,12 @@ appId: com.fesperiquette.keepeat
             - extendedWaitUntil:
                 visible:
                   id: tab-home
-                timeout: 25000
+                timeout: 30000
 
 - extendedWaitUntil:
     visible:
       id: tab-home
-    timeout: 15000
+    timeout: 20000
 
 - assertVisible:
     id: tab-home
