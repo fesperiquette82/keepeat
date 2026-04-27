@@ -165,7 +165,7 @@ jobs:
           echo "Looking for reusable android-debug-apk artifact for PR #$PR_NUMBER"
           echo "current_head_sha=$CURRENT_HEAD_SHA"
 
-          CANDIDATE_RUNS_JSON="$(gh api "repos/$REPO/actions/runs?event=pull_request&status=success&per_page=100" \
+          CANDIDATE_RUNS_JSON="$(gh api "repos/$REPO/actions/runs?event=pull_request&per_page=100" \
             --jq '.workflow_runs
               | map(select(.name == "Mobile E2E (Maestro)"))
               | map(select(.id != ('"$CURRENT_RUN_ID"'|tonumber)))

@@ -97,7 +97,7 @@ def test_maestro_e2e_is_fully_runnable_in_github_actions():
     assert workflow.index("Try reusing existing PR APK artifact") < workflow.index("Build debug APK")
     assert "needs.changes.outputs.maestro_required == 'true'" in workflow
     assert "Try reusing existing PR APK artifact" in workflow
-    assert 'gh api "repos/$REPO/actions/runs?event=pull_request&status=success&per_page=100"' in workflow
+    assert 'gh api "repos/$REPO/actions/runs?event=pull_request&per_page=100"' in workflow
     assert "current_head_sha=" in workflow
     assert "artifact_source_head_sha=" in workflow
     assert "source_head_sha_equals_current=" in workflow
@@ -556,3 +556,36 @@ def test_auth_session_flow_protects_login_actions_with_conditions():
     # Should have conditional runFlow
     assert 'when:\n            visible:\n              id: login-email-input' in retry_branch, \
         "01-auth-session: 'notVisible: tab-home' branch must contain 'when: visible: login-email-input' to conditionally protect login actions."
+
+
+def test_mobile_e2e_reuses_apk_even_if_maestro_workflow_failed():
+    """
+    Regression: APK reuse should not require workflow status=success.
+
+    Scenario: A run builds APK successfully, but Maestro flow fails later.
+    The workflow status becomes 'failure', but the APK artifact is valid.
+    Next run should reuse this APK, not rebuild unnecessarily.
+
+    Issue: If the reuse_apk search filters by status=success, it will exclude
+    all runs where Maestro failed, wasting build time and CI resources.
+
+    Valid: Search ALL runs, filter on "Build Android debug APK" job.conclusion == success
+    Invalid: Search only status=success runs (workflow-level, too strict)
+    """
+    workflow = Path(".github/workflows/mobile-e2e.yml").read_text(encoding="utf-8")
+
+    # Find the "Try reusing existing PR APK artifact" step
+    reuse_step = workflow.split("Try reusing existing PR APK artifact")[1].split("Decide whether to build APK")[0]
+
+    # Verify: the gh api call does NOT filter by status=success
+    # (it filters on the Build job conclusion later, which is correct)
+    assert 'actions/runs?event=pull_request&per_page=100' in reuse_step, \
+        "APK reuse search should query all runs, not just status=success"
+
+    assert 'status=success' not in reuse_step.split('CANDIDATE_RUNS_JSON')[0], \
+        "APK reuse must not filter by workflow status=success (too strict). " \
+        "It should query all runs and filter by Build job conclusion instead."
+
+    # Verify: the job filtering logic exists and is correct
+    assert '.name == "Mobile E2E / Build Android debug APK" and .conclusion == "success"' in reuse_step, \
+        "APK reuse must filter runs where the Build job specifically succeeded."
