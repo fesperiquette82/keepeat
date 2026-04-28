@@ -46,6 +46,7 @@ appId: com.fesperiquette.keepeat
     commands:
       - takeScreenshot: 01-auth-session-login-still-visible-after-submit
       - waitForAnimationToEnd
+      - takeScreenshot: 01-auth-session-login-error-state
       - assertNotVisible:
           id: login-email-input
 

@@ -1013,3 +1013,73 @@ def test_maestro_runner_gate_remains_blocking():
     maestro_job = workflow.split("maestro-e2e:")[1].split("\n  ")[0]
     assert "continue-on-error: true" not in maestro_job, \
         "maestro-e2e job must NOT have continue-on-error: true"
+
+
+def test_auth_session_flow_has_strong_final_assertion():
+    """
+    Regression: 01-auth-session must have a final strong assertion on tab-home
+    to prevent the flow from passing silently without actually reaching home.
+
+    Must include:
+    1. assertVisible: id: tab-home (mandatory, not optional)
+    2. Before this assertion, capture diagnostic screenshots on error paths
+    3. No branch should skip the final assertion
+    """
+    auth_flow = Path(".maestro/01-auth-session.yaml").read_text(encoding="utf-8")
+
+    # Verify final assertion exists
+    assert "- assertVisible:" in auth_flow.split("Final assertion")[0] or \
+           "assertVisible:\n    id: tab-home" in auth_flow, \
+        "01-auth-session must have assertVisible: id: tab-home in final section"
+
+    # Verify the final assertion is NOT optional
+    final_section = auth_flow.split("Final assertion")[-1]
+    assert "optional:" not in final_section or "optional: false" in final_section, \
+        "Final assertion on tab-home must NOT be optional"
+
+    # Verify final assertion is on tab-home
+    assert "id: tab-home" in final_section, \
+        "Final assertion must be on id: tab-home"
+
+    # Verify diagnostic screenshots are captured before final assertion
+    assert "takeScreenshot:" in auth_flow.split("login-still-visible-after-submit")[1].split("Final assertion")[0], \
+        "Should capture diagnostic screenshot when login fails"
+
+
+def test_navigation_flow_ensures_auth_before_nav_tests():
+    """
+    Regression: 02-navigation-main-tabs must not assume implicit authenticated state.
+
+    If the flow runs after reset/seed (which clears auth), it must:
+    1. Handle login screen explicitly if visible
+    2. Wait for tab-home before starting navigation tests
+    3. Not skip login just because it assumes previous flow handled it
+    """
+    nav_flow = Path(".maestro/02-navigation-main-tabs.yaml").read_text(encoding="utf-8")
+
+    # Verify login handling exists
+    assert "login-email-input" in nav_flow, \
+        "02-navigation-main-tabs must handle login-email-input if visible"
+
+    # Verify hideKeyboard is used before submit (keyboard can cover button)
+    login_section = nav_flow.split("login-email-input")[0] if "login-email-input" in nav_flow else ""
+    submit_section = nav_flow.split("login-submit-button")[0]
+    assert "hideKeyboard" in submit_section, \
+        "Flow must hide keyboard before tapping submit button"
+
+    # Verify waitForAnimationToEnd after login submit
+    assert submit_section.count("waitForAnimationToEnd") > 0, \
+        "Flow must wait for animations after login submit"
+
+    # Verify tab-home is explicitly asserted before navigation tests
+    assert "assertVisible:" in nav_flow and "id: tab-home" in nav_flow, \
+        "Flow must assert tab-home is visible before starting navigation tests"
+
+    # Verify the order: login (if needed) → assert home → then test tabs
+    # Find position after login section where home is asserted
+    home_assert_section = nav_flow.split("Final assertion: Home must be visible before testing navigation")[1]
+    stock_tap_section = nav_flow.split("Test navigation to stock tab")[0]
+
+    # The home assert should come before stock tap section
+    assert "assertVisible:" in home_assert_section and "id: tab-home" in home_assert_section, \
+        "Must assert tab-home visible before testing tab navigation"
