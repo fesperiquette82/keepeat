@@ -1337,6 +1337,7 @@ async def register(request: Request, body: UserCreate):
 @_resolve_annotations
 @limiter.limit("10/minute")
 async def login(request: Request, body: UserLogin):
+    logger.info('[E2E_LOGIN_ATTEMPT] email=%s', body.email.lower())
     doc = await users_col.find_one({"email": body.email.lower()})
     # Toujours appeler verify_password (même avec hash factice) pour éviter
     # l'énumération d'emails par différence de temps de réponse
