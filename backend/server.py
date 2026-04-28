@@ -1021,12 +1021,12 @@ async def test_seed_data():
     premium_password_hash = hash_password(premium_fixture["password"])
     await users_col.update_one(
         {"email": free_fixture["email"]},
-        {"$set": {"email": free_fixture["email"], "password_hash": free_password_hash, "is_premium": False, "subscription_status": "inactive", "email_verified": True}},
+        {"$set": {"email": free_fixture["email"], "hashed_password": free_password_hash, "is_premium": False, "subscription_status": "inactive", "email_verified": True}},
         upsert=True,
     )
     await users_col.update_one(
         {"email": premium_fixture["email"]},
-        {"$set": {"email": premium_fixture["email"], "password_hash": premium_password_hash, "is_premium": True, "subscription_status": "active", "email_verified": True}},
+        {"$set": {"email": premium_fixture["email"], "hashed_password": premium_password_hash, "is_premium": True, "subscription_status": "active", "email_verified": True}},
         upsert=True,
     )
     free_user = await users_col.find_one({"email": free_fixture["email"]}, {"_id": 1})
@@ -1035,6 +1035,34 @@ async def test_seed_data():
     await stock_col.delete_many({"user_id": str(free_user["_id"])})
     await stock_col.insert_many(build_seed_stock(str(free_user["_id"])))
     return {"ok": True, "action": "seed", "fixtures": TEST_FIXTURES}
+
+
+@app.get("/api/test/e2e-diagnostics")
+async def e2e_diagnostics():
+    _ensure_test_mode_route()
+    app_env = os.getenv("APP_ENV", "unknown").strip().lower()
+    backend_url = os.getenv("BACKEND_URL", "http://127.0.0.1:8000").strip()
+    free_user = await users_col.find_one({"email": "e2e.free@keepeat.test"})
+    premium_user = await users_col.find_one({"email": "premium-user@keepeat.test"})
+    return {
+        "ok": True,
+        "e2e_backend_url": backend_url,
+        "app_env": app_env,
+        "test_users": {
+            "free": {
+                "email": "e2e.free@keepeat.test",
+                "exists": bool(free_user),
+                "id": str(free_user["_id"]) if free_user else None,
+                "email_verified": free_user.get("email_verified") if free_user else None,
+            },
+            "premium": {
+                "email": "premium-user@keepeat.test",
+                "exists": bool(premium_user),
+                "id": str(premium_user["_id"]) if premium_user else None,
+                "email_verified": premium_user.get("email_verified") if premium_user else None,
+            },
+        },
+    }
 
 
 cors_origins = os.getenv("CORS_ORIGINS", "*").strip()

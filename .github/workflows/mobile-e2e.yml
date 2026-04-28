@@ -411,6 +411,48 @@ jobs:
           echo "APK final decision: mobile_apk_required=${{ needs.changes.outputs.mobile_apk_required }} maestro_required=${{ needs.changes.outputs.maestro_required }} apk_ready=$APK_READY apk_source=$APK_SOURCE source_run_id=$SOURCE_RUN_ID source_head_sha=$SOURCE_HEAD_SHA"
           echo "try_reuse_apk=$TRY_REUSE_APK reuse_apk_success=$REUSE_APK_SUCCESS build_apk_step_should_run=${{ steps.decide_build.outputs.build_apk_step_should_run }}"
 
+      - name: Diagnose APK backend URL compatibility
+        if: needs.changes.outputs.maestro_required == 'true'
+        run: |
+          set -euo pipefail
+
+          EXPECTED_E2E_BACKEND_URL="http://10.0.2.2:8000"
+          APK_BACKEND_URL_FROM_METADATA=""
+          APK_METADATA_EXISTS="false"
+
+          if [ -f e2e-apk/apk-build-metadata.json ]; then
+            APK_METADATA_EXISTS="true"
+            APK_BACKEND_URL_FROM_METADATA="$(jq -r '.backend_url_e2e // empty' e2e-apk/apk-build-metadata.json 2>/dev/null || echo '')"
+          fi
+
+          echo "=========================================="
+          echo "APK Backend URL Compatibility Diagnostics"
+          echo "=========================================="
+          echo "APK source: ${{ steps.apk_decision.outputs.apk_source }}"
+          echo "Expected E2E backend URL: $EXPECTED_E2E_BACKEND_URL"
+          echo "APK metadata exists: $APK_METADATA_EXISTS"
+          if [ "$APK_METADATA_EXISTS" = "true" ]; then
+            echo "APK metadata file: e2e-apk/apk-build-metadata.json"
+            echo "APK backend URL from metadata: $APK_BACKEND_URL_FROM_METADATA"
+            if [ -z "$APK_BACKEND_URL_FROM_METADATA" ]; then
+              echo "⚠️  WARNING: APK metadata missing backend_url_e2e field"
+            elif [ "$APK_BACKEND_URL_FROM_METADATA" = "$EXPECTED_E2E_BACKEND_URL" ]; then
+              echo "✅ APK backend URL is E2E compatible"
+            else
+              echo "❌ APK backend URL is INCOMPATIBLE with E2E:"
+              echo "   APK will connect to: $APK_BACKEND_URL_FROM_METADATA"
+              echo "   E2E test expects:   $EXPECTED_E2E_BACKEND_URL"
+              echo "   Consequence: App login requests will NOT reach local backend"
+            fi
+          else
+            echo "⚠️  WARNING: APK metadata not available - cannot verify backend URL"
+            if [ "${{ steps.apk_decision.outputs.apk_source }}" = "reused" ]; then
+              echo "   Reused APK has no provenance metadata"
+              echo "   Backend URL is unknown - app may use incorrect URL"
+            fi
+          fi
+          echo "=========================================="
+
       - name: Upload Android debug APK artifact
         if: steps.apk_decision.outputs.apk_source == 'built'
         uses: actions/upload-artifact@v4

@@ -126,6 +126,25 @@ ensure_apk_installed() {
   fi
 }
 
+diagnose_app_state_before_flows() {
+  echo "==> Diagnosing app state before launching flows"
+  echo "==> Launching app briefly to check initial screen"
+  adb shell am start -n "com.fesperiquette.keepeat/.MainActivity" 2>&1 || true
+  sleep 3
+  echo "==> Dumping app window hierarchy"
+  adb shell uiautomator dump /tmp/ui_dump.xml 2>&1 || true
+  adb pull /tmp/ui_dump.xml maestro-results/00-app-state-before-flows.xml 2>&1 || true
+  echo "==> Checking for login-email-input visibility"
+  if adb shell uiautomator dump /tmp/ui_dump.xml 2>&1 | grep -i "login.*email" >/dev/null 2>&1; then
+    echo "   ✓ Login email input detected in UI hierarchy"
+  else
+    echo "   ✗ Login email input NOT found in UI hierarchy - app may not be on login screen"
+  fi
+  echo "==> Stopping app for clean flow execution"
+  adb shell am force-stop "com.fesperiquette.keepeat" || true
+  sleep 1
+}
+
 ensure_emulator_ready
 wait_for_boot_completed
 wait_for_package_manager_ready
@@ -135,6 +154,8 @@ ensure_apk_installed
 sleep 8
 
 mkdir -p maestro-results
+
+diagnose_app_state_before_flows
 
 FLOW_FILES=()
 if [ "$MAESTRO_SUITE" = "smoke" ]; then
