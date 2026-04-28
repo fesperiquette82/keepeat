@@ -35,6 +35,16 @@ ensure_emulator_ready() {
   adb devices -l || true
 }
 
+forward_backend_to_emulator() {
+  echo "==> Setting up port forwarding for backend"
+  echo "Forwarding emulator localhost:8000 → runner backend 127.0.0.1:8000"
+  if adb reverse tcp:8000 tcp:8000; then
+    echo "✅ adb reverse tcp:8000 tcp:8000 succeeded"
+  else
+    echo "❌ adb reverse tcp:8000 tcp:8000 failed (non-blocking, app may use localhost)" >&2
+  fi
+}
+
 wait_for_boot_completed() {
   echo "==> Waiting for Android boot completion (sys.boot_completed=1)"
   local boot_completed=""
@@ -119,6 +129,7 @@ ensure_apk_installed() {
 ensure_emulator_ready
 wait_for_boot_completed
 wait_for_package_manager_ready
+forward_backend_to_emulator
 install_apk_with_retry
 ensure_apk_installed
 sleep 8

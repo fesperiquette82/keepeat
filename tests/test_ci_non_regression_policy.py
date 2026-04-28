@@ -1083,3 +1083,43 @@ def test_navigation_flow_ensures_auth_before_nav_tests():
     # The home assert should come before stock tap section
     assert "assertVisible:" in home_assert_section and "id: tab-home" in home_assert_section, \
         "Must assert tab-home visible before testing tab navigation"
+
+
+def test_maestro_runner_sets_up_backend_forwarding():
+    """
+    Regression: App uses localhost:8000 for backend, but emulator localhost ≠ runner host.
+
+    Need adb reverse tcp:8000 tcp:8000 to route emulator connections back to runner.
+    Without it, app cannot reach backend → no login possible → tab-home never visible.
+
+    Validates that runner sets up port forwarding before launching flows.
+    """
+    runner_script = Path("scripts/run-maestro-e2e.sh").read_text(encoding="utf-8")
+
+    # Verify forward_backend_to_emulator function exists
+    assert "forward_backend_to_emulator()" in runner_script, \
+        "scripts/run-maestro-e2e.sh must define forward_backend_to_emulator() function"
+
+    # Extract function body
+    forward_section = runner_script.split("forward_backend_to_emulator()")[1].split("^}")[0] \
+        if "forward_backend_to_emulator()" in runner_script else ""
+
+    # Verify adb reverse is called
+    assert "adb reverse tcp:8000 tcp:8000" in runner_script, \
+        "scripts/run-maestro-e2e.sh must call 'adb reverse tcp:8000 tcp:8000'"
+
+    # Verify forward_backend_to_emulator is called in sequence before APK install
+    setup_sequence = runner_script.split("ensure_emulator_ready")[1].split("mkdir -p maestro-results")[0]
+
+    forward_pos = setup_sequence.find("forward_backend_to_emulator")
+    install_pos = setup_sequence.find("install_apk_with_retry")
+
+    assert forward_pos > 0 and install_pos > 0, \
+        "forward_backend_to_emulator must be defined"
+
+    assert forward_pos < install_pos, \
+        "forward_backend_to_emulator must be called BEFORE install_apk_with_retry"
+
+    # Verify logs document the forwarding
+    assert "adb reverse" in runner_script or "port forwarding" in runner_script.lower(), \
+        "Runner must log that port forwarding is being set up"
