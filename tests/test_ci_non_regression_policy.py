@@ -1249,3 +1249,55 @@ def test_apk_build_metadata_includes_all_required_fields():
         if "github." in field_pattern or "env." in field_pattern or "date" in field_pattern:
             assert field_pattern in metadata_creation, \
                 f"APK metadata field '{field_name}' must include {field_pattern}"
+
+
+def test_maestro_runner_ui_diagnostics_are_reliable():
+    """
+    Regression: Preflight UI diagnostics must not produce false conclusions.
+
+    The preflight UI dump check was using /tmp/ui_dump.xml which is unreliable.
+    When the pull failed, the script would still search the missing file and
+    conclude that login-email-input was absent—a false negative.
+
+    This test verifies the diagnostic is robust and won't mislead CI logs.
+
+    Expected behavior:
+    1. Use reliable path /sdcard/window_dump.xml
+    2. Verify file exists on device after dump
+    3. Pull only if file exists
+    4. Only assert about UI elements if pull succeeded
+    5. If dump/pull fails: show warning, don't conclude anything false
+    """
+    runner_script = Path("scripts/run-maestro-e2e.sh").read_text(encoding="utf-8")
+
+    # Verify diagnose function exists
+    assert "diagnose_app_state_before_flows()" in runner_script, \
+        "scripts/run-maestro-e2e.sh must define diagnose_app_state_before_flows() function"
+
+    diagnose_section = runner_script.split("diagnose_app_state_before_flows()")[1].split("ensure_emulator_ready")[0]
+
+    # CRITICAL: Verify reliable sdcard path is used, not fragile /tmp path
+    assert "/sdcard/window_dump.xml" in diagnose_section, \
+        "diagnose_app_state_before_flows must use reliable path /sdcard/window_dump.xml (not /tmp/ui_dump.xml)"
+
+    # Verify old fragile path is NOT used
+    assert "dump /tmp/ui_dump.xml" not in diagnose_section, \
+        "diagnose_app_state_before_flows must NOT use /tmp/ui_dump.xml (unreliable on Android)"
+
+    # Verify file existence check before pull
+    assert 'test -f "$dump_path"' in diagnose_section or 'adb shell test -f' in diagnose_section, \
+        "diagnose_app_state_before_flows must verify file exists on device after dump (adb shell test -f)"
+
+    # Verify pull is protected by success check
+    assert 'dump_success="true"' in diagnose_section or 'if adb pull' in diagnose_section, \
+        "diagnose_app_state_before_flows must gate UI assertions behind pull success"
+
+    # Verify warnings are shown if dump fails (don't silently conclude false negatives)
+    assert "Skipping UI element checks" in diagnose_section or "could not be retrieved" in diagnose_section, \
+        "diagnose_app_state_before_flows must warn and skip assertions if UI dump fails"
+
+    # Verify diagnostic is non-blocking (doesn't call exit/return 1)
+    # This is a preflight diagnostic, not a gate
+    diagnose_body = diagnose_section.split("{")[1] if "{" in diagnose_section else diagnose_section
+    assert diagnose_body.count("return 1") == 0 or "return 1" not in diagnose_body.split("diagnose_app_state_before_flows")[0], \
+        "diagnose_app_state_before_flows must not exit with failure (preflight diagnostic is non-blocking)"

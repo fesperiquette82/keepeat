@@ -187,15 +187,43 @@ diagnose_app_state_before_flows() {
   echo "==> Launching app briefly to check initial screen"
   adb shell am start -n "com.fesperiquette.keepeat/.MainActivity" 2>&1 || true
   sleep 3
+
   echo "==> Dumping app window hierarchy"
-  adb shell uiautomator dump /tmp/ui_dump.xml 2>&1 || true
-  adb pull /tmp/ui_dump.xml maestro-results/00-app-state-before-flows.xml 2>&1 || true
-  echo "==> Checking for login-email-input visibility"
-  if adb shell uiautomator dump /tmp/ui_dump.xml 2>&1 | grep -i "login.*email" >/dev/null 2>&1; then
-    echo "   ✓ Login email input detected in UI hierarchy"
+  local dump_path="/sdcard/window_dump.xml"
+  local dump_success="false"
+
+  # Dump UI hierarchy to reliable sdcard path
+  if adb shell uiautomator dump "$dump_path" 2>&1 | grep -q "Dump hierarchy saved"; then
+    # Verify file exists on device
+    if adb shell test -f "$dump_path" 2>/dev/null; then
+      echo "==> UI hierarchy dumped to $dump_path"
+
+      # Pull to local maestro-results for inspection
+      if adb pull "$dump_path" maestro-results/preflight-ui.xml >/dev/null 2>&1; then
+        echo "==> UI hierarchy pulled to maestro-results/preflight-ui.xml"
+        dump_success="true"
+      else
+        echo "⚠️  UI hierarchy pull failed (device → host)"
+      fi
+    else
+      echo "⚠️  UI hierarchy file does not exist on device ($dump_path)"
+    fi
   else
-    echo "   ✗ Login email input NOT found in UI hierarchy - app may not be on login screen"
+    echo "⚠️  UI hierarchy dump failed or returned unexpected output"
   fi
+
+  # Only assert about UI elements if dump succeeded
+  if [ "$dump_success" = "true" ]; then
+    echo "==> Checking for login-email-input visibility"
+    if grep -i "login.*email" maestro-results/preflight-ui.xml >/dev/null 2>&1; then
+      echo "   ✓ login-email-input found in UI hierarchy"
+    else
+      echo "   ℹ  login-email-input NOT found in current UI hierarchy (app may not be on login screen)"
+    fi
+  else
+    echo "⚠️  Skipping UI element checks: dump could not be retrieved"
+  fi
+
   echo "==> Stopping app for clean flow execution"
   adb shell am force-stop "com.fesperiquette.keepeat" || true
   sleep 1
