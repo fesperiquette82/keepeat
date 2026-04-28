@@ -856,17 +856,7 @@ def test_maestro_runner_waits_for_android_package_manager_before_apk_install():
     assert "adb install" not in script_start, \
         "adb install must NOT be called before emulator readiness checks (regression)"
 
-    # Verify wait_for_activity_manager_ready function exists (NEW: prevent system provider errors)
-    assert "wait_for_activity_manager_ready()" in runner_script, \
-        "scripts/run-maestro-e2e.sh must define wait_for_activity_manager_ready() function"
-
-    am_ready_section = runner_script.split("wait_for_activity_manager_ready()")[1].split("wait_for_settings_provider_ready()")[0]
-    assert "adb shell cmd activity list activities" in am_ready_section, \
-        "wait_for_activity_manager_ready must verify Activity Manager using 'adb shell cmd activity list activities'"
-    assert "Activity Manager is ready" in am_ready_section, \
-        "wait_for_activity_manager_ready must log when Activity Manager is ready"
-
-    # Verify wait_for_settings_provider_ready function exists (NEW: fix "Cannot access system provider" error)
+    # Verify wait_for_settings_provider_ready function exists (CRITICAL: fix "Cannot access system provider" error)
     assert "wait_for_settings_provider_ready()" in runner_script, \
         "scripts/run-maestro-e2e.sh must define wait_for_settings_provider_ready() function"
 
@@ -884,24 +874,27 @@ def test_maestro_runner_waits_for_android_package_manager_before_apk_install():
     assert "Cannot access system provider" in error_check_section, \
         "is_transient_install_error must recognize 'Cannot access system provider' errors as transient"
 
-    # Verify the improved call sequence with all readiness checks
+    # Verify the call sequence: Package Manager → Settings Provider → Install
     call_sequence = """ensure_emulator_ready
 wait_for_boot_completed
 wait_for_package_manager_ready
-wait_for_activity_manager_ready
 wait_for_settings_provider_ready
 install_apk_with_retry"""
     for line in call_sequence.split('\n'):
         assert line in runner_script, \
             f"scripts/run-maestro-e2e.sh must call {line} in correct sequence"
 
-    # Verify Activity Manager is checked AFTER Package Manager but BEFORE adb install
-    activity_mgr_pos = runner_script.find("wait_for_activity_manager_ready")
+    # Verify Settings Provider is checked AFTER Package Manager but BEFORE adb install
     settings_provider_pos = runner_script.find("wait_for_settings_provider_ready")
     install_pos = runner_script.find("install_apk_with_retry")
 
-    assert pm_order < activity_mgr_pos < settings_provider_pos < install_pos, \
-        "Readiness checks must be called in order: PackageManager → ActivityManager → SettingsProvider → Install"
+    assert pm_order < settings_provider_pos < install_pos, \
+        "Readiness checks must be called in order: PackageManager → SettingsProvider → Install"
+
+    # Verify Activity Manager check is NOT a blocking gate (to avoid false negatives on some CI runners)
+    # Activity Manager availability may vary by CI environment and is not directly required for adb install
+    assert "wait_for_activity_manager_ready()" not in runner_script, \
+        "Activity Manager check must not be a blocking gate (may not be portable to all CI runners)"
 
     # Verify ensure_apk_installed is called AFTER install_apk_with_retry
     ensure_install_order = runner_script.find("ensure_apk_installed")

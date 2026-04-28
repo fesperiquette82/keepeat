@@ -90,30 +90,6 @@ wait_for_package_manager_ready() {
   return 1
 }
 
-wait_for_activity_manager_ready() {
-  echo "==> Waiting for Android Activity Manager to be ready"
-  local max_attempts=30
-  local attempt=1
-
-  while [ $attempt -le $max_attempts ]; do
-    if adb shell cmd activity list activities >/dev/null 2>&1; then
-      echo "==> Android Activity Manager is ready"
-      return 0
-    fi
-
-    local attempt_msg="(attempt $attempt/$max_attempts)"
-    if [ $((attempt % 5)) -eq 0 ]; then
-      echo "  Activity Manager not ready yet $attempt_msg, retrying..."
-    fi
-
-    sleep 1
-    attempt=$((attempt + 1))
-  done
-
-  echo "Activity Manager did not become ready within timeout ($max_attempts attempts)" >&2
-  return 1
-}
-
 wait_for_settings_provider_ready() {
   echo "==> Waiting for Android Settings provider to be ready"
   local max_attempts=30
@@ -228,11 +204,10 @@ diagnose_app_state_before_flows() {
 ensure_emulator_ready
 wait_for_boot_completed
 wait_for_package_manager_ready
-wait_for_activity_manager_ready
 wait_for_settings_provider_ready
-echo "==> Android system services are ready"
-echo "==> Waiting briefly for system providers to stabilize (5s)"
-sleep 5
+echo "==> Android system providers are ready"
+echo "==> Waiting briefly for Android services to stabilize"
+sleep 3
 forward_backend_to_emulator
 install_apk_with_retry
 ensure_apk_installed
