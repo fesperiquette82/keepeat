@@ -247,12 +247,44 @@ jobs:
               continue
             fi
 
-            echo "✅ Reusing APK: e2e-apk/app-debug.apk (run_id=$RUN_ID source_head_sha=$RUN_HEAD_SHA)"
-            echo "reuse_apk_success=true"
-            echo "found=true" >> "$GITHUB_OUTPUT"
-            echo "source_run_id=$RUN_ID" >> "$GITHUB_OUTPUT"
-            echo "source_head_sha=$RUN_HEAD_SHA" >> "$GITHUB_OUTPUT"
-            exit 0
+            # Verify APK compatibility: check build metadata
+            METADATA_COMPATIBLE="true"
+            if gh run download "$RUN_ID" --name apk-build-metadata --dir e2e-apk 2>/dev/null; then
+              if [ -f e2e-apk/apk-build-metadata.json ]; then
+                BACKEND_URL_FROM_METADATA="$(jq -r '.backend_url_e2e // empty' e2e-apk/apk-build-metadata.json 2>/dev/null || echo '')"
+                EXPECTED_BACKEND_URL="http://10.0.2.2:8000"
+                if [ -z "$BACKEND_URL_FROM_METADATA" ] || [ "$BACKEND_URL_FROM_METADATA" != "$EXPECTED_BACKEND_URL" ]; then
+                  echo "Skip run_id=$RUN_ID: APK backend URL mismatch or missing"
+                  echo "  expected: $EXPECTED_BACKEND_URL"
+                  echo "  from_metadata: $BACKEND_URL_FROM_METADATA"
+                  METADATA_COMPATIBLE="false"
+                  rm -rf e2e-apk
+                  mkdir -p e2e-apk
+                  continue
+                fi
+              else
+                echo "Skip run_id=$RUN_ID: APK build metadata file missing (cannot verify backend URL)"
+                METADATA_COMPATIBLE="false"
+                rm -rf e2e-apk
+                mkdir -p e2e-apk
+                continue
+              fi
+            else
+              echo "Skip run_id=$RUN_ID: APK build metadata artifact not found (cannot verify backend URL)"
+              METADATA_COMPATIBLE="false"
+              rm -rf e2e-apk
+              mkdir -p e2e-apk
+              continue
+            fi
+
+            if [ "$METADATA_COMPATIBLE" = "true" ]; then
+              echo "✅ Reusing APK: e2e-apk/app-debug.apk (run_id=$RUN_ID source_head_sha=$RUN_HEAD_SHA backend_url=$BACKEND_URL_FROM_METADATA)"
+              echo "reuse_apk_success=true"
+              echo "found=true" >> "$GITHUB_OUTPUT"
+              echo "source_run_id=$RUN_ID" >> "$GITHUB_OUTPUT"
+              echo "source_head_sha=$RUN_HEAD_SHA" >> "$GITHUB_OUTPUT"
+              exit 0
+            fi
           done
 
           echo "No valid reusable APK found after evaluating PR artifacts."
@@ -314,6 +346,26 @@ jobs:
           mkdir -p "$GITHUB_WORKSPACE/e2e-apk"
           cp app/build/outputs/apk/debug/app-debug.apk "$GITHUB_WORKSPACE/e2e-apk/app-debug.apk"
 
+      - name: Create APK build metadata
+        if: steps.decide_build.outputs.build_apk_step_should_run == 'true'
+        env:
+          EXPO_PUBLIC_BACKEND_URL: http://10.0.2.2:8000
+        run: |
+          set -euo pipefail
+          mkdir -p e2e-apk
+          cat > e2e-apk/apk-build-metadata.json <<EOF
+          {
+            "head_sha": "${{ github.sha }}",
+            "build_run_id": "${{ github.run_id }}",
+            "backend_url_e2e": "${{ env.EXPO_PUBLIC_BACKEND_URL }}",
+            "build_timestamp": "$(date -u +%Y-%m-%dT%H:%M:%SZ)",
+            "package_name": "com.fesperiquette.keepeat",
+            "app_variant": "debug"
+          }
+          EOF
+          echo "✅ APK build metadata created:"
+          cat e2e-apk/apk-build-metadata.json
+
       - name: Decide APK availability
         id: apk_decision
         run: |
@@ -365,6 +417,13 @@ jobs:
         with:
           name: android-debug-apk
           path: e2e-apk/app-debug.apk
+
+      - name: Upload APK build metadata artifact
+        if: steps.apk_decision.outputs.apk_source == 'built'
+        uses: actions/upload-artifact@v4
+        with:
+          name: apk-build-metadata
+          path: e2e-apk/apk-build-metadata.json
 
   maestro-e2e:
     name: Mobile E2E / PR smoke Maestro suite

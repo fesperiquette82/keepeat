@@ -1123,3 +1123,98 @@ def test_maestro_runner_sets_up_backend_forwarding():
     # Verify logs document the forwarding
     assert "adb reverse" in runner_script or "port forwarding" in runner_script.lower(), \
         "Runner must log that port forwarding is being set up"
+
+
+def test_apk_reuse_requires_backend_url_verification():
+    """
+    Regression: APK reuse should not accept APK built with prod/staging backend URL.
+
+    Scenario: Run A builds APK with http://keepeat-backend.onrender.com (prod).
+    Run B on the same PR tries to reuse that APK for local E2E tests.
+    Expected: Reject reuse because prod URL won't connect to local backend.
+
+    Solution: Create apk-build-metadata.json at build time with backend_url_e2e.
+    At reuse time, verify backend_url_e2e == http://10.0.2.2:8000 (E2E compatible).
+
+    This test verifies the metadata verification logic exists and is not bypassed.
+    """
+    workflow = Path(".github/workflows/mobile-e2e.yml").read_text(encoding="utf-8")
+
+    # Verify metadata creation step exists
+    assert "Create APK build metadata" in workflow, \
+        "Workflow must have 'Create APK build metadata' step to capture backend URL at build time"
+
+    metadata_creation = workflow.split("Create APK build metadata")[1].split("Decide APK availability")[0]
+    assert "apk-build-metadata.json" in metadata_creation, \
+        "Metadata creation must produce apk-build-metadata.json"
+
+    assert "backend_url_e2e" in metadata_creation, \
+        "Metadata must include backend_url_e2e field"
+
+    assert "http://10.0.2.2:8000" in metadata_creation, \
+        "Metadata must capture backend URL as http://10.0.2.2:8000"
+
+    # Verify metadata artifact upload
+    assert "Upload APK build metadata artifact" in workflow, \
+        "Workflow must upload apk-build-metadata artifact for future reuse verification"
+
+    upload_metadata = workflow.split("Upload APK build metadata artifact")[1].split("maestro-e2e:")[0]
+    assert "apk-build-metadata" in upload_metadata, \
+        "Upload step must use artifact name 'apk-build-metadata'"
+
+    # Verify reuse logic checks metadata
+    reuse_section = workflow.split("Try reusing existing PR APK artifact")[1].split("Decide whether to build APK")[0]
+    assert "apk-build-metadata" in reuse_section, \
+        "Reuse APK logic must download and verify apk-build-metadata artifact"
+
+    assert "EXPECTED_BACKEND_URL" in reuse_section, \
+        "Reuse logic must check for expected backend URL"
+
+    assert "http://10.0.2.2:8000" in reuse_section, \
+        "Reuse logic must verify backend URL is E2E compatible (http://10.0.2.2:8000)"
+
+    assert "METADATA_COMPATIBLE" in reuse_section, \
+        "Reuse logic must evaluate metadata compatibility before accepting APK"
+
+    assert "Skip run_id=" in reuse_section and "backend URL mismatch" in reuse_section, \
+        "Reuse logic must skip APK if metadata incompatible"
+
+    # Verify metadata check is not bypassed
+    assert "continue" in reuse_section or "Skip run_id=" in reuse_section, \
+        "Reuse logic must skip incompatible APK (not blindly accept it)"
+
+
+def test_apk_build_metadata_includes_all_required_fields():
+    """
+    Regression: APK metadata must include all fields needed to verify compatibility.
+
+    Required fields:
+    - head_sha: commit SHA (for provenance)
+    - build_run_id: GitHub run ID (for traceability)
+    - backend_url_e2e: the exact backend URL used at build time (for E2E verification)
+    - build_timestamp: when the APK was built (for audit)
+    - package_name: which APK package (for safety)
+    - app_variant: debug/prod (for mode verification)
+
+    Without these fields, metadata verification is incomplete.
+    """
+    workflow = Path(".github/workflows/mobile-e2e.yml").read_text(encoding="utf-8")
+
+    metadata_creation = workflow.split("Create APK build metadata")[1].split("Decide APK availability")[0]
+
+    required_fields = [
+        ("head_sha", "${{ github.sha }}"),
+        ("build_run_id", "${{ github.run_id }}"),
+        ("backend_url_e2e", "${{ env.EXPO_PUBLIC_BACKEND_URL }}"),
+        ("build_timestamp", "date -u"),
+        ("package_name", "com.fesperiquette.keepeat"),
+        ("app_variant", "debug"),
+    ]
+
+    for field_name, field_pattern in required_fields:
+        assert f'"{field_name}"' in metadata_creation or field_name in metadata_creation, \
+            f"APK metadata must include '{field_name}' field"
+
+        if "github." in field_pattern or "env." in field_pattern or "date" in field_pattern:
+            assert field_pattern in metadata_creation, \
+                f"APK metadata field '{field_name}' must include {field_pattern}"
