@@ -90,30 +90,110 @@ wait_for_package_manager_ready() {
   return 1
 }
 
+wait_for_activity_manager_ready() {
+  echo "==> Waiting for Android Activity Manager to be ready"
+  local max_attempts=30
+  local attempt=1
+
+  while [ $attempt -le $max_attempts ]; do
+    if adb shell cmd activity list activities >/dev/null 2>&1; then
+      echo "==> Android Activity Manager is ready"
+      return 0
+    fi
+
+    local attempt_msg="(attempt $attempt/$max_attempts)"
+    if [ $((attempt % 5)) -eq 0 ]; then
+      echo "  Activity Manager not ready yet $attempt_msg, retrying..."
+    fi
+
+    sleep 1
+    attempt=$((attempt + 1))
+  done
+
+  echo "Activity Manager did not become ready within timeout ($max_attempts attempts)" >&2
+  return 1
+}
+
+wait_for_settings_provider_ready() {
+  echo "==> Waiting for Android Settings provider to be ready"
+  local max_attempts=30
+  local attempt=1
+
+  while [ $attempt -le $max_attempts ]; do
+    if adb shell settings get global device_provisioned >/dev/null 2>&1; then
+      echo "==> Android Settings provider is ready"
+      return 0
+    fi
+
+    local attempt_msg="(attempt $attempt/$max_attempts)"
+    if [ $((attempt % 5)) -eq 0 ]; then
+      echo "  Settings provider not ready yet $attempt_msg, retrying..."
+    fi
+
+    sleep 1
+    attempt=$((attempt + 1))
+  done
+
+  echo "Settings provider did not become ready within timeout ($max_attempts attempts)" >&2
+  return 1
+}
+
+is_transient_install_error() {
+  local error_msg="$1"
+
+  # Check for known transient errors that should trigger retry
+  if echo "$error_msg" | grep -qiE "(can't find service|Cannot access system provider|device offline|device not found|Broken pipe|Package Manager not ready)"; then
+    return 0  # transient error
+  fi
+
+  return 1  # not transient
+}
+
 install_apk_with_retry() {
   echo "==> Installing APK $E2E_ANDROID_APP_ID"
   local max_attempts=3
   local attempt=1
+  local last_error=""
 
   while [ $attempt -le $max_attempts ]; do
-    if adb install -r e2e-apk/app-debug.apk; then
-      echo "==> APK installation succeeded"
+    last_error="$(adb install -r e2e-apk/app-debug.apk 2>&1)" || true
+
+    if [ $? -eq 0 ]; then
+      echo "✅ APK installation succeeded"
       return 0
     fi
 
-    if [ $attempt -lt $max_attempts ]; then
-      echo "APK installation attempt $attempt failed, retrying in 2s..." >&2
-      sleep 2
+    echo "❌ APK installation attempt $attempt failed" >&2
 
-      if ! wait_for_package_manager_ready; then
-        echo "Package Manager not ready on retry attempt $attempt" >&2
+    if is_transient_install_error "$last_error"; then
+      echo "   Error is transient: $last_error" >&2
+      if [ $attempt -lt $max_attempts ]; then
+        echo "   Retrying in 3s..." >&2
+        sleep 3
+
+        echo "   Waiting for Android system to stabilize before retry..." >&2
+        if ! wait_for_package_manager_ready; then
+          echo "   Package Manager not ready on retry attempt $attempt" >&2
+        fi
+        if ! wait_for_activity_manager_ready; then
+          echo "   Activity Manager not ready on retry attempt $attempt" >&2
+        fi
+        if ! wait_for_settings_provider_ready; then
+          echo "   Settings provider not ready on retry attempt $attempt" >&2
+        fi
       fi
+    else
+      echo "   Error appears non-transient: $last_error" >&2
+      echo "   Aborting (not retrying permanent failures like APK parsing, signature, etc)" >&2
+      echo "APK installation failed with non-transient error" >&2
+      return 1
     fi
 
     attempt=$((attempt + 1))
   done
 
   echo "APK installation failed after $max_attempts attempts" >&2
+  echo "Last error: $last_error" >&2
   return 1
 }
 
@@ -148,6 +228,11 @@ diagnose_app_state_before_flows() {
 ensure_emulator_ready
 wait_for_boot_completed
 wait_for_package_manager_ready
+wait_for_activity_manager_ready
+wait_for_settings_provider_ready
+echo "==> Android system services are ready"
+echo "==> Waiting briefly for system providers to stabilize (5s)"
+sleep 5
 forward_backend_to_emulator
 install_apk_with_retry
 ensure_apk_installed
