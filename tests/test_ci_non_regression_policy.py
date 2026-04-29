@@ -1490,3 +1490,67 @@ def test_root_index_waits_for_auth_load_before_redirect():
     assert "router.replace" in index_tsx, "index.tsx must use router.replace for conditional redirect"
 
 
+def test_maestro_runner_clears_app_data_between_flows():
+    """
+    Regression: App data (secure store) must be cleared between test flows.
+
+    Scenario:
+    - Flow 1 (auth-session) runs: user logs in, tokens stored in secure store
+    - Between flows: backend is reset/seeded (new user database state)
+    - Flow 2 (navigation) starts: app loads stale tokens from secure store
+    - App sends requests with old tokens
+    - Backend rejects tokens as invalid
+    - App should redirect to login but has race condition or shows cached state
+    Result: Second flow fails, no POST /api/auth/login reaches backend
+
+    Solution: Between flows, clear app data so secure store is reset.
+    This ensures app starts fresh with no stale tokens after backend reset.
+
+    The sequence should be:
+    1. stabilize_between_flows: stop app + clear app data
+    2. reset/seed backend to seeded state
+    3. run next Maestro flow with fresh auth state
+    """
+    runner_script = Path("scripts/run-maestro-e2e.sh").read_text(encoding="utf-8")
+
+    # Verify stabilize_between_flows function exists
+    assert "stabilize_between_flows()" in runner_script, \
+        "scripts/run-maestro-e2e.sh must define stabilize_between_flows() function"
+
+    # Extract function body
+    stabilize_section = runner_script.split("stabilize_between_flows()")[1].split("declare -a FLOW_RESULTS")[0]
+
+    # Verify pm clear is called to reset app data
+    assert "pm clear" in stabilize_section, \
+        "stabilize_between_flows must call 'adb shell pm clear' to reset app data between flows"
+
+    assert "$E2E_ANDROID_APP_ID" in stabilize_section, \
+        "pm clear must target the E2E app package (E2E_ANDROID_APP_ID)"
+
+    # Verify force-stop happens first (before clearing data)
+    force_stop_pos = stabilize_section.find("force-stop")
+    pm_clear_pos = stabilize_section.find("pm clear")
+
+    assert force_stop_pos > 0 and pm_clear_pos > 0, \
+        "Both force-stop and pm clear must be present"
+
+    assert force_stop_pos < pm_clear_pos, \
+        "force-stop must happen BEFORE pm clear (stop app first, then clear its data)"
+
+    # Verify stabilize_between_flows is called in the main flow loop
+    loop_section = runner_script.split("for flow_file in")[1].split("adb logcat -d > emulator-logcat.txt")[0]
+
+    assert "stabilize_between_flows" in loop_section, \
+        "Main flow loop must call stabilize_between_flows between each flow"
+
+    # Verify reset/seed happens AFTER stabilize_between_flows
+    stabilize_pos = loop_section.find("stabilize_between_flows")
+    reset_seed_pos = loop_section.find("e2e-reset-seed.mjs")
+
+    assert stabilize_pos > 0 and reset_seed_pos > 0, \
+        "Both stabilize_between_flows and reset/seed must be called in loop"
+
+    assert stabilize_pos < reset_seed_pos, \
+        "stabilize_between_flows (clear app data) must happen BEFORE reset/seed (backend state)"
+
+
