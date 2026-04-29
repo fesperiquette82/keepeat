@@ -37,6 +37,8 @@ appId: com.fesperiquette.keepeat
           visible:
             id: tab-home
           timeout: 60000
+      - assertVisible:
+          id: tab-home
 
 # Check: Login still visible after submit (means login failed)
 - runFlow:

@@ -49,17 +49,22 @@ async function waitForBackend(maxAttempts = 30) {
 
 async function main() {
   await waitForBackend();
+
+  console.log('[e2e-reset-seed] backend is reachable');
+
   const resetPayload = await call('/api/test/reset');
   if (!resetPayload?.ok) {
     throw new Error('Reset payload does not include ok=true');
   }
+  console.log('[e2e-reset-seed] reset completed');
 
   if (mode === 'seeded') {
     const seedPayload = await call('/api/test/seed');
     if (!seedPayload?.ok) {
       throw new Error('Seed payload does not include ok=true');
     }
-    console.log(`[e2e-reset-seed] mode=seeded fixtures=${Object.keys(seedPayload.fixtures || {}).join(',')}`);
+    console.log(`[e2e-reset-seed] seed completed with fixtures: ${Object.keys(seedPayload.fixtures || {}).join(',')}`);
+    console.log('[e2e-reset-seed] test user e2e.free@keepeat.test is now available for login');
     return;
   }
 

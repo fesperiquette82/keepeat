@@ -268,8 +268,6 @@ stabilize_between_flows() {
   adb shell input keyevent 3 || true
   adb shell am force-stop "$E2E_ANDROID_APP_ID" || true
   adb shell am force-stop dev.mobile.maestro || true
-  echo "==> Clearing app data to remove stale secure store auth state"
-  adb shell pm clear "$E2E_ANDROID_APP_ID" || true
   sleep 2
 }
 
@@ -291,6 +289,11 @@ for flow_file in "${FLOW_FILES[@]}"; do
   echo "MAESTRO_DRIVER_STARTUP_TIMEOUT=${MAESTRO_DRIVER_STARTUP_TIMEOUT}"
   node scripts/e2e-reset-seed.mjs --mode "$mode" --base-url "$E2E_RESET_SEED_BASE_URL"
   export MAESTRO_DRIVER_STARTUP_TIMEOUT
+
+  echo "==> Emulator state before Maestro flow:"
+  adb shell getprop sys.boot_completed || echo "  (boot_completed unavailable)"
+  echo "==> App package status:"
+  adb shell pm list packages "$E2E_ANDROID_APP_ID" | tr -d '\r' || echo "  (package list failed)"
 
   if ~/.maestro/bin/maestro test "$flow_file" --format junit --output "maestro-results/$flow_name"; then
     echo "✅ Maestro flow passed: $flow_name"

@@ -206,7 +206,6 @@ def test_maestro_e2e_is_fully_runnable_in_github_actions():
     assert "sys.boot_completed" in maestro_script
     assert "pm list packages \"$E2E_ANDROID_APP_ID\"" in maestro_script
     assert "sleep 8" in maestro_script
-    assert "pm clear" in maestro_script, "Must clear app data between flows to reset secure store auth state"
     assert 'mode="seeded"' in maestro_script
     assert 'if [ "$flow_name" = "03-stock-empty-state" ]; then' in maestro_script
     assert 'adb shell am force-stop "$E2E_ANDROID_APP_ID" || true' in maestro_script
@@ -1355,19 +1354,21 @@ def test_maestro_runner_ui_diagnostics_are_reliable():
 
 def test_app_index_redirect_does_not_bypass_auth_guard():
     """
-    Verify that app/index.tsx redirect to /(tabs) does not bypass the auth guard.
-    The guard in _layout.tsx must be able to intercept and redirect to /login if needed.
-    Without this, unauthenticated users would see tabs instead of login screen.
+    Verify that app/index.tsx does not immediately redirect to /(tabs) before auth is loaded.
+    This prevents the race condition where tabs appear before the auth guard can redirect to /login.
+    The fix: index.tsx should wait for isLoaded before redirecting, rendering a blank screen meanwhile.
     """
     index_tsx = Path("frontend/app/index.tsx").read_text(encoding="utf-8")
 
-    # Verify index.tsx exists and redirects (current pattern)
-    assert "Redirect" in index_tsx, "app/index.tsx should use Redirect component"
-    assert "/(tabs)" in index_tsx, "app/index.tsx should redirect to tabs"
+    # Verify index.tsx waits for auth to load before redirecting
+    assert "isLoaded" in index_tsx, "app/index.tsx must check isLoaded before redirecting"
+    assert "useEffect" in index_tsx, "app/index.tsx must use useEffect to delay redirect until auth is loaded"
+    assert "router.replace" in index_tsx, "app/index.tsx must use router.replace for conditional redirect"
+    assert "user" in index_tsx, "app/index.tsx must check user state to decide redirect target"
 
-    # Verify the auth guard exists in root layout
+    # Verify the auth guard exists in root layout as backup
     layout_tsx = Path("frontend/app/_layout.tsx").read_text(encoding="utf-8")
-    assert "resolveAuthRedirect" in layout_tsx, "Root layout must call resolveAuthRedirect"
+    assert "resolveAuthRedirect" in layout_tsx, "Root layout must call resolveAuthRedirect as backup"
     assert "isLoaded" in layout_tsx, "Auth guard must check isLoaded state"
     assert "hasUser" in layout_tsx or "user" in layout_tsx, "Auth guard must check user state"
 
@@ -1460,26 +1461,32 @@ def test_app_config_resolves_backend_url_for_e2e_builds():
     assert "resolveApiUrl" in config_ts, "Config must have resolveApiUrl function"
 
 
-def test_maestro_runner_clears_app_secure_store_between_flows():
+def test_root_index_waits_for_auth_load_before_redirect():
     """
-    Verify that app data is cleared between Maestro flows to remove stale secure store tokens.
+    Verify that app/index.tsx delays redirect until auth is loaded.
 
-    Without this, when the backend is reset/reseeded between flows, the app can have:
-    - Stale token in secure store (from previous flow's login)
-    - But that user doesn't exist on freshly-reseeded backend
-    - So the app thinks it's authenticated (token is valid locally) but backend doesn't recognize user
-    - This causes login to never be attempted, breaking auth flow tests
+    Without this, there's a race condition where index.tsx immediately redirects
+    to /(tabs), but the guard in _layout.tsx hasn't run yet to check auth state.
+    This causes the app to display tabs even though the user is not authenticated.
+
+    The fix: index.tsx should not redirect until isLoaded === true.
     """
-    runner_script = Path("scripts/run-maestro-e2e.sh").read_text(encoding="utf-8")
+    index_tsx = Path("frontend/app/index.tsx").read_text(encoding="utf-8")
 
-    # Verify that app data is cleared in stabilization
-    assert "pm clear" in runner_script, \
-        "stabilize_between_flows must clear app data with 'adb shell pm clear' to remove stale secure store auth"
+    # Verify that it checks isLoaded before redirecting
+    assert "isLoaded" in index_tsx, "index.tsx must check isLoaded state"
 
-    # Verify it's called between each flow
-    assert runner_script.count("stabilize_between_flows") >= 2, \
-        "stabilize_between_flows must be called to stabilize between Maestro flows"
+    # Verify that it uses useEffect for conditional redirect
+    assert "useEffect" in index_tsx, "index.tsx must use useEffect for delayed redirect"
 
-    # Verify that the clear command targets the correct app ID
-    assert "$E2E_ANDROID_APP_ID" in runner_script, \
-        "App clear must use E2E_ANDROID_APP_ID variable (not hardcoded app ID)"
+    # Verify that it checks user state
+    assert "user" in index_tsx, "index.tsx must check user state before deciding redirect target"
+
+    # Verify that it shows something while loading
+    assert "View" in index_tsx, "index.tsx must render a View component while loading"
+
+    # Verify that it doesn't use immediate Redirect component (would bypass timing)
+    # It should use router.replace inside useEffect instead
+    assert "router.replace" in index_tsx, "index.tsx must use router.replace for conditional redirect"
+
+
