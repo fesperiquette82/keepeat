@@ -268,6 +268,9 @@ stabilize_between_flows() {
   adb shell input keyevent 3 || true
   adb shell am force-stop "$E2E_ANDROID_APP_ID" || true
   adb shell am force-stop dev.mobile.maestro || true
+  # Critical: Clear app data to reset secure store (tokens, user state)
+  # When backend is reset/seeded between flows, app must not retain stale tokens
+  adb shell pm clear "$E2E_ANDROID_APP_ID" || true
   sleep 2
 }
 
