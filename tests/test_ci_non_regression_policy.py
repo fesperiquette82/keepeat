@@ -1553,4 +1553,30 @@ def test_maestro_runner_clears_app_data_between_flows():
     assert stabilize_pos < reset_seed_pos, \
         "stabilize_between_flows (clear app data) must happen BEFORE reset/seed (backend state)"
 
+    # CRITICAL: Verify app is forcefully stopped AFTER pm clear
+    # pm clear can auto-restart the app. Without a second force-stop, app ends in undefined state
+    # Look specifically for force-stop targeting the E2E app AFTER pm clear
+    pm_clear_section = stabilize_section[pm_clear_pos:]
+
+    app_id_force_stop_in_pm_clear_section = f"force-stop" in pm_clear_section and "$E2E_ANDROID_APP_ID" in pm_clear_section
+    assert app_id_force_stop_in_pm_clear_section, \
+        "stabilize_between_flows must call 'adb shell am force-stop $E2E_ANDROID_APP_ID' AFTER pm clear to ensure app is fully stopped (pm clear can auto-restart)"
+
+    # Verify the second force-stop with app ID appears in the right section
+    app_id_in_pm_section = pm_clear_section.find("$E2E_ANDROID_APP_ID")
+    force_stop_in_pm_section = pm_clear_section.find("force-stop")
+    assert force_stop_in_pm_section >= 0 and app_id_in_pm_section >= 0, \
+        "After pm clear, must call force-stop with $E2E_ANDROID_APP_ID"
+
+    # CRITICAL: Verify sleep duration is sufficient (at least 3 seconds)
+    # Insufficient sleep leaves app in intermediate state at flow start
+    import re
+    sleep_matches = re.findall(r'sleep\s+(\d+)', stabilize_section)
+    assert len(sleep_matches) > 0, \
+        "stabilize_between_flows must include sleep to stabilize after stopping"
+
+    sleep_duration = int(sleep_matches[-1])  # Get last sleep duration
+    assert sleep_duration >= 3, \
+        f"Sleep after stabilize_between_flows must be at least 3 seconds for emulator to fully stop app (got {sleep_duration}s)"
+
 
