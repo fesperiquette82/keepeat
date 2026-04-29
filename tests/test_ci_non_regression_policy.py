@@ -206,7 +206,7 @@ def test_maestro_e2e_is_fully_runnable_in_github_actions():
     assert "sys.boot_completed" in maestro_script
     assert "pm list packages \"$E2E_ANDROID_APP_ID\"" in maestro_script
     assert "sleep 8" in maestro_script
-    assert "pm clear" not in maestro_script
+    assert "pm clear" in maestro_script, "Must clear app data between flows to reset secure store auth state"
     assert 'mode="seeded"' in maestro_script
     assert 'if [ "$flow_name" = "03-stock-empty-state" ]; then' in maestro_script
     assert 'adb shell am force-stop "$E2E_ANDROID_APP_ID" || true' in maestro_script
@@ -1458,3 +1458,28 @@ def test_app_config_resolves_backend_url_for_e2e_builds():
     # Verify API URL resolution logic
     assert "buildApiUrl" in config_ts, "Config must export buildApiUrl function"
     assert "resolveApiUrl" in config_ts, "Config must have resolveApiUrl function"
+
+
+def test_maestro_runner_clears_app_secure_store_between_flows():
+    """
+    Verify that app data is cleared between Maestro flows to remove stale secure store tokens.
+
+    Without this, when the backend is reset/reseeded between flows, the app can have:
+    - Stale token in secure store (from previous flow's login)
+    - But that user doesn't exist on freshly-reseeded backend
+    - So the app thinks it's authenticated (token is valid locally) but backend doesn't recognize user
+    - This causes login to never be attempted, breaking auth flow tests
+    """
+    runner_script = Path("scripts/run-maestro-e2e.sh").read_text(encoding="utf-8")
+
+    # Verify that app data is cleared in stabilization
+    assert "pm clear" in runner_script, \
+        "stabilize_between_flows must clear app data with 'adb shell pm clear' to remove stale secure store auth"
+
+    # Verify it's called between each flow
+    assert runner_script.count("stabilize_between_flows") >= 2, \
+        "stabilize_between_flows must be called to stabilize between Maestro flows"
+
+    # Verify that the clear command targets the correct app ID
+    assert "$E2E_ANDROID_APP_ID" in runner_script, \
+        "App clear must use E2E_ANDROID_APP_ID variable (not hardcoded app ID)"

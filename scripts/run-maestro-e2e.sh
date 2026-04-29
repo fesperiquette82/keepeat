@@ -268,6 +268,8 @@ stabilize_between_flows() {
   adb shell input keyevent 3 || true
   adb shell am force-stop "$E2E_ANDROID_APP_ID" || true
   adb shell am force-stop dev.mobile.maestro || true
+  echo "==> Clearing app data to remove stale secure store auth state"
+  adb shell pm clear "$E2E_ANDROID_APP_ID" || true
   sleep 2
 }
 
