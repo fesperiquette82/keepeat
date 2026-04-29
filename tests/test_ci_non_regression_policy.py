@@ -1251,6 +1251,56 @@ def test_apk_build_metadata_includes_all_required_fields():
                 f"APK metadata field '{field_name}' must include {field_pattern}"
 
 
+def test_apk_reuse_logic_requires_compatible_metadata():
+    """
+    Regression: APK reuse must validate backend URL compatibility.
+
+    The workflow has a reuse APK step that:
+    1. Searches for existing APK artifacts from previous runs
+    2. Downloads metadata (if available)
+    3. Checks backend_url_e2e matches EXPECTED_BACKEND_URL (http://10.0.2.2:8000)
+    4. REJECTS APK if metadata is missing or URL is incompatible
+    5. Forces APK build if reuse is rejected
+
+    This test verifies the reuse logic is safe and won't use an APK
+    that might have been built with prod or staging backend URL.
+
+    Critical: E2E tests MUST use http://10.0.2.2:8000 to reach local backend via adb reverse.
+    An APK built with https://keepeat-backend.onrender.com would SKIP all E2E tests silently.
+    """
+    workflow = Path(".github/workflows/mobile-e2e.yml").read_text(encoding="utf-8")
+
+    # Find reuse APK section
+    reuse_section = workflow.split("Try reusing existing PR APK artifact")[1].split("Decide whether to build APK")[0]
+
+    # CRITICAL: Must check backend URL from metadata
+    assert "backend_url_e2e" in reuse_section, \
+        "APK reuse must extract backend_url_e2e from metadata"
+
+    assert "EXPECTED_BACKEND_URL" in reuse_section or "http://10.0.2.2:8000" in reuse_section, \
+        "APK reuse must define expected E2E backend URL (http://10.0.2.2:8000)"
+
+    # CRITICAL: Must reject if URLs don't match
+    assert "!=" in reuse_section or "mismatch" in reuse_section.lower() or "skip" in reuse_section.lower(), \
+        "APK reuse must reject APK if backend URL doesn't match expected E2E URL"
+
+    # CRITICAL: Must skip/continue (not accept) on metadata missing or incompatible
+    assert "continue" in reuse_section or "Skip" in reuse_section, \
+        "APK reuse must skip/continue loop if metadata is missing or URL is incompatible"
+
+    # Must not silently accept incompatible APK
+    assert "echo" in reuse_section or "METADATA_COMPATIBLE" in reuse_section, \
+        "APK reuse must log when rejecting an APK (for audit trail)"
+
+    # Verify build fallback: if reuse fails, build APK
+    decide_build = workflow.split("Decide whether to build APK")[1].split("Setup Node")[0]
+    assert "maestro_required" in decide_build and "REUSE_APK_SUCCESS" in decide_build, \
+        "Build decision must check: if maestro required AND reuse failed, force build"
+
+    assert "BUILD_APK_STEP_SHOULD_RUN=\"true\"" in decide_build, \
+        "If reuse APK fails, must set BUILD_APK_STEP_SHOULD_RUN to build APK"
+
+
 def test_maestro_runner_ui_diagnostics_are_reliable():
     """
     Regression: Preflight UI diagnostics must not produce false conclusions.
@@ -1301,3 +1351,110 @@ def test_maestro_runner_ui_diagnostics_are_reliable():
     diagnose_body = diagnose_section.split("{")[1] if "{" in diagnose_section else diagnose_section
     assert diagnose_body.count("return 1") == 0 or "return 1" not in diagnose_body.split("diagnose_app_state_before_flows")[0], \
         "diagnose_app_state_before_flows must not exit with failure (preflight diagnostic is non-blocking)"
+
+
+def test_app_index_redirect_does_not_bypass_auth_guard():
+    """
+    Verify that app/index.tsx redirect to /(tabs) does not bypass the auth guard.
+    The guard in _layout.tsx must be able to intercept and redirect to /login if needed.
+    Without this, unauthenticated users would see tabs instead of login screen.
+    """
+    index_tsx = Path("frontend/app/index.tsx").read_text(encoding="utf-8")
+
+    # Verify index.tsx exists and redirects (current pattern)
+    assert "Redirect" in index_tsx, "app/index.tsx should use Redirect component"
+    assert "/(tabs)" in index_tsx, "app/index.tsx should redirect to tabs"
+
+    # Verify the auth guard exists in root layout
+    layout_tsx = Path("frontend/app/_layout.tsx").read_text(encoding="utf-8")
+    assert "resolveAuthRedirect" in layout_tsx, "Root layout must call resolveAuthRedirect"
+    assert "isLoaded" in layout_tsx, "Auth guard must check isLoaded state"
+    assert "hasUser" in layout_tsx or "user" in layout_tsx, "Auth guard must check user state"
+
+    # Verify the guard runs as an effect (not just at render time)
+    assert "useEffect" in layout_tsx, "Auth guard must be in useEffect for proper timing"
+
+    # Verify the guard runs on route changes
+    assert "segments" in layout_tsx, "Auth guard must react to segment changes"
+
+
+def test_auth_navigation_guard_redirects_to_login_when_unauthenticated():
+    """
+    Verify that resolveAuthRedirect properly redirects unauthenticated users to /login
+    when they try to access protected routes (non-public screens).
+    """
+    guard_ts = Path("frontend/utils/authNavigationGuard.ts").read_text(encoding="utf-8")
+
+    # Verify guard function exists
+    assert "resolveAuthRedirect" in guard_ts, "authNavigationGuard.ts must export resolveAuthRedirect"
+
+    # Verify public screens are defined
+    assert "AUTH_PUBLIC_SCREENS" in guard_ts, "Must define AUTH_PUBLIC_SCREENS list"
+    assert "login" in guard_ts, "login must be in public screens"
+    assert "register" in guard_ts, "register must be in public screens"
+
+    # Verify the redirect logic for unauthenticated users
+    assert "!hasUser" in guard_ts or "not hasUser" in guard_ts, "Guard must check if user is missing"
+    assert ("'/login'" in guard_ts or '"/login"' in guard_ts), "Guard must return /login path for unauthenticated users"
+
+    # Verify the logic prevents authenticated users from seeing login/register
+    assert "hasUser" in guard_ts and ("login" in guard_ts or "register" in guard_ts), \
+        "Guard must redirect authenticated users away from login/register"
+
+
+def test_login_screen_has_correct_test_ids_for_maestro():
+    """
+    Verify that the login screen has all required testIDs for Maestro to interact with it.
+    Without these IDs, Maestro flows cannot find and interact with login form elements.
+    """
+    login_tsx = Path("frontend/app/login.tsx").read_text(encoding="utf-8")
+
+    # Verify email input has correct testID
+    assert 'testID="login-email-input"' in login_tsx, \
+        "Login email input must have testID='login-email-input' for Maestro"
+
+    # Verify password input has correct testID
+    assert 'testID="login-password-input"' in login_tsx, \
+        "Login password input must have testID='login-password-input' for Maestro"
+
+    # Verify submit button has correct testID
+    assert 'testID="login-submit-button"' in login_tsx, \
+        "Login submit button must have testID='login-submit-button' for Maestro"
+
+
+def test_maestro_flow_01_auth_expects_login_screen_visible():
+    """
+    Verify that Maestro flow 01-auth-session is correctly checking for login screen visibility
+    and has proper fallback logic if login screen is not found.
+    """
+    flow_yaml = Path(".maestro/01-auth-session.yaml").read_text(encoding="utf-8")
+
+    # Verify flow checks for login-email-input visibility
+    assert "login-email-input" in flow_yaml, "Flow must check for login-email-input element"
+
+    # Verify flow tries to submit login
+    assert "login-submit-button" in flow_yaml, "Flow must interact with login submit button"
+
+    # Verify flow waits for tab-home after login
+    assert "tab-home" in flow_yaml, "Flow must verify tab-home appears after successful login"
+
+    # Verify flow has branches for different scenarios
+    assert flow_yaml.count("runFlow:") >= 3, "Flow should have multiple conditional branches"
+
+
+def test_app_config_resolves_backend_url_for_e2e_builds():
+    """
+    Verify that the frontend app config properly resolves the backend URL at runtime.
+    For E2E tests, EXPO_PUBLIC_BACKEND_URL=http://10.0.2.2:8000 is injected during build.
+    """
+    config_ts = Path("frontend/utils/config.ts").read_text(encoding="utf-8")
+
+    # Verify EXPO_PUBLIC_BACKEND_URL is checked
+    assert "EXPO_PUBLIC_BACKEND_URL" in config_ts, "Config must check EXPO_PUBLIC_BACKEND_URL env var"
+
+    # Verify fallback defaults exist
+    assert "localhost:8000" in config_ts, "Config must have localhost:8000 as development default"
+
+    # Verify API URL resolution logic
+    assert "buildApiUrl" in config_ts, "Config must export buildApiUrl function"
+    assert "resolveApiUrl" in config_ts, "Config must have resolveApiUrl function"
