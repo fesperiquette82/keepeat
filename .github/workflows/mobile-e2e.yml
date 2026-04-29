@@ -37,6 +37,11 @@ jobs:
       reason: ${{ steps.decision.outputs.reason }}
 
     steps:
+      - name: Checkout
+        uses: actions/checkout@v5
+        with:
+          fetch-depth: 0
+
       - name: Detect mobile-impacting changes
         id: filter
         uses: dorny/paths-filter@v3
