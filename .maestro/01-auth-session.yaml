@@ -101,11 +101,11 @@ appId: com.fesperiquette.keepeat
       - assertVisible:
           id: tab-home
 
-# Final safety net: Wait for home with extended timeout (60s for slow CI emulator boot)
+# Final safety net: Wait for home with extended timeout (120s for CI emulator slowness + warmup boot)
 - extendedWaitUntil:
     visible:
       id: tab-home
-    timeout: 60000
+    timeout: 120000
 
 # Final assertion: Home must be visible
 - assertVisible:

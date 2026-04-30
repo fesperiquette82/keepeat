@@ -273,6 +273,14 @@ stabilize_between_flows() {
   adb shell pm clear "$E2E_ANDROID_APP_ID" || true
   # Ensure app is fully stopped after pm clear (pm clear may auto-restart app)
   adb shell am force-stop "$E2E_ANDROID_APP_ID" || true
+
+  # Warmup boot: Launch app to initialize React Native completely
+  # This prevents app from starting in an intermediate "semi-dead" state in Maestro
+  adb shell am start -n "com.fesperiquette.keepeat/.MainActivity" || true
+  sleep 5
+
+  # Cold kill: Force-stop after warmup so Maestro relaunches with clean initialization
+  adb shell am force-stop "$E2E_ANDROID_APP_ID" || true
   sleep 3
 }
 

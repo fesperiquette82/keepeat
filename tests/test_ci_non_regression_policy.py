@@ -1568,15 +1568,34 @@ def test_maestro_runner_clears_app_data_between_flows():
     assert force_stop_in_pm_section >= 0 and app_id_in_pm_section >= 0, \
         "After pm clear, must call force-stop with $E2E_ANDROID_APP_ID"
 
-    # CRITICAL: Verify sleep duration is sufficient (at least 3 seconds)
-    # Insufficient sleep leaves app in intermediate state at flow start
+    # CRITICAL: Verify warmup boot sequence to prevent semi-dead app state
+    # After pm clear, React Native can remain partially initialized. Warmup forces full initialization.
+    assert "am start" in stabilize_section, \
+        "stabilize_between_flows must include warmup boot 'adb shell am start' to initialize React Native completely"
+
+    assert "com.fesperiquette.keepeat/.MainActivity" in stabilize_section, \
+        "Warmup boot must target the correct MainActivity"
+
+    # Verify sleep duration after warmup (at least 5 seconds for full initialization)
     import re
     sleep_matches = re.findall(r'sleep\s+(\d+)', stabilize_section)
-    assert len(sleep_matches) > 0, \
-        "stabilize_between_flows must include sleep to stabilize after stopping"
+    assert len(sleep_matches) >= 2, \
+        "stabilize_between_flows must include multiple sleeps: one for warmup boot (~5s), one after cold-kill (~3s)"
 
-    sleep_duration = int(sleep_matches[-1])  # Get last sleep duration
-    assert sleep_duration >= 3, \
-        f"Sleep after stabilize_between_flows must be at least 3 seconds for emulator to fully stop app (got {sleep_duration}s)"
+    # First sleep (after warmup boot) should be >= 5 seconds
+    warmup_sleep = int(sleep_matches[0])
+    assert warmup_sleep >= 5, \
+        f"Sleep after warmup boot must be at least 5 seconds for React Native initialization (got {warmup_sleep}s)"
+
+    # Verify cold-kill happens after warmup (force-stop the app so Maestro relaunches clean)
+    am_start_pos = stabilize_section.find("am start")
+    cold_kill_force_stop = stabilize_section[am_start_pos:]
+    assert "force-stop" in cold_kill_force_stop, \
+        "After warmup boot, must call force-stop to ensure clean cold restart for Maestro"
+
+    # Last sleep (after cold-kill) should be >= 3 seconds
+    final_sleep = int(sleep_matches[-1])
+    assert final_sleep >= 3, \
+        f"Sleep after cold-kill must be at least 3 seconds for emulator stabilization (got {final_sleep}s)"
 
 
