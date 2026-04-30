@@ -1594,14 +1594,21 @@ def test_maestro_runner_clears_app_data_between_flows():
     assert "force-stop" in cold_kill_force_stop, \
         "After warmup boot, must call force-stop to ensure clean cold restart for Maestro"
 
-    # Verify final stabilization sleep exists
+    # Verify sleep durations for app settling and stabilization
     import re
     sleep_matches = re.findall(r'sleep\s+(\d+)', stabilize_section)
-    assert len(sleep_matches) > 0, \
-        "stabilize_between_flows must include sleep for final stabilization"
+    assert len(sleep_matches) >= 2, \
+        "stabilize_between_flows must include: sleep for app settling (~5s) + sleep for final stabilization (~1s)"
 
+    # First sleep after wait_app_fully_initialized should be >= 5 seconds
+    # This allows React Native and navigation stack to fully render UI elements
+    app_settle_sleep = int(sleep_matches[0])
+    assert app_settle_sleep >= 5, \
+        f"Sleep after wait_app_fully_initialized must be at least 5 seconds for app UI to render (got {app_settle_sleep}s)"
+
+    # Final sleep after cold-kill should be >= 1 second
     final_sleep = int(sleep_matches[-1])
-    assert final_sleep >= 2, \
-        f"Sleep after cold-kill must be at least 2 seconds for emulator stabilization (got {final_sleep}s)"
+    assert final_sleep >= 1, \
+        f"Sleep after cold-kill must be at least 1 second for emulator stabilization (got {final_sleep}s)"
 
 
