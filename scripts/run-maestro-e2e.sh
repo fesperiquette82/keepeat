@@ -307,9 +307,12 @@ stabilize_between_flows() {
   # This can take 10-30 seconds on slow CI emulators
   wait_app_fully_initialized || true
 
-  # Let app settle after detection - React Native and navigation stack need time to render
-  # UI elements. Without this, app may appear in mCurrentFocus but not yet be interactive/renderable.
-  sleep 5
+  # Critical: Let app settle after pm clear
+  # After pm clear, React Native bundle cache + navigation state need extra time to stabilize.
+  # The app appears in mCurrentFocus but may not have valid UI rendered yet.
+  # Without sufficient time, Maestro relaunches to a blank state (neither login nor home visible).
+  # This extended sleep ensures React Native completes full initialization + renders valid UI.
+  sleep 15
 
   # Cold kill: Force-stop after warmup so Maestro relaunches with clean initialization
   adb shell am force-stop "$E2E_ANDROID_APP_ID" || true

@@ -1600,11 +1600,12 @@ def test_maestro_runner_clears_app_data_between_flows():
     assert len(sleep_matches) >= 2, \
         "stabilize_between_flows must include: sleep for app settling (~5s) + sleep for final stabilization (~1s)"
 
-    # First sleep after wait_app_fully_initialized should be >= 5 seconds
-    # This allows React Native and navigation stack to fully render UI elements
+    # First sleep after wait_app_fully_initialized should be >= 15 seconds
+    # After pm clear, React Native bundle cache + nav state need extended stabilization
+    # App may appear in mCurrentFocus but lack valid UI state without this extended sleep
     app_settle_sleep = int(sleep_matches[0])
-    assert app_settle_sleep >= 5, \
-        f"Sleep after wait_app_fully_initialized must be at least 5 seconds for app UI to render (got {app_settle_sleep}s)"
+    assert app_settle_sleep >= 15, \
+        f"Sleep after wait_app_fully_initialized must be at least 15 seconds for React Native + UI to fully stabilize after pm clear (got {app_settle_sleep}s)"
 
     # Final sleep after cold-kill should be >= 1 second
     final_sleep = int(sleep_matches[-1])
