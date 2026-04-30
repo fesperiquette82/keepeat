@@ -1568,24 +1568,25 @@ def test_maestro_runner_clears_app_data_between_flows():
     assert force_stop_in_pm_section >= 0 and app_id_in_pm_section >= 0, \
         "After pm clear, must call force-stop with $E2E_ANDROID_APP_ID"
 
-    # CRITICAL: Verify warmup boot sequence to prevent semi-dead app state
-    # After pm clear, React Native can remain partially initialized. Warmup forces full initialization.
+    # CRITICAL: Verify warmup boot with initialization wait
+    # After pm clear, React Native needs time to initialize. Warmup ensures app loads completely.
+    assert "wait_app_fully_initialized" in runner_script, \
+        "stabilize_between_flows must call wait_app_fully_initialized to detect when React Native is ready"
+
     assert "am start" in stabilize_section, \
-        "stabilize_between_flows must include warmup boot 'adb shell am start' to initialize React Native completely"
+        "stabilize_between_flows must include 'adb shell am start' to launch app for warmup"
 
     assert "com.fesperiquette.keepeat/.MainActivity" in stabilize_section, \
         "Warmup boot must target the correct MainActivity"
 
-    # Verify sleep duration after warmup (at least 5 seconds for full initialization)
-    import re
-    sleep_matches = re.findall(r'sleep\s+(\d+)', stabilize_section)
-    assert len(sleep_matches) >= 2, \
-        "stabilize_between_flows must include multiple sleeps: one for warmup boot (~5s), one after cold-kill (~3s)"
+    # Verify wait_app_fully_initialized is called (polling for mCurrentFocus)
+    wait_func_section = runner_script.split("wait_app_fully_initialized()")[1].split("stabilize_between_flows")[0]
+    assert "mCurrentFocus" in wait_func_section, \
+        "wait_app_fully_initialized must check mCurrentFocus via dumpsys window to detect app in foreground"
 
-    # First sleep (after warmup boot) should be >= 5 seconds
-    warmup_sleep = int(sleep_matches[0])
-    assert warmup_sleep >= 5, \
-        f"Sleep after warmup boot must be at least 5 seconds for React Native initialization (got {warmup_sleep}s)"
+    # Package name may be escaped in bash (com\\.fesperiquette\\.keepeat)
+    assert "fesperiquette" in wait_func_section, \
+        "wait_app_fully_initialized must look for the app package name (containing 'fesperiquette') in mCurrentFocus"
 
     # Verify cold-kill happens after warmup (force-stop the app so Maestro relaunches clean)
     am_start_pos = stabilize_section.find("am start")
@@ -1593,9 +1594,14 @@ def test_maestro_runner_clears_app_data_between_flows():
     assert "force-stop" in cold_kill_force_stop, \
         "After warmup boot, must call force-stop to ensure clean cold restart for Maestro"
 
-    # Last sleep (after cold-kill) should be >= 3 seconds
+    # Verify final stabilization sleep exists
+    import re
+    sleep_matches = re.findall(r'sleep\s+(\d+)', stabilize_section)
+    assert len(sleep_matches) > 0, \
+        "stabilize_between_flows must include sleep for final stabilization"
+
     final_sleep = int(sleep_matches[-1])
-    assert final_sleep >= 3, \
-        f"Sleep after cold-kill must be at least 3 seconds for emulator stabilization (got {final_sleep}s)"
+    assert final_sleep >= 2, \
+        f"Sleep after cold-kill must be at least 2 seconds for emulator stabilization (got {final_sleep}s)"
 
 

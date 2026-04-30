@@ -263,6 +263,31 @@ if [ "${#FLOW_FILES[@]}" -eq 0 ]; then
   exit 1
 fi
 
+wait_app_fully_initialized() {
+  local max_attempts=60
+  local attempt=1
+
+  while [ $attempt -le $max_attempts ]; do
+    # Check if app is visible (dumpsys shows app in mCurrentFocus)
+    local current_focus="$(adb shell dumpsys window | grep "mCurrentFocus" | grep -o "com\.fesperiquette\.keepeat" || true)"
+
+    if [ -n "$current_focus" ]; then
+      echo "==> App detected in foreground (attempt $attempt/$max_attempts)"
+      return 0
+    fi
+
+    if [ $((attempt % 10)) -eq 0 ]; then
+      echo "  App not fully visible yet (attempt $attempt/$max_attempts, waiting...)"
+    fi
+
+    sleep 1
+    attempt=$((attempt + 1))
+  done
+
+  echo "⚠️  App did not appear in foreground within timeout (may still be initializing)" >&2
+  return 1
+}
+
 stabilize_between_flows() {
   ensure_emulator_ready
   adb shell input keyevent 3 || true
@@ -274,14 +299,17 @@ stabilize_between_flows() {
   # Ensure app is fully stopped after pm clear (pm clear may auto-restart app)
   adb shell am force-stop "$E2E_ANDROID_APP_ID" || true
 
-  # Warmup boot: Launch app to initialize React Native completely
-  # This prevents app from starting in an intermediate "semi-dead" state in Maestro
-  adb shell am start -n "com.fesperiquette.keepeat/.MainActivity" || true
-  sleep 5
+  # Warmup boot: Launch app to let React Native initialize completely
+  # Don't wait for success - am start returns immediately, app loads in background
+  adb shell am start -n "com.fesperiquette.keepeat/.MainActivity" 2>&1 || true
+
+  # Wait for app to actually appear in foreground (indicates React Native initialization complete)
+  # This can take 10-30 seconds on slow CI emulators
+  wait_app_fully_initialized || true
 
   # Cold kill: Force-stop after warmup so Maestro relaunches with clean initialization
   adb shell am force-stop "$E2E_ANDROID_APP_ID" || true
-  sleep 3
+  sleep 2
 }
 
 declare -a FLOW_RESULTS
