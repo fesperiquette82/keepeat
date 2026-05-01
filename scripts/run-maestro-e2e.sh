@@ -243,6 +243,9 @@ sleep 8
 
 mkdir -p maestro-results
 
+echo "==> Starting logcat capture for diagnostics"
+bash scripts/capture-logcat.sh start maestro-results || true
+
 diagnose_app_state_before_flows
 
 FLOW_FILES=()
@@ -363,6 +366,12 @@ for flow_file in "${FLOW_FILES[@]}"; do
     fi
   fi
 done
+
+echo "==> Stopping logcat capture"
+bash scripts/capture-logcat.sh stop || true
+
+echo "==> Generating diagnostic HTML report"
+bash scripts/generate-e2e-report.sh maestro-results maestro-results/e2e-report.html || true
 
 adb logcat -d > emulator-logcat.txt || true
 
