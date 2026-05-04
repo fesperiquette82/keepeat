@@ -51,32 +51,42 @@ export default function LoginScreen() {
   };
 
   const handleLogin = async () => {
+    logger.info('[LOGIN_FORM] handleLogin called');
     setLocalError(null);
     clearError();
     setEmailNotVerified(false);
 
     if (!email.trim()) {
+      logger.info('[LOGIN_FORM] email validation failed: empty');
       setLocalError(fr ? 'Veuillez saisir votre adresse email.' : 'Please enter your email.');
       return;
     }
     if (!password) {
+      logger.info('[LOGIN_FORM] password validation failed: empty');
       setLocalError(fr ? 'Veuillez saisir votre mot de passe.' : 'Please enter your password.');
       return;
     }
 
+    logger.info('[LOGIN_FORM] validation passed, attempting login', { email: email.trim().toLowerCase() });
     setIsLoading(true);
     try {
+      logger.info('[LOGIN_FORM] calling authStore.login()');
       await login(email.trim().toLowerCase(), password);
+      logger.info('[LOGIN_FORM] authStore.login() succeeded, navigation managed by _layout.tsx');
       // La navigation est gérée par _layout.tsx via le changement d'état user
     } catch (err: any) {
+      logger.error('[LOGIN_FORM] authStore.login() failed', err);
       if (err.message === 'EMAIL_NOT_VERIFIED') {
+        logger.info('[LOGIN_FORM] email not verified');
         setEmailNotVerified(true);
       } else {
+        logger.error('[LOGIN_FORM] login error', { message: err.message });
         setLocalError(
           err.message || (fr ? 'Email ou mot de passe incorrect.' : 'Invalid email or password.')
         );
       }
     } finally {
+      logger.info('[LOGIN_FORM] handleLogin finally block, setting isLoading=false');
       setIsLoading(false);
     }
   };

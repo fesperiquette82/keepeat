@@ -72,19 +72,29 @@ interface AuthStore {
 }
 
 async function apiPost(endpoint: string, body: object): Promise<any> {
-  const response = await fetch(buildApiUrl(`/api/auth/${endpoint}`), {
-    method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify(body),
-  });
+  const url = buildApiUrl(`/api/auth/${endpoint}`);
+  console.log('[AUTH_API] POST request to:', url);
+  try {
+    const response = await fetch(url, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(body),
+    });
 
-  const data = await response.json();
+    console.log('[AUTH_API] response status:', response.status, 'ok:', response.ok);
+    const data = await response.json();
+    console.log('[AUTH_API] response data received');
 
-  if (!response.ok) {
-    throw new Error(data.detail || `Error ${response.status}`);
+    if (!response.ok) {
+      console.error('[AUTH_API] response not ok, detail:', data.detail);
+      throw new Error(data.detail || `Error ${response.status}`);
+    }
+
+    return data;
+  } catch (err: any) {
+    console.error('[AUTH_API] fetch failed:', err);
+    throw err;
   }
-
-  return data;
 }
 
 export const useAuthStore = create<AuthStore>((set) => ({
@@ -139,10 +149,14 @@ export const useAuthStore = create<AuthStore>((set) => ({
   },
 
   login: async (email, password) => {
+    console.log('[AUTH_STORE] login called with email:', email);
     set({ error: null });
     try {
+      console.log('[AUTH_STORE] calling apiPost to /api/auth/login');
       const data = await apiPost('login', { email, password });
+      console.log('[AUTH_STORE] apiPost succeeded, received response:', { has_token: !!data.access_token, has_user: !!data.user });
       const { access_token, user } = data as { access_token: string; user: AuthUser };
+      console.log('[AUTH_STORE] saving token and user to SecureStore');
       await SecureStore.setItemAsync(TOKEN_KEY, access_token);
       await SecureStore.setItemAsync(USER_KEY, JSON.stringify(user));
       const isBiometricSupported = SecureStore.canUseBiometricAuthentication();
@@ -161,6 +175,7 @@ export const useAuthStore = create<AuthStore>((set) => ({
           }
         }
       }
+      console.log('[AUTH_STORE] updating Zustand state with token and user');
       set({
         token: access_token,
         user,
@@ -168,9 +183,12 @@ export const useAuthStore = create<AuthStore>((set) => ({
         hasBiometricCredentials,
         isBiometricSupported,
       });
+      console.log('[AUTH_STORE] refreshing entitlements and usage');
       await useAuthStore.getState().refreshEntitlements();
       await useAuthStore.getState().refreshUsage();
+      console.log('[AUTH_STORE] login complete');
     } catch (err: any) {
+      console.error('[AUTH_STORE] login failed:', err);
       set({ error: err.message || 'Erreur de connexion' });
       throw err;
     }
