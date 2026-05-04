@@ -1613,3 +1613,39 @@ def test_maestro_runner_clears_app_data_between_flows():
         f"Sleep after cold-kill must be at least 1 second for emulator stabilization (got {final_sleep}s)"
 
 
+def test_app_index_auth_guard_prevents_maestro_race_condition():
+    """
+    Verify that app/index.tsx implements auth guard to prevent race condition.
+
+    Problem: If app/index.tsx uses simple <Redirect href="/(tabs)" />, it immediately
+    redirects to tabs before _layout.tsx auth guard can check if user is authenticated.
+    This creates a race condition where:
+    1. App loads with simple Redirect
+    2. Redirect fires synchronously → navigates to /(tabs)
+    3. Auth guard in _layout.tsx hasn't run yet
+    4. User is NOT authenticated but sees tabs
+    5. Maestro test fails: tab-home appears but shouldn't be accessible without login
+
+    Solution: app/index.tsx must check isLoaded and user state in useEffect before
+    calling router.replace. This delays redirect until auth is loaded.
+
+    Impact: Maestro tests 01-auth-session and 02-navigation-main-tabs now pass because
+    app correctly routes to login when authenticated state is unknown.
+    """
+    index_tsx = Path("frontend/app/index.tsx").read_text(encoding="utf-8")
+
+    # Verify the fix is in place
+    assert "isLoaded" in index_tsx, \
+        "app/index.tsx must check isLoaded to prevent redirecting before auth loads"
+    assert "useEffect" in index_tsx, \
+        "app/index.tsx must use useEffect to delay redirect until auth state is known"
+    assert "router.replace" in index_tsx, \
+        "app/index.tsx must use router.replace for conditional navigation"
+    assert "user" in index_tsx, \
+        "app/index.tsx must check user state to decide between /login and /(tabs)"
+
+    # Verify it's NOT using simple <Redirect> which would bypass timing
+    assert "Redirect" not in index_tsx or "router.replace" in index_tsx, \
+        "app/index.tsx must not use immediate <Redirect> without auth check"
+
+
