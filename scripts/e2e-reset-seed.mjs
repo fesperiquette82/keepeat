@@ -34,17 +34,38 @@ async function call(path) {
   return response.json();
 }
 
-async function waitForBackend(maxAttempts = 30) {
+async function waitForBackend(maxAttempts = 60) {
   for (let attempt = 1; attempt <= maxAttempts; attempt += 1) {
     try {
-      const response = await fetch(`${baseUrl}/health`);
-      if (response.ok) return;
+      // First check: /health endpoint (responds early)
+      const healthResponse = await fetch(`${baseUrl}/health`);
+      if (!healthResponse.ok) {
+        if (attempt % 10 === 0) console.log(`[e2e-reset-seed] health check attempt ${attempt}/${maxAttempts} (status ${healthResponse.status})`);
+        await new Promise((resolve) => setTimeout(resolve, 1000));
+        continue;
+      }
+
+      // Second check: POST /api/test/reset (only works when backend is truly ready)
+      // This ensures the backend has completed its full startup sequence
+      try {
+        const testResponse = await fetch(`${baseUrl}/api/test/reset`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+        });
+        // If POST works, backend is fully ready
+        if (testResponse.ok) return;
+        if (attempt % 10 === 0) console.log(`[e2e-reset-seed] reset test attempt ${attempt}/${maxAttempts} (status ${testResponse.status})`);
+      } catch (postError) {
+        // POST call failed, backend not ready yet
+        if (attempt % 10 === 0) console.log(`[e2e-reset-seed] reset test attempt ${attempt}/${maxAttempts} (error: ${postError.message})`);
+      }
     } catch {
-      // retry
+      // fetch itself failed, retry
+      if (attempt % 10 === 0) console.log(`[e2e-reset-seed] health check attempt ${attempt}/${maxAttempts} (fetch error)`);
     }
     await new Promise((resolve) => setTimeout(resolve, 1000));
   }
-  throw new Error(`Backend is unreachable at ${baseUrl}`);
+  throw new Error(`Backend is unreachable or not ready at ${baseUrl} after ${maxAttempts} attempts`);
 }
 
 async function main() {
