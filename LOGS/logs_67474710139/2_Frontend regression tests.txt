@@ -1,0 +1,1396 @@
+﻿2026-05-05T04:58:49.2110822Z Current runner version: '2.334.0'
+2026-05-05T04:58:49.2144273Z ##[group]Runner Image Provisioner
+2026-05-05T04:58:49.2145386Z Hosted Compute Agent
+2026-05-05T04:58:49.2146325Z Version: 20260213.493
+2026-05-05T04:58:49.2147471Z Commit: 5c115507f6dd24b8de37d8bbe0bb4509d0cc0fa3
+2026-05-05T04:58:49.2148474Z Build Date: 2026-02-13T00:28:41Z
+2026-05-05T04:58:49.2149588Z Worker ID: {cf69ba98-993a-4e01-81b7-b0eec1efee74}
+2026-05-05T04:58:49.2150577Z Azure Region: eastus
+2026-05-05T04:58:49.2151479Z ##[endgroup]
+2026-05-05T04:58:49.2153429Z ##[group]Operating System
+2026-05-05T04:58:49.2154328Z Ubuntu
+2026-05-05T04:58:49.2154941Z 24.04.4
+2026-05-05T04:58:49.2155755Z LTS
+2026-05-05T04:58:49.2156432Z ##[endgroup]
+2026-05-05T04:58:49.2157454Z ##[group]Runner Image
+2026-05-05T04:58:49.2158335Z Image: ubuntu-24.04
+2026-05-05T04:58:49.2159043Z Version: 20260413.86.1
+2026-05-05T04:58:49.2160966Z Included Software: https://github.com/actions/runner-images/blob/ubuntu24/20260413.86/images/ubuntu/Ubuntu2404-Readme.md
+2026-05-05T04:58:49.2163216Z Image Release: https://github.com/actions/runner-images/releases/tag/ubuntu24%2F20260413.86
+2026-05-05T04:58:49.2164818Z ##[endgroup]
+2026-05-05T04:58:49.2169451Z ##[group]GITHUB_TOKEN Permissions
+2026-05-05T04:58:49.2172475Z Actions: write
+2026-05-05T04:58:49.2173245Z ArtifactMetadata: write
+2026-05-05T04:58:49.2174293Z Attestations: write
+2026-05-05T04:58:49.2175029Z Checks: write
+2026-05-05T04:58:49.2175777Z Contents: write
+2026-05-05T04:58:49.2177176Z Deployments: write
+2026-05-05T04:58:49.2177997Z Discussions: write
+2026-05-05T04:58:49.2178705Z Issues: write
+2026-05-05T04:58:49.2179595Z Metadata: read
+2026-05-05T04:58:49.2180793Z Models: read
+2026-05-05T04:58:49.2181484Z Packages: write
+2026-05-05T04:58:49.2182339Z Pages: write
+2026-05-05T04:58:49.2183169Z PullRequests: write
+2026-05-05T04:58:49.2183969Z RepositoryProjects: write
+2026-05-05T04:58:49.2184987Z SecurityEvents: write
+2026-05-05T04:58:49.2185823Z Statuses: write
+2026-05-05T04:58:49.2186604Z VulnerabilityAlerts: read
+2026-05-05T04:58:49.2187769Z ##[endgroup]
+2026-05-05T04:58:49.2190707Z Secret source: Actions
+2026-05-05T04:58:49.2191990Z Prepare workflow directory
+2026-05-05T04:58:49.2746886Z Prepare all required actions
+2026-05-05T04:58:49.2800697Z Getting action download info
+2026-05-05T04:58:49.5085790Z Download action repository 'actions/checkout@v5' (SHA:93cb6efe18208431cddfb8368fd83d5badbf9bfd)
+2026-05-05T04:58:49.5969087Z Download action repository 'actions/setup-node@v5' (SHA:a0853c24544627f65ddf259abe73b1d18a591444)
+2026-05-05T04:58:49.9946418Z Complete job name: Frontend regression tests
+2026-05-05T04:58:50.0615975Z ##[group]Run actions/checkout@v5
+2026-05-05T04:58:50.0616727Z with:
+2026-05-05T04:58:50.0617348Z   repository: fesperiquette82/keepeat
+2026-05-05T04:58:50.0618021Z   token: ***
+2026-05-05T04:58:50.0618391Z   ssh-strict: true
+2026-05-05T04:58:50.0618821Z   ssh-user: git
+2026-05-05T04:58:50.0619208Z   persist-credentials: true
+2026-05-05T04:58:50.0619640Z   clean: true
+2026-05-05T04:58:50.0620026Z   sparse-checkout-cone-mode: true
+2026-05-05T04:58:50.0620507Z   fetch-depth: 1
+2026-05-05T04:58:50.0620881Z   fetch-tags: false
+2026-05-05T04:58:50.0621269Z   show-progress: true
+2026-05-05T04:58:50.0621654Z   lfs: false
+2026-05-05T04:58:50.0622004Z   submodules: false
+2026-05-05T04:58:50.0622396Z   set-safe-directory: true
+2026-05-05T04:58:50.0623013Z ##[endgroup]
+2026-05-05T04:58:50.1607662Z Syncing repository: fesperiquette82/keepeat
+2026-05-05T04:58:50.1609341Z ##[group]Getting Git version info
+2026-05-05T04:58:50.1610000Z Working directory is '/home/runner/work/keepeat/keepeat'
+2026-05-05T04:58:50.1611007Z [command]/usr/bin/git version
+2026-05-05T04:58:50.1631627Z git version 2.53.0
+2026-05-05T04:58:50.1650627Z ##[endgroup]
+2026-05-05T04:58:50.1663873Z Temporarily overriding HOME='/home/runner/work/_temp/7f124cde-a9ce-4afe-95ef-1a36e86baf34' before making global git config changes
+2026-05-05T04:58:50.1665220Z Adding repository directory to the temporary git global config as a safe directory
+2026-05-05T04:58:50.1669091Z [command]/usr/bin/git config --global --add safe.directory /home/runner/work/keepeat/keepeat
+2026-05-05T04:58:50.1703150Z Deleting the contents of '/home/runner/work/keepeat/keepeat'
+2026-05-05T04:58:50.1707857Z ##[group]Initializing the repository
+2026-05-05T04:58:50.1712798Z [command]/usr/bin/git init /home/runner/work/keepeat/keepeat
+2026-05-05T04:58:50.1776575Z hint: Using 'master' as the name for the initial branch. This default branch name
+2026-05-05T04:58:50.1778232Z hint: will change to "main" in Git 3.0. To configure the initial branch name
+2026-05-05T04:58:50.1779164Z hint: to use in all of your new repositories, which will suppress this warning,
+2026-05-05T04:58:50.1779858Z hint: call:
+2026-05-05T04:58:50.1780210Z hint:
+2026-05-05T04:58:50.1780674Z hint: 	git config --global init.defaultBranch <name>
+2026-05-05T04:58:50.1781233Z hint:
+2026-05-05T04:58:50.1781762Z hint: Names commonly chosen instead of 'master' are 'main', 'trunk' and
+2026-05-05T04:58:50.1782605Z hint: 'development'. The just-created branch can be renamed via this command:
+2026-05-05T04:58:50.1783291Z hint:
+2026-05-05T04:58:50.1783653Z hint: 	git branch -m <name>
+2026-05-05T04:58:50.1784117Z hint:
+2026-05-05T04:58:50.1784692Z hint: Disable this message with "git config set advice.defaultBranchName false"
+2026-05-05T04:58:50.1788538Z Initialized empty Git repository in /home/runner/work/keepeat/keepeat/.git/
+2026-05-05T04:58:50.1796881Z [command]/usr/bin/git remote add origin https://github.com/fesperiquette82/keepeat
+2026-05-05T04:58:50.1830170Z ##[endgroup]
+2026-05-05T04:58:50.1830919Z ##[group]Disabling automatic garbage collection
+2026-05-05T04:58:50.1833715Z [command]/usr/bin/git config --local gc.auto 0
+2026-05-05T04:58:50.1863397Z ##[endgroup]
+2026-05-05T04:58:50.1864398Z ##[group]Setting up auth
+2026-05-05T04:58:50.1870904Z [command]/usr/bin/git config --local --name-only --get-regexp core\.sshCommand
+2026-05-05T04:58:50.1906672Z [command]/usr/bin/git submodule foreach --recursive sh -c "git config --local --name-only --get-regexp 'core\.sshCommand' && git config --local --unset-all 'core.sshCommand' || :"
+2026-05-05T04:58:50.2219411Z [command]/usr/bin/git config --local --name-only --get-regexp http\.https\:\/\/github\.com\/\.extraheader
+2026-05-05T04:58:50.2254694Z [command]/usr/bin/git submodule foreach --recursive sh -c "git config --local --name-only --get-regexp 'http\.https\:\/\/github\.com\/\.extraheader' && git config --local --unset-all 'http.https://github.com/.extraheader' || :"
+2026-05-05T04:58:50.2512006Z [command]/usr/bin/git config --local --name-only --get-regexp ^includeIf\.gitdir:
+2026-05-05T04:58:50.2546445Z [command]/usr/bin/git submodule foreach --recursive git config --local --show-origin --name-only --get-regexp remote.origin.url
+2026-05-05T04:58:50.2794619Z [command]/usr/bin/git config --local http.https://github.com/.extraheader AUTHORIZATION: basic ***
+2026-05-05T04:58:50.2833683Z ##[endgroup]
+2026-05-05T04:58:50.2834369Z ##[group]Fetching the repository
+2026-05-05T04:58:50.2842591Z [command]/usr/bin/git -c protocol.version=2 fetch --no-tags --prune --no-recurse-submodules --depth=1 origin +4045a7d583f2ff4d6b8f4ca82acd0ab451325beb:refs/remotes/origin/codex/fix-ci-logic-for-maestro-checks
+2026-05-05T04:58:51.2211992Z From https://github.com/fesperiquette82/keepeat
+2026-05-05T04:58:51.2214394Z  * [new ref]         4045a7d583f2ff4d6b8f4ca82acd0ab451325beb -> origin/codex/fix-ci-logic-for-maestro-checks
+2026-05-05T04:58:51.2239384Z ##[endgroup]
+2026-05-05T04:58:51.2240377Z ##[group]Determining the checkout info
+2026-05-05T04:58:51.2241740Z ##[endgroup]
+2026-05-05T04:58:51.2248173Z [command]/usr/bin/git sparse-checkout disable
+2026-05-05T04:58:51.2287551Z [command]/usr/bin/git config --local --unset-all extensions.worktreeConfig
+2026-05-05T04:58:51.2315980Z ##[group]Checking out the ref
+2026-05-05T04:58:51.2321067Z [command]/usr/bin/git checkout --progress --force -B codex/fix-ci-logic-for-maestro-checks refs/remotes/origin/codex/fix-ci-logic-for-maestro-checks
+2026-05-05T04:58:51.9382013Z Switched to a new branch 'codex/fix-ci-logic-for-maestro-checks'
+2026-05-05T04:58:51.9383531Z branch 'codex/fix-ci-logic-for-maestro-checks' set up to track 'origin/codex/fix-ci-logic-for-maestro-checks'.
+2026-05-05T04:58:51.9406783Z ##[endgroup]
+2026-05-05T04:58:51.9449707Z [command]/usr/bin/git log -1 --format=%H
+2026-05-05T04:58:51.9473043Z 4045a7d583f2ff4d6b8f4ca82acd0ab451325beb
+2026-05-05T04:58:51.9710927Z ##[group]Run actions/setup-node@v5
+2026-05-05T04:58:51.9711254Z with:
+2026-05-05T04:58:51.9711468Z   node-version: 22
+2026-05-05T04:58:51.9711697Z   cache: npm
+2026-05-05T04:58:51.9711965Z   cache-dependency-path: frontend/package-lock.json
+2026-05-05T04:58:51.9712306Z   always-auth: false
+2026-05-05T04:58:51.9712537Z   check-latest: false
+2026-05-05T04:58:51.9712919Z   token: ***
+2026-05-05T04:58:51.9713159Z   package-manager-cache: true
+2026-05-05T04:58:51.9713436Z ##[endgroup]
+2026-05-05T04:58:52.1145751Z Found in cache @ /opt/hostedtoolcache/node/22.22.2/x64
+2026-05-05T04:58:52.1150237Z (node:2361) [DEP0040] DeprecationWarning: The `punycode` module is deprecated. Please use a userland alternative instead.
+2026-05-05T04:58:52.1151134Z (Use `node --trace-deprecation ...` to show where the warning was created)
+2026-05-05T04:58:52.1152552Z ##[group]Environment details
+2026-05-05T04:58:52.4152251Z node: v22.22.2
+2026-05-05T04:58:52.4152949Z npm: 10.9.7
+2026-05-05T04:58:52.4153399Z yarn: 1.22.22
+2026-05-05T04:58:52.4154306Z ##[endgroup]
+2026-05-05T04:58:52.4172730Z [command]/opt/hostedtoolcache/node/22.22.2/x64/bin/npm config get cache
+2026-05-05T04:58:52.5245162Z /home/runner/.npm
+2026-05-05T04:58:52.5937549Z Cache hit for: node-cache-Linux-x64-npm-07ee83690cbaac8c828e80941ec81b0f066556f5660a774826e9a87521fb671f
+2026-05-05T04:58:52.6036813Z (node:2361) [DEP0169] DeprecationWarning: `url.parse()` behavior is not standardized and prone to errors that have security implications. Use the WHATWG URL API instead. CVEs are not issued for `url.parse()` vulnerabilities.
+2026-05-05T04:58:53.2479122Z Received 117145253 of 117145253 (100.0%), 185.9 MBs/sec
+2026-05-05T04:58:53.2479999Z Cache Size: ~112 MB (117145253 B)
+2026-05-05T04:58:53.2506310Z [command]/usr/bin/tar -xf /home/runner/work/_temp/9934c09e-1145-484d-9b2b-c1be66332556/cache.tzst -P -C /home/runner/work/keepeat/keepeat --use-compress-program unzstd
+2026-05-05T04:58:53.6112543Z Cache restored successfully
+2026-05-05T04:58:53.6168168Z Cache restored from key: node-cache-Linux-x64-npm-07ee83690cbaac8c828e80941ec81b0f066556f5660a774826e9a87521fb671f
+2026-05-05T04:58:53.6392566Z ##[group]Run npm ci
+2026-05-05T04:58:53.6392862Z [36;1mnpm ci[0m
+2026-05-05T04:58:53.6426233Z shell: /usr/bin/bash -e {0}
+2026-05-05T04:58:53.6426508Z ##[endgroup]
+2026-05-05T04:58:57.8728637Z npm warn deprecated inflight@1.0.6: This module is not supported, and leaks memory. Do not use it. Check out lru-cache if you want a good and tested way to coalesce async requests by a key value, which is much more comprehensive and powerful.
+2026-05-05T04:58:57.9234324Z npm warn deprecated lodash.get@4.4.2: This package is deprecated. Use the optional chaining (?.) operator instead.
+2026-05-05T04:58:57.9477773Z npm warn deprecated rimraf@2.4.5: Rimraf versions prior to v4 are no longer supported
+2026-05-05T04:58:58.0391298Z npm warn deprecated rimraf@3.0.2: Rimraf versions prior to v4 are no longer supported
+2026-05-05T04:58:58.0550135Z npm warn deprecated @oclif/screen@3.0.8: Package no longer supported. Contact Support at https://www.npmjs.com/support for more info.
+2026-05-05T04:58:58.1602420Z npm warn deprecated glob@7.2.3: Old versions of glob are not supported, and contain widely publicized security vulnerabilities, which have been fixed in the current version. Please update. Support for old versions may be purchased (at exorbitant rates) by contacting i@izs.me
+2026-05-05T04:58:58.1615226Z npm warn deprecated glob@7.2.3: Old versions of glob are not supported, and contain widely publicized security vulnerabilities, which have been fixed in the current version. Please update. Support for old versions may be purchased (at exorbitant rates) by contacting i@izs.me
+2026-05-05T04:58:58.1618609Z npm warn deprecated glob@7.2.3: Old versions of glob are not supported, and contain widely publicized security vulnerabilities, which have been fixed in the current version. Please update. Support for old versions may be purchased (at exorbitant rates) by contacting i@izs.me
+2026-05-05T04:58:58.1620588Z npm warn deprecated glob@6.0.4: Old versions of glob are not supported, and contain widely publicized security vulnerabilities, which have been fixed in the current version. Please update. Support for old versions may be purchased (at exorbitant rates) by contacting i@izs.me
+2026-05-05T04:58:58.1658506Z npm warn deprecated glob@7.2.3: Old versions of glob are not supported, and contain widely publicized security vulnerabilities, which have been fixed in the current version. Please update. Support for old versions may be purchased (at exorbitant rates) by contacting i@izs.me
+2026-05-05T04:58:58.6754423Z npm warn deprecated uuid@3.4.0: Please upgrade  to version 7 or higher.  Older versions may use Math.random() in certain circumstances, which is known to be problematic.  See https://v8.dev/blog/math-random for details.
+2026-05-05T04:58:58.7218310Z npm warn deprecated @xmldom/xmldom@0.7.13: this version is no longer supported, please update to at least 0.8.*
+2026-05-05T04:59:00.4583645Z npm warn deprecated glob@10.5.0: Old versions of glob are not supported, and contain widely publicized security vulnerabilities, which have been fixed in the current version. Please update. Support for old versions may be purchased (at exorbitant rates) by contacting i@izs.me
+2026-05-05T04:59:13.0250340Z 
+2026-05-05T04:59:13.0251130Z added 1255 packages, and audited 1256 packages in 19s
+2026-05-05T04:59:13.0251450Z 
+2026-05-05T04:59:13.0251628Z 213 packages are looking for funding
+2026-05-05T04:59:13.0251929Z   run `npm fund` for details
+2026-05-05T04:59:13.1203395Z 
+2026-05-05T04:59:13.1204418Z 34 vulnerabilities (1 low, 22 moderate, 11 high)
+2026-05-05T04:59:13.1204807Z 
+2026-05-05T04:59:13.1205030Z To address issues that do not require attention, run:
+2026-05-05T04:59:13.1205358Z   npm audit fix
+2026-05-05T04:59:13.1205489Z 
+2026-05-05T04:59:13.1205746Z To address all issues possible (including breaking changes), run:
+2026-05-05T04:59:13.1206109Z   npm audit fix --force
+2026-05-05T04:59:13.1206287Z 
+2026-05-05T04:59:13.1206466Z Some issues need review, and may require choosing
+2026-05-05T04:59:13.1207468Z a different dependency.
+2026-05-05T04:59:13.1207635Z 
+2026-05-05T04:59:13.1207754Z Run `npm audit` for details.
+2026-05-05T04:59:13.2466819Z ##[group]Run npm run lint
+2026-05-05T04:59:13.2467343Z [36;1mnpm run lint[0m
+2026-05-05T04:59:13.2490966Z shell: /usr/bin/bash -e {0}
+2026-05-05T04:59:13.2491216Z ##[endgroup]
+2026-05-05T04:59:13.3458726Z 
+2026-05-05T04:59:13.3459109Z > frontend@1.0.0 lint
+2026-05-05T04:59:13.3459485Z > expo lint
+2026-05-05T04:59:13.3459664Z 
+2026-05-05T04:59:17.7379148Z ##[group]Run npm run test:ci
+2026-05-05T04:59:17.7379435Z [36;1mnpm run test:ci[0m
+2026-05-05T04:59:17.7402273Z shell: /usr/bin/bash -e {0}
+2026-05-05T04:59:17.7402521Z ##[endgroup]
+2026-05-05T04:59:17.8400517Z 
+2026-05-05T04:59:17.8400902Z > frontend@1.0.0 test:ci
+2026-05-05T04:59:17.8401605Z > npm run test:unit && npm run test:integration && npm run test:smoke
+2026-05-05T04:59:17.8402032Z 
+2026-05-05T04:59:17.9351926Z 
+2026-05-05T04:59:17.9352573Z > frontend@1.0.0 test:unit
+2026-05-05T04:59:17.9353486Z > npm run test:build && node --test .test-dist/utils/**/*.test.js .test-dist/data/**/*.test.js
+2026-05-05T04:59:17.9354024Z 
+2026-05-05T04:59:18.0354147Z 
+2026-05-05T04:59:18.0354773Z > frontend@1.0.0 test:build
+2026-05-05T04:59:18.0355394Z > rm -rf .test-dist && tsc -p tsconfig.test.json
+2026-05-05T04:59:18.0355748Z 
+2026-05-05T04:59:20.4589650Z TAP version 13
+2026-05-05T04:59:20.5322132Z # (node:2570) ExperimentalWarning: The MockTimers API is an experimental feature and might change at any time
+2026-05-05T04:59:20.5334655Z # (Use `node --trace-warnings ...` to show where the warning was created)
+2026-05-05T04:59:20.5399036Z # Subtest: le scope stock ne propose que des recettes avec au moins un ingrédient disponible et un plan anti-gaspi global unique
+2026-05-05T04:59:20.5408985Z ok 1 - le scope stock ne propose que des recettes avec au moins un ingrédient disponible et un plan anti-gaspi global unique
+2026-05-05T04:59:20.5437808Z   ---
+2026-05-05T04:59:20.5467875Z   duration_ms: 27.197898
+2026-05-05T04:59:20.5497587Z   type: 'test'
+2026-05-05T04:59:20.5498209Z   ...
+2026-05-05T04:59:20.5504520Z # Subtest: daysUntil gère les dates ISO sans dérive timezone (10 avril -> 25/30 avril)
+2026-05-05T04:59:20.5506080Z ok 2 - daysUntil gère les dates ISO sans dérive timezone (10 avril -> 25/30 avril)
+2026-05-05T04:59:20.5506930Z   ---
+2026-05-05T04:59:20.5507755Z   duration_ms: 0.807313
+2026-05-05T04:59:20.5508413Z   type: 'test'
+2026-05-05T04:59:20.5508905Z   ...
+2026-05-05T04:59:20.5509881Z # Subtest: filtre recettes: expiryMonth inclut 25/30 avril, expiryWeek reste vide au 10 avril
+2026-05-05T04:59:20.5511205Z ok 3 - filtre recettes: expiryMonth inclut 25/30 avril, expiryWeek reste vide au 10 avril
+2026-05-05T04:59:20.5512112Z   ---
+2026-05-05T04:59:20.5512603Z   duration_ms: 0.245523
+2026-05-05T04:59:20.5513137Z   type: 'test'
+2026-05-05T04:59:20.5513595Z   ...
+2026-05-05T04:59:20.5514443Z # Subtest: monotonie recettes: jour ⊂ semaine ⊂ mois ⊂ toutes
+2026-05-05T04:59:20.5515465Z ok 4 - monotonie recettes: jour ⊂ semaine ⊂ mois ⊂ toutes
+2026-05-05T04:59:20.5516167Z   ---
+2026-05-05T04:59:20.5516656Z   duration_ms: 0.510304
+2026-05-05T04:59:20.5517402Z   type: 'test'
+2026-05-05T04:59:20.5517890Z   ...
+2026-05-05T04:59:20.5519225Z # Subtest: monotonie stricte avec item sans date: day ⊆ week ⊆ month ⊆ stock (inclut sans date uniquement dans stock)
+2026-05-05T04:59:20.5520993Z ok 5 - monotonie stricte avec item sans date: day ⊆ week ⊆ month ⊆ stock (inclut sans date uniquement dans stock)
+2026-05-05T04:59:20.5522032Z   ---
+2026-05-05T04:59:20.5522531Z   duration_ms: 0.382305
+2026-05-05T04:59:20.5523069Z   type: 'test'
+2026-05-05T04:59:20.5523545Z   ...
+2026-05-05T04:59:20.5524676Z # Subtest: filtrage recettes: aucun ingrédient cible normalisable => aucune recette
+2026-05-05T04:59:20.5526053Z ok 6 - filtrage recettes: aucun ingrédient cible normalisable => aucune recette
+2026-05-05T04:59:20.5526871Z   ---
+2026-05-05T04:59:20.5527521Z   duration_ms: 0.125416
+2026-05-05T04:59:20.5528217Z   type: 'test'
+2026-05-05T04:59:20.5528676Z   ...
+2026-05-05T04:59:20.5529826Z # Subtest: filtrage recettes: exclut les recettes fallback génériques même si les ingrédients matchent
+2026-05-05T04:59:20.5531420Z ok 7 - filtrage recettes: exclut les recettes fallback génériques même si les ingrédients matchent
+2026-05-05T04:59:20.5532313Z   ---
+2026-05-05T04:59:20.5532776Z   duration_ms: 0.768796
+2026-05-05T04:59:20.5533287Z   type: 'test'
+2026-05-05T04:59:20.5533744Z   ...
+2026-05-05T04:59:20.5535051Z # Subtest: resolveStockItems expose l'image quand la payload stock fournit image_url
+2026-05-05T04:59:20.5536363Z ok 8 - resolveStockItems expose l'image quand la payload stock fournit image_url
+2026-05-05T04:59:20.5541718Z   ---
+2026-05-05T04:59:20.5542039Z   duration_ms: 0.2846
+2026-05-05T04:59:20.5542383Z   type: 'test'
+2026-05-05T04:59:20.5542675Z   ...
+2026-05-05T04:59:20.5543344Z # Subtest: resolveStockItems expose l'image quand la payload stock fournit imageUrl
+2026-05-05T04:59:20.5544361Z ok 9 - resolveStockItems expose l'image quand la payload stock fournit imageUrl
+2026-05-05T04:59:20.5544963Z   ---
+2026-05-05T04:59:20.5545235Z   duration_ms: 0.348665
+2026-05-05T04:59:20.5545544Z   type: 'test'
+2026-05-05T04:59:20.5545820Z   ...
+2026-05-05T04:59:20.5546533Z # Subtest: resolveStockItems expose l'image quand la payload stock contient product.image_url
+2026-05-05T04:59:20.5547952Z ok 10 - resolveStockItems expose l'image quand la payload stock contient product.image_url
+2026-05-05T04:59:20.5548587Z   ---
+2026-05-05T04:59:20.5548884Z   duration_ms: 0.436625
+2026-05-05T04:59:20.5549248Z   type: 'test'
+2026-05-05T04:59:20.5549789Z   ...
+2026-05-05T04:59:20.5550438Z # Subtest: resolveStockItems garde le placeholder UI quand aucune image valide n'existe
+2026-05-05T04:59:20.5551461Z ok 11 - resolveStockItems garde le placeholder UI quand aucune image valide n'existe
+2026-05-05T04:59:20.5552153Z   ---
+2026-05-05T04:59:20.5552508Z   duration_ms: 0.198694
+2026-05-05T04:59:20.5552927Z   type: 'test'
+2026-05-05T04:59:20.5553200Z   ...
+2026-05-05T04:59:20.5554984Z # Subtest: resolveStockItems conserve les doublons de nom quand les IDs sont différents (cas scan/ajouts multiples)
+2026-05-05T04:59:20.5556543Z ok 12 - resolveStockItems conserve les doublons de nom quand les IDs sont différents (cas scan/ajouts multiples)
+2026-05-05T04:59:20.5557985Z   ---
+2026-05-05T04:59:20.5558273Z   duration_ms: 0.16268
+2026-05-05T04:59:20.5558581Z   type: 'test'
+2026-05-05T04:59:20.5558853Z   ...
+2026-05-05T04:59:20.5615461Z # Subtest: isAdminUser retourne false sans user
+2026-05-05T04:59:20.5636156Z ok 13 - isAdminUser retourne false sans user
+2026-05-05T04:59:20.5636665Z   ---
+2026-05-05T04:59:20.5636944Z   duration_ms: 0.964576
+2026-05-05T04:59:20.5637846Z   type: 'test'
+2026-05-05T04:59:20.5638124Z   ...
+2026-05-05T04:59:20.5638835Z # Subtest: buildPeriodParams crée une fenêtre relative pour 7d
+2026-05-05T04:59:20.5639648Z ok 14 - buildPeriodParams crée une fenêtre relative pour 7d
+2026-05-05T04:59:20.5640103Z   ---
+2026-05-05T04:59:20.5640378Z   duration_ms: 1.564653
+2026-05-05T04:59:20.5640701Z   type: 'test'
+2026-05-05T04:59:20.5640978Z   ...
+2026-05-05T04:59:20.5641415Z # Subtest: buildPeriodParams conserve les dates custom
+2026-05-05T04:59:20.5642040Z ok 15 - buildPeriodParams conserve les dates custom
+2026-05-05T04:59:20.5642481Z   ---
+2026-05-05T04:59:20.5642754Z   duration_ms: 0.26395
+2026-05-05T04:59:20.5643061Z   type: 'test'
+2026-05-05T04:59:20.5643339Z   ...
+2026-05-05T04:59:20.5643735Z # Subtest: refuse les appels sans token auth
+2026-05-05T04:59:20.5644293Z ok 16 - refuse les appels sans token auth
+2026-05-05T04:59:20.5644678Z   ---
+2026-05-05T04:59:20.5644969Z   duration_ms: 0.802315
+2026-05-05T04:59:20.5645291Z   type: 'test'
+2026-05-05T04:59:20.5645566Z   ...
+2026-05-05T04:59:20.5646414Z # Subtest: en variante prod, les debug tools restent désactivés même si le flag est forcé
+2026-05-05T04:59:20.5647929Z ok 17 - en variante prod, les debug tools restent désactivés même si le flag est forcé
+2026-05-05T04:59:20.5648546Z   ---
+2026-05-05T04:59:20.5648831Z   duration_ms: 1.816345
+2026-05-05T04:59:20.5649152Z   type: 'test'
+2026-05-05T04:59:20.5649438Z   ...
+2026-05-05T04:59:20.5650221Z # Subtest: en variante debug, les debug tools peuvent être activés explicitement
+2026-05-05T04:59:20.5651262Z ok 18 - en variante debug, les debug tools peuvent être activés explicitement
+2026-05-05T04:59:20.5651816Z   ---
+2026-05-05T04:59:20.5652098Z   duration_ms: 0.498707
+2026-05-05T04:59:20.5652426Z   type: 'test'
+2026-05-05T04:59:20.5652708Z   ...
+2026-05-05T04:59:20.5727621Z # Subtest: ne redirige jamais tant que l’état auth n’est pas chargé
+2026-05-05T04:59:20.5741363Z ok 19 - ne redirige jamais tant que l’état auth n’est pas chargé
+2026-05-05T04:59:20.5759552Z   ---
+2026-05-05T04:59:20.5760315Z   duration_ms: 2.605321
+2026-05-05T04:59:20.5760990Z   type: 'test'
+2026-05-05T04:59:20.5761457Z   ...
+2026-05-05T04:59:20.5762402Z # Subtest: redirige vers /login quand utilisateur absent sur écran privé
+2026-05-05T04:59:20.5763552Z ok 20 - redirige vers /login quand utilisateur absent sur écran privé
+2026-05-05T04:59:20.5764246Z   ---
+2026-05-05T04:59:20.5764695Z   duration_ms: 0.159546
+2026-05-05T04:59:20.5765196Z   type: 'test'
+2026-05-05T04:59:20.5765645Z   ...
+2026-05-05T04:59:20.5766505Z # Subtest: ne redirige pas vers /login sur écrans publics sans utilisateur
+2026-05-05T04:59:20.5767814Z ok 21 - ne redirige pas vers /login sur écrans publics sans utilisateur
+2026-05-05T04:59:20.5768523Z   ---
+2026-05-05T04:59:20.5768963Z   duration_ms: 0.255097
+2026-05-05T04:59:20.5769474Z   type: 'test'
+2026-05-05T04:59:20.5769912Z   ...
+2026-05-05T04:59:20.5771042Z # Subtest: redirige un utilisateur connecté quittant login/register vers /
+2026-05-05T04:59:20.5772174Z ok 22 - redirige un utilisateur connecté quittant login/register vers /
+2026-05-05T04:59:20.5772879Z   ---
+2026-05-05T04:59:20.5773324Z   duration_ms: 0.226034
+2026-05-05T04:59:20.5773831Z   type: 'test'
+2026-05-05T04:59:20.5774269Z   ...
+2026-05-05T04:59:20.5775191Z # Subtest: ne force pas de redirection pour utilisateur connecté sur autres écrans
+2026-05-05T04:59:20.5776406Z ok 23 - ne force pas de redirection pour utilisateur connecté sur autres écrans
+2026-05-05T04:59:20.5777392Z   ---
+2026-05-05T04:59:20.5777877Z   duration_ms: 0.213456
+2026-05-05T04:59:20.5778373Z   type: 'test'
+2026-05-05T04:59:20.5778818Z   ...
+2026-05-05T04:59:20.5779548Z # Subtest: respecte une liste custom d’écrans publics
+2026-05-05T04:59:20.5785742Z ok 24 - respecte une liste custom d’écrans publics
+2026-05-05T04:59:20.5786888Z   ---
+2026-05-05T04:59:20.5787674Z   duration_ms: 0.290069
+2026-05-05T04:59:20.5788193Z   type: 'test'
+2026-05-05T04:59:20.5788727Z   ...
+2026-05-05T04:59:20.6089124Z # Subtest: serializeBiometricCredentials normalise l’email avant persistance
+2026-05-05T04:59:20.6090772Z ok 25 - serializeBiometricCredentials normalise l’email avant persistance
+2026-05-05T04:59:20.6095792Z   ---
+2026-05-05T04:59:20.6096356Z   duration_ms: 1.09614
+2026-05-05T04:59:20.6096954Z   type: 'test'
+2026-05-05T04:59:20.6097682Z   ...
+2026-05-05T04:59:20.6098451Z # Subtest: parseBiometricCredentials rejette les payloads invalides
+2026-05-05T04:59:20.6099554Z ok 26 - parseBiometricCredentials rejette les payloads invalides
+2026-05-05T04:59:20.6100279Z   ---
+2026-05-05T04:59:20.6100754Z   duration_ms: 0.254076
+2026-05-05T04:59:20.6101271Z   type: 'test'
+2026-05-05T04:59:20.6101734Z   ...
+2026-05-05T04:59:20.6102536Z # Subtest: parseBiometricCredentials retourne des credentials exploitables
+2026-05-05T04:59:20.6103705Z ok 27 - parseBiometricCredentials retourne des credentials exploitables
+2026-05-05T04:59:20.6104518Z   ---
+2026-05-05T04:59:20.6104999Z   duration_ms: 0.635459
+2026-05-05T04:59:20.6105508Z   type: 'test'
+2026-05-05T04:59:20.6105950Z   ...
+2026-05-05T04:59:20.6106717Z # Subtest: shouldDisplayBiometricLoginButton masque le bouton sur web
+2026-05-05T04:59:20.6108048Z ok 28 - shouldDisplayBiometricLoginButton masque le bouton sur web
+2026-05-05T04:59:20.6118990Z   ---
+2026-05-05T04:59:20.6125666Z   duration_ms: 0.165885
+2026-05-05T04:59:20.6126487Z   type: 'test'
+2026-05-05T04:59:20.6127353Z   ...
+2026-05-05T04:59:20.6128811Z # Subtest: isBiometricAuthenticationCancellationError détecte les annulations biométriques connues
+2026-05-05T04:59:20.6130531Z ok 29 - isBiometricAuthenticationCancellationError détecte les annulations biométriques connues
+2026-05-05T04:59:20.6131566Z   ---
+2026-05-05T04:59:20.6132070Z   duration_ms: 0.177782
+2026-05-05T04:59:20.6132637Z   type: 'test'
+2026-05-05T04:59:20.6133149Z   ...
+2026-05-05T04:59:20.6509114Z # Subtest: build metadata script generates readable file with stable fields
+2026-05-05T04:59:20.6510458Z ok 30 - build metadata script generates readable file with stable fields
+2026-05-05T04:59:20.6511256Z   ---
+2026-05-05T04:59:20.6511838Z   duration_ms: 45.625814
+2026-05-05T04:59:20.6512345Z   type: 'test'
+2026-05-05T04:59:20.6512779Z   ...
+2026-05-05T04:59:20.6657255Z # Subtest: expiryText retourne le libellé attendu pour chaque cas
+2026-05-05T04:59:20.6674482Z ok 31 - expiryText retourne le libellé attendu pour chaque cas
+2026-05-05T04:59:20.6701935Z   ---
+2026-05-05T04:59:20.6703767Z   duration_ms: 1.065294
+2026-05-05T04:59:20.6704390Z   type: 'test'
+2026-05-05T04:59:20.6704910Z   ...
+2026-05-05T04:59:20.6705725Z # Subtest: expiryColor retourne la couleur selon le niveau d'urgence
+2026-05-05T04:59:20.6706797Z ok 32 - expiryColor retourne la couleur selon le niveau d'urgence
+2026-05-05T04:59:20.6707895Z   ---
+2026-05-05T04:59:20.6708416Z   duration_ms: 0.215448
+2026-05-05T04:59:20.6708987Z   type: 'test'
+2026-05-05T04:59:20.6709575Z   ...
+2026-05-05T04:59:20.6710630Z # Subtest: normalizeIngredientName applique la normalisation demandée
+2026-05-05T04:59:20.6712361Z ok 33 - normalizeIngredientName applique la normalisation demandée
+2026-05-05T04:59:20.6713211Z   ---
+2026-05-05T04:59:20.6713719Z   duration_ms: 0.812671
+2026-05-05T04:59:20.6714264Z   type: 'test'
+2026-05-05T04:59:20.6714774Z   ...
+2026-05-05T04:59:20.6715845Z # Subtest: reconnaît les concepts tomate multilingues (Passierte Tomaten)
+2026-05-05T04:59:20.6717372Z ok 34 - reconnaît les concepts tomate multilingues (Passierte Tomaten)
+2026-05-05T04:59:20.6718201Z   ---
+2026-05-05T04:59:20.6718727Z   duration_ms: 0.503173
+2026-05-05T04:59:20.6719276Z   type: 'test'
+2026-05-05T04:59:20.6719776Z   ...
+2026-05-05T04:59:20.6720564Z # Subtest: évite un faux positif tomate sur ketchup
+2026-05-05T04:59:20.6721509Z ok 35 - évite un faux positif tomate sur ketchup
+2026-05-05T04:59:20.6722155Z   ---
+2026-05-05T04:59:20.6722658Z   duration_ms: 0.451988
+2026-05-05T04:59:20.6723211Z   type: 'test'
+2026-05-05T04:59:20.6723678Z   ...
+2026-05-05T04:59:20.6724422Z # Subtest: reconnaît oeuf/œufs/egg/eier
+2026-05-05T04:59:20.6725242Z ok 36 - reconnaît oeuf/œufs/egg/eier
+2026-05-05T04:59:20.6725866Z   ---
+2026-05-05T04:59:20.6726356Z   duration_ms: 0.205935
+2026-05-05T04:59:20.6726909Z   type: 'test'
+2026-05-05T04:59:20.6727659Z   ...
+2026-05-05T04:59:20.6728548Z # Subtest: matchRecipeIngredientsToStock retourne les ids attendus avec concepts
+2026-05-05T04:59:20.6729831Z ok 37 - matchRecipeIngredientsToStock retourne les ids attendus avec concepts
+2026-05-05T04:59:20.6730696Z   ---
+2026-05-05T04:59:20.6731179Z   duration_ms: 1.49566
+2026-05-05T04:59:20.6731733Z   type: 'test'
+2026-05-05T04:59:20.6732227Z   ...
+2026-05-05T04:59:20.6733331Z # Subtest: computeRecipeIngredientAvailability est cohérent avec le moteur robuste
+2026-05-05T04:59:20.6734816Z ok 38 - computeRecipeIngredientAvailability est cohérent avec le moteur robuste
+2026-05-05T04:59:20.6735717Z   ---
+2026-05-05T04:59:20.6736259Z   duration_ms: 0.560178
+2026-05-05T04:59:20.6736833Z   type: 'test'
+2026-05-05T04:59:20.6737576Z   ...
+2026-05-05T04:59:20.6924509Z # Subtest: gère correctement le passage décembre -> janvier
+2026-05-05T04:59:20.6929897Z ok 39 - gère correctement le passage décembre -> janvier
+2026-05-05T04:59:20.6930738Z   ---
+2026-05-05T04:59:20.6931215Z   duration_ms: 2.107235
+2026-05-05T04:59:20.6931719Z   type: 'test'
+2026-05-05T04:59:20.6932193Z   ...
+2026-05-05T04:59:20.6935602Z # Subtest: n’est pas impacté par une date de référence en année bissextile
+2026-05-05T04:59:20.6939429Z ok 40 - n’est pas impacté par une date de référence en année bissextile
+2026-05-05T04:59:20.6940173Z   ---
+2026-05-05T04:59:20.6940635Z   duration_ms: 0.379241
+2026-05-05T04:59:20.6941149Z   type: 'test'
+2026-05-05T04:59:20.6941598Z   ...
+2026-05-05T04:59:20.6951009Z # Subtest: couvre correctement un changement d’année
+2026-05-05T04:59:20.6951968Z ok 41 - couvre correctement un changement d’année
+2026-05-05T04:59:20.6952992Z   ---
+2026-05-05T04:59:20.6953492Z   duration_ms: 0.251963
+2026-05-05T04:59:20.6954011Z   type: 'test'
+2026-05-05T04:59:20.6954480Z   ...
+2026-05-05T04:59:20.6960250Z # Subtest: garantit l’absence de doublons
+2026-05-05T04:59:20.6963845Z ok 42 - garantit l’absence de doublons
+2026-05-05T04:59:20.6964484Z   ---
+2026-05-05T04:59:20.6964993Z   duration_ms: 0.289287
+2026-05-05T04:59:20.6965491Z   type: 'test'
+2026-05-05T04:59:20.6965948Z   ...
+2026-05-05T04:59:20.7123667Z # Subtest: resolveBackNavigationAction retourne back quand un historique est disponible
+2026-05-05T04:59:20.7140742Z ok 43 - resolveBackNavigationAction retourne back quand un historique est disponible
+2026-05-05T04:59:20.7141797Z   ---
+2026-05-05T04:59:20.7142288Z   duration_ms: 2.072293
+2026-05-05T04:59:20.7142820Z   type: 'test'
+2026-05-05T04:59:20.7167608Z   ...
+2026-05-05T04:59:20.7209137Z # Subtest: resolveBackNavigationAction retourne replace vers le fallback quand aucun historique n’existe
+2026-05-05T04:59:20.7238275Z ok 44 - resolveBackNavigationAction retourne replace vers le fallback quand aucun historique n’existe
+2026-05-05T04:59:20.7254833Z   ---
+2026-05-05T04:59:20.7255396Z   duration_ms: 0.158554
+2026-05-05T04:59:20.7255940Z   type: 'test'
+2026-05-05T04:59:20.7256384Z   ...
+2026-05-05T04:59:20.7258839Z # Subtest: resolveBackNavigationAction utilise le fallback par défaut si non fourni
+2026-05-05T04:59:20.7260286Z ok 45 - resolveBackNavigationAction utilise le fallback par défaut si non fourni
+2026-05-05T04:59:20.7261092Z   ---
+2026-05-05T04:59:20.7261549Z   duration_ms: 0.157333
+2026-05-05T04:59:20.7262042Z   type: 'test'
+2026-05-05T04:59:20.7262499Z   ...
+2026-05-05T04:59:20.7263366Z # Subtest: resolveBackNavigationAction supporte un fallback explicite vers le tab stock
+2026-05-05T04:59:20.7264590Z ok 46 - resolveBackNavigationAction supporte un fallback explicite vers le tab stock
+2026-05-05T04:59:20.7265383Z   ---
+2026-05-05T04:59:20.7265809Z   duration_ms: 0.180477
+2026-05-05T04:59:20.7266299Z   type: 'test'
+2026-05-05T04:59:20.7266761Z   ...
+2026-05-05T04:59:20.8337628Z # Subtest: persistProductEdit met à jour le produit puis rafraîchit le stock
+2026-05-05T04:59:20.8339226Z ok 47 - persistProductEdit met à jour le produit puis rafraîchit le stock
+2026-05-05T04:59:20.8340081Z   ---
+2026-05-05T04:59:20.8340543Z   duration_ms: 2.492454
+2026-05-05T04:59:20.8341070Z   type: 'test'
+2026-05-05T04:59:20.8341534Z   ...
+2026-05-05T04:59:20.8343490Z # Subtest: persistProductEdit n'actualise pas le stock si la sauvegarde échoue
+2026-05-05T04:59:20.8346280Z ok 48 - persistProductEdit n'actualise pas le stock si la sauvegarde échoue
+2026-05-05T04:59:20.8347350Z   ---
+2026-05-05T04:59:20.8347840Z   duration_ms: 0.286143
+2026-05-05T04:59:20.8348356Z   type: 'test'
+2026-05-05T04:59:20.8348826Z   ...
+2026-05-05T04:59:20.8349550Z # Subtest: toApiExpiryDate normalise les dates au format API
+2026-05-05T04:59:20.8350451Z ok 49 - toApiExpiryDate normalise les dates au format API
+2026-05-05T04:59:20.8351167Z   ---
+2026-05-05T04:59:20.8351646Z   duration_ms: 1.320823
+2026-05-05T04:59:20.8352158Z   type: 'test'
+2026-05-05T04:59:20.8352610Z   ...
+2026-05-05T04:59:20.8493982Z # Subtest: le bouton modifier expose un libellé discret et lisible
+2026-05-05T04:59:20.8518729Z ok 50 - le bouton modifier expose un libellé discret et lisible
+2026-05-05T04:59:20.8559862Z   ---
+2026-05-05T04:59:20.8560615Z   duration_ms: 0.810969
+2026-05-05T04:59:20.8561149Z   type: 'test'
+2026-05-05T04:59:20.8561539Z   ...
+2026-05-05T04:59:20.8562603Z # Subtest: la navigation d'édition pointe vers le flux partagé de correction produit
+2026-05-05T04:59:20.8563842Z ok 51 - la navigation d'édition pointe vers le flux partagé de correction produit
+2026-05-05T04:59:20.8564581Z   ---
+2026-05-05T04:59:20.8564963Z   duration_ms: 0.85262
+2026-05-05T04:59:20.8565424Z   type: 'test'
+2026-05-05T04:59:20.8565794Z   ...
+2026-05-05T04:59:20.8566763Z # Subtest: produit OCR sans date explicite calcule une date estimée via règle de catégorie
+2026-05-05T04:59:20.8569020Z ok 52 - produit OCR sans date explicite calcule une date estimée via règle de catégorie
+2026-05-05T04:59:20.8569796Z   ---
+2026-05-05T04:59:20.8570191Z   duration_ms: 1.226953
+2026-05-05T04:59:20.8570647Z   type: 'test'
+2026-05-05T04:59:20.8571015Z   ...
+2026-05-05T04:59:20.8572123Z # Subtest: fallback zone: si la zone choisie n’a pas de durée, on utilise une autre durée disponible
+2026-05-05T04:59:20.8573833Z ok 53 - fallback zone: si la zone choisie n’a pas de durée, on utilise une autre durée disponible
+2026-05-05T04:59:20.8575006Z   ---
+2026-05-05T04:59:20.8575508Z   duration_ms: 0.188028
+2026-05-05T04:59:20.8575978Z   type: 'test'
+2026-05-05T04:59:20.8576364Z   ...
+2026-05-05T04:59:20.8577674Z # Subtest: quand Gemini ne renvoie pas de durée explicite mais un fallback existe, la date est calculée
+2026-05-05T04:59:20.8579085Z ok 54 - quand Gemini ne renvoie pas de durée explicite mais un fallback existe, la date est calculée
+2026-05-05T04:59:20.8579904Z   ---
+2026-05-05T04:59:20.8580276Z   duration_ms: 0.152385
+2026-05-05T04:59:20.8580763Z   type: 'test'
+2026-05-05T04:59:20.8581137Z   ...
+2026-05-05T04:59:20.8581958Z # Subtest: utilise la date estimée explicite quand fournie par OCR/Gemini
+2026-05-05T04:59:20.8583306Z ok 55 - utilise la date estimée explicite quand fournie par OCR/Gemini
+2026-05-05T04:59:20.8583951Z   ---
+2026-05-05T04:59:20.8584332Z   duration_ms: 0.131865
+2026-05-05T04:59:20.8584788Z   type: 'test'
+2026-05-05T04:59:20.8585162Z   ...
+2026-05-05T04:59:20.8586000Z # Subtest: zone par défaut cohérente pour réduire les cas sans estimation
+2026-05-05T04:59:20.8587320Z ok 56 - zone par défaut cohérente pour réduire les cas sans estimation
+2026-05-05T04:59:20.8587996Z   ---
+2026-05-05T04:59:20.8588370Z   duration_ms: 0.117424
+2026-05-05T04:59:20.8588829Z   type: 'test'
+2026-05-05T04:59:20.8589200Z   ...
+2026-05-05T04:59:20.8590052Z # Subtest: erreur réseau/serveur → fallback (image conservée pour envoi manuel)
+2026-05-05T04:59:20.8591174Z ok 57 - erreur réseau/serveur → fallback (image conservée pour envoi manuel)
+2026-05-05T04:59:20.8591895Z   ---
+2026-05-05T04:59:20.8592267Z   duration_ms: 1.284058
+2026-05-05T04:59:20.8592721Z   type: 'test'
+2026-05-05T04:59:20.8593096Z   ...
+2026-05-05T04:59:20.8593733Z # Subtest: erreur HTTP 502 non-premium → fallback
+2026-05-05T04:59:20.8594470Z ok 58 - erreur HTTP 502 non-premium → fallback
+2026-05-05T04:59:20.8595013Z   ---
+2026-05-05T04:59:20.8595377Z   duration_ms: 0.254386
+2026-05-05T04:59:20.8595817Z   type: 'test'
+2026-05-05T04:59:20.8596176Z   ...
+2026-05-05T04:59:20.8596847Z # Subtest: erreur PREMIUM_REQUIRED → premium (paywall)
+2026-05-05T04:59:20.8607949Z ok 59 - erreur PREMIUM_REQUIRED → premium (paywall)
+2026-05-05T04:59:20.8627526Z   ---
+2026-05-05T04:59:20.8665373Z   duration_ms: 0.228178
+2026-05-05T04:59:20.8687604Z   type: 'test'
+2026-05-05T04:59:20.8717695Z   ...
+2026-05-05T04:59:20.8719069Z # Subtest: erreur QUOTA_EXCEEDED → premium (paywall)
+2026-05-05T04:59:20.8748151Z ok 60 - erreur QUOTA_EXCEEDED → premium (paywall)
+2026-05-05T04:59:20.8767650Z   ---
+2026-05-05T04:59:20.8798938Z   duration_ms: 0.231282
+2026-05-05T04:59:20.8814771Z   type: 'test'
+2026-05-05T04:59:20.8867701Z   ...
+2026-05-05T04:59:20.8869066Z # Subtest: la liste des points d’entrée couvre toutes les mutations stock attendues sans doublon
+2026-05-05T04:59:20.8878319Z ok 61 - la liste des points d’entrée couvre toutes les mutations stock attendues sans doublon
+2026-05-05T04:59:20.8894789Z   ---
+2026-05-05T04:59:20.8896793Z   duration_ms: 1.598553
+2026-05-05T04:59:20.8917851Z   type: 'test'
+2026-05-05T04:59:20.8918265Z   ...
+2026-05-05T04:59:20.8919361Z # Subtest: recalcule une source de vérité dédupliquée après ajout manuel / barcode / OCR
+2026-05-05T04:59:20.8920655Z ok 62 - recalcule une source de vérité dédupliquée après ajout manuel / barcode / OCR
+2026-05-05T04:59:20.8929966Z   ---
+2026-05-05T04:59:20.8930380Z   duration_ms: 10.637682
+2026-05-05T04:59:20.8930824Z   type: 'test'
+2026-05-05T04:59:20.8931196Z   ...
+2026-05-05T04:59:20.8932049Z # Subtest: recalcule après modification / suppression / consommation / jet
+2026-05-05T04:59:20.8933564Z ok 63 - recalcule après modification / suppression / consommation / jet
+2026-05-05T04:59:20.8934288Z   ---
+2026-05-05T04:59:20.8934656Z   duration_ms: 4.352383
+2026-05-05T04:59:20.8935067Z   type: 'test'
+2026-05-05T04:59:20.8935424Z   ...
+2026-05-05T04:59:20.8936290Z # Subtest: un produit avec vraie recette associée reste visible dans le détail
+2026-05-05T04:59:20.8937565Z ok 64 - un produit avec vraie recette associée reste visible dans le détail
+2026-05-05T04:59:20.8938233Z   ---
+2026-05-05T04:59:20.8938591Z   duration_ms: 5.784739
+2026-05-05T04:59:20.8939011Z   type: 'test'
+2026-05-05T04:59:20.8939377Z   ...
+2026-05-05T04:59:20.8940280Z # Subtest: un produit sans recette associée ne reçoit pas de recette non liée après mutation
+2026-05-05T04:59:20.8941533Z ok 65 - un produit sans recette associée ne reçoit pas de recette non liée après mutation
+2026-05-05T04:59:20.8942247Z   ---
+2026-05-05T04:59:20.8942596Z   duration_ms: 2.878785
+2026-05-05T04:59:20.8942996Z   type: 'test'
+2026-05-05T04:59:20.8943383Z   ...
+2026-05-05T04:59:20.8944232Z # Subtest: détecte un démarrage froid quand aucun lot de recettes n'est en cache
+2026-05-05T04:59:20.8945574Z ok 66 - détecte un démarrage froid quand aucun lot de recettes n'est en cache
+2026-05-05T04:59:20.8946254Z   ---
+2026-05-05T04:59:20.8946608Z   duration_ms: 1.176018
+2026-05-05T04:59:20.8947179Z   type: 'test'
+2026-05-05T04:59:20.8947560Z   ...
+2026-05-05T04:59:20.8948448Z # Subtest: n'active pas le bootstrap si au moins un lot de recettes est déjà en cache
+2026-05-05T04:59:20.8949673Z ok 67 - n'active pas le bootstrap si au moins un lot de recettes est déjà en cache
+2026-05-05T04:59:20.8950379Z   ---
+2026-05-05T04:59:20.8950749Z   duration_ms: 0.248458
+2026-05-05T04:59:20.8951167Z   type: 'test'
+2026-05-05T04:59:20.8951529Z   ...
+2026-05-05T04:59:20.9068993Z # Subtest: ouverture recette avec cache hydraté: lecture locale immédiate, aucun fetch backend
+2026-05-05T04:59:20.9070373Z ok 68 - ouverture recette avec cache hydraté: lecture locale immédiate, aucun fetch backend
+2026-05-05T04:59:20.9071040Z   ---
+2026-05-05T04:59:20.9071329Z   duration_ms: 1.076301
+2026-05-05T04:59:20.9071682Z   type: 'test'
+2026-05-05T04:59:20.9071947Z   ...
+2026-05-05T04:59:20.9072804Z # Subtest: ouvertures répétées pendant une requête déjà en cours: pas d avalanche de refresh
+2026-05-05T04:59:20.9074020Z ok 69 - ouvertures répétées pendant une requête déjà en cours: pas d avalanche de refresh
+2026-05-05T04:59:20.9074641Z   ---
+2026-05-05T04:59:20.9074905Z   duration_ms: 0.213496
+2026-05-05T04:59:20.9075213Z   type: 'test'
+2026-05-05T04:59:20.9075486Z   ...
+2026-05-05T04:59:20.9076294Z # Subtest: cache absent et aucune requête en cours: un fetch backend unique est autorisé
+2026-05-05T04:59:20.9077596Z ok 70 - cache absent et aucune requête en cours: un fetch backend unique est autorisé
+2026-05-05T04:59:20.9078192Z   ---
+2026-05-05T04:59:20.9078461Z   duration_ms: 0.259214
+2026-05-05T04:59:20.9078783Z   type: 'test'
+2026-05-05T04:59:20.9079045Z   ...
+2026-05-05T04:59:20.9318647Z # Subtest: retour recette: utilise back quand un historique existe
+2026-05-05T04:59:20.9319874Z ok 71 - retour recette: utilise back quand un historique existe
+2026-05-05T04:59:20.9337945Z   ---
+2026-05-05T04:59:20.9338540Z   duration_ms: 1.997563
+2026-05-05T04:59:20.9339039Z   type: 'test'
+2026-05-05T04:59:20.9339485Z   ...
+2026-05-05T04:59:20.9340338Z # Subtest: retour recette: fallback explicite vers /(tabs)/recipes sans historique
+2026-05-05T04:59:20.9341503Z ok 72 - retour recette: fallback explicite vers /(tabs)/recipes sans historique
+2026-05-05T04:59:20.9342265Z   ---
+2026-05-05T04:59:20.9342694Z   duration_ms: 0.234867
+2026-05-05T04:59:20.9343181Z   type: 'test'
+2026-05-05T04:59:20.9343574Z   ...
+2026-05-05T04:59:20.9483110Z # Subtest: formatFrenchRecipeText restaure les accents usuels et apostrophes de recette
+2026-05-05T04:59:20.9489359Z ok 73 - formatFrenchRecipeText restaure les accents usuels et apostrophes de recette
+2026-05-05T04:59:20.9490255Z   ---
+2026-05-05T04:59:20.9491330Z   duration_ms: 2.504502
+2026-05-05T04:59:20.9491934Z   type: 'test'
+2026-05-05T04:59:20.9492397Z   ...
+2026-05-05T04:59:20.9493231Z # Subtest: formatFrenchRecipeText conserve la casse sur les remplacements
+2026-05-05T04:59:20.9495657Z ok 74 - formatFrenchRecipeText conserve la casse sur les remplacements
+2026-05-05T04:59:20.9496375Z   ---
+2026-05-05T04:59:20.9496810Z   duration_ms: 0.299332
+2026-05-05T04:59:20.9497759Z   type: 'test'
+2026-05-05T04:59:20.9498189Z   ...
+2026-05-05T04:59:20.9669647Z # Subtest: un ingrédient lié à un article stock avec image expose la vignette
+2026-05-05T04:59:20.9673055Z ok 75 - un ingrédient lié à un article stock avec image expose la vignette
+2026-05-05T04:59:20.9673781Z   ---
+2026-05-05T04:59:20.9674240Z   duration_ms: 1.834962
+2026-05-05T04:59:20.9674695Z   type: 'test'
+2026-05-05T04:59:20.9675111Z   ...
+2026-05-05T04:59:20.9681812Z # Subtest: un ingrédient disponible sans image utilise le placeholder
+2026-05-05T04:59:20.9685820Z ok 76 - un ingrédient disponible sans image utilise le placeholder
+2026-05-05T04:59:20.9686511Z   ---
+2026-05-05T04:59:20.9686925Z   duration_ms: 0.267565
+2026-05-05T04:59:20.9688456Z   type: 'test'
+2026-05-05T04:59:20.9688896Z   ...
+2026-05-05T04:59:20.9701012Z # Subtest: un ingrédient manquant ne casse pas le rendu
+2026-05-05T04:59:20.9707455Z ok 77 - un ingrédient manquant ne casse pas le rendu
+2026-05-05T04:59:20.9708120Z   ---
+2026-05-05T04:59:20.9708571Z   duration_ms: 0.292763
+2026-05-05T04:59:20.9709052Z   type: 'test'
+2026-05-05T04:59:20.9709477Z   ...
+2026-05-05T04:59:20.9710209Z # Subtest: la logique de mapping existante retrouve la meilleure image produit
+2026-05-05T04:59:20.9719702Z ok 78 - la logique de mapping existante retrouve la meilleure image produit
+2026-05-05T04:59:20.9720434Z   ---
+2026-05-05T04:59:20.9720865Z   duration_ms: 0.890957
+2026-05-05T04:59:20.9721343Z   type: 'test'
+2026-05-05T04:59:20.9721783Z   ...
+2026-05-05T04:59:20.9933039Z # Subtest: affiche une quantité numérique + unité naturelle pour les pièces (œufs)
+2026-05-05T04:59:20.9958332Z ok 79 - affiche une quantité numérique + unité naturelle pour les pièces (œufs)
+2026-05-05T04:59:20.9987689Z   ---
+2026-05-05T04:59:20.9988247Z   duration_ms: 1.391186
+2026-05-05T04:59:21.0010395Z   type: 'test'
+2026-05-05T04:59:21.0010677Z   ...
+2026-05-05T04:59:21.0011356Z # Subtest: recalcule les quantités selon le nombre de personnes
+2026-05-05T04:59:21.0012203Z ok 80 - recalcule les quantités selon le nombre de personnes
+2026-05-05T04:59:21.0012602Z   ---
+2026-05-05T04:59:21.0012848Z   duration_ms: 0.28447
+2026-05-05T04:59:21.0013153Z   type: 'test'
+2026-05-05T04:59:21.0013420Z   ...
+2026-05-05T04:59:21.0013958Z # Subtest: formate correctement les unités g/ml/pièce/cuillère
+2026-05-05T04:59:21.0014658Z ok 81 - formate correctement les unités g/ml/pièce/cuillère
+2026-05-05T04:59:21.0015064Z   ---
+2026-05-05T04:59:21.0015317Z   duration_ms: 0.444977
+2026-05-05T04:59:21.0015589Z   type: 'test'
+2026-05-05T04:59:21.0015828Z   ...
+2026-05-05T04:59:21.0016535Z # Subtest: la normalisation frontend n’utilise plus "portion" comme fallback principal
+2026-05-05T04:59:21.0017548Z ok 82 - la normalisation frontend n’utilise plus "portion" comme fallback principal
+2026-05-05T04:59:21.0017943Z   ---
+2026-05-05T04:59:21.0018128Z   duration_ms: 0.410748
+2026-05-05T04:59:21.0018337Z   type: 'test'
+2026-05-05T04:59:21.0018514Z   ...
+2026-05-05T04:59:21.0018930Z # Subtest: sans unité ou sans quantité, on garde un fallback lisible
+2026-05-05T04:59:21.0019476Z ok 83 - sans unité ou sans quantité, on garde un fallback lisible
+2026-05-05T04:59:21.0019781Z   ---
+2026-05-05T04:59:21.0019959Z   duration_ms: 0.136612
+2026-05-05T04:59:21.0020154Z   type: 'test'
+2026-05-05T04:59:21.0020332Z   ...
+2026-05-05T04:59:21.0020747Z # Subtest: le pluriel français reste cohérent pour les unités principales
+2026-05-05T04:59:21.0021307Z ok 84 - le pluriel français reste cohérent pour les unités principales
+2026-05-05T04:59:21.0021613Z   ---
+2026-05-05T04:59:21.0021778Z   duration_ms: 0.179725
+2026-05-05T04:59:21.0022311Z   type: 'test'
+2026-05-05T04:59:21.0022483Z   ...
+2026-05-05T04:59:21.0065480Z # Subtest: préfère ingredients[] structuré quand présent
+2026-05-05T04:59:21.0073297Z ok 85 - préfère ingredients[] structuré quand présent
+2026-05-05T04:59:21.0073930Z   ---
+2026-05-05T04:59:21.0074369Z   duration_ms: 1.8
+2026-05-05T04:59:21.0074807Z   type: 'test'
+2026-05-05T04:59:21.0075211Z   ...
+2026-05-05T04:59:21.0079792Z # Subtest: fallback legacy reste fonctionnel sans ingredients[]
+2026-05-05T04:59:21.0080779Z ok 86 - fallback legacy reste fonctionnel sans ingredients[]
+2026-05-05T04:59:21.0081377Z   ---
+2026-05-05T04:59:21.0081803Z   duration_ms: 1.542239
+2026-05-05T04:59:21.0082225Z   type: 'test'
+2026-05-05T04:59:21.0082628Z   ...
+2026-05-05T04:59:21.0083595Z # Subtest: ignore display_label comme source de vérité et garde quantity/unit structurés
+2026-05-05T04:59:21.0084882Z ok 87 - ignore display_label comme source de vérité et garde quantity/unit structurés
+2026-05-05T04:59:21.0085586Z   ---
+2026-05-05T04:59:21.0086041Z   duration_ms: 0.231782
+2026-05-05T04:59:21.0086435Z   type: 'test'
+2026-05-05T04:59:21.0086844Z   ...
+2026-05-05T04:59:21.0369080Z # Subtest: splitRecipeDisplay: les 2 premières recettes vont dans le header (plan card)
+2026-05-05T04:59:21.0370689Z ok 88 - splitRecipeDisplay: les 2 premières recettes vont dans le header (plan card)
+2026-05-05T04:59:21.0397689Z   ---
+2026-05-05T04:59:21.0407916Z   duration_ms: 1.610621
+2026-05-05T04:59:21.0408542Z   type: 'test'
+2026-05-05T04:59:21.0409012Z   ...
+2026-05-05T04:59:21.0409887Z # Subtest: splitRecipeDisplay: le reste des recettes va dans la liste (FlatList data)
+2026-05-05T04:59:21.0411138Z ok 89 - splitRecipeDisplay: le reste des recettes va dans la liste (FlatList data)
+2026-05-05T04:59:21.0411922Z   ---
+2026-05-05T04:59:21.0412361Z   duration_ms: 0.1494
+2026-05-05T04:59:21.0412839Z   type: 'test'
+2026-05-05T04:59:21.0413262Z   ...
+2026-05-05T04:59:21.0414312Z # Subtest: régression: header et list ne contiennent aucun item en commun (plus de doublons)
+2026-05-05T04:59:21.0415727Z ok 90 - régression: header et list ne contiennent aucun item en commun (plus de doublons)
+2026-05-05T04:59:21.0416601Z   ---
+2026-05-05T04:59:21.0417284Z   duration_ms: 0.175389
+2026-05-05T04:59:21.0417818Z   type: 'test'
+2026-05-05T04:59:21.0418290Z   ...
+2026-05-05T04:59:21.0419246Z # Subtest: régression: header.concat(list) reconstitue le tableau original complet
+2026-05-05T04:59:21.0420553Z ok 91 - régression: header.concat(list) reconstitue le tableau original complet
+2026-05-05T04:59:21.0421354Z   ---
+2026-05-05T04:59:21.0421795Z   duration_ms: 0.174788
+2026-05-05T04:59:21.0422292Z   type: 'test'
+2026-05-05T04:59:21.0450544Z   ...
+2026-05-05T04:59:21.0451689Z # Subtest: splitRecipeDisplay: tableau vide → header et list vides
+2026-05-05T04:59:21.0452864Z ok 92 - splitRecipeDisplay: tableau vide → header et list vides
+2026-05-05T04:59:21.0453578Z   ---
+2026-05-05T04:59:21.0454017Z   duration_ms: 0.14183
+2026-05-05T04:59:21.0454511Z   type: 'test'
+2026-05-05T04:59:21.0454963Z   ...
+2026-05-05T04:59:21.0455930Z # Subtest: splitRecipeDisplay: 1 recette → dans header uniquement, list vide
+2026-05-05T04:59:21.0457441Z ok 93 - splitRecipeDisplay: 1 recette → dans header uniquement, list vide
+2026-05-05T04:59:21.0458252Z   ---
+2026-05-05T04:59:21.0458707Z   duration_ms: 0.193556
+2026-05-05T04:59:21.0459224Z   type: 'test'
+2026-05-05T04:59:21.0459686Z   ...
+2026-05-05T04:59:21.0460619Z # Subtest: splitRecipeDisplay: exactement 2 recettes → header plein, list vide
+2026-05-05T04:59:21.0461806Z ok 94 - splitRecipeDisplay: exactement 2 recettes → header plein, list vide
+2026-05-05T04:59:21.0462542Z   ---
+2026-05-05T04:59:21.0462983Z   duration_ms: 0.951126
+2026-05-05T04:59:21.0463509Z   type: 'test'
+2026-05-05T04:59:21.0463941Z   ...
+2026-05-05T04:59:21.0464809Z # Subtest: splitRecipeDisplay: headerCount personnalisé (3) est respecté
+2026-05-05T04:59:21.0465964Z ok 95 - splitRecipeDisplay: headerCount personnalisé (3) est respecté
+2026-05-05T04:59:21.0466713Z   ---
+2026-05-05T04:59:21.0467849Z   duration_ms: 0.164864
+2026-05-05T04:59:21.0468426Z   type: 'test'
+2026-05-05T04:59:21.0468931Z   ...
+2026-05-05T04:59:21.0575126Z # Subtest: mapRecipesFilterToApi utilise les alias attendus par le backend
+2026-05-05T04:59:21.0597174Z ok 96 - mapRecipesFilterToApi utilise les alias attendus par le backend
+2026-05-05T04:59:21.0617659Z   ---
+2026-05-05T04:59:21.0638039Z   duration_ms: 0.972437
+2026-05-05T04:59:21.0638640Z   type: 'test'
+2026-05-05T04:59:21.0639137Z   ...
+2026-05-05T04:59:21.0640430Z # Subtest: BUG-016 : filtre stock envoie stock et non all (cohérence recipesFilter + recipesStore)
+2026-05-05T04:59:21.0641927Z ok 97 - BUG-016 : filtre stock envoie stock et non all (cohérence recipesFilter + recipesStore)
+2026-05-05T04:59:21.0642851Z   ---
+2026-05-05T04:59:21.0643312Z   duration_ms: 0.146806
+2026-05-05T04:59:21.0643786Z   type: 'test'
+2026-05-05T04:59:21.0644203Z   ...
+2026-05-05T04:59:21.0716258Z # Subtest: normalizeSuggestionRecipe marque fallback via debug.is_fallback
+2026-05-05T04:59:21.0717684Z ok 98 - normalizeSuggestionRecipe marque fallback via debug.is_fallback
+2026-05-05T04:59:21.0718460Z   ---
+2026-05-05T04:59:21.0719289Z   duration_ms: 1.473608
+2026-05-05T04:59:21.0719793Z   type: 'test'
+2026-05-05T04:59:21.0720225Z   ...
+2026-05-05T04:59:21.0720972Z # Subtest: normalizeSuggestionRecipe garde false sans fallback explicite
+2026-05-05T04:59:21.0722007Z ok 99 - normalizeSuggestionRecipe garde false sans fallback explicite
+2026-05-05T04:59:21.0722696Z   ---
+2026-05-05T04:59:21.0723112Z   duration_ms: 0.201187
+2026-05-05T04:59:21.0723571Z   type: 'test'
+2026-05-05T04:59:21.0723991Z   ...
+2026-05-05T04:59:21.1106758Z # (node:2766) ExperimentalWarning: The MockTimers API is an experimental feature and might change at any time
+2026-05-05T04:59:21.1109932Z # (Use `node --trace-warnings ...` to show where the warning was created)
+2026-05-05T04:59:21.1140832Z # Subtest: monotonie filtres recettes: day ⊆ week ⊆ month ⊆ all et comptage cohérent
+2026-05-05T04:59:21.1163182Z ok 100 - monotonie filtres recettes: day ⊆ week ⊆ month ⊆ all et comptage cohérent
+2026-05-05T04:59:21.1228665Z   ---
+2026-05-05T04:59:21.1239849Z   duration_ms: 2.920667
+2026-05-05T04:59:21.1240435Z   type: 'test'
+2026-05-05T04:59:21.1240914Z   ...
+2026-05-05T04:59:21.1242043Z # Subtest: déduplication: une recette dupliquée n apparait qu une fois dans une même vue
+2026-05-05T04:59:21.1243492Z ok 101 - déduplication: une recette dupliquée n apparait qu une fois dans une même vue
+2026-05-05T04:59:21.1244334Z   ---
+2026-05-05T04:59:21.1244798Z   duration_ms: 0.965777
+2026-05-05T04:59:21.1245321Z   type: 'test'
+2026-05-05T04:59:21.1245772Z   ...
+2026-05-05T04:59:21.1246928Z # Subtest: déduplication: même recette backend avec ids différents est fusionnée via signature sémantique
+2026-05-05T04:59:21.1248855Z ok 102 - déduplication: même recette backend avec ids différents est fusionnée via signature sémantique
+2026-05-05T04:59:21.1249804Z   ---
+2026-05-05T04:59:21.1250261Z   duration_ms: 0.312492
+2026-05-05T04:59:21.1250755Z   type: 'test'
+2026-05-05T04:59:21.1251219Z   ...
+2026-05-05T04:59:21.1252498Z # Subtest: déduplication: même titre + durée + type reste unique même si les ingrédients disponibles diffèrent
+2026-05-05T04:59:21.1254243Z ok 103 - déduplication: même titre + durée + type reste unique même si les ingrédients disponibles diffèrent
+2026-05-05T04:59:21.1255145Z   ---
+2026-05-05T04:59:21.1255584Z   duration_ms: 0.318771
+2026-05-05T04:59:21.1256085Z   type: 'test'
+2026-05-05T04:59:21.1256536Z   ...
+2026-05-05T04:59:21.1257989Z # Subtest: buildTargetIngredientNames: deux appels avec les mêmes items produisent des clés sérialisées identiques (BUG-025)
+2026-05-05T04:59:21.1259820Z ok 104 - buildTargetIngredientNames: deux appels avec les mêmes items produisent des clés sérialisées identiques (BUG-025)
+2026-05-05T04:59:21.1260803Z   ---
+2026-05-05T04:59:21.1261223Z   duration_ms: 0.308375
+2026-05-05T04:59:21.1261681Z   type: 'test'
+2026-05-05T04:59:21.1262099Z   ...
+2026-05-05T04:59:21.1263661Z # Subtest: cohérence anti-gaspi / liste principale: top suggestions restent un sous-ensemble de la liste filtrée
+2026-05-05T04:59:21.1265347Z ok 105 - cohérence anti-gaspi / liste principale: top suggestions restent un sous-ensemble de la liste filtrée
+2026-05-05T04:59:21.1266220Z   ---
+2026-05-05T04:59:21.1266636Z   duration_ms: 0.287324
+2026-05-05T04:59:21.1267313Z   type: 'test'
+2026-05-05T04:59:21.1267716Z   ...
+2026-05-05T04:59:21.1268621Z # Subtest: cas utilisateur: un filtre restrictif ne retourne jamais plus de recettes que Toutes sur base commune
+2026-05-05T04:59:21.1269949Z ok 106 - cas utilisateur: un filtre restrictif ne retourne jamais plus de recettes que Toutes sur base commune
+2026-05-05T04:59:21.1270780Z   ---
+2026-05-05T04:59:21.1271173Z   duration_ms: 1.680303
+2026-05-05T04:59:21.1271676Z   type: 'test'
+2026-05-05T04:59:21.1272263Z   ...
+2026-05-05T04:59:21.1302175Z # Subtest: fetchRecipesSuggestionsWithStockFallback garde la réponse principale quand elle contient des recettes
+2026-05-05T04:59:21.1304592Z ok 107 - fetchRecipesSuggestionsWithStockFallback garde la réponse principale quand elle contient des recettes
+2026-05-05T04:59:21.1332571Z   ---
+2026-05-05T04:59:21.1333250Z   duration_ms: 1.591172
+2026-05-05T04:59:21.1333803Z   type: 'test'
+2026-05-05T04:59:21.1334277Z   ...
+2026-05-05T04:59:21.1335286Z # Subtest: fetchRecipesSuggestionsWithStockFallback bascule sur stock quand le filtre temporel est vide
+2026-05-05T04:59:21.1336849Z ok 108 - fetchRecipesSuggestionsWithStockFallback bascule sur stock quand le filtre temporel est vide
+2026-05-05T04:59:21.1338038Z   ---
+2026-05-05T04:59:21.1338486Z   duration_ms: 0.255638
+2026-05-05T04:59:21.1338958Z   type: 'test'
+2026-05-05T04:59:21.1339383Z   ...
+2026-05-05T04:59:21.1340325Z # Subtest: resolveDisplayedRecipesWithScope utilise le scope temporel quand il n y a pas fallback
+2026-05-05T04:59:21.1341685Z ok 109 - resolveDisplayedRecipesWithScope utilise le scope temporel quand il n y a pas fallback
+2026-05-05T04:59:21.1342578Z   ---
+2026-05-05T04:59:21.1342998Z   duration_ms: 0.34564
+2026-05-05T04:59:21.1343479Z   type: 'test'
+2026-05-05T04:59:21.1343891Z   ...
+2026-05-05T04:59:21.1344940Z # Subtest: resolveDisplayedRecipesWithScope utilise le scope stock quand fallback activé
+2026-05-05T04:59:21.1346417Z ok 110 - resolveDisplayedRecipesWithScope utilise le scope stock quand fallback activé
+2026-05-05T04:59:21.1347502Z   ---
+2026-05-05T04:59:21.1347955Z   duration_ms: 0.185675
+2026-05-05T04:59:21.1348483Z   type: 'test'
+2026-05-05T04:59:21.1348921Z   ...
+2026-05-05T04:59:21.1350054Z # Subtest: fetchRecipesSuggestionsWithStockFallback préserve suggest_later=true quand recipes vides
+2026-05-05T04:59:21.1351825Z ok 111 - fetchRecipesSuggestionsWithStockFallback préserve suggest_later=true quand recipes vides
+2026-05-05T04:59:21.1352858Z   ---
+2026-05-05T04:59:21.1353322Z   duration_ms: 0.180718
+2026-05-05T04:59:21.1353858Z   type: 'test'
+2026-05-05T04:59:21.1354396Z   ...
+2026-05-05T04:59:21.1355681Z # Subtest: fetchRecipesSuggestionsWithStockFallback préserve suggest_later=false quand recipes présentes
+2026-05-05T04:59:21.1358107Z ok 112 - fetchRecipesSuggestionsWithStockFallback préserve suggest_later=false quand recipes présentes
+2026-05-05T04:59:21.1360282Z   ---
+2026-05-05T04:59:21.1360757Z   duration_ms: 0.198694
+2026-05-05T04:59:21.1361255Z   type: 'test'
+2026-05-05T04:59:21.1361693Z   ...
+2026-05-05T04:59:21.1362685Z # Subtest: fetchRecipesSuggestionsWithStockFallback utilise le meta du fallback quand bascule sur stock
+2026-05-05T04:59:21.1364165Z ok 113 - fetchRecipesSuggestionsWithStockFallback utilise le meta du fallback quand bascule sur stock
+2026-05-05T04:59:21.1365036Z   ---
+2026-05-05T04:59:21.1365450Z   duration_ms: 0.176601
+2026-05-05T04:59:21.1365910Z   type: 'test'
+2026-05-05T04:59:21.1366326Z   ...
+2026-05-05T04:59:21.1367717Z # Subtest: resolveDisplayedRecipesWithScope fonctionne avec le champ available_ingredients du backend
+2026-05-05T04:59:21.1369412Z ok 114 - resolveDisplayedRecipesWithScope fonctionne avec le champ available_ingredients du backend
+2026-05-05T04:59:21.1370456Z   ---
+2026-05-05T04:59:21.1371135Z   duration_ms: 0.210361
+2026-05-05T04:59:21.1371619Z   type: 'test'
+2026-05-05T04:59:21.1372036Z   ...
+2026-05-05T04:59:21.1372959Z # Subtest: resolveDisplayedRecipesWithScope fonctionne avec le champ usedIngredients apres sanitize
+2026-05-05T04:59:21.1374360Z ok 115 - resolveDisplayedRecipesWithScope fonctionne avec le champ usedIngredients apres sanitize
+2026-05-05T04:59:21.1390868Z   ---
+2026-05-05T04:59:21.1391296Z   duration_ms: 0.584003
+2026-05-05T04:59:21.1391752Z   type: 'test'
+2026-05-05T04:59:21.1392271Z   ...
+2026-05-05T04:59:21.1438187Z # Subtest: BUG-033 : une erreur dans unregisterPushToken ne doit pas interrompre le logout (nettoyage token garanti)
+2026-05-05T04:59:21.1448162Z ok 116 - BUG-033 : une erreur dans unregisterPushToken ne doit pas interrompre le logout (nettoyage token garanti)
+2026-05-05T04:59:21.1461937Z   ---
+2026-05-05T04:59:21.1462546Z   duration_ms: 1.15718
+2026-05-05T04:59:21.1463047Z   type: 'test'
+2026-05-05T04:59:21.1463438Z   ...
+2026-05-05T04:59:21.1464596Z # Subtest: buildLogoutConfirmationCopy construit les libellés de confirmation de déconnexion
+2026-05-05T04:59:21.1466563Z ok 117 - buildLogoutConfirmationCopy construit les libellés de confirmation de déconnexion
+2026-05-05T04:59:21.1478192Z   ---
+2026-05-05T04:59:21.1478493Z   duration_ms: 1.177
+2026-05-05T04:59:21.1478829Z   type: 'test'
+2026-05-05T04:59:21.1479110Z   ...
+2026-05-05T04:59:21.1722537Z # Subtest: écran Stock avec store hydraté et cache frais: skip refetch backend
+2026-05-05T04:59:21.1743014Z ok 118 - écran Stock avec store hydraté et cache frais: skip refetch backend
+2026-05-05T04:59:21.1783453Z   ---
+2026-05-05T04:59:21.1807712Z   duration_ms: 0.838369
+2026-05-05T04:59:21.1822370Z   type: 'test'
+2026-05-05T04:59:21.1850933Z   ...
+2026-05-05T04:59:21.1852421Z # Subtest: navigation répétée Stock -> Détail -> Stock dans la fenêtre TTL: pas de refetch avalanche
+2026-05-05T04:59:21.1854015Z ok 119 - navigation répétée Stock -> Détail -> Stock dans la fenêtre TTL: pas de refetch avalanche
+2026-05-05T04:59:21.1854867Z   ---
+2026-05-05T04:59:21.1855319Z   duration_ms: 0.152175
+2026-05-05T04:59:21.1855839Z   type: 'test'
+2026-05-05T04:59:21.1856272Z   ...
+2026-05-05T04:59:21.1857295Z # Subtest: cache expiré: refetch backend redevient autorisé
+2026-05-05T04:59:21.1858272Z ok 120 - cache expiré: refetch backend redevient autorisé
+2026-05-05T04:59:21.1858920Z   ---
+2026-05-05T04:59:21.1859370Z   duration_ms: 0.160778
+2026-05-05T04:59:21.1859908Z   type: 'test'
+2026-05-05T04:59:21.1860346Z   ...
+2026-05-05T04:59:21.1861183Z # Subtest: force=true bypass le cache même avec store hydraté
+2026-05-05T04:59:21.1862176Z ok 121 - force=true bypass le cache même avec store hydraté
+2026-05-05T04:59:21.1862804Z   ---
+2026-05-05T04:59:21.1863249Z   duration_ms: 0.177182
+2026-05-05T04:59:21.1863735Z   type: 'test'
+2026-05-05T04:59:21.1864164Z   ...
+2026-05-05T04:59:21.1865489Z # Subtest: régression: ajout OCR (sans barcode) — force:true contourne le cache frais (garde-fou pour les callers hors addItem)
+2026-05-05T04:59:21.1867782Z ok 122 - régression: ajout OCR (sans barcode) — force:true contourne le cache frais (garde-fou pour les callers hors addItem)
+2026-05-05T04:59:21.1868768Z   ---
+2026-05-05T04:59:21.1869124Z   duration_ms: 0.154358
+2026-05-05T04:59:21.1869518Z   type: 'test'
+2026-05-05T04:59:21.1869927Z   ...
+2026-05-05T04:59:21.1908162Z # Subtest: résout image_url quand le champ snake_case est présent
+2026-05-05T04:59:21.1928602Z ok 123 - résout image_url quand le champ snake_case est présent
+2026-05-05T04:59:21.1947556Z   ---
+2026-05-05T04:59:21.1977592Z   duration_ms: 2.740891
+2026-05-05T04:59:21.1978841Z   type: 'test'
+2026-05-05T04:59:21.2000417Z   ...
+2026-05-05T04:59:21.2001883Z # Subtest: résout imageUrl quand le champ camelCase est présent
+2026-05-05T04:59:21.2002973Z ok 124 - résout imageUrl quand le champ camelCase est présent
+2026-05-05T04:59:21.2003637Z   ---
+2026-05-05T04:59:21.2004085Z   duration_ms: 0.272333
+2026-05-05T04:59:21.2004573Z   type: 'test'
+2026-05-05T04:59:21.2005009Z   ...
+2026-05-05T04:59:21.2006109Z # Subtest: retourne undefined sans image valide (fallback UI attendu)
+2026-05-05T04:59:21.2007278Z ok 125 - retourne undefined sans image valide (fallback UI attendu)
+2026-05-05T04:59:21.2007945Z   ---
+2026-05-05T04:59:21.2008356Z   duration_ms: 0.230101
+2026-05-05T04:59:21.2008827Z   type: 'test'
+2026-05-05T04:59:21.2009243Z   ...
+2026-05-05T04:59:21.2010146Z # Subtest: résout image imbriquée dans product.image_url pour compatibilité API
+2026-05-05T04:59:21.2011349Z ok 126 - résout image imbriquée dans product.image_url pour compatibilité API
+2026-05-05T04:59:21.2012068Z   ---
+2026-05-05T04:59:21.2012490Z   duration_ms: 0.199195
+2026-05-05T04:59:21.2012951Z   type: 'test'
+2026-05-05T04:59:21.2013357Z   ...
+2026-05-05T04:59:21.2014097Z # Subtest: résout image imbriquée depuis productData.imageUrl
+2026-05-05T04:59:21.2015051Z ok 127 - résout image imbriquée depuis productData.imageUrl
+2026-05-05T04:59:21.2015663Z   ---
+2026-05-05T04:59:21.2016074Z   duration_ms: 0.307024
+2026-05-05T04:59:21.2016552Z   type: 'test'
+2026-05-05T04:59:21.2016968Z   ...
+2026-05-05T04:59:21.2018025Z # Subtest: convertit les URLs protocol-relative et http vers https
+2026-05-05T04:59:21.2018953Z ok 128 - convertit les URLs protocol-relative et http vers https
+2026-05-05T04:59:21.2019598Z   ---
+2026-05-05T04:59:21.2019999Z   duration_ms: 0.211403
+2026-05-05T04:59:21.2020457Z   type: 'test'
+2026-05-05T04:59:21.2020868Z   ...
+2026-05-05T04:59:21.2021850Z # Subtest: préserve l'image existante quand la payload d'édition n'expose plus de champ image
+2026-05-05T04:59:21.2023185Z ok 129 - préserve l'image existante quand la payload d'édition n'expose plus de champ image
+2026-05-05T04:59:21.2023957Z   ---
+2026-05-05T04:59:21.2024366Z   duration_ms: 0.328936
+2026-05-05T04:59:21.2024825Z   type: 'test'
+2026-05-05T04:59:21.2025236Z   ...
+2026-05-05T04:59:21.2237696Z # Subtest: normalise un nom produit avec packaging/marque
+2026-05-05T04:59:21.2239042Z ok 130 - normalise un nom produit avec packaging/marque
+2026-05-05T04:59:21.2239777Z   ---
+2026-05-05T04:59:21.2240235Z   duration_ms: 2.960676
+2026-05-05T04:59:21.2240765Z   type: 'test'
+2026-05-05T04:59:21.2241223Z   ...
+2026-05-05T04:59:21.2243026Z # Subtest: retourne des recettes directes quand l’article est référencé
+2026-05-05T04:59:21.2244807Z ok 131 - retourne des recettes directes quand l’article est référencé
+2026-05-05T04:59:21.2245926Z   ---
+2026-05-05T04:59:21.2246410Z   duration_ms: 3.963948
+2026-05-05T04:59:21.2246920Z   type: 'test'
+2026-05-05T04:59:21.2247569Z   ...
+2026-05-05T04:59:21.2250192Z # Subtest: l'écran détail produit n'affiche pas de bloc de suggestions générales
+2026-05-05T04:59:21.2251527Z ok 132 - l'écran détail produit n'affiche pas de bloc de suggestions générales
+2026-05-05T04:59:21.2252295Z   ---
+2026-05-05T04:59:21.2252757Z   duration_ms: 0.229849
+2026-05-05T04:59:21.2253263Z   type: 'test'
+2026-05-05T04:59:21.2253705Z   ...
+2026-05-05T04:59:21.2255389Z # Subtest: retourne des suggestions anti-gaspi liées uniquement pour les recettes qui utilisent vraiment l'ingrédient
+2026-05-05T04:59:21.2257700Z ok 133 - retourne des suggestions anti-gaspi liées uniquement pour les recettes qui utilisent vraiment l'ingrédient
+2026-05-05T04:59:21.2258781Z   ---
+2026-05-05T04:59:21.2259237Z   duration_ms: 2.789243
+2026-05-05T04:59:21.2259728Z   type: 'test'
+2026-05-05T04:59:21.2260173Z   ...
+2026-05-05T04:59:21.2261072Z # Subtest: article sans recette liée retourne des sections vides
+2026-05-05T04:59:21.2262399Z ok 134 - article sans recette liée retourne des sections vides
+2026-05-05T04:59:21.2263088Z   ---
+2026-05-05T04:59:21.2263537Z   duration_ms: 3.939602
+2026-05-05T04:59:21.2264042Z   type: 'test'
+2026-05-05T04:59:21.2264487Z   ...
+2026-05-05T04:59:21.2269503Z # Subtest: si aucune recette n’est réellement liée, aucune recette non liée n’est injectée dans la section directe
+2026-05-05T04:59:21.2272191Z ok 135 - si aucune recette n’est réellement liée, aucune recette non liée n’est injectée dans la section directe
+2026-05-05T04:59:21.2273182Z   ---
+2026-05-05T04:59:21.2273978Z   duration_ms: 2.71284
+2026-05-05T04:59:21.2274539Z   type: 'test'
+2026-05-05T04:59:21.2275023Z   ...
+2026-05-05T04:59:21.2288179Z # Subtest: supprime les doublons de recettes dans la section des recettes associées
+2026-05-05T04:59:21.2289870Z ok 136 - supprime les doublons de recettes dans la section des recettes associées
+2026-05-05T04:59:21.2290642Z   ---
+2026-05-05T04:59:21.2291077Z   duration_ms: 0.490044
+2026-05-05T04:59:21.2291557Z   type: 'test'
+2026-05-05T04:59:21.2292009Z   ...
+2026-05-05T04:59:21.2293018Z # Subtest: l'écran détail produit garde un état vide explicite pour les recettes associées
+2026-05-05T04:59:21.2294366Z ok 137 - l'écran détail produit garde un état vide explicite pour les recettes associées
+2026-05-05T04:59:21.2295145Z   ---
+2026-05-05T04:59:21.2295585Z   duration_ms: 0.205053
+2026-05-05T04:59:21.2296076Z   type: 'test'
+2026-05-05T04:59:21.2296501Z   ...
+2026-05-05T04:59:21.2297919Z # Subtest: sépare les suggestions globales des recettes réellement liées pour éviter un écran contradictoire
+2026-05-05T04:59:21.2299736Z ok 138 - sépare les suggestions globales des recettes réellement liées pour éviter un écran contradictoire
+2026-05-05T04:59:21.2301058Z   ---
+2026-05-05T04:59:21.2301520Z   duration_ms: 3.050388
+2026-05-05T04:59:21.2302017Z   type: 'test'
+2026-05-05T04:59:21.2302459Z   ...
+2026-05-05T04:59:21.2303453Z # Subtest: construit la route de navigation vers le détail recette existant
+2026-05-05T04:59:21.2304625Z ok 139 - construit la route de navigation vers le détail recette existant
+2026-05-05T04:59:21.2305340Z   ---
+2026-05-05T04:59:21.2305781Z   duration_ms: 0.889004
+2026-05-05T04:59:21.2306291Z   type: 'test'
+2026-05-05T04:59:21.2306737Z   ...
+2026-05-05T04:59:21.2430107Z # Subtest: buildRestoredItemsList: item absent → inséré en tête
+2026-05-05T04:59:21.2432073Z ok 140 - buildRestoredItemsList: item absent → inséré en tête
+2026-05-05T04:59:21.2432741Z   ---
+2026-05-05T04:59:21.2433294Z   duration_ms: 2.16505
+2026-05-05T04:59:21.2433822Z   type: 'test'
+2026-05-05T04:59:21.2434256Z   ...
+2026-05-05T04:59:21.2435181Z # Subtest: buildRestoredItemsList: item déjà présent → dédupliqué et ramené en tête
+2026-05-05T04:59:21.2436453Z ok 141 - buildRestoredItemsList: item déjà présent → dédupliqué et ramené en tête
+2026-05-05T04:59:21.2437349Z   ---
+2026-05-05T04:59:21.2437767Z   duration_ms: 0.186535
+2026-05-05T04:59:21.2438204Z   type: 'test'
+2026-05-05T04:59:21.2438584Z   ...
+2026-05-05T04:59:21.2439343Z # Subtest: buildRestoredItemsList: liste vide → résultat = [item restauré]
+2026-05-05T04:59:21.2440428Z ok 142 - buildRestoredItemsList: liste vide → résultat = [item restauré]
+2026-05-05T04:59:21.2441135Z   ---
+2026-05-05T04:59:21.2441547Z   duration_ms: 0.136412
+2026-05-05T04:59:21.2442010Z   type: 'test'
+2026-05-05T04:59:21.2442415Z   ...
+2026-05-05T04:59:21.2443161Z # Subtest: buildRestoredItemsList: les autres items conservent leur ordre
+2026-05-05T04:59:21.2444225Z ok 143 - buildRestoredItemsList: les autres items conservent leur ordre
+2026-05-05T04:59:21.2444945Z   ---
+2026-05-05T04:59:21.2445367Z   duration_ms: 0.160277
+2026-05-05T04:59:21.2445822Z   type: 'test'
+2026-05-05T04:59:21.2446247Z   ...
+2026-05-05T04:59:21.2447410Z # Subtest: régression: B consommé avant la restauration de A ne réapparaît pas dans le store
+2026-05-05T04:59:21.2448793Z ok 144 - régression: B consommé avant la restauration de A ne réapparaît pas dans le store
+2026-05-05T04:59:21.2449556Z   ---
+2026-05-05T04:59:21.2449925Z   duration_ms: 0.313965
+2026-05-05T04:59:21.2450352Z   type: 'test'
+2026-05-05T04:59:21.2450753Z   ...
+2026-05-05T04:59:21.2635773Z # Subtest: resolveSwipeAction mappe correctement la direction de swipe gauche vers used
+2026-05-05T04:59:21.2638175Z ok 145 - resolveSwipeAction mappe correctement la direction de swipe gauche vers used
+2026-05-05T04:59:21.2638951Z   ---
+2026-05-05T04:59:21.2639339Z   duration_ms: 1.48171
+2026-05-05T04:59:21.2639768Z   type: 'test'
+2026-05-05T04:59:21.2640146Z   ...
+2026-05-05T04:59:21.2658552Z # Subtest: resolveSwipeAction mappe correctement la direction de swipe droite vers thrown
+2026-05-05T04:59:21.2668358Z ok 146 - resolveSwipeAction mappe correctement la direction de swipe droite vers thrown
+2026-05-05T04:59:21.2669409Z   ---
+2026-05-05T04:59:21.2669861Z   duration_ms: 0.232123
+2026-05-05T04:59:21.2670361Z   type: 'test'
+2026-05-05T04:59:21.2670804Z   ...
+2026-05-05T04:59:21.2671719Z # Subtest: resolveSwipeActionFromOpenSide mappe correctement l'ouverture gauche vers used
+2026-05-05T04:59:21.2673023Z ok 147 - resolveSwipeActionFromOpenSide mappe correctement l'ouverture gauche vers used
+2026-05-05T04:59:21.2673832Z   ---
+2026-05-05T04:59:21.2674256Z   duration_ms: 0.173967
+2026-05-05T04:59:21.2674737Z   type: 'test'
+2026-05-05T04:59:21.2675173Z   ...
+2026-05-05T04:59:21.2676029Z # Subtest: resolveSwipeActionFromOpenSide mappe correctement l'ouverture droite vers thrown
+2026-05-05T04:59:21.2677571Z ok 148 - resolveSwipeActionFromOpenSide mappe correctement l'ouverture droite vers thrown
+2026-05-05T04:59:21.2678469Z   ---
+2026-05-05T04:59:21.2678940Z   duration_ms: 0.144123
+2026-05-05T04:59:21.2679428Z   type: 'test'
+2026-05-05T04:59:21.2680163Z   ...
+2026-05-05T04:59:21.2681434Z # Subtest: régression: deux ouvertures Swipeable consécutives à gauche restent mappées vers used
+2026-05-05T04:59:21.2682939Z ok 149 - régression: deux ouvertures Swipeable consécutives à gauche restent mappées vers used
+2026-05-05T04:59:21.2683768Z   ---
+2026-05-05T04:59:21.2684200Z   duration_ms: 0.975252
+2026-05-05T04:59:21.2684663Z   type: 'test'
+2026-05-05T04:59:21.2685112Z   ...
+2026-05-05T04:59:21.2686132Z # Subtest: régression: suppressions consécutives gauche puis droite restent correctement mappées
+2026-05-05T04:59:21.2687991Z ok 150 - régression: suppressions consécutives gauche puis droite restent correctement mappées
+2026-05-05T04:59:21.2688872Z   ---
+2026-05-05T04:59:21.2689327Z   duration_ms: 0.186295
+2026-05-05T04:59:21.2689814Z   type: 'test'
+2026-05-05T04:59:21.2690230Z   ...
+2026-05-05T04:59:21.2703864Z # Subtest: createSwipeActionQueue exécute les suppressions en série même si elles arrivent en rafale
+2026-05-05T04:59:21.2708381Z ok 151 - createSwipeActionQueue exécute les suppressions en série même si elles arrivent en rafale
+2026-05-05T04:59:21.2709354Z   ---
+2026-05-05T04:59:21.2709817Z   duration_ms: 7.559743
+2026-05-05T04:59:21.2710314Z   type: 'test'
+2026-05-05T04:59:21.2710732Z   ...
+2026-05-05T04:59:21.2723541Z # Subtest: resolveStockRemovalBanner garde l'annulation quand la suppression a réussi
+2026-05-05T04:59:21.2733014Z ok 152 - resolveStockRemovalBanner garde l'annulation quand la suppression a réussi
+2026-05-05T04:59:21.2733911Z   ---
+2026-05-05T04:59:21.2734360Z   duration_ms: 0.347003
+2026-05-05T04:59:21.2734843Z   type: 'test'
+2026-05-05T04:59:21.2735296Z   ...
+2026-05-05T04:59:21.2736380Z # Subtest: resolveStockRemovalBanner désactive l'annulation quand la suppression a échoué
+2026-05-05T04:59:21.2738086Z ok 153 - resolveStockRemovalBanner désactive l'annulation quand la suppression a échoué
+2026-05-05T04:59:21.2738954Z   ---
+2026-05-05T04:59:21.2739406Z   duration_ms: 0.524495
+2026-05-05T04:59:21.2739897Z   type: 'test'
+2026-05-05T04:59:21.2740344Z   ...
+2026-05-05T04:59:21.2741464Z # Subtest: resolveStockRemovalBanner désactive l'annulation quand failedCount > 0 (race condition)
+2026-05-05T04:59:21.2743043Z ok 154 - resolveStockRemovalBanner désactive l'annulation quand failedCount > 0 (race condition)
+2026-05-05T04:59:21.2743905Z   ---
+2026-05-05T04:59:21.2744346Z   duration_ms: 2.105482
+2026-05-05T04:59:21.2744836Z   type: 'test'
+2026-05-05T04:59:21.2745259Z   ...
+2026-05-05T04:59:21.2932430Z # Subtest: BUG-023 : mise à jour optimiste appliquée sur le bon item
+2026-05-05T04:59:21.2941072Z ok 155 - BUG-023 : mise à jour optimiste appliquée sur le bon item
+2026-05-05T04:59:21.2941767Z   ---
+2026-05-05T04:59:21.2942260Z   duration_ms: 1.291038
+2026-05-05T04:59:21.2942758Z   type: 'test'
+2026-05-05T04:59:21.2943214Z   ...
+2026-05-05T04:59:21.2944036Z # Subtest: BUG-023 : les autres items ne sont pas modifiés
+2026-05-05T04:59:21.2945341Z ok 156 - BUG-023 : les autres items ne sont pas modifiés
+2026-05-05T04:59:21.2946031Z   ---
+2026-05-05T04:59:21.2946492Z   duration_ms: 0.214116
+2026-05-05T04:59:21.2947402Z   type: 'test'
+2026-05-05T04:59:21.2947946Z   ...
+2026-05-05T04:59:21.2948925Z # Subtest: BUG-023 : la mutation UPDATE est ajoutée à pendingMutations
+2026-05-05T04:59:21.2950056Z ok 157 - BUG-023 : la mutation UPDATE est ajoutée à pendingMutations
+2026-05-05T04:59:21.2950812Z   ---
+2026-05-05T04:59:21.2951268Z   duration_ms: 0.785992
+2026-05-05T04:59:21.2951767Z   type: 'test'
+2026-05-05T04:59:21.2952200Z   ...
+2026-05-05T04:59:21.2953020Z # Subtest: BUG-023 : les mutations existantes sont préservées
+2026-05-05T04:59:21.2954491Z ok 158 - BUG-023 : les mutations existantes sont préservées
+2026-05-05T04:59:21.2954919Z   ---
+2026-05-05T04:59:21.2976411Z   duration_ms: 0.260045
+2026-05-05T04:59:21.2988092Z   type: 'test'
+2026-05-05T04:59:21.2988660Z   ...
+2026-05-05T04:59:21.2989704Z # Subtest: BUG-023 : item inconnu laisse la liste inchangée
+2026-05-05T04:59:21.2990640Z ok 159 - BUG-023 : item inconnu laisse la liste inchangée
+2026-05-05T04:59:21.2991511Z   ---
+2026-05-05T04:59:21.2991869Z   duration_ms: 0.198423
+2026-05-05T04:59:21.2992309Z   type: 'test'
+2026-05-05T04:59:21.2992726Z   ...
+2026-05-05T04:59:21.3071766Z # Subtest: affiche le bouton scan sur les écrans onglets autorisés
+2026-05-05T04:59:21.3076844Z ok 160 - affiche le bouton scan sur les écrans onglets autorisés
+2026-05-05T04:59:21.3077704Z   ---
+2026-05-05T04:59:21.3078127Z   duration_ms: 0.858669
+2026-05-05T04:59:21.3078592Z   type: 'test'
+2026-05-05T04:59:21.3078998Z   ...
+2026-05-05T04:59:21.3079621Z # Subtest: masque le bouton scan sur les routes sensibles
+2026-05-05T04:59:21.3080424Z ok 161 - masque le bouton scan sur les routes sensibles
+2026-05-05T04:59:21.3081011Z   ---
+2026-05-05T04:59:21.3081418Z   duration_ms: 0.158043
+2026-05-05T04:59:21.3081868Z   type: 'test'
+2026-05-05T04:59:21.3082276Z   ...
+2026-05-05T04:59:21.3083186Z # Subtest: masque le bouton scan sur les transitions vers des écrans non éligibles
+2026-05-05T04:59:21.3084373Z ok 162 - masque le bouton scan sur les transitions vers des écrans non éligibles
+2026-05-05T04:59:21.3085087Z   ---
+2026-05-05T04:59:21.3085483Z   duration_ms: 0.234837
+2026-05-05T04:59:21.3085934Z   type: 'test'
+2026-05-05T04:59:21.3086345Z   ...
+2026-05-05T04:59:21.3312735Z # Subtest: theme clair par défaut
+2026-05-05T04:59:21.3316575Z ok 163 - theme clair par défaut
+2026-05-05T04:59:21.3317383Z   ---
+2026-05-05T04:59:21.3317814Z   duration_ms: 1.315845
+2026-05-05T04:59:21.3318296Z   type: 'test'
+2026-05-05T04:59:21.3318710Z   ...
+2026-05-05T04:59:21.3330088Z # Subtest: palette sombre retournée en mode dark
+2026-05-05T04:59:21.3335348Z ok 164 - palette sombre retournée en mode dark
+2026-05-05T04:59:21.3336003Z   ---
+2026-05-05T04:59:21.3336468Z   duration_ms: 0.20328
+2026-05-05T04:59:21.3337286Z   type: 'test'
+2026-05-05T04:59:21.3337749Z   ...
+2026-05-05T04:59:21.3338629Z # Subtest: régression scan: le mode clair ne force pas un fond noir
+2026-05-05T04:59:21.3339768Z ok 165 - régression scan: le mode clair ne force pas un fond noir
+2026-05-05T04:59:21.3340472Z   ---
+2026-05-05T04:59:21.3340909Z   duration_ms: 0.179526
+2026-05-05T04:59:21.3341385Z   type: 'test'
+2026-05-05T04:59:21.3341833Z   ...
+2026-05-05T04:59:21.3468396Z # Subtest: thème par défaut au premier lancement = clair
+2026-05-05T04:59:21.3474372Z ok 166 - thème par défaut au premier lancement = clair
+2026-05-05T04:59:21.3479825Z   ---
+2026-05-05T04:59:21.3480228Z   duration_ms: 0.795485
+2026-05-05T04:59:21.3480656Z   type: 'test'
+2026-05-05T04:59:21.3481016Z   ...
+2026-05-05T04:59:21.3481849Z # Subtest: quand l’utilisateur choisit sombre, la préférence est persistée
+2026-05-05T04:59:21.3482919Z ok 167 - quand l’utilisateur choisit sombre, la préférence est persistée
+2026-05-05T04:59:21.3483589Z   ---
+2026-05-05T04:59:21.3483958Z   duration_ms: 0.185714
+2026-05-05T04:59:21.3484382Z   type: 'test'
+2026-05-05T04:59:21.3484774Z   ...
+2026-05-05T04:59:21.3485939Z # Subtest: au redémarrage, la préférence persistée est relue correctement
+2026-05-05T04:59:21.3487723Z ok 168 - au redémarrage, la préférence persistée est relue correctement
+2026-05-05T04:59:21.3488437Z   ---
+2026-05-05T04:59:21.3488820Z   duration_ms: 0.137343
+2026-05-05T04:59:21.3489236Z   type: 'test'
+2026-05-05T04:59:21.3489603Z   ...
+2026-05-05T04:59:21.3490281Z # Subtest: le sélecteur de thème met à jour l’état global
+2026-05-05T04:59:21.3491069Z ok 169 - le sélecteur de thème met à jour l’état global
+2026-05-05T04:59:21.3491615Z   ---
+2026-05-05T04:59:21.3491985Z   duration_ms: 0.125776
+2026-05-05T04:59:21.3492298Z   type: 'test'
+2026-05-05T04:59:21.3492757Z   ...
+2026-05-05T04:59:21.3571521Z # Subtest: storageZoneLabel retourne Frigo pour frigo
+2026-05-05T04:59:21.3573880Z ok 170 - storageZoneLabel retourne Frigo pour frigo
+2026-05-05T04:59:21.3574394Z   ---
+2026-05-05T04:59:21.3577516Z   duration_ms: 1.323556
+2026-05-05T04:59:21.3578239Z   type: 'test'
+2026-05-05T04:59:21.3579146Z   ...
+2026-05-05T04:59:21.3579705Z # Subtest: storageZoneLabel retourne Placard pour placard
+2026-05-05T04:59:21.3580388Z ok 171 - storageZoneLabel retourne Placard pour placard
+2026-05-05T04:59:21.3581177Z   ---
+2026-05-05T04:59:21.3597699Z   duration_ms: 0.253204
+2026-05-05T04:59:21.3598213Z   type: 'test'
+2026-05-05T04:59:21.3598628Z   ...
+2026-05-05T04:59:21.3599493Z # Subtest: storageZoneLabel retourne Congélateur pour congelateur
+2026-05-05T04:59:21.3600518Z ok 172 - storageZoneLabel retourne Congélateur pour congelateur
+2026-05-05T04:59:21.3601163Z   ---
+2026-05-05T04:59:21.3601526Z   duration_ms: 0.174768
+2026-05-05T04:59:21.3601975Z   type: 'test'
+2026-05-05T04:59:21.3602989Z   ...
+2026-05-05T04:59:21.3603763Z # Subtest: storageZoneLabel retourne Zone inconnue pour une zone absente
+2026-05-05T04:59:21.3604759Z ok 173 - storageZoneLabel retourne Zone inconnue pour une zone absente
+2026-05-05T04:59:21.3605386Z   ---
+2026-05-05T04:59:21.3605775Z   duration_ms: 0.165074
+2026-05-05T04:59:21.3606167Z   type: 'test'
+2026-05-05T04:59:21.3606571Z   ...
+2026-05-05T04:59:21.3607365Z # Subtest: storageZoneLabel retourne Zone inconnue pour une zone invalide
+2026-05-05T04:59:21.3608377Z ok 174 - storageZoneLabel retourne Zone inconnue pour une zone invalide
+2026-05-05T04:59:21.3609005Z   ---
+2026-05-05T04:59:21.3609390Z   duration_ms: 0.231112
+2026-05-05T04:59:21.3609795Z   type: 'test'
+2026-05-05T04:59:21.3610202Z   ...
+2026-05-05T04:59:21.3610948Z # Subtest: régression BUG-028 : congelateur ne retourne plus Placard
+2026-05-05T04:59:21.3611957Z ok 175 - régression BUG-028 : congelateur ne retourne plus Placard
+2026-05-05T04:59:21.3612531Z   ---
+2026-05-05T04:59:21.3612917Z   duration_ms: 0.213145
+2026-05-05T04:59:21.3613312Z   type: 'test'
+2026-05-05T04:59:21.3613699Z   ...
+2026-05-05T04:59:21.4023260Z # Subtest: pluralizeFr gère singulier/pluriel
+2026-05-05T04:59:21.4025803Z ok 176 - pluralizeFr gère singulier/pluriel
+2026-05-05T04:59:21.4026108Z   ---
+2026-05-05T04:59:21.4026302Z   duration_ms: 0.828134
+2026-05-05T04:59:21.4026511Z   type: 'test'
+2026-05-05T04:59:21.4026723Z   ...
+2026-05-05T04:59:21.4038269Z # Subtest: countLabelFr construit un libellé naturel
+2026-05-05T04:59:21.4042250Z ok 177 - countLabelFr construit un libellé naturel
+2026-05-05T04:59:21.4042934Z   ---
+2026-05-05T04:59:21.4043452Z   duration_ms: 0.148239
+2026-05-05T04:59:21.4043984Z   type: 'test'
+2026-05-05T04:59:21.4044445Z   ...
+2026-05-05T04:59:21.4045251Z # Subtest: formatEuroFr formate en français avec espace avant euro
+2026-05-05T04:59:21.4046014Z ok 178 - formatEuroFr formate en français avec espace avant euro
+2026-05-05T04:59:21.4046329Z   ---
+2026-05-05T04:59:21.4046515Z   duration_ms: 14.447473
+2026-05-05T04:59:21.4046734Z   type: 'test'
+2026-05-05T04:59:21.4046921Z   ...
+2026-05-05T04:59:21.4121467Z # Subtest: régression: undoRemovalCore transmet l'item complet à restoreItemFn (pas seulement l'id)
+2026-05-05T04:59:21.4122829Z ok 179 - régression: undoRemovalCore transmet l'item complet à restoreItemFn (pas seulement l'id)
+2026-05-05T04:59:21.4123515Z   ---
+2026-05-05T04:59:21.4124321Z   duration_ms: 1.327923
+2026-05-05T04:59:21.4124715Z   type: 'test'
+2026-05-05T04:59:21.4125052Z   ...
+2026-05-05T04:59:21.4125578Z # Subtest: undoRemovalCore incrémente restoredCount quand restoreItemFn réussit
+2026-05-05T04:59:21.4126253Z ok 180 - undoRemovalCore incrémente restoredCount quand restoreItemFn réussit
+2026-05-05T04:59:21.4126624Z   ---
+2026-05-05T04:59:21.4126805Z   duration_ms: 0.1759
+2026-05-05T04:59:21.4127201Z   type: 'test'
+2026-05-05T04:59:21.4127387Z   ...
+2026-05-05T04:59:21.4127843Z # Subtest: undoRemovalCore incrémente failedCount quand restoreItemFn échoue
+2026-05-05T04:59:21.4128478Z ok 181 - undoRemovalCore incrémente failedCount quand restoreItemFn échoue
+2026-05-05T04:59:21.4128833Z   ---
+2026-05-05T04:59:21.4129002Z   duration_ms: 0.185695
+2026-05-05T04:59:21.4129212Z   type: 'test'
+2026-05-05T04:59:21.4129391Z   ...
+2026-05-05T04:59:21.4129835Z # Subtest: undoRemovalCore comptabilise correctement les succès et échecs mixtes
+2026-05-05T04:59:21.4130498Z ok 182 - undoRemovalCore comptabilise correctement les succès et échecs mixtes
+2026-05-05T04:59:21.4130851Z   ---
+2026-05-05T04:59:21.4131196Z   duration_ms: 0.19649
+2026-05-05T04:59:21.4131386Z   type: 'test'
+2026-05-05T04:59:21.4131553Z   ...
+2026-05-05T04:59:21.4131980Z # Subtest: undoRemovalCore: tableau vide → restoredCount=0, failedCount=0
+2026-05-05T04:59:21.4132570Z ok 183 - undoRemovalCore: tableau vide → restoredCount=0, failedCount=0
+2026-05-05T04:59:21.4132902Z   ---
+2026-05-05T04:59:21.4133081Z   duration_ms: 0.146276
+2026-05-05T04:59:21.4133288Z   type: 'test'
+2026-05-05T04:59:21.4133465Z   ...
+2026-05-05T04:59:21.4133639Z 1..183
+2026-05-05T04:59:21.4133814Z # tests 183
+2026-05-05T04:59:21.4133987Z # suites 0
+2026-05-05T04:59:21.4134162Z # pass 183
+2026-05-05T04:59:21.4134324Z # fail 0
+2026-05-05T04:59:21.4134500Z # cancelled 0
+2026-05-05T04:59:21.4134683Z # skipped 0
+2026-05-05T04:59:21.4134855Z # todo 0
+2026-05-05T04:59:21.4135040Z # duration_ms 976.552331
+2026-05-05T04:59:21.5176352Z 
+2026-05-05T04:59:21.5176733Z > frontend@1.0.0 test:integration
+2026-05-05T04:59:21.5177473Z > npm run test:build && node --test .test-dist/integration/**/*.test.js
+2026-05-05T04:59:21.5177767Z 
+2026-05-05T04:59:21.6169526Z 
+2026-05-05T04:59:21.6169949Z > frontend@1.0.0 test:build
+2026-05-05T04:59:21.6170388Z > rm -rf .test-dist && tsc -p tsconfig.test.json
+2026-05-05T04:59:21.6170631Z 
+2026-05-05T04:59:23.9199461Z TAP version 13
+2026-05-05T04:59:23.9585672Z # Subtest: intégration recettes: fallback exclu + déduplication + partition header/list cohérente
+2026-05-05T04:59:23.9598086Z ok 1 - intégration recettes: fallback exclu + déduplication + partition header/list cohérente
+2026-05-05T04:59:23.9598745Z   ---
+2026-05-05T04:59:23.9599092Z   duration_ms: 1.812098
+2026-05-05T04:59:23.9599528Z   type: 'test'
+2026-05-05T04:59:23.9599924Z   ...
+2026-05-05T04:59:23.9683187Z 1..1
+2026-05-05T04:59:23.9684340Z # tests 1
+2026-05-05T04:59:23.9684998Z # suites 0
+2026-05-05T04:59:23.9685559Z # pass 1
+2026-05-05T04:59:23.9687217Z # fail 0
+2026-05-05T04:59:23.9687988Z # cancelled 0
+2026-05-05T04:59:23.9688477Z # skipped 0
+2026-05-05T04:59:23.9689553Z # todo 0
+2026-05-05T04:59:23.9690028Z # duration_ms 61.029821
+2026-05-05T04:59:24.0757357Z 
+2026-05-05T04:59:24.0757883Z > frontend@1.0.0 test:smoke
+2026-05-05T04:59:24.0758573Z > npm run test:build && node --test .test-dist/smoke/**/*.test.js
+2026-05-05T04:59:24.0758946Z 
+2026-05-05T04:59:24.1772621Z 
+2026-05-05T04:59:24.1773163Z > frontend@1.0.0 test:build
+2026-05-05T04:59:24.1773757Z > rm -rf .test-dist && tsc -p tsconfig.test.json
+2026-05-05T04:59:24.1774097Z 
+2026-05-05T04:59:26.5346958Z TAP version 13
+2026-05-05T04:59:26.5716363Z # Subtest: smoke frontend: app config charge sans crash et expose les clés critiques
+2026-05-05T04:59:26.5724183Z ok 1 - smoke frontend: app config charge sans crash et expose les clés critiques
+2026-05-05T04:59:26.5724800Z   ---
+2026-05-05T04:59:26.5725090Z   duration_ms: 5.516162
+2026-05-05T04:59:26.5725415Z   type: 'test'
+2026-05-05T04:59:26.5725696Z   ...
+2026-05-05T04:59:26.5806607Z 1..1
+2026-05-05T04:59:26.5808019Z # tests 1
+2026-05-05T04:59:26.5808987Z # suites 0
+2026-05-05T04:59:26.5809502Z # pass 1
+2026-05-05T04:59:26.5811434Z # fail 0
+2026-05-05T04:59:26.5811963Z # cancelled 0
+2026-05-05T04:59:26.5812624Z # skipped 0
+2026-05-05T04:59:26.5813871Z # todo 0
+2026-05-05T04:59:26.5814345Z # duration_ms 61.505075
+2026-05-05T04:59:26.6000585Z ##[group]Run node ../scripts/report-frontend-regression-suites.mjs
+2026-05-05T04:59:26.6001079Z [36;1mnode ../scripts/report-frontend-regression-suites.mjs[0m
+2026-05-05T04:59:26.6024063Z shell: /usr/bin/bash -e {0}
+2026-05-05T04:59:26.6024305Z ##[endgroup]
+2026-05-05T04:59:26.6345220Z Frontend non-regression suites summary
+2026-05-05T04:59:26.6346749Z ====================================
+2026-05-05T04:59:26.6347709Z Resolved tests directory: /home/runner/work/keepeat/keepeat/frontend/utils
+2026-05-05T04:59:26.6348340Z Total test files: 40
+2026-05-05T04:59:26.6348709Z - navigation: 6
+2026-05-05T04:59:26.6349029Z - recipes: 14
+2026-05-05T04:59:26.6349322Z - stock: 6
+2026-05-05T04:59:26.6350348Z - config_and_settings: 4
+2026-05-05T04:59:26.6352549Z - auth_and_admin: 4
+2026-05-05T04:59:26.6511648Z Post job cleanup.
+2026-05-05T04:59:26.7700761Z (node:2971) [DEP0040] DeprecationWarning: The `punycode` module is deprecated. Please use a userland alternative instead.
+2026-05-05T04:59:26.7701542Z (Use `node --trace-deprecation ...` to show where the warning was created)
+2026-05-05T04:59:26.7704589Z Cache hit occurred on the primary key node-cache-Linux-x64-npm-07ee83690cbaac8c828e80941ec81b0f066556f5660a774826e9a87521fb671f, not saving cache.
+2026-05-05T04:59:26.7846259Z Post job cleanup.
+2026-05-05T04:59:26.8675512Z [command]/usr/bin/git version
+2026-05-05T04:59:26.8712282Z git version 2.53.0
+2026-05-05T04:59:26.8747914Z Temporarily overriding HOME='/home/runner/work/_temp/44c8df04-1366-41b4-892e-9edb87fbbbf3' before making global git config changes
+2026-05-05T04:59:26.8749266Z Adding repository directory to the temporary git global config as a safe directory
+2026-05-05T04:59:26.8753757Z [command]/usr/bin/git config --global --add safe.directory /home/runner/work/keepeat/keepeat
+2026-05-05T04:59:26.8790135Z [command]/usr/bin/git config --local --name-only --get-regexp core\.sshCommand
+2026-05-05T04:59:26.8824011Z [command]/usr/bin/git submodule foreach --recursive sh -c "git config --local --name-only --get-regexp 'core\.sshCommand' && git config --local --unset-all 'core.sshCommand' || :"
+2026-05-05T04:59:26.9080039Z [command]/usr/bin/git config --local --name-only --get-regexp http\.https\:\/\/github\.com\/\.extraheader
+2026-05-05T04:59:26.9106796Z http.https://github.com/.extraheader
+2026-05-05T04:59:26.9118685Z [command]/usr/bin/git config --local --unset-all http.https://github.com/.extraheader
+2026-05-05T04:59:26.9153762Z [command]/usr/bin/git submodule foreach --recursive sh -c "git config --local --name-only --get-regexp 'http\.https\:\/\/github\.com\/\.extraheader' && git config --local --unset-all 'http.https://github.com/.extraheader' || :"
+2026-05-05T04:59:26.9412577Z [command]/usr/bin/git config --local --name-only --get-regexp ^includeIf\.gitdir:
+2026-05-05T04:59:26.9444675Z [command]/usr/bin/git submodule foreach --recursive git config --local --show-origin --name-only --get-regexp remote.origin.url
+2026-05-05T04:59:26.9879985Z Cleaning up orphan processes
