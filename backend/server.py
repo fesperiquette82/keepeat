@@ -1365,30 +1365,46 @@ async def register(request: Request, body: UserCreate):
 @_resolve_annotations
 @limiter.limit("10/minute")
 async def login(request: Request, body: UserLogin):
-    logger.info('[E2E_LOGIN_ATTEMPT] email=%s', body.email.lower())
-    doc = await users_col.find_one({"email": body.email.lower()})
-    # Toujours appeler verify_password (même avec hash factice) pour éviter
-    # l'énumération d'emails par différence de temps de réponse
-    hash_to_check = doc["hashed_password"] if doc else _DUMMY_HASH
-    password_ok = verify_password(body.password, hash_to_check)
-    if not doc or not password_ok:
-        raise HTTPException(status_code=401, detail="Invalid email or password")
+    logger.info('[E2E_LOGIN_ATTEMPT] email=%s password_len=%d', body.email.lower(), len(body.password))
+    try:
+        doc = await users_col.find_one({"email": body.email.lower()})
+        if not doc:
+            logger.info('[E2E_LOGIN_ATTEMPT] user not found: %s', body.email.lower())
+        else:
+            logger.info('[E2E_LOGIN_ATTEMPT] user found: %s (verified=%s premium=%s)', body.email.lower(), doc.get("email_verified", True), doc.get("is_premium", False))
 
-    if not doc.get("email_verified", True):
-        raise HTTPException(status_code=403, detail="EMAIL_NOT_VERIFIED")
+        # Toujours appeler verify_password (même avec hash factice) pour éviter
+        # l'énumération d'emails par différence de temps de réponse
+        hash_to_check = doc["hashed_password"] if doc else _DUMMY_HASH
+        password_ok = verify_password(body.password, hash_to_check)
+        logger.info('[E2E_LOGIN_ATTEMPT] password_ok=%s', password_ok)
 
-    user_id = str(doc["_id"])
-    await users_col.update_one({"_id": doc["_id"]}, {"$set": {"last_login": utc_now().isoformat()}})
-    token = create_token(user_id)
-    return TokenResponse(
-        access_token=token,
-        user=UserResponse(
-            id=user_id,
-            email=doc["email"],
-            is_premium=doc.get("is_premium", False),
-            is_verified=doc.get("email_verified", True),
-        ),
-    )
+        if not doc or not password_ok:
+            logger.warning('[E2E_LOGIN_ATTEMPT] login failed: invalid credentials for %s', body.email.lower())
+            raise HTTPException(status_code=401, detail="Invalid email or password")
+
+        if not doc.get("email_verified", True):
+            logger.warning('[E2E_LOGIN_ATTEMPT] login failed: email not verified for %s', body.email.lower())
+            raise HTTPException(status_code=403, detail="EMAIL_NOT_VERIFIED")
+
+        user_id = str(doc["_id"])
+        await users_col.update_one({"_id": doc["_id"]}, {"$set": {"last_login": utc_now().isoformat()}})
+        token = create_token(user_id)
+        logger.info('[E2E_LOGIN_ATTEMPT] login successful for %s', body.email.lower())
+        return TokenResponse(
+            access_token=token,
+            user=UserResponse(
+                id=user_id,
+                email=doc["email"],
+                is_premium=doc.get("is_premium", False),
+                is_verified=doc.get("email_verified", True),
+            ),
+        )
+    except HTTPException:
+        raise
+    except Exception as exc:
+        logger.error('[E2E_LOGIN_ATTEMPT] unexpected error: %s', exc)
+        raise
 
 
 @api_router.post("/auth/verify-email", response_model=TokenResponse)

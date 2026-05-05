@@ -1,0 +1,264 @@
+﻿2026-05-04T16:34:27.4454507Z Current runner version: '2.334.0'
+2026-05-04T16:34:27.4487934Z ##[group]Runner Image Provisioner
+2026-05-04T16:34:27.4488989Z Hosted Compute Agent
+2026-05-04T16:34:27.4489836Z Version: 20260213.493
+2026-05-04T16:34:27.4490727Z Commit: 5c115507f6dd24b8de37d8bbe0bb4509d0cc0fa3
+2026-05-04T16:34:27.4491860Z Build Date: 2026-02-13T00:28:41Z
+2026-05-04T16:34:27.4492828Z Worker ID: {007ca904-492e-4ba3-8dbf-babf46035c55}
+2026-05-04T16:34:27.4494029Z Azure Region: centralus
+2026-05-04T16:34:27.4494876Z ##[endgroup]
+2026-05-04T16:34:27.4497067Z ##[group]Operating System
+2026-05-04T16:34:27.4498486Z Ubuntu
+2026-05-04T16:34:27.4499160Z 24.04.4
+2026-05-04T16:34:27.4499823Z LTS
+2026-05-04T16:34:27.4500581Z ##[endgroup]
+2026-05-04T16:34:27.4501323Z ##[group]Runner Image
+2026-05-04T16:34:27.4502059Z Image: ubuntu-24.04
+2026-05-04T16:34:27.4502962Z Version: 20260413.86.1
+2026-05-04T16:34:27.4504722Z Included Software: https://github.com/actions/runner-images/blob/ubuntu24/20260413.86/images/ubuntu/Ubuntu2404-Readme.md
+2026-05-04T16:34:27.4507471Z Image Release: https://github.com/actions/runner-images/releases/tag/ubuntu24%2F20260413.86
+2026-05-04T16:34:27.4508877Z ##[endgroup]
+2026-05-04T16:34:27.4513494Z ##[group]GITHUB_TOKEN Permissions
+2026-05-04T16:34:27.4516405Z Actions: write
+2026-05-04T16:34:27.4517188Z ArtifactMetadata: write
+2026-05-04T16:34:27.4518245Z Attestations: write
+2026-05-04T16:34:27.4519015Z Checks: write
+2026-05-04T16:34:27.4519706Z Contents: write
+2026-05-04T16:34:27.4520562Z Deployments: write
+2026-05-04T16:34:27.4521346Z Discussions: write
+2026-05-04T16:34:27.4522022Z Issues: write
+2026-05-04T16:34:27.4522788Z Metadata: read
+2026-05-04T16:34:27.4523485Z Models: read
+2026-05-04T16:34:27.4524236Z Packages: write
+2026-05-04T16:34:27.4525062Z Pages: write
+2026-05-04T16:34:27.4525947Z PullRequests: write
+2026-05-04T16:34:27.4526821Z RepositoryProjects: write
+2026-05-04T16:34:27.4527947Z SecurityEvents: write
+2026-05-04T16:34:27.4528817Z Statuses: write
+2026-05-04T16:34:27.4529558Z VulnerabilityAlerts: read
+2026-05-04T16:34:27.4530888Z ##[endgroup]
+2026-05-04T16:34:27.4533477Z Secret source: Actions
+2026-05-04T16:34:27.4534483Z Prepare workflow directory
+2026-05-04T16:34:27.4893370Z Prepare all required actions
+2026-05-04T16:34:27.4945964Z Getting action download info
+2026-05-04T16:34:27.8152528Z Download action repository 'actions/checkout@v5' (SHA:93cb6efe18208431cddfb8368fd83d5badbf9bfd)
+2026-05-04T16:34:27.9303727Z Download action repository 'dorny/paths-filter@v3' (SHA:d1c1ffe0248fe513906c8e24db8ea791d46f8590)
+2026-05-04T16:34:28.3086946Z Complete job name: Mobile E2E / Changes detection gate
+2026-05-04T16:34:28.3889663Z ##[group]Run actions/checkout@v5
+2026-05-04T16:34:28.3890411Z with:
+2026-05-04T16:34:28.3890771Z   fetch-depth: 0
+2026-05-04T16:34:28.3891202Z   repository: fesperiquette82/keepeat
+2026-05-04T16:34:28.3891853Z   token: ***
+2026-05-04T16:34:28.3892222Z   ssh-strict: true
+2026-05-04T16:34:28.3892619Z   ssh-user: git
+2026-05-04T16:34:28.3893007Z   persist-credentials: true
+2026-05-04T16:34:28.3893466Z   clean: true
+2026-05-04T16:34:28.3893859Z   sparse-checkout-cone-mode: true
+2026-05-04T16:34:28.3894327Z   fetch-tags: false
+2026-05-04T16:34:28.3894709Z   show-progress: true
+2026-05-04T16:34:28.3895099Z   lfs: false
+2026-05-04T16:34:28.3895452Z   submodules: false
+2026-05-04T16:34:28.3895867Z   set-safe-directory: true
+2026-05-04T16:34:28.3896599Z ##[endgroup]
+2026-05-04T16:34:28.4906510Z Syncing repository: fesperiquette82/keepeat
+2026-05-04T16:34:28.4909242Z ##[group]Getting Git version info
+2026-05-04T16:34:28.4910292Z Working directory is '/home/runner/work/keepeat/keepeat'
+2026-05-04T16:34:28.4911961Z [command]/usr/bin/git version
+2026-05-04T16:34:28.4918011Z git version 2.53.0
+2026-05-04T16:34:28.4938599Z ##[endgroup]
+2026-05-04T16:34:28.4952779Z Temporarily overriding HOME='/home/runner/work/_temp/ed18edc0-d386-4e75-86d2-03e21ec9ac31' before making global git config changes
+2026-05-04T16:34:28.4954943Z Adding repository directory to the temporary git global config as a safe directory
+2026-05-04T16:34:28.4957835Z [command]/usr/bin/git config --global --add safe.directory /home/runner/work/keepeat/keepeat
+2026-05-04T16:34:28.4994087Z Deleting the contents of '/home/runner/work/keepeat/keepeat'
+2026-05-04T16:34:28.4999098Z ##[group]Initializing the repository
+2026-05-04T16:34:28.5004122Z [command]/usr/bin/git init /home/runner/work/keepeat/keepeat
+2026-05-04T16:34:28.5066077Z hint: Using 'master' as the name for the initial branch. This default branch name
+2026-05-04T16:34:28.5068152Z hint: will change to "main" in Git 3.0. To configure the initial branch name
+2026-05-04T16:34:28.5069830Z hint: to use in all of your new repositories, which will suppress this warning,
+2026-05-04T16:34:28.5071079Z hint: call:
+2026-05-04T16:34:28.5071846Z hint:
+2026-05-04T16:34:28.5072695Z hint: 	git config --global init.defaultBranch <name>
+2026-05-04T16:34:28.5073785Z hint:
+2026-05-04T16:34:28.5074751Z hint: Names commonly chosen instead of 'master' are 'main', 'trunk' and
+2026-05-04T16:34:28.5076403Z hint: 'development'. The just-created branch can be renamed via this command:
+2026-05-04T16:34:28.5078005Z hint:
+2026-05-04T16:34:28.5078767Z hint: 	git branch -m <name>
+2026-05-04T16:34:28.5079613Z hint:
+2026-05-04T16:34:28.5080695Z hint: Disable this message with "git config set advice.defaultBranchName false"
+2026-05-04T16:34:28.5082510Z Initialized empty Git repository in /home/runner/work/keepeat/keepeat/.git/
+2026-05-04T16:34:28.5085660Z [command]/usr/bin/git remote add origin https://github.com/fesperiquette82/keepeat
+2026-05-04T16:34:28.5112361Z ##[endgroup]
+2026-05-04T16:34:28.5113728Z ##[group]Disabling automatic garbage collection
+2026-05-04T16:34:28.5115022Z [command]/usr/bin/git config --local gc.auto 0
+2026-05-04T16:34:28.5151675Z ##[endgroup]
+2026-05-04T16:34:28.5153370Z ##[group]Setting up auth
+2026-05-04T16:34:28.5156863Z [command]/usr/bin/git config --local --name-only --get-regexp core\.sshCommand
+2026-05-04T16:34:28.5196973Z [command]/usr/bin/git submodule foreach --recursive sh -c "git config --local --name-only --get-regexp 'core\.sshCommand' && git config --local --unset-all 'core.sshCommand' || :"
+2026-05-04T16:34:28.5484228Z [command]/usr/bin/git config --local --name-only --get-regexp http\.https\:\/\/github\.com\/\.extraheader
+2026-05-04T16:34:28.5514670Z [command]/usr/bin/git submodule foreach --recursive sh -c "git config --local --name-only --get-regexp 'http\.https\:\/\/github\.com\/\.extraheader' && git config --local --unset-all 'http.https://github.com/.extraheader' || :"
+2026-05-04T16:34:28.5744676Z [command]/usr/bin/git config --local --name-only --get-regexp ^includeIf\.gitdir:
+2026-05-04T16:34:28.5775349Z [command]/usr/bin/git submodule foreach --recursive git config --local --show-origin --name-only --get-regexp remote.origin.url
+2026-05-04T16:34:28.6006445Z [command]/usr/bin/git config --local http.https://github.com/.extraheader AUTHORIZATION: basic ***
+2026-05-04T16:34:28.6043096Z ##[endgroup]
+2026-05-04T16:34:28.6044124Z ##[group]Fetching the repository
+2026-05-04T16:34:28.6054168Z [command]/usr/bin/git -c protocol.version=2 fetch --prune --no-recurse-submodules origin +refs/heads/*:refs/remotes/origin/* +refs/tags/*:refs/tags/* +fe2028bb3d5069962828ba00696a6c4963e2eb89:refs/remotes/pull/137/merge
+2026-05-04T16:34:30.2333745Z From https://github.com/fesperiquette82/keepeat
+2026-05-04T16:34:30.2335860Z  * [new branch]      codex/fix-ci-logic-for-maestro-checks    -> origin/codex/fix-ci-logic-for-maestro-checks
+2026-05-04T16:34:30.2338002Z  * [new branch]      main                                     -> origin/main
+2026-05-04T16:34:30.2339587Z  * [new branch]      multiple_usr                             -> origin/multiple_usr
+2026-05-04T16:34:30.2341717Z  * [new branch]      pr-136                                   -> origin/pr-136
+2026-05-04T16:34:30.2342980Z  * [new branch]      test                                     -> origin/test
+2026-05-04T16:34:30.2344254Z  * [new ref]         fe2028bb3d5069962828ba00696a6c4963e2eb89 -> pull/137/merge
+2026-05-04T16:34:30.2376287Z ##[endgroup]
+2026-05-04T16:34:30.2377961Z ##[group]Determining the checkout info
+2026-05-04T16:34:30.2379169Z ##[endgroup]
+2026-05-04T16:34:30.2383096Z [command]/usr/bin/git sparse-checkout disable
+2026-05-04T16:34:30.2422259Z [command]/usr/bin/git config --local --unset-all extensions.worktreeConfig
+2026-05-04T16:34:30.2450819Z ##[group]Checking out the ref
+2026-05-04T16:34:30.2455547Z [command]/usr/bin/git checkout --progress --force refs/remotes/pull/137/merge
+2026-05-04T16:34:30.9411768Z Note: switching to 'refs/remotes/pull/137/merge'.
+2026-05-04T16:34:30.9413389Z 
+2026-05-04T16:34:30.9414487Z You are in 'detached HEAD' state. You can look around, make experimental
+2026-05-04T16:34:30.9415783Z changes and commit them, and you can discard any commits you make in this
+2026-05-04T16:34:30.9416967Z state without impacting any branches by switching back to a branch.
+2026-05-04T16:34:30.9417956Z 
+2026-05-04T16:34:30.9418437Z If you want to create a new branch to retain commits you create, you may
+2026-05-04T16:34:30.9419575Z do so (now or later) by using -c with the switch command. Example:
+2026-05-04T16:34:30.9420297Z 
+2026-05-04T16:34:30.9420626Z   git switch -c <new-branch-name>
+2026-05-04T16:34:30.9421189Z 
+2026-05-04T16:34:30.9421517Z Or undo this operation with:
+2026-05-04T16:34:30.9421981Z 
+2026-05-04T16:34:30.9422245Z   git switch -
+2026-05-04T16:34:30.9422603Z 
+2026-05-04T16:34:30.9423280Z Turn off this advice by setting config variable advice.detachedHead to false
+2026-05-04T16:34:30.9424204Z 
+2026-05-04T16:34:30.9425292Z HEAD is now at fe2028b Merge 44c8bd598f80b0767bc0889cf65f48d2a05b9420 into f2138f0fb18b18c8f1c7ce2f92ab762c1c0f300a
+2026-05-04T16:34:30.9475295Z ##[endgroup]
+2026-05-04T16:34:30.9478885Z [command]/usr/bin/git log -1 --format=%H
+2026-05-04T16:34:30.9504376Z fe2028bb3d5069962828ba00696a6c4963e2eb89
+2026-05-04T16:34:30.9806554Z ##[group]Run dorny/paths-filter@v3
+2026-05-04T16:34:30.9807985Z with:
+2026-05-04T16:34:30.9816841Z   filters: mobile_apk_required:
+  - 'frontend/**'
+  - 'android/**'
+  - 'assets/**'
+  - 'app.json'
+  - 'app.config.*'
+  - 'eas.json'
+  - 'package.json'
+  - 'package-lock.json'
+  - 'frontend/package.json'
+  - 'frontend/package-lock.json'
+  - 'babel.config.*'
+  - 'metro.config.*'
+  - 'tsconfig*.json'
+maestro_required:
+  - 'frontend/**'
+  - 'android/**'
+  - 'assets/**'
+  - 'app.json'
+  - 'app.config.*'
+  - 'eas.json'
+  - 'package.json'
+  - 'package-lock.json'
+  - 'frontend/package.json'
+  - 'frontend/package-lock.json'
+  - 'babel.config.*'
+  - 'metro.config.*'
+  - 'tsconfig*.json'
+  - '.maestro/**'
+  - '.github/workflows/mobile-e2e.yml'
+  - 'scripts/e2e-*'
+  - 'scripts/run-maestro-e2e.sh'
+
+2026-05-04T16:34:30.9826225Z   token: ***
+2026-05-04T16:34:30.9827046Z   list-files: none
+2026-05-04T16:34:30.9828054Z   initial-fetch-depth: 100
+2026-05-04T16:34:30.9829144Z   predicate-quantifier: some
+2026-05-04T16:34:30.9830145Z ##[endgroup]
+2026-05-04T16:34:31.0864345Z ##[group]Fetching list of changed files for PR#137 from Github API
+2026-05-04T16:34:31.0872723Z Invoking listFiles(pull_number: 137, per_page: 100)
+2026-05-04T16:34:31.5908347Z Received 13 items
+2026-05-04T16:34:31.5910144Z [modified] .github/workflows/mobile-e2e.yml
+2026-05-04T16:34:31.5910685Z [modified] .maestro/01-auth-session.yaml
+2026-05-04T16:34:31.5911198Z [modified] .maestro/02-navigation-main-tabs.yaml
+2026-05-04T16:34:31.5911669Z [modified] backend/server.py
+2026-05-04T16:34:31.5912071Z [modified] docs/non-regression-tests.md
+2026-05-04T16:34:31.5912503Z [modified] frontend/app/index.tsx
+2026-05-04T16:34:31.5912920Z [modified] frontend/app/login.tsx
+2026-05-04T16:34:31.5913318Z [modified] frontend/store/authStore.ts
+2026-05-04T16:34:31.5913746Z [added] scripts/capture-logcat.sh
+2026-05-04T16:34:31.5914146Z [modified] scripts/e2e-reset-seed.mjs
+2026-05-04T16:34:31.5914583Z [added] scripts/generate-e2e-report.sh
+2026-05-04T16:34:31.5915090Z [modified] scripts/run-maestro-e2e.sh
+2026-05-04T16:34:31.5915571Z [modified] tests/test_ci_non_regression_policy.py
+2026-05-04T16:34:31.5916838Z ##[endgroup]
+2026-05-04T16:34:31.5917175Z Detected 13 changed files
+2026-05-04T16:34:31.5923529Z Results:
+2026-05-04T16:34:31.5924399Z ##[group]Filter mobile_apk_required = true
+2026-05-04T16:34:31.5924811Z Matching files:
+2026-05-04T16:34:31.5925121Z frontend/app/index.tsx [modified]
+2026-05-04T16:34:31.5925505Z frontend/app/login.tsx [modified]
+2026-05-04T16:34:31.5925901Z frontend/store/authStore.ts [modified]
+2026-05-04T16:34:31.5932583Z ##[endgroup]
+2026-05-04T16:34:31.5933134Z ##[group]Filter maestro_required = true
+2026-05-04T16:34:31.5933550Z Matching files:
+2026-05-04T16:34:31.5933933Z .github/workflows/mobile-e2e.yml [modified]
+2026-05-04T16:34:31.5934376Z .maestro/01-auth-session.yaml [modified]
+2026-05-04T16:34:31.5934842Z .maestro/02-navigation-main-tabs.yaml [modified]
+2026-05-04T16:34:31.5935383Z frontend/app/index.tsx [modified]
+2026-05-04T16:34:31.5935900Z frontend/app/login.tsx [modified]
+2026-05-04T16:34:31.5936350Z frontend/store/authStore.ts [modified]
+2026-05-04T16:34:31.5936765Z scripts/e2e-reset-seed.mjs [modified]
+2026-05-04T16:34:31.5937196Z scripts/run-maestro-e2e.sh [modified]
+2026-05-04T16:34:31.5938007Z ##[endgroup]
+2026-05-04T16:34:31.5938445Z Changes output set to ["mobile_apk_required","maestro_required"]
+2026-05-04T16:34:31.6463227Z ##[group]Run set -euo pipefail
+2026-05-04T16:34:31.6463610Z [36;1mset -euo pipefail[0m
+2026-05-04T16:34:31.6463853Z [36;1m[0m
+2026-05-04T16:34:31.6464053Z [36;1mAPK_REQUIRED="true"[0m
+2026-05-04T16:34:31.6464290Z [36;1mMAESTRO_REQUIRED="true"[0m
+2026-05-04T16:34:31.6464527Z [36;1mFORCE_BUILD="false"[0m
+2026-05-04T16:34:31.6464736Z [36;1mREASON=""[0m
+2026-05-04T16:34:31.6464921Z [36;1m[0m
+2026-05-04T16:34:31.6465132Z [36;1mif [ "$FORCE_BUILD" = "true" ]; then[0m
+2026-05-04T16:34:31.6465419Z [36;1m  APK_REQUIRED="true"[0m
+2026-05-04T16:34:31.6465661Z [36;1m  MAESTRO_REQUIRED="true"[0m
+2026-05-04T16:34:31.6465993Z [36;1m  REASON="workflow_dispatch_force_mobile_apk_build"[0m
+2026-05-04T16:34:31.6466344Z [36;1melif [ "$MAESTRO_REQUIRED" != "true" ]; then[0m
+2026-05-04T16:34:31.6466728Z [36;1m  REASON="only_non_mobile_changes_detected"[0m
+2026-05-04T16:34:31.6467031Z [36;1melif [ "$APK_REQUIRED" = "true" ]; then[0m
+2026-05-04T16:34:31.6467547Z [36;1m  REASON="apk_and_maestro_impacted_files_detected"[0m
+2026-05-04T16:34:31.6467846Z [36;1melse[0m
+2026-05-04T16:34:31.6468114Z [36;1m  REASON="maestro_runner_or_flow_change_without_apk_delta"[0m
+2026-05-04T16:34:31.6468420Z [36;1mfi[0m
+2026-05-04T16:34:31.6468588Z [36;1m[0m
+2026-05-04T16:34:31.6468842Z [36;1mecho "mobile_apk_required=$APK_REQUIRED" >> "$GITHUB_OUTPUT"[0m
+2026-05-04T16:34:31.6469257Z [36;1mecho "maestro_required=$MAESTRO_REQUIRED" >> "$GITHUB_OUTPUT"[0m
+2026-05-04T16:34:31.6469622Z [36;1mecho "reason=$REASON" >> "$GITHUB_OUTPUT"[0m
+2026-05-04T16:34:31.6469892Z [36;1m[0m
+2026-05-04T16:34:31.6470438Z [36;1mecho "Mobile E2E decision: mobile_apk_required=$APK_REQUIRED maestro_required=$MAESTRO_REQUIRED reason=$REASON force_mobile_apk_build=$FORCE_BUILD"[0m
+2026-05-04T16:34:31.6498045Z shell: /usr/bin/bash -e {0}
+2026-05-04T16:34:31.6498333Z ##[endgroup]
+2026-05-04T16:34:31.6567066Z Mobile E2E decision: mobile_apk_required=true maestro_required=true reason=apk_and_maestro_impacted_files_detected force_mobile_apk_build=false
+2026-05-04T16:34:31.6739377Z Post job cleanup.
+2026-05-04T16:34:31.7565678Z [command]/usr/bin/git version
+2026-05-04T16:34:31.7602068Z git version 2.53.0
+2026-05-04T16:34:31.7641571Z Temporarily overriding HOME='/home/runner/work/_temp/fcdc4ec7-27d0-4773-ba7d-254dcd7bf935' before making global git config changes
+2026-05-04T16:34:31.7642390Z Adding repository directory to the temporary git global config as a safe directory
+2026-05-04T16:34:31.7647247Z [command]/usr/bin/git config --global --add safe.directory /home/runner/work/keepeat/keepeat
+2026-05-04T16:34:31.7683316Z [command]/usr/bin/git config --local --name-only --get-regexp core\.sshCommand
+2026-05-04T16:34:31.7716296Z [command]/usr/bin/git submodule foreach --recursive sh -c "git config --local --name-only --get-regexp 'core\.sshCommand' && git config --local --unset-all 'core.sshCommand' || :"
+2026-05-04T16:34:31.7991807Z [command]/usr/bin/git config --local --name-only --get-regexp http\.https\:\/\/github\.com\/\.extraheader
+2026-05-04T16:34:31.8015249Z http.https://github.com/.extraheader
+2026-05-04T16:34:31.8025467Z [command]/usr/bin/git config --local --unset-all http.https://github.com/.extraheader
+2026-05-04T16:34:31.8059608Z [command]/usr/bin/git submodule foreach --recursive sh -c "git config --local --name-only --get-regexp 'http\.https\:\/\/github\.com\/\.extraheader' && git config --local --unset-all 'http.https://github.com/.extraheader' || :"
+2026-05-04T16:34:31.8299860Z [command]/usr/bin/git config --local --name-only --get-regexp ^includeIf\.gitdir:
+2026-05-04T16:34:31.8330628Z [command]/usr/bin/git submodule foreach --recursive git config --local --show-origin --name-only --get-regexp remote.origin.url
+2026-05-04T16:34:31.8711286Z Evaluate and set job outputs
+2026-05-04T16:34:31.8717998Z Set output 'mobile_apk_required'
+2026-05-04T16:34:31.8719683Z Set output 'maestro_required'
+2026-05-04T16:34:31.8720480Z Set output 'reason'
+2026-05-04T16:34:31.8721176Z Cleaning up orphan processes
+2026-05-04T16:34:31.9028023Z ##[warning]Node.js 20 actions are deprecated. The following actions are running on Node.js 20 and may not work as expected: dorny/paths-filter@v3. Actions will be forced to run with Node.js 24 by default starting June 2nd, 2026. Node.js 20 will be removed from the runner on September 16th, 2026. Please check if updated versions of these actions are available that support Node.js 24. To opt into Node.js 24 now, set the FORCE_JAVASCRIPT_ACTIONS_TO_NODE24=true environment variable on the runner or in your workflow file. Once Node.js 24 becomes the default, you can temporarily opt out by setting ACTIONS_ALLOW_USE_UNSECURE_NODE_VERSION=true. For more information see: https://github.blog/changelog/2025-09-19-deprecation-of-node-20-on-github-actions-runners/

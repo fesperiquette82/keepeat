@@ -1,0 +1,346 @@
+﻿2026-05-04T16:34:25.5486858Z Current runner version: '2.334.0'
+2026-05-04T16:34:25.5509812Z ##[group]Runner Image Provisioner
+2026-05-04T16:34:25.5510613Z Hosted Compute Agent
+2026-05-04T16:34:25.5511070Z Version: 20260213.493
+2026-05-04T16:34:25.5511633Z Commit: 5c115507f6dd24b8de37d8bbe0bb4509d0cc0fa3
+2026-05-04T16:34:25.5512502Z Build Date: 2026-02-13T00:28:41Z
+2026-05-04T16:34:25.5513105Z Worker ID: {31698d16-bcae-4948-8671-44ce90e9e48a}
+2026-05-04T16:34:25.5513681Z Azure Region: westus3
+2026-05-04T16:34:25.5514185Z ##[endgroup]
+2026-05-04T16:34:25.5515541Z ##[group]Operating System
+2026-05-04T16:34:25.5516056Z Ubuntu
+2026-05-04T16:34:25.5516510Z 24.04.4
+2026-05-04T16:34:25.5516904Z LTS
+2026-05-04T16:34:25.5517312Z ##[endgroup]
+2026-05-04T16:34:25.5517707Z ##[group]Runner Image
+2026-05-04T16:34:25.5518218Z Image: ubuntu-24.04
+2026-05-04T16:34:25.5518660Z Version: 20260413.86.1
+2026-05-04T16:34:25.5519772Z Included Software: https://github.com/actions/runner-images/blob/ubuntu24/20260413.86/images/ubuntu/Ubuntu2404-Readme.md
+2026-05-04T16:34:25.5521004Z Image Release: https://github.com/actions/runner-images/releases/tag/ubuntu24%2F20260413.86
+2026-05-04T16:34:25.5521989Z ##[endgroup]
+2026-05-04T16:34:25.5524765Z ##[group]GITHUB_TOKEN Permissions
+2026-05-04T16:34:25.5526694Z Actions: write
+2026-05-04T16:34:25.5527226Z ArtifactMetadata: write
+2026-05-04T16:34:25.5527726Z Attestations: write
+2026-05-04T16:34:25.5528148Z Checks: write
+2026-05-04T16:34:25.5528599Z Contents: write
+2026-05-04T16:34:25.5529063Z Deployments: write
+2026-05-04T16:34:25.5529479Z Discussions: write
+2026-05-04T16:34:25.5529941Z Issues: write
+2026-05-04T16:34:25.5530349Z Metadata: read
+2026-05-04T16:34:25.5530782Z Models: read
+2026-05-04T16:34:25.5531195Z Packages: write
+2026-05-04T16:34:25.5531669Z Pages: write
+2026-05-04T16:34:25.5532374Z PullRequests: write
+2026-05-04T16:34:25.5532833Z RepositoryProjects: write
+2026-05-04T16:34:25.5533349Z SecurityEvents: write
+2026-05-04T16:34:25.5533796Z Statuses: write
+2026-05-04T16:34:25.5534289Z VulnerabilityAlerts: read
+2026-05-04T16:34:25.5534788Z ##[endgroup]
+2026-05-04T16:34:25.5536766Z Secret source: Actions
+2026-05-04T16:34:25.5537675Z Prepare workflow directory
+2026-05-04T16:34:25.5837700Z Prepare all required actions
+2026-05-04T16:34:25.5873981Z Getting action download info
+2026-05-04T16:34:26.0615418Z Download action repository 'actions/checkout@v5' (SHA:93cb6efe18208431cddfb8368fd83d5badbf9bfd)
+2026-05-04T16:34:26.1383881Z Download action repository 'actions/setup-python@v5' (SHA:a26af69be951a213d495a4c3e4e4022e16d87065)
+2026-05-04T16:34:26.2870996Z Complete job name: Backend regression tests
+2026-05-04T16:34:26.3486597Z ##[group]Run actions/checkout@v5
+2026-05-04T16:34:26.3487407Z with:
+2026-05-04T16:34:26.3487870Z   repository: fesperiquette82/keepeat
+2026-05-04T16:34:26.3488631Z   token: ***
+2026-05-04T16:34:26.3489023Z   ssh-strict: true
+2026-05-04T16:34:26.3489471Z   ssh-user: git
+2026-05-04T16:34:26.3489856Z   persist-credentials: true
+2026-05-04T16:34:26.3490365Z   clean: true
+2026-05-04T16:34:26.3490757Z   sparse-checkout-cone-mode: true
+2026-05-04T16:34:26.3491257Z   fetch-depth: 1
+2026-05-04T16:34:26.3491699Z   fetch-tags: false
+2026-05-04T16:34:26.3492307Z   show-progress: true
+2026-05-04T16:34:26.3492752Z   lfs: false
+2026-05-04T16:34:26.3493164Z   submodules: false
+2026-05-04T16:34:26.3493593Z   set-safe-directory: true
+2026-05-04T16:34:26.3494294Z ##[endgroup]
+2026-05-04T16:34:26.4412205Z Syncing repository: fesperiquette82/keepeat
+2026-05-04T16:34:26.4414407Z ##[group]Getting Git version info
+2026-05-04T16:34:26.4415139Z Working directory is '/home/runner/work/keepeat/keepeat'
+2026-05-04T16:34:26.4416300Z [command]/usr/bin/git version
+2026-05-04T16:34:26.4444817Z git version 2.53.0
+2026-05-04T16:34:26.4464343Z ##[endgroup]
+2026-05-04T16:34:26.4477798Z Temporarily overriding HOME='/home/runner/work/_temp/06e60f1e-1d5d-48e9-bc65-eb5d0a5471b1' before making global git config changes
+2026-05-04T16:34:26.4479017Z Adding repository directory to the temporary git global config as a safe directory
+2026-05-04T16:34:26.4483338Z [command]/usr/bin/git config --global --add safe.directory /home/runner/work/keepeat/keepeat
+2026-05-04T16:34:26.4511737Z Deleting the contents of '/home/runner/work/keepeat/keepeat'
+2026-05-04T16:34:26.4515548Z ##[group]Initializing the repository
+2026-05-04T16:34:26.4519665Z [command]/usr/bin/git init /home/runner/work/keepeat/keepeat
+2026-05-04T16:34:26.4600867Z hint: Using 'master' as the name for the initial branch. This default branch name
+2026-05-04T16:34:26.4602767Z hint: will change to "main" in Git 3.0. To configure the initial branch name
+2026-05-04T16:34:26.4603736Z hint: to use in all of your new repositories, which will suppress this warning,
+2026-05-04T16:34:26.4604384Z hint: call:
+2026-05-04T16:34:26.4604974Z hint:
+2026-05-04T16:34:26.4605604Z hint: 	git config --global init.defaultBranch <name>
+2026-05-04T16:34:26.4606211Z hint:
+2026-05-04T16:34:26.4606722Z hint: Names commonly chosen instead of 'master' are 'main', 'trunk' and
+2026-05-04T16:34:26.4607608Z hint: 'development'. The just-created branch can be renamed via this command:
+2026-05-04T16:34:26.4608411Z hint:
+2026-05-04T16:34:26.4608799Z hint: 	git branch -m <name>
+2026-05-04T16:34:26.4609297Z hint:
+2026-05-04T16:34:26.4609875Z hint: Disable this message with "git config set advice.defaultBranchName false"
+2026-05-04T16:34:26.4610749Z Initialized empty Git repository in /home/runner/work/keepeat/keepeat/.git/
+2026-05-04T16:34:26.4612890Z [command]/usr/bin/git remote add origin https://github.com/fesperiquette82/keepeat
+2026-05-04T16:34:26.4637807Z ##[endgroup]
+2026-05-04T16:34:26.4638555Z ##[group]Disabling automatic garbage collection
+2026-05-04T16:34:26.4641608Z [command]/usr/bin/git config --local gc.auto 0
+2026-05-04T16:34:26.4666931Z ##[endgroup]
+2026-05-04T16:34:26.4668141Z ##[group]Setting up auth
+2026-05-04T16:34:26.4674803Z [command]/usr/bin/git config --local --name-only --get-regexp core\.sshCommand
+2026-05-04T16:34:26.4701352Z [command]/usr/bin/git submodule foreach --recursive sh -c "git config --local --name-only --get-regexp 'core\.sshCommand' && git config --local --unset-all 'core.sshCommand' || :"
+2026-05-04T16:34:26.4930593Z [command]/usr/bin/git config --local --name-only --get-regexp http\.https\:\/\/github\.com\/\.extraheader
+2026-05-04T16:34:26.4956394Z [command]/usr/bin/git submodule foreach --recursive sh -c "git config --local --name-only --get-regexp 'http\.https\:\/\/github\.com\/\.extraheader' && git config --local --unset-all 'http.https://github.com/.extraheader' || :"
+2026-05-04T16:34:26.5125434Z [command]/usr/bin/git config --local --name-only --get-regexp ^includeIf\.gitdir:
+2026-05-04T16:34:26.5150377Z [command]/usr/bin/git submodule foreach --recursive git config --local --show-origin --name-only --get-regexp remote.origin.url
+2026-05-04T16:34:26.5338044Z [command]/usr/bin/git config --local http.https://github.com/.extraheader AUTHORIZATION: basic ***
+2026-05-04T16:34:26.5366974Z ##[endgroup]
+2026-05-04T16:34:26.5367718Z ##[group]Fetching the repository
+2026-05-04T16:34:26.5375191Z [command]/usr/bin/git -c protocol.version=2 fetch --no-tags --prune --no-recurse-submodules --depth=1 origin +44c8bd598f80b0767bc0889cf65f48d2a05b9420:refs/remotes/origin/pr-136
+2026-05-04T16:34:28.7633131Z From https://github.com/fesperiquette82/keepeat
+2026-05-04T16:34:28.7635060Z  * [new ref]         44c8bd598f80b0767bc0889cf65f48d2a05b9420 -> origin/pr-136
+2026-05-04T16:34:28.7659415Z ##[endgroup]
+2026-05-04T16:34:28.7660541Z ##[group]Determining the checkout info
+2026-05-04T16:34:28.7662299Z ##[endgroup]
+2026-05-04T16:34:28.7667979Z [command]/usr/bin/git sparse-checkout disable
+2026-05-04T16:34:28.7700391Z [command]/usr/bin/git config --local --unset-all extensions.worktreeConfig
+2026-05-04T16:34:28.7723171Z ##[group]Checking out the ref
+2026-05-04T16:34:28.7727616Z [command]/usr/bin/git checkout --progress --force -B pr-136 refs/remotes/origin/pr-136
+2026-05-04T16:34:29.3224778Z Switched to a new branch 'pr-136'
+2026-05-04T16:34:29.3225631Z branch 'pr-136' set up to track 'origin/pr-136'.
+2026-05-04T16:34:29.3238168Z ##[endgroup]
+2026-05-04T16:34:29.3272823Z [command]/usr/bin/git log -1 --format=%H
+2026-05-04T16:34:29.3292673Z 44c8bd598f80b0767bc0889cf65f48d2a05b9420
+2026-05-04T16:34:29.3520136Z ##[group]Run actions/setup-python@v5
+2026-05-04T16:34:29.3520553Z with:
+2026-05-04T16:34:29.3520805Z   python-version: 3.12
+2026-05-04T16:34:29.3521068Z   cache: pip
+2026-05-04T16:34:29.3521361Z   cache-dependency-path: backend/requirements.txt
+2026-05-04T16:34:29.3521722Z   check-latest: false
+2026-05-04T16:34:29.3522471Z   token: ***
+2026-05-04T16:34:29.3522725Z   update-environment: true
+2026-05-04T16:34:29.3523032Z   allow-prereleases: false
+2026-05-04T16:34:29.3523320Z   freethreaded: false
+2026-05-04T16:34:29.3523576Z ##[endgroup]
+2026-05-04T16:34:29.5131152Z ##[group]Installed versions
+2026-05-04T16:34:29.5217188Z Successfully set up CPython (3.12.13)
+2026-05-04T16:34:29.5218010Z ##[endgroup]
+2026-05-04T16:34:29.5549926Z [command]/opt/hostedtoolcache/Python/3.12.13/x64/bin/pip cache dir
+2026-05-04T16:34:30.0435292Z /home/runner/.cache/pip
+2026-05-04T16:34:30.3405052Z Cache hit for: setup-python-Linux-x64-24.04-Ubuntu-python-3.12.13-pip-0e36ea9993b375daff9db3f8c908c04666baf3137abb3802fae3103f7f986333
+2026-05-04T16:34:31.5916671Z Received 17852614 of 17852614 (100.0%), 17.2 MBs/sec
+2026-05-04T16:34:31.5917297Z Cache Size: ~17 MB (17852614 B)
+2026-05-04T16:34:31.5944970Z [command]/usr/bin/tar -xf /home/runner/work/_temp/9b46e546-b9ee-4f94-bdf9-d5b60fbeff9b/cache.tzst -P -C /home/runner/work/keepeat/keepeat --use-compress-program unzstd
+2026-05-04T16:34:31.6292342Z Cache restored successfully
+2026-05-04T16:34:31.6306360Z Cache restored from key: setup-python-Linux-x64-24.04-Ubuntu-python-3.12.13-pip-0e36ea9993b375daff9db3f8c908c04666baf3137abb3802fae3103f7f986333
+2026-05-04T16:34:31.6432592Z ##[group]Run pip install -r backend/requirements.txt pytest
+2026-05-04T16:34:31.6433178Z [36;1mpip install -r backend/requirements.txt pytest[0m
+2026-05-04T16:34:31.6452929Z shell: /usr/bin/bash -e {0}
+2026-05-04T16:34:31.6453188Z env:
+2026-05-04T16:34:31.6453472Z   pythonLocation: /opt/hostedtoolcache/Python/3.12.13/x64
+2026-05-04T16:34:31.6453879Z   PKG_CONFIG_PATH: /opt/hostedtoolcache/Python/3.12.13/x64/lib/pkgconfig
+2026-05-04T16:34:31.6454260Z   Python_ROOT_DIR: /opt/hostedtoolcache/Python/3.12.13/x64
+2026-05-04T16:34:31.6454616Z   Python2_ROOT_DIR: /opt/hostedtoolcache/Python/3.12.13/x64
+2026-05-04T16:34:31.6454972Z   Python3_ROOT_DIR: /opt/hostedtoolcache/Python/3.12.13/x64
+2026-05-04T16:34:31.6455318Z   LD_LIBRARY_PATH: /opt/hostedtoolcache/Python/3.12.13/x64/lib
+2026-05-04T16:34:31.6455601Z ##[endgroup]
+2026-05-04T16:34:32.4025142Z Collecting pytest
+2026-05-04T16:34:32.4037434Z   Using cached pytest-9.0.3-py3-none-any.whl.metadata (7.6 kB)
+2026-05-04T16:34:32.4657002Z Collecting fastapi>=0.115.4 (from -r backend/requirements.txt (line 1))
+2026-05-04T16:34:32.5399094Z   Downloading fastapi-0.136.1-py3-none-any.whl.metadata (28 kB)
+2026-05-04T16:34:32.6009298Z Collecting uvicorn>=0.32.0 (from -r backend/requirements.txt (line 2))
+2026-05-04T16:34:32.6118966Z   Downloading uvicorn-0.46.0-py3-none-any.whl.metadata (6.7 kB)
+2026-05-04T16:34:32.6396251Z Collecting python-dotenv>=1.0.1 (from -r backend/requirements.txt (line 3))
+2026-05-04T16:34:32.6408894Z   Using cached python_dotenv-1.2.2-py3-none-any.whl.metadata (27 kB)
+2026-05-04T16:34:32.7743580Z Collecting pydantic>=2.9.0 (from -r backend/requirements.txt (line 4))
+2026-05-04T16:34:32.7843074Z   Downloading pydantic-2.13.3-py3-none-any.whl.metadata (108 kB)
+2026-05-04T16:34:32.8255276Z Collecting email-validator>=2.2.0 (from -r backend/requirements.txt (line 5))
+2026-05-04T16:34:32.8268521Z   Using cached email_validator-2.3.0-py3-none-any.whl.metadata (26 kB)
+2026-05-04T16:34:33.1268244Z Collecting pymongo==4.5.0 (from -r backend/requirements.txt (line 6))
+2026-05-04T16:34:33.1281945Z   Using cached pymongo-4.5.0-cp312-cp312-manylinux_2_17_x86_64.manylinux2014_x86_64.whl.metadata (22 kB)
+2026-05-04T16:34:33.1518817Z Collecting motor==3.3.1 (from -r backend/requirements.txt (line 7))
+2026-05-04T16:34:33.1531434Z   Using cached motor-3.3.1-py3-none-any.whl.metadata (20 kB)
+2026-05-04T16:34:33.1732587Z Collecting python-jose>=3.3.0 (from -r backend/requirements.txt (line 8))
+2026-05-04T16:34:33.1744317Z   Using cached python_jose-3.5.0-py2.py3-none-any.whl.metadata (5.5 kB)
+2026-05-04T16:34:33.2120114Z Collecting bcrypt==4.1.3 (from -r backend/requirements.txt (line 9))
+2026-05-04T16:34:33.2132829Z   Using cached bcrypt-4.1.3-cp39-abi3-manylinux_2_28_x86_64.whl.metadata (9.5 kB)
+2026-05-04T16:34:33.2311068Z Collecting passlib>=1.7.4 (from -r backend/requirements.txt (line 10))
+2026-05-04T16:34:33.2322625Z   Using cached passlib-1.7.4-py2.py3-none-any.whl.metadata (1.7 kB)
+2026-05-04T16:34:33.2528235Z Collecting httpx>=0.27.0 (from -r backend/requirements.txt (line 11))
+2026-05-04T16:34:33.2540103Z   Using cached httpx-0.28.1-py3-none-any.whl.metadata (7.1 kB)
+2026-05-04T16:34:33.2743074Z Collecting python-multipart>=0.0.9 (from -r backend/requirements.txt (line 12))
+2026-05-04T16:34:33.2840846Z   Downloading python_multipart-0.0.27-py3-none-any.whl.metadata (2.1 kB)
+2026-05-04T16:34:33.3042536Z Collecting tzdata>=2024.2 (from -r backend/requirements.txt (line 13))
+2026-05-04T16:34:33.3143566Z   Downloading tzdata-2026.2-py2.py3-none-any.whl.metadata (1.4 kB)
+2026-05-04T16:34:33.3347990Z Collecting aiosmtplib>=2.0.0 (from -r backend/requirements.txt (line 14))
+2026-05-04T16:34:33.3360598Z   Using cached aiosmtplib-5.1.0-py3-none-any.whl.metadata (3.6 kB)
+2026-05-04T16:34:33.3519845Z Collecting slowapi>=0.1.9 (from -r backend/requirements.txt (line 15))
+2026-05-04T16:34:33.3531050Z   Using cached slowapi-0.1.9-py3-none-any.whl.metadata (3.0 kB)
+2026-05-04T16:34:33.3894163Z Collecting google-auth>=2.29.0 (from -r backend/requirements.txt (line 16))
+2026-05-04T16:34:33.3999308Z   Downloading google_auth-2.50.0-py3-none-any.whl.metadata (6.2 kB)
+2026-05-04T16:34:33.4313086Z Collecting requests>=2.31.0 (from -r backend/requirements.txt (line 17))
+2026-05-04T16:34:33.4325401Z   Using cached requests-2.33.1-py3-none-any.whl.metadata (4.8 kB)
+2026-05-04T16:34:33.4512277Z Collecting dnspython<3.0.0,>=1.16.0 (from pymongo==4.5.0->-r backend/requirements.txt (line 6))
+2026-05-04T16:34:33.4524203Z   Using cached dnspython-2.8.0-py3-none-any.whl.metadata (5.7 kB)
+2026-05-04T16:34:33.4725207Z Collecting iniconfig>=1.0.1 (from pytest)
+2026-05-04T16:34:33.4737342Z   Using cached iniconfig-2.3.0-py3-none-any.whl.metadata (2.5 kB)
+2026-05-04T16:34:33.4939607Z Collecting packaging>=22 (from pytest)
+2026-05-04T16:34:33.5037948Z   Downloading packaging-26.2-py3-none-any.whl.metadata (3.5 kB)
+2026-05-04T16:34:33.5218372Z Collecting pluggy<2,>=1.5 (from pytest)
+2026-05-04T16:34:33.5232933Z   Using cached pluggy-1.6.0-py3-none-any.whl.metadata (4.8 kB)
+2026-05-04T16:34:33.5447010Z Collecting pygments>=2.7.2 (from pytest)
+2026-05-04T16:34:33.5458813Z   Using cached pygments-2.20.0-py3-none-any.whl.metadata (2.5 kB)
+2026-05-04T16:34:33.5726547Z Collecting starlette>=0.46.0 (from fastapi>=0.115.4->-r backend/requirements.txt (line 1))
+2026-05-04T16:34:33.5738073Z   Using cached starlette-1.0.0-py3-none-any.whl.metadata (6.3 kB)
+2026-05-04T16:34:33.5946278Z Collecting typing-extensions>=4.8.0 (from fastapi>=0.115.4->-r backend/requirements.txt (line 1))
+2026-05-04T16:34:33.5957191Z   Using cached typing_extensions-4.15.0-py3-none-any.whl.metadata (3.3 kB)
+2026-05-04T16:34:33.6113897Z Collecting typing-inspection>=0.4.2 (from fastapi>=0.115.4->-r backend/requirements.txt (line 1))
+2026-05-04T16:34:33.6125113Z   Using cached typing_inspection-0.4.2-py3-none-any.whl.metadata (2.6 kB)
+2026-05-04T16:34:33.6273071Z Collecting annotated-doc>=0.0.2 (from fastapi>=0.115.4->-r backend/requirements.txt (line 1))
+2026-05-04T16:34:33.6283808Z   Using cached annotated_doc-0.0.4-py3-none-any.whl.metadata (6.6 kB)
+2026-05-04T16:34:33.6506735Z Collecting click>=7.0 (from uvicorn>=0.32.0->-r backend/requirements.txt (line 2))
+2026-05-04T16:34:33.6603990Z   Downloading click-8.3.3-py3-none-any.whl.metadata (2.6 kB)
+2026-05-04T16:34:33.6779357Z Collecting h11>=0.8 (from uvicorn>=0.32.0->-r backend/requirements.txt (line 2))
+2026-05-04T16:34:33.6789948Z   Using cached h11-0.16.0-py3-none-any.whl.metadata (8.3 kB)
+2026-05-04T16:34:33.6955255Z Collecting annotated-types>=0.6.0 (from pydantic>=2.9.0->-r backend/requirements.txt (line 4))
+2026-05-04T16:34:33.6966467Z   Using cached annotated_types-0.7.0-py3-none-any.whl.metadata (15 kB)
+2026-05-04T16:34:34.3776597Z Collecting pydantic-core==2.46.3 (from pydantic>=2.9.0->-r backend/requirements.txt (line 4))
+2026-05-04T16:34:34.3880042Z   Downloading pydantic_core-2.46.3-cp312-cp312-manylinux_2_17_x86_64.manylinux2014_x86_64.whl.metadata (6.6 kB)
+2026-05-04T16:34:34.4122355Z Collecting idna>=2.0.0 (from email-validator>=2.2.0->-r backend/requirements.txt (line 5))
+2026-05-04T16:34:34.4220095Z   Downloading idna-3.13-py3-none-any.whl.metadata (8.0 kB)
+2026-05-04T16:34:34.4421002Z Collecting ecdsa!=0.15 (from python-jose>=3.3.0->-r backend/requirements.txt (line 8))
+2026-05-04T16:34:34.4432777Z   Using cached ecdsa-0.19.2-py2.py3-none-any.whl.metadata (29 kB)
+2026-05-04T16:34:34.4627872Z Collecting rsa!=4.1.1,!=4.4,<5.0,>=4.0 (from python-jose>=3.3.0->-r backend/requirements.txt (line 8))
+2026-05-04T16:34:34.4638739Z   Using cached rsa-4.9.1-py3-none-any.whl.metadata (5.6 kB)
+2026-05-04T16:34:34.4873258Z Collecting pyasn1>=0.5.0 (from python-jose>=3.3.0->-r backend/requirements.txt (line 8))
+2026-05-04T16:34:34.4885633Z   Using cached pyasn1-0.6.3-py3-none-any.whl.metadata (8.4 kB)
+2026-05-04T16:34:34.5127251Z Collecting anyio (from httpx>=0.27.0->-r backend/requirements.txt (line 11))
+2026-05-04T16:34:34.5139097Z   Using cached anyio-4.13.0-py3-none-any.whl.metadata (4.5 kB)
+2026-05-04T16:34:34.5380422Z Collecting certifi (from httpx>=0.27.0->-r backend/requirements.txt (line 11))
+2026-05-04T16:34:34.5481149Z   Downloading certifi-2026.4.22-py3-none-any.whl.metadata (2.5 kB)
+2026-05-04T16:34:34.5701356Z Collecting httpcore==1.* (from httpx>=0.27.0->-r backend/requirements.txt (line 11))
+2026-05-04T16:34:34.5712225Z   Using cached httpcore-1.0.9-py3-none-any.whl.metadata (21 kB)
+2026-05-04T16:34:34.6015695Z Collecting limits>=2.3 (from slowapi>=0.1.9->-r backend/requirements.txt (line 15))
+2026-05-04T16:34:34.6027594Z   Using cached limits-5.8.0-py3-none-any.whl.metadata (10 kB)
+2026-05-04T16:34:34.6266108Z Collecting pyasn1-modules>=0.2.1 (from google-auth>=2.29.0->-r backend/requirements.txt (line 16))
+2026-05-04T16:34:34.6278182Z   Using cached pyasn1_modules-0.4.2-py3-none-any.whl.metadata (3.5 kB)
+2026-05-04T16:34:34.7989903Z Collecting cryptography>=38.0.3 (from google-auth>=2.29.0->-r backend/requirements.txt (line 16))
+2026-05-04T16:34:34.8090724Z   Downloading cryptography-47.0.0-cp311-abi3-manylinux_2_34_x86_64.whl.metadata (4.5 kB)
+2026-05-04T16:34:34.8939754Z Collecting charset_normalizer<4,>=2 (from requests>=2.31.0->-r backend/requirements.txt (line 17))
+2026-05-04T16:34:34.8953573Z   Using cached charset_normalizer-3.4.7-cp312-cp312-manylinux2014_x86_64.manylinux_2_17_x86_64.manylinux_2_28_x86_64.whl.metadata (40 kB)
+2026-05-04T16:34:34.9232613Z Collecting urllib3<3,>=1.26 (from requests>=2.31.0->-r backend/requirements.txt (line 17))
+2026-05-04T16:34:34.9244020Z   Using cached urllib3-2.6.3-py3-none-any.whl.metadata (6.9 kB)
+2026-05-04T16:34:35.0157236Z Collecting cffi>=2.0.0 (from cryptography>=38.0.3->google-auth>=2.29.0->-r backend/requirements.txt (line 16))
+2026-05-04T16:34:35.0170162Z   Using cached cffi-2.0.0-cp312-cp312-manylinux2014_x86_64.manylinux_2_17_x86_64.whl.metadata (2.6 kB)
+2026-05-04T16:34:35.0338520Z Collecting pycparser (from cffi>=2.0.0->cryptography>=38.0.3->google-auth>=2.29.0->-r backend/requirements.txt (line 16))
+2026-05-04T16:34:35.0349104Z   Using cached pycparser-3.0-py3-none-any.whl.metadata (8.2 kB)
+2026-05-04T16:34:35.0532553Z Collecting six>=1.9.0 (from ecdsa!=0.15->python-jose>=3.3.0->-r backend/requirements.txt (line 8))
+2026-05-04T16:34:35.0543525Z   Using cached six-1.17.0-py2.py3-none-any.whl.metadata (1.7 kB)
+2026-05-04T16:34:35.0739042Z Collecting deprecated>=1.2 (from limits>=2.3->slowapi>=0.1.9->-r backend/requirements.txt (line 15))
+2026-05-04T16:34:35.0750363Z   Using cached deprecated-1.3.1-py2.py3-none-any.whl.metadata (5.9 kB)
+2026-05-04T16:34:35.3265345Z Collecting wrapt<3,>=1.10 (from deprecated>=1.2->limits>=2.3->slowapi>=0.1.9->-r backend/requirements.txt (line 15))
+2026-05-04T16:34:35.3275904Z   Using cached wrapt-2.1.2-cp312-cp312-manylinux1_x86_64.manylinux_2_28_x86_64.manylinux_2_5_x86_64.whl.metadata (7.4 kB)
+2026-05-04T16:34:35.3421021Z Using cached pymongo-4.5.0-cp312-cp312-manylinux_2_17_x86_64.manylinux2014_x86_64.whl (686 kB)
+2026-05-04T16:34:35.3433026Z Using cached motor-3.3.1-py3-none-any.whl (70 kB)
+2026-05-04T16:34:35.3443706Z Using cached bcrypt-4.1.3-cp39-abi3-manylinux_2_28_x86_64.whl (283 kB)
+2026-05-04T16:34:35.3454536Z Using cached dnspython-2.8.0-py3-none-any.whl (331 kB)
+2026-05-04T16:34:35.3465822Z Using cached pytest-9.0.3-py3-none-any.whl (375 kB)
+2026-05-04T16:34:35.3477323Z Using cached pluggy-1.6.0-py3-none-any.whl (20 kB)
+2026-05-04T16:34:35.3578351Z Downloading fastapi-0.136.1-py3-none-any.whl (117 kB)
+2026-05-04T16:34:35.3823010Z Downloading uvicorn-0.46.0-py3-none-any.whl (70 kB)
+2026-05-04T16:34:35.3934281Z Using cached python_dotenv-1.2.2-py3-none-any.whl (22 kB)
+2026-05-04T16:34:35.4032221Z Downloading pydantic-2.13.3-py3-none-any.whl (471 kB)
+2026-05-04T16:34:35.4611351Z Downloading pydantic_core-2.46.3-cp312-cp312-manylinux_2_17_x86_64.manylinux2014_x86_64.whl (2.1 MB)
+2026-05-04T16:34:35.5890438Z    ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━ 2.1/2.1 MB 17.3 MB/s  0:00:00
+2026-05-04T16:34:35.5901984Z Using cached email_validator-2.3.0-py3-none-any.whl (35 kB)
+2026-05-04T16:34:35.5912647Z Using cached python_jose-3.5.0-py2.py3-none-any.whl (34 kB)
+2026-05-04T16:34:35.5922793Z Using cached rsa-4.9.1-py3-none-any.whl (34 kB)
+2026-05-04T16:34:35.5932520Z Using cached passlib-1.7.4-py2.py3-none-any.whl (525 kB)
+2026-05-04T16:34:35.5944605Z Using cached httpx-0.28.1-py3-none-any.whl (73 kB)
+2026-05-04T16:34:35.5954612Z Using cached httpcore-1.0.9-py3-none-any.whl (78 kB)
+2026-05-04T16:34:35.6050887Z Downloading python_multipart-0.0.27-py3-none-any.whl (29 kB)
+2026-05-04T16:34:35.6176354Z Downloading tzdata-2026.2-py2.py3-none-any.whl (349 kB)
+2026-05-04T16:34:35.6330484Z Using cached aiosmtplib-5.1.0-py3-none-any.whl (27 kB)
+2026-05-04T16:34:35.6340500Z Using cached slowapi-0.1.9-py3-none-any.whl (14 kB)
+2026-05-04T16:34:35.6439900Z Downloading google_auth-2.50.0-py3-none-any.whl (246 kB)
+2026-05-04T16:34:35.6552642Z Using cached requests-2.33.1-py3-none-any.whl (64 kB)
+2026-05-04T16:34:35.6563496Z Using cached charset_normalizer-3.4.7-cp312-cp312-manylinux2014_x86_64.manylinux_2_17_x86_64.manylinux_2_28_x86_64.whl (216 kB)
+2026-05-04T16:34:35.6663871Z Downloading idna-3.13-py3-none-any.whl (68 kB)
+2026-05-04T16:34:35.6701246Z Using cached urllib3-2.6.3-py3-none-any.whl (131 kB)
+2026-05-04T16:34:35.6711655Z Using cached annotated_doc-0.0.4-py3-none-any.whl (5.3 kB)
+2026-05-04T16:34:35.6721321Z Using cached annotated_types-0.7.0-py3-none-any.whl (13 kB)
+2026-05-04T16:34:35.6817893Z Downloading certifi-2026.4.22-py3-none-any.whl (135 kB)
+2026-05-04T16:34:35.6967865Z Downloading click-8.3.3-py3-none-any.whl (110 kB)
+2026-05-04T16:34:35.7110127Z Downloading cryptography-47.0.0-cp311-abi3-manylinux_2_34_x86_64.whl (4.7 MB)
+2026-05-04T16:34:35.8389174Z    ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━ 4.7/4.7 MB 37.8 MB/s  0:00:00
+2026-05-04T16:34:35.8400968Z Using cached cffi-2.0.0-cp312-cp312-manylinux2014_x86_64.manylinux_2_17_x86_64.whl (219 kB)
+2026-05-04T16:34:35.8412794Z Using cached ecdsa-0.19.2-py2.py3-none-any.whl (150 kB)
+2026-05-04T16:34:35.8423446Z Using cached h11-0.16.0-py3-none-any.whl (37 kB)
+2026-05-04T16:34:35.8433611Z Using cached iniconfig-2.3.0-py3-none-any.whl (7.5 kB)
+2026-05-04T16:34:35.8443465Z Using cached limits-5.8.0-py3-none-any.whl (60 kB)
+2026-05-04T16:34:35.8454036Z Using cached deprecated-1.3.1-py2.py3-none-any.whl (11 kB)
+2026-05-04T16:34:35.8463954Z Using cached wrapt-2.1.2-cp312-cp312-manylinux1_x86_64.manylinux_2_28_x86_64.manylinux_2_5_x86_64.whl (121 kB)
+2026-05-04T16:34:35.8561201Z Downloading packaging-26.2-py3-none-any.whl (100 kB)
+2026-05-04T16:34:35.8595262Z Using cached pyasn1-0.6.3-py3-none-any.whl (83 kB)
+2026-05-04T16:34:35.8605843Z Using cached pyasn1_modules-0.4.2-py3-none-any.whl (181 kB)
+2026-05-04T16:34:35.8616517Z Using cached pygments-2.20.0-py3-none-any.whl (1.2 MB)
+2026-05-04T16:34:35.8632063Z Using cached six-1.17.0-py2.py3-none-any.whl (11 kB)
+2026-05-04T16:34:35.8642431Z Using cached starlette-1.0.0-py3-none-any.whl (72 kB)
+2026-05-04T16:34:35.8653729Z Using cached anyio-4.13.0-py3-none-any.whl (114 kB)
+2026-05-04T16:34:35.8664272Z Using cached typing_extensions-4.15.0-py3-none-any.whl (44 kB)
+2026-05-04T16:34:35.8674267Z Using cached typing_inspection-0.4.2-py3-none-any.whl (14 kB)
+2026-05-04T16:34:35.8684039Z Using cached pycparser-3.0-py3-none-any.whl (48 kB)
+2026-05-04T16:34:35.9931025Z Installing collected packages: passlib, wrapt, urllib3, tzdata, typing-extensions, six, python-multipart, python-dotenv, pygments, pycparser, pyasn1, pluggy, packaging, iniconfig, idna, h11, dnspython, click, charset_normalizer, certifi, bcrypt, annotated-types, annotated-doc, aiosmtplib, uvicorn, typing-inspection, rsa, requests, pytest, pymongo, pydantic-core, pyasn1-modules, httpcore, email-validator, ecdsa, deprecated, cffi, anyio, starlette, python-jose, pydantic, motor, limits, httpx, cryptography, slowapi, google-auth, fastapi
+2026-05-04T16:34:39.4111512Z 
+2026-05-04T16:34:39.4153096Z Successfully installed aiosmtplib-5.1.0 annotated-doc-0.0.4 annotated-types-0.7.0 anyio-4.13.0 bcrypt-4.1.3 certifi-2026.4.22 cffi-2.0.0 charset_normalizer-3.4.7 click-8.3.3 cryptography-47.0.0 deprecated-1.3.1 dnspython-2.8.0 ecdsa-0.19.2 email-validator-2.3.0 fastapi-0.136.1 google-auth-2.50.0 h11-0.16.0 httpcore-1.0.9 httpx-0.28.1 idna-3.13 iniconfig-2.3.0 limits-5.8.0 motor-3.3.1 packaging-26.2 passlib-1.7.4 pluggy-1.6.0 pyasn1-0.6.3 pyasn1-modules-0.4.2 pycparser-3.0 pydantic-2.13.3 pydantic-core-2.46.3 pygments-2.20.0 pymongo-4.5.0 pytest-9.0.3 python-dotenv-1.2.2 python-jose-3.5.0 python-multipart-0.0.27 requests-2.33.1 rsa-4.9.1 six-1.17.0 slowapi-0.1.9 starlette-1.0.0 typing-extensions-4.15.0 typing-inspection-0.4.2 tzdata-2026.2 urllib3-2.6.3 uvicorn-0.46.0 wrapt-2.1.2
+2026-05-04T16:34:39.5336531Z 
+2026-05-04T16:34:39.5337073Z [notice] A new release of pip is available: 26.0.1 -> 26.1
+2026-05-04T16:34:39.5337644Z [notice] To update, run: pip install --upgrade pip
+2026-05-04T16:34:39.9431154Z ##[group]Run python -m pytest tests/test_ci_non_regression_policy.py tests/test_critical_regressions.py tests/test_runtime_server.py tests/test_warmup.py tests/test_verify_tests_added_policy_script.py backend/tests/test_critical_bug_regressions.py backend/tests/test_recipe_suggestions_contract.py --tb=short -q
+2026-05-04T16:34:39.9433300Z [36;1mpython -m pytest tests/test_ci_non_regression_policy.py tests/test_critical_regressions.py tests/test_runtime_server.py tests/test_warmup.py tests/test_verify_tests_added_policy_script.py backend/tests/test_critical_bug_regressions.py backend/tests/test_recipe_suggestions_contract.py --tb=short -q[0m
+2026-05-04T16:34:39.9448338Z shell: /usr/bin/bash -e {0}
+2026-05-04T16:34:39.9448572Z env:
+2026-05-04T16:34:39.9448810Z   pythonLocation: /opt/hostedtoolcache/Python/3.12.13/x64
+2026-05-04T16:34:39.9449207Z   PKG_CONFIG_PATH: /opt/hostedtoolcache/Python/3.12.13/x64/lib/pkgconfig
+2026-05-04T16:34:39.9449617Z   Python_ROOT_DIR: /opt/hostedtoolcache/Python/3.12.13/x64
+2026-05-04T16:34:39.9449964Z   Python2_ROOT_DIR: /opt/hostedtoolcache/Python/3.12.13/x64
+2026-05-04T16:34:39.9450300Z   Python3_ROOT_DIR: /opt/hostedtoolcache/Python/3.12.13/x64
+2026-05-04T16:34:39.9450651Z   LD_LIBRARY_PATH: /opt/hostedtoolcache/Python/3.12.13/x64/lib
+2026-05-04T16:34:39.9450992Z   MONGODB_URI: mongodb://localhost:27017/keepeat_test
+2026-05-04T16:34:39.9451267Z   JWT_SECRET: test_secret_ci
+2026-05-04T16:34:39.9451499Z   GEMINI_OCR_API_KEY: dummy_for_tests
+2026-05-04T16:34:39.9451736Z   GEMINI_RECIPES_API_KEY: dummy_for_tests
+2026-05-04T16:34:39.9452267Z   PYTHONPATH: /home/runner/work/keepeat/keepeat
+2026-05-04T16:34:39.9452516Z ##[endgroup]
+2026-05-04T16:35:36.1678627Z ........................................................................ [ 98%]
+2026-05-04T16:35:36.7182262Z .                                                                        [100%]
+2026-05-04T16:35:36.7183987Z =============================== warnings summary ===============================
+2026-05-04T16:35:36.7184870Z ../../../../../opt/hostedtoolcache/Python/3.12.13/x64/lib/python3.12/site-packages/passlib/utils/__init__.py:854
+2026-05-04T16:35:36.7185737Z   /opt/hostedtoolcache/Python/3.12.13/x64/lib/python3.12/site-packages/passlib/utils/__init__.py:854: DeprecationWarning: 'crypt' is deprecated and slated for removal in Python 3.13
+2026-05-04T16:35:36.7186407Z     from crypt import crypt as _crypt
+2026-05-04T16:35:36.7186573Z 
+2026-05-04T16:35:36.7186781Z -- Docs: https://docs.pytest.org/en/stable/how-to/capture-warnings.html
+2026-05-04T16:35:36.7187154Z 73 passed, 1 warning in 56.09s
+2026-05-04T16:35:36.8463479Z Post job cleanup.
+2026-05-04T16:35:36.9927052Z Cache hit occurred on the primary key setup-python-Linux-x64-24.04-Ubuntu-python-3.12.13-pip-0e36ea9993b375daff9db3f8c908c04666baf3137abb3802fae3103f7f986333, not saving cache.
+2026-05-04T16:35:37.0036040Z Post job cleanup.
+2026-05-04T16:35:37.0853297Z [command]/usr/bin/git version
+2026-05-04T16:35:37.0886058Z git version 2.53.0
+2026-05-04T16:35:37.0921449Z Temporarily overriding HOME='/home/runner/work/_temp/ad240c73-1375-4606-937f-a91cc8fc0b22' before making global git config changes
+2026-05-04T16:35:37.0922821Z Adding repository directory to the temporary git global config as a safe directory
+2026-05-04T16:35:37.0927349Z [command]/usr/bin/git config --global --add safe.directory /home/runner/work/keepeat/keepeat
+2026-05-04T16:35:37.0959549Z [command]/usr/bin/git config --local --name-only --get-regexp core\.sshCommand
+2026-05-04T16:35:37.0986518Z [command]/usr/bin/git submodule foreach --recursive sh -c "git config --local --name-only --get-regexp 'core\.sshCommand' && git config --local --unset-all 'core.sshCommand' || :"
+2026-05-04T16:35:37.1176173Z [command]/usr/bin/git config --local --name-only --get-regexp http\.https\:\/\/github\.com\/\.extraheader
+2026-05-04T16:35:37.1195348Z http.https://github.com/.extraheader
+2026-05-04T16:35:37.1205077Z [command]/usr/bin/git config --local --unset-all http.https://github.com/.extraheader
+2026-05-04T16:35:37.1230627Z [command]/usr/bin/git submodule foreach --recursive sh -c "git config --local --name-only --get-regexp 'http\.https\:\/\/github\.com\/\.extraheader' && git config --local --unset-all 'http.https://github.com/.extraheader' || :"
+2026-05-04T16:35:37.1417729Z [command]/usr/bin/git config --local --name-only --get-regexp ^includeIf\.gitdir:
+2026-05-04T16:35:37.1445306Z [command]/usr/bin/git submodule foreach --recursive git config --local --show-origin --name-only --get-regexp remote.origin.url
+2026-05-04T16:35:37.1738717Z Cleaning up orphan processes
+2026-05-04T16:35:37.1955767Z ##[warning]Node.js 20 actions are deprecated. The following actions are running on Node.js 20 and may not work as expected: actions/setup-python@v5. Actions will be forced to run with Node.js 24 by default starting June 2nd, 2026. Node.js 20 will be removed from the runner on September 16th, 2026. Please check if updated versions of these actions are available that support Node.js 24. To opt into Node.js 24 now, set the FORCE_JAVASCRIPT_ACTIONS_TO_NODE24=true environment variable on the runner or in your workflow file. Once Node.js 24 becomes the default, you can temporarily opt out by setting ACTIONS_ALLOW_USE_UNSECURE_NODE_VERSION=true. For more information see: https://github.blog/changelog/2025-09-19-deprecation-of-node-20-on-github-actions-runners/

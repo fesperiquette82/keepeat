@@ -1,0 +1,1645 @@
+﻿2026-05-04T16:34:37.1655627Z Current runner version: '2.334.0'
+2026-05-04T16:34:37.1706001Z ##[group]Runner Image Provisioner
+2026-05-04T16:34:37.1706863Z Hosted Compute Agent
+2026-05-04T16:34:37.1707406Z Version: 20260213.493
+2026-05-04T16:34:37.1708027Z Commit: 5c115507f6dd24b8de37d8bbe0bb4509d0cc0fa3
+2026-05-04T16:34:37.1708727Z Build Date: 2026-02-13T00:28:41Z
+2026-05-04T16:34:37.1709500Z Worker ID: {b1c20784-16ee-4405-a046-2379e24a6d59}
+2026-05-04T16:34:37.1710176Z Azure Region: eastus
+2026-05-04T16:34:37.1710730Z ##[endgroup]
+2026-05-04T16:34:37.1713161Z ##[group]Operating System
+2026-05-04T16:34:37.1713749Z Ubuntu
+2026-05-04T16:34:37.1714273Z 24.04.4
+2026-05-04T16:34:37.1714915Z LTS
+2026-05-04T16:34:37.1715397Z ##[endgroup]
+2026-05-04T16:34:37.1715871Z ##[group]Runner Image
+2026-05-04T16:34:37.1716492Z Image: ubuntu-24.04
+2026-05-04T16:34:37.1716975Z Version: 20260413.86.1
+2026-05-04T16:34:37.1718259Z Included Software: https://github.com/actions/runner-images/blob/ubuntu24/20260413.86/images/ubuntu/Ubuntu2404-Readme.md
+2026-05-04T16:34:37.1719759Z Image Release: https://github.com/actions/runner-images/releases/tag/ubuntu24%2F20260413.86
+2026-05-04T16:34:37.1720678Z ##[endgroup]
+2026-05-04T16:34:37.1721766Z ##[group]GITHUB_TOKEN Permissions
+2026-05-04T16:34:37.1724184Z Actions: read
+2026-05-04T16:34:37.1724844Z Contents: read
+2026-05-04T16:34:37.1725360Z Metadata: read
+2026-05-04T16:34:37.1725834Z ##[endgroup]
+2026-05-04T16:34:37.1727985Z Secret source: Actions
+2026-05-04T16:34:37.1728912Z Prepare workflow directory
+2026-05-04T16:34:37.2053632Z Prepare all required actions
+2026-05-04T16:34:37.2090760Z Getting action download info
+2026-05-04T16:34:37.5913195Z Download action repository 'actions/checkout@v5' (SHA:93cb6efe18208431cddfb8368fd83d5badbf9bfd)
+2026-05-04T16:34:37.7505551Z Download action repository 'actions/setup-node@v5' (SHA:a0853c24544627f65ddf259abe73b1d18a591444)
+2026-05-04T16:34:37.9558825Z Download action repository 'actions/setup-java@v5' (SHA:be666c2fcd27ec809703dec50e508c2fdc7f6654)
+2026-05-04T16:34:38.1590042Z Download action repository 'actions/upload-artifact@v4' (SHA:ea165f8d65b6e75b540449e92b4886f43607fa02)
+2026-05-04T16:34:38.3819042Z Complete job name: Mobile E2E / Build Android debug APK
+2026-05-04T16:34:38.4593781Z ##[group]Run actions/checkout@v5
+2026-05-04T16:34:38.4594626Z with:
+2026-05-04T16:34:38.4595038Z   fetch-depth: 0
+2026-05-04T16:34:38.4595488Z   repository: fesperiquette82/keepeat
+2026-05-04T16:34:38.4596266Z   token: ***
+2026-05-04T16:34:38.4596670Z   ssh-strict: true
+2026-05-04T16:34:38.4597101Z   ssh-user: git
+2026-05-04T16:34:38.4597531Z   persist-credentials: true
+2026-05-04T16:34:38.4598025Z   clean: true
+2026-05-04T16:34:38.4598473Z   sparse-checkout-cone-mode: true
+2026-05-04T16:34:38.4598991Z   fetch-tags: false
+2026-05-04T16:34:38.4599423Z   show-progress: true
+2026-05-04T16:34:38.4599844Z   lfs: false
+2026-05-04T16:34:38.4600241Z   submodules: false
+2026-05-04T16:34:38.4600672Z   set-safe-directory: true
+2026-05-04T16:34:38.4601357Z ##[endgroup]
+2026-05-04T16:34:38.5585640Z Syncing repository: fesperiquette82/keepeat
+2026-05-04T16:34:38.5587550Z ##[group]Getting Git version info
+2026-05-04T16:34:38.5588240Z Working directory is '/home/runner/work/keepeat/keepeat'
+2026-05-04T16:34:38.5589332Z [command]/usr/bin/git version
+2026-05-04T16:34:38.5615392Z git version 2.53.0
+2026-05-04T16:34:38.5634564Z ##[endgroup]
+2026-05-04T16:34:38.5648413Z Temporarily overriding HOME='/home/runner/work/_temp/bf87c063-2529-4132-825d-0c03d76d7ae8' before making global git config changes
+2026-05-04T16:34:38.5649845Z Adding repository directory to the temporary git global config as a safe directory
+2026-05-04T16:34:38.5653837Z [command]/usr/bin/git config --global --add safe.directory /home/runner/work/keepeat/keepeat
+2026-05-04T16:34:38.5688119Z Deleting the contents of '/home/runner/work/keepeat/keepeat'
+2026-05-04T16:34:38.5692227Z ##[group]Initializing the repository
+2026-05-04T16:34:38.5696576Z [command]/usr/bin/git init /home/runner/work/keepeat/keepeat
+2026-05-04T16:34:38.5763422Z hint: Using 'master' as the name for the initial branch. This default branch name
+2026-05-04T16:34:38.5765421Z hint: will change to "main" in Git 3.0. To configure the initial branch name
+2026-05-04T16:34:38.5766403Z hint: to use in all of your new repositories, which will suppress this warning,
+2026-05-04T16:34:38.5767191Z hint: call:
+2026-05-04T16:34:38.5767846Z hint:
+2026-05-04T16:34:38.5768909Z hint: 	git config --global init.defaultBranch <name>
+2026-05-04T16:34:38.5769882Z hint:
+2026-05-04T16:34:38.5770569Z hint: Names commonly chosen instead of 'master' are 'main', 'trunk' and
+2026-05-04T16:34:38.5771513Z hint: 'development'. The just-created branch can be renamed via this command:
+2026-05-04T16:34:38.5772658Z hint:
+2026-05-04T16:34:38.5773320Z hint: 	git branch -m <name>
+2026-05-04T16:34:38.5774096Z hint:
+2026-05-04T16:34:38.5774985Z hint: Disable this message with "git config set advice.defaultBranchName false"
+2026-05-04T16:34:38.5775981Z Initialized empty Git repository in /home/runner/work/keepeat/keepeat/.git/
+2026-05-04T16:34:38.5777701Z [command]/usr/bin/git remote add origin https://github.com/fesperiquette82/keepeat
+2026-05-04T16:34:38.5839630Z ##[endgroup]
+2026-05-04T16:34:38.5840415Z ##[group]Disabling automatic garbage collection
+2026-05-04T16:34:38.5920666Z [command]/usr/bin/git config --local gc.auto 0
+2026-05-04T16:34:38.5923112Z ##[endgroup]
+2026-05-04T16:34:38.5923833Z ##[group]Setting up auth
+2026-05-04T16:34:38.5924572Z [command]/usr/bin/git config --local --name-only --get-regexp core\.sshCommand
+2026-05-04T16:34:38.5926805Z [command]/usr/bin/git submodule foreach --recursive sh -c "git config --local --name-only --get-regexp 'core\.sshCommand' && git config --local --unset-all 'core.sshCommand' || :"
+2026-05-04T16:34:38.6207955Z [command]/usr/bin/git config --local --name-only --get-regexp http\.https\:\/\/github\.com\/\.extraheader
+2026-05-04T16:34:38.6239048Z [command]/usr/bin/git submodule foreach --recursive sh -c "git config --local --name-only --get-regexp 'http\.https\:\/\/github\.com\/\.extraheader' && git config --local --unset-all 'http.https://github.com/.extraheader' || :"
+2026-05-04T16:34:38.6469193Z [command]/usr/bin/git config --local --name-only --get-regexp ^includeIf\.gitdir:
+2026-05-04T16:34:38.6502438Z [command]/usr/bin/git submodule foreach --recursive git config --local --show-origin --name-only --get-regexp remote.origin.url
+2026-05-04T16:34:38.6730825Z [command]/usr/bin/git config --local http.https://github.com/.extraheader AUTHORIZATION: basic ***
+2026-05-04T16:34:38.6766500Z ##[endgroup]
+2026-05-04T16:34:38.6767274Z ##[group]Fetching the repository
+2026-05-04T16:34:38.6776126Z [command]/usr/bin/git -c protocol.version=2 fetch --prune --no-recurse-submodules origin +refs/heads/*:refs/remotes/origin/* +refs/tags/*:refs/tags/* +fe2028bb3d5069962828ba00696a6c4963e2eb89:refs/remotes/pull/137/merge
+2026-05-04T16:34:40.0173112Z From https://github.com/fesperiquette82/keepeat
+2026-05-04T16:34:40.0176227Z  * [new branch]      codex/fix-ci-logic-for-maestro-checks    -> origin/codex/fix-ci-logic-for-maestro-checks
+2026-05-04T16:34:40.0179301Z  * [new branch]      main                                     -> origin/main
+2026-05-04T16:34:40.0181841Z  * [new branch]      multiple_usr                             -> origin/multiple_usr
+2026-05-04T16:34:40.0184934Z  * [new branch]      pr-136                                   -> origin/pr-136
+2026-05-04T16:34:40.0187439Z  * [new branch]      test                                     -> origin/test
+2026-05-04T16:34:40.0189911Z  * [new ref]         fe2028bb3d5069962828ba00696a6c4963e2eb89 -> pull/137/merge
+2026-05-04T16:34:40.0225338Z ##[endgroup]
+2026-05-04T16:34:40.0227015Z ##[group]Determining the checkout info
+2026-05-04T16:34:40.0229668Z ##[endgroup]
+2026-05-04T16:34:40.0234878Z [command]/usr/bin/git sparse-checkout disable
+2026-05-04T16:34:40.0281746Z [command]/usr/bin/git config --local --unset-all extensions.worktreeConfig
+2026-05-04T16:34:40.0314400Z ##[group]Checking out the ref
+2026-05-04T16:34:40.0318747Z [command]/usr/bin/git checkout --progress --force refs/remotes/pull/137/merge
+2026-05-04T16:34:40.7317034Z Note: switching to 'refs/remotes/pull/137/merge'.
+2026-05-04T16:34:40.7317555Z 
+2026-05-04T16:34:40.7317911Z You are in 'detached HEAD' state. You can look around, make experimental
+2026-05-04T16:34:40.7318389Z changes and commit them, and you can discard any commits you make in this
+2026-05-04T16:34:40.7318863Z state without impacting any branches by switching back to a branch.
+2026-05-04T16:34:40.7319162Z 
+2026-05-04T16:34:40.7319358Z If you want to create a new branch to retain commits you create, you may
+2026-05-04T16:34:40.7319803Z do so (now or later) by using -c with the switch command. Example:
+2026-05-04T16:34:40.7320051Z 
+2026-05-04T16:34:40.7320197Z   git switch -c <new-branch-name>
+2026-05-04T16:34:40.7320553Z 
+2026-05-04T16:34:40.7320671Z Or undo this operation with:
+2026-05-04T16:34:40.7320844Z 
+2026-05-04T16:34:40.7320940Z   git switch -
+2026-05-04T16:34:40.7321066Z 
+2026-05-04T16:34:40.7321312Z Turn off this advice by setting config variable advice.detachedHead to false
+2026-05-04T16:34:40.7321651Z 
+2026-05-04T16:34:40.7322193Z HEAD is now at fe2028b Merge 44c8bd598f80b0767bc0889cf65f48d2a05b9420 into f2138f0fb18b18c8f1c7ce2f92ab762c1c0f300a
+2026-05-04T16:34:40.7342944Z ##[endgroup]
+2026-05-04T16:34:40.7384405Z [command]/usr/bin/git log -1 --format=%H
+2026-05-04T16:34:40.7408678Z fe2028bb3d5069962828ba00696a6c4963e2eb89
+2026-05-04T16:34:40.7645804Z ##[group]Run TRY_REUSE_APK="false"
+2026-05-04T16:34:40.7646196Z [36;1mTRY_REUSE_APK="false"[0m
+2026-05-04T16:34:40.7646524Z [36;1mif [ "true" = "true" ] && [ "true" = "false" ]; then[0m
+2026-05-04T16:34:40.7646868Z [36;1m  TRY_REUSE_APK="true"[0m
+2026-05-04T16:34:40.7647106Z [36;1mfi[0m
+2026-05-04T16:34:40.7647326Z [36;1mBUILD_APK_STEP_SHOULD_RUN="false"[0m
+2026-05-04T16:34:40.7647602Z [36;1mif [ "true" = "true" ]; then[0m
+2026-05-04T16:34:40.7647869Z [36;1m  BUILD_APK_STEP_SHOULD_RUN="true"[0m
+2026-05-04T16:34:40.7648149Z [36;1mfi[0m
+2026-05-04T16:34:40.7648351Z [36;1mecho "mobile_apk_required=true"[0m
+2026-05-04T16:34:40.7648646Z [36;1mecho "maestro_required=true"[0m
+2026-05-04T16:34:40.7648912Z [36;1mecho "force_mobile_apk_build=false"[0m
+2026-05-04T16:34:40.7649208Z [36;1mecho "try_reuse_apk=$TRY_REUSE_APK"[0m
+2026-05-04T16:34:40.7649564Z [36;1mecho "build_apk_step_should_run=$BUILD_APK_STEP_SHOULD_RUN"[0m
+2026-05-04T16:34:40.7675803Z shell: /usr/bin/bash -e {0}
+2026-05-04T16:34:40.7676078Z ##[endgroup]
+2026-05-04T16:34:40.7741677Z mobile_apk_required=true
+2026-05-04T16:34:40.7742192Z maestro_required=true
+2026-05-04T16:34:40.7742445Z force_mobile_apk_build=false
+2026-05-04T16:34:40.7742693Z try_reuse_apk=false
+2026-05-04T16:34:40.7742922Z build_apk_step_should_run=true
+2026-05-04T16:34:40.7803404Z ##[group]Run set -euo pipefail
+2026-05-04T16:34:40.7803763Z [36;1mset -euo pipefail[0m
+2026-05-04T16:34:40.7803997Z [36;1m[0m
+2026-05-04T16:34:40.7804219Z [36;1mBUILD_APK_STEP_SHOULD_RUN="false"[0m
+2026-05-04T16:34:40.7804509Z [36;1mREUSE_APK_SUCCESS="false"[0m
+2026-05-04T16:34:40.7804788Z [36;1m[0m
+2026-05-04T16:34:40.7804981Z [36;1mif [ "true" = "true" ]; then[0m
+2026-05-04T16:34:40.7805271Z [36;1m  BUILD_APK_STEP_SHOULD_RUN="true"[0m
+2026-05-04T16:34:40.7805643Z [36;1melif [ "true" = "true" ] && [ "$REUSE_APK_SUCCESS" = "false" ]; then[0m
+2026-05-04T16:34:40.7806191Z [36;1m  echo "ℹ️  Maestro required but no reusable APK found — will build APK automatically"[0m
+2026-05-04T16:34:40.7806696Z [36;1m  BUILD_APK_STEP_SHOULD_RUN="true"[0m
+2026-05-04T16:34:40.7806967Z [36;1mfi[0m
+2026-05-04T16:34:40.7807158Z [36;1m[0m
+2026-05-04T16:34:40.7807489Z [36;1mecho "build_apk_step_should_run=$BUILD_APK_STEP_SHOULD_RUN" >> "$GITHUB_OUTPUT"[0m
+2026-05-04T16:34:40.7808373Z [36;1mecho "APK build decision: build_apk_step_should_run=$BUILD_APK_STEP_SHOULD_RUN (mobile_apk_required=true maestro_required=true reuse_apk_success=$REUSE_APK_SUCCESS)"[0m
+2026-05-04T16:34:40.7830148Z shell: /usr/bin/bash -e {0}
+2026-05-04T16:34:40.7830413Z ##[endgroup]
+2026-05-04T16:34:40.7873055Z APK build decision: build_apk_step_should_run=true (mobile_apk_required=true maestro_required=true reuse_apk_success=false)
+2026-05-04T16:34:40.7968595Z ##[group]Run actions/setup-node@v5
+2026-05-04T16:34:40.7968879Z with:
+2026-05-04T16:34:40.7969093Z   node-version: 22
+2026-05-04T16:34:40.7969298Z   cache: npm
+2026-05-04T16:34:40.7969560Z   cache-dependency-path: frontend/package-lock.json
+2026-05-04T16:34:40.7969864Z   always-auth: false
+2026-05-04T16:34:40.7970090Z   check-latest: false
+2026-05-04T16:34:40.7970454Z   token: ***
+2026-05-04T16:34:40.7970677Z   package-manager-cache: true
+2026-05-04T16:34:40.7970938Z ##[endgroup]
+2026-05-04T16:34:40.9396264Z Found in cache @ /opt/hostedtoolcache/node/22.22.2/x64
+2026-05-04T16:34:40.9400488Z (node:2291) [DEP0040] DeprecationWarning: The `punycode` module is deprecated. Please use a userland alternative instead.
+2026-05-04T16:34:40.9401640Z (Use `node --trace-deprecation ...` to show where the warning was created)
+2026-05-04T16:34:40.9404010Z ##[group]Environment details
+2026-05-04T16:34:41.2488241Z node: v22.22.2
+2026-05-04T16:34:41.2488631Z npm: 10.9.7
+2026-05-04T16:34:41.2488992Z yarn: 1.22.22
+2026-05-04T16:34:41.2489766Z ##[endgroup]
+2026-05-04T16:34:41.2511927Z [command]/opt/hostedtoolcache/node/22.22.2/x64/bin/npm config get cache
+2026-05-04T16:34:41.3913297Z /home/runner/.npm
+2026-05-04T16:34:41.4707166Z Cache hit for: node-cache-Linux-x64-npm-07ee83690cbaac8c828e80941ec81b0f066556f5660a774826e9a87521fb671f
+2026-05-04T16:34:41.4810459Z (node:2291) [DEP0169] DeprecationWarning: `url.parse()` behavior is not standardized and prone to errors that have security implications. Use the WHATWG URL API instead. CVEs are not issued for `url.parse()` vulnerabilities.
+2026-05-04T16:34:42.1247202Z Received 117145253 of 117145253 (100.0%), 185.9 MBs/sec
+2026-05-04T16:34:42.1247764Z Cache Size: ~112 MB (117145253 B)
+2026-05-04T16:34:42.1317290Z [command]/usr/bin/tar -xf /home/runner/work/_temp/8320d467-abcd-4889-bc86-e3817106d1f9/cache.tzst -P -C /home/runner/work/keepeat/keepeat --use-compress-program unzstd
+2026-05-04T16:34:42.5027969Z Cache restored successfully
+2026-05-04T16:34:42.5093806Z Cache restored from key: node-cache-Linux-x64-npm-07ee83690cbaac8c828e80941ec81b0f066556f5660a774826e9a87521fb671f
+2026-05-04T16:34:42.5304689Z ##[group]Run npm ci
+2026-05-04T16:34:42.5304940Z [36;1mnpm ci[0m
+2026-05-04T16:34:42.8479593Z shell: /usr/bin/bash -e {0}
+2026-05-04T16:34:42.8479905Z ##[endgroup]
+2026-05-04T16:34:48.2008287Z npm warn deprecated inflight@1.0.6: This module is not supported, and leaks memory. Do not use it. Check out lru-cache if you want a good and tested way to coalesce async requests by a key value, which is much more comprehensive and powerful.
+2026-05-04T16:34:48.2497132Z npm warn deprecated lodash.get@4.4.2: This package is deprecated. Use the optional chaining (?.) operator instead.
+2026-05-04T16:34:48.2816345Z npm warn deprecated rimraf@2.4.5: Rimraf versions prior to v4 are no longer supported
+2026-05-04T16:34:48.4058905Z npm warn deprecated rimraf@3.0.2: Rimraf versions prior to v4 are no longer supported
+2026-05-04T16:34:48.4377466Z npm warn deprecated @oclif/screen@3.0.8: Package no longer supported. Contact Support at https://www.npmjs.com/support for more info.
+2026-05-04T16:34:48.5464430Z npm warn deprecated glob@7.2.3: Old versions of glob are not supported, and contain widely publicized security vulnerabilities, which have been fixed in the current version. Please update. Support for old versions may be purchased (at exorbitant rates) by contacting i@izs.me
+2026-05-04T16:34:48.5469302Z npm warn deprecated glob@7.2.3: Old versions of glob are not supported, and contain widely publicized security vulnerabilities, which have been fixed in the current version. Please update. Support for old versions may be purchased (at exorbitant rates) by contacting i@izs.me
+2026-05-04T16:34:48.5472500Z npm warn deprecated glob@7.2.3: Old versions of glob are not supported, and contain widely publicized security vulnerabilities, which have been fixed in the current version. Please update. Support for old versions may be purchased (at exorbitant rates) by contacting i@izs.me
+2026-05-04T16:34:48.5475696Z npm warn deprecated glob@6.0.4: Old versions of glob are not supported, and contain widely publicized security vulnerabilities, which have been fixed in the current version. Please update. Support for old versions may be purchased (at exorbitant rates) by contacting i@izs.me
+2026-05-04T16:34:48.5515425Z npm warn deprecated glob@7.2.3: Old versions of glob are not supported, and contain widely publicized security vulnerabilities, which have been fixed in the current version. Please update. Support for old versions may be purchased (at exorbitant rates) by contacting i@izs.me
+2026-05-04T16:34:49.4824433Z npm warn deprecated uuid@3.4.0: Please upgrade  to version 7 or higher.  Older versions may use Math.random() in certain circumstances, which is known to be problematic.  See https://v8.dev/blog/math-random for details.
+2026-05-04T16:34:49.6849631Z npm warn deprecated @xmldom/xmldom@0.7.13: this version is no longer supported, please update to at least 0.8.*
+2026-05-04T16:34:51.5107154Z npm warn deprecated glob@10.5.0: Old versions of glob are not supported, and contain widely publicized security vulnerabilities, which have been fixed in the current version. Please update. Support for old versions may be purchased (at exorbitant rates) by contacting i@izs.me
+2026-05-04T16:35:04.8301870Z 
+2026-05-04T16:35:04.8303117Z added 1255 packages, and audited 1256 packages in 22s
+2026-05-04T16:35:04.8303577Z 
+2026-05-04T16:35:04.8303843Z 213 packages are looking for funding
+2026-05-04T16:35:04.8304289Z   run `npm fund` for details
+2026-05-04T16:35:04.9215712Z 
+2026-05-04T16:35:04.9216580Z 34 vulnerabilities (1 low, 22 moderate, 11 high)
+2026-05-04T16:35:04.9217008Z 
+2026-05-04T16:35:04.9217346Z To address issues that do not require attention, run:
+2026-05-04T16:35:04.9217847Z   npm audit fix
+2026-05-04T16:35:04.9218028Z 
+2026-05-04T16:35:04.9218476Z To address all issues possible (including breaking changes), run:
+2026-05-04T16:35:04.9219103Z   npm audit fix --force
+2026-05-04T16:35:04.9219360Z 
+2026-05-04T16:35:04.9219662Z Some issues need review, and may require choosing
+2026-05-04T16:35:04.9220756Z a different dependency.
+2026-05-04T16:35:04.9221034Z 
+2026-05-04T16:35:04.9221251Z Run `npm audit` for details.
+2026-05-04T16:35:05.0488589Z ##[group]Run actions/setup-java@v5
+2026-05-04T16:35:05.0488868Z with:
+2026-05-04T16:35:05.0489071Z   distribution: temurin
+2026-05-04T16:35:05.0489288Z   java-version: 17
+2026-05-04T16:35:05.0489489Z   cache: gradle
+2026-05-04T16:35:05.0489694Z   java-package: jdk
+2026-05-04T16:35:05.0489906Z   check-latest: false
+2026-05-04T16:35:05.0490112Z   server-id: github
+2026-05-04T16:35:05.0490324Z   server-username: GITHUB_ACTOR
+2026-05-04T16:35:05.0490581Z   server-password: GITHUB_TOKEN
+2026-05-04T16:35:05.0490825Z   overwrite-settings: true
+2026-05-04T16:35:05.0491092Z   job-status: success
+2026-05-04T16:35:05.0491447Z   token: ***
+2026-05-04T16:35:05.0491662Z ##[endgroup]
+2026-05-04T16:35:05.2004770Z ##[group]Installed distributions
+2026-05-04T16:35:05.2274664Z Resolved Java 17.0.18+8 from tool-cache
+2026-05-04T16:35:05.2275223Z Setting Java 17.0.18+8 as the default
+2026-05-04T16:35:05.2285399Z Creating toolchains.xml for JDK version 17 from temurin
+2026-05-04T16:35:05.2353732Z Writing to /home/runner/.m2/toolchains.xml
+2026-05-04T16:35:05.2354073Z 
+2026-05-04T16:35:05.2354235Z Java configuration:
+2026-05-04T16:35:05.2354558Z   Distribution: temurin
+2026-05-04T16:35:05.2354895Z   Version: 17.0.18+8
+2026-05-04T16:35:05.2355443Z   Path: /opt/hostedtoolcache/Java_Temurin-Hotspot_jdk/17.0.18-8/x64
+2026-05-04T16:35:05.2355886Z 
+2026-05-04T16:35:05.2356508Z ##[endgroup]
+2026-05-04T16:35:05.2360746Z Creating settings.xml with server-id: github
+2026-05-04T16:35:05.2372484Z Writing to /home/runner/.m2/settings.xml
+2026-05-04T16:35:10.9904432Z Cache hit for: setup-java-Linux-x64-gradle-ffbbd95830615dda34e1501a1f85f6ebf4dc6fce97208760cbf1aada27b7a181
+2026-05-04T16:35:12.0557519Z Received 209715200 of 1937803735 (10.8%), 199.8 MBs/sec
+2026-05-04T16:35:13.0550250Z Received 503316480 of 1937803735 (26.0%), 239.9 MBs/sec
+2026-05-04T16:35:14.0554002Z Received 721420288 of 1937803735 (37.2%), 229.2 MBs/sec
+2026-05-04T16:35:15.0578036Z Received 947912704 of 1937803735 (48.9%), 225.8 MBs/sec
+2026-05-04T16:35:16.0582875Z Received 1207959552 of 1937803735 (62.3%), 230.2 MBs/sec
+2026-05-04T16:35:17.0578987Z Received 1488977920 of 1937803735 (76.8%), 236.5 MBs/sec
+2026-05-04T16:35:18.0579806Z Received 1749024768 of 1937803735 (90.3%), 238.1 MBs/sec
+2026-05-04T16:35:18.8054503Z Received 1937803735 of 1937803735 (100.0%), 238.4 MBs/sec
+2026-05-04T16:35:18.8054978Z Cache Size: ~1848 MB (1937803735 B)
+2026-05-04T16:35:18.8173682Z [command]/usr/bin/tar -xf /home/runner/work/_temp/058bb77a-3224-48e7-9038-62cff79f8d5c/cache.tzst -P -C /home/runner/work/keepeat/keepeat --use-compress-program unzstd
+2026-05-04T16:35:29.4700860Z Cache restored successfully
+2026-05-04T16:35:29.6992685Z Cache restored from key: setup-java-Linux-x64-gradle-ffbbd95830615dda34e1501a1f85f6ebf4dc6fce97208760cbf1aada27b7a181
+2026-05-04T16:35:29.7338262Z ##[group]Run npx expo prebuild --platform android --clean
+2026-05-04T16:35:29.7338708Z [36;1mnpx expo prebuild --platform android --clean[0m
+2026-05-04T16:35:29.7361596Z shell: /usr/bin/bash -e {0}
+2026-05-04T16:35:29.7361854Z env:
+2026-05-04T16:35:29.7362454Z   JAVA_HOME: /opt/hostedtoolcache/Java_Temurin-Hotspot_jdk/17.0.18-8/x64
+2026-05-04T16:35:29.7362950Z   JAVA_HOME_17_X64: /opt/hostedtoolcache/Java_Temurin-Hotspot_jdk/17.0.18-8/x64
+2026-05-04T16:35:29.7363374Z   EXPO_PUBLIC_BACKEND_URL: http://10.0.2.2:8000
+2026-05-04T16:35:29.7363652Z   CI: 1
+2026-05-04T16:35:29.7363846Z   EXPO_NO_TELEMETRY: 1
+2026-05-04T16:35:29.7364068Z ##[endgroup]
+2026-05-04T16:35:31.4227170Z - Clearing android
+2026-05-04T16:35:31.4247274Z ✔ Cleared android code
+2026-05-04T16:35:31.5091818Z - Creating native directory (./android)
+2026-05-04T16:35:32.1564389Z ✔ Created native directory
+2026-05-04T16:35:32.1568620Z - Updating package.json
+2026-05-04T16:35:32.1705707Z ✔ Updated package.json
+2026-05-04T16:35:32.1706338Z - Running prebuild
+2026-05-04T16:35:37.5775624Z » android: withAndroidBuildProperties: android.newArchEnabled is deprecated, use app config `newArchEnabled` instead. https://docs.expo.dev/versions/latest/config/app/#newarchenabled
+2026-05-04T16:35:37.5776868Z - Running prebuild
+2026-05-04T16:35:37.5802997Z ✔ Finished prebuild
+2026-05-04T16:35:37.6163829Z ##[group]Run chmod +x ./gradlew
+2026-05-04T16:35:37.6164191Z [36;1mchmod +x ./gradlew[0m
+2026-05-04T16:35:37.6164491Z [36;1m./gradlew assembleDebug --no-daemon[0m
+2026-05-04T16:35:37.6164825Z [36;1mmkdir -p "$GITHUB_WORKSPACE/e2e-apk"[0m
+2026-05-04T16:35:37.6165311Z [36;1mcp app/build/outputs/apk/debug/app-debug.apk "$GITHUB_WORKSPACE/e2e-apk/app-debug.apk"[0m
+2026-05-04T16:35:37.6188646Z shell: /usr/bin/bash -e {0}
+2026-05-04T16:35:37.6188903Z env:
+2026-05-04T16:35:37.6189219Z   JAVA_HOME: /opt/hostedtoolcache/Java_Temurin-Hotspot_jdk/17.0.18-8/x64
+2026-05-04T16:35:37.6189739Z   JAVA_HOME_17_X64: /opt/hostedtoolcache/Java_Temurin-Hotspot_jdk/17.0.18-8/x64
+2026-05-04T16:35:37.6190114Z ##[endgroup]
+2026-05-04T16:35:39.7691074Z 
+2026-05-04T16:35:39.7692257Z Welcome to Gradle 8.14.3!
+2026-05-04T16:35:39.7692601Z 
+2026-05-04T16:35:39.7692872Z Here are the highlights of this release:
+2026-05-04T16:35:39.7693361Z  - Java 24 support
+2026-05-04T16:35:39.7693874Z  - GraalVM Native Image toolchain selection
+2026-05-04T16:35:39.7694391Z  - Enhancements to test reporting
+2026-05-04T16:35:39.7694851Z  - Build Authoring improvements
+2026-05-04T16:35:39.7695108Z 
+2026-05-04T16:35:39.7695666Z For more details see https://docs.gradle.org/8.14.3/release-notes.html
+2026-05-04T16:35:39.7696100Z 
+2026-05-04T16:35:39.9677457Z To honour the JVM settings for this build a single-use Daemon process will be forked. For more on this, please refer to https://docs.gradle.org/8.14.3/userguide/gradle_daemon.html#sec:disabling_the_daemon in the Gradle documentation.
+2026-05-04T16:35:41.2672313Z Daemon will be stopped at the end of the build 
+2026-05-04T16:35:54.1713908Z > Task :gradle-plugin:shared:checkKotlinGradlePluginConfigurationErrors SKIPPED
+2026-05-04T16:35:54.1720988Z > Task :gradle-plugin:settings-plugin:checkKotlinGradlePluginConfigurationErrors SKIPPED
+2026-05-04T16:35:54.1723293Z > Task :expo-gradle-plugin:expo-autolinking-settings-plugin:checkKotlinGradlePluginConfigurationErrors SKIPPED
+2026-05-04T16:35:54.1725687Z > Task :expo-gradle-plugin:expo-autolinking-plugin-shared:checkKotlinGradlePluginConfigurationErrors SKIPPED
+2026-05-04T16:35:54.2679643Z > Task :gradle-plugin:settings-plugin:pluginDescriptors
+2026-05-04T16:35:54.2690556Z > Task :expo-gradle-plugin:expo-autolinking-settings-plugin:pluginDescriptors
+2026-05-04T16:35:54.3679445Z > Task :expo-gradle-plugin:expo-autolinking-settings-plugin:processResources
+2026-05-04T16:35:54.3715357Z > Task :gradle-plugin:settings-plugin:processResources
+2026-05-04T16:35:54.6673591Z > Task :gradle-plugin:shared:processResources NO-SOURCE
+2026-05-04T16:35:54.6723514Z > Task :expo-gradle-plugin:expo-autolinking-plugin-shared:processResources NO-SOURCE
+2026-05-04T16:36:01.5674859Z > Task :gradle-plugin:shared:compileKotlin
+2026-05-04T16:36:01.6691771Z > Task :gradle-plugin:shared:compileJava NO-SOURCE
+2026-05-04T16:36:01.6729709Z > Task :gradle-plugin:shared:classes UP-TO-DATE
+2026-05-04T16:36:01.6731356Z > Task :gradle-plugin:shared:jar
+2026-05-04T16:36:01.8681237Z > Task :expo-gradle-plugin:expo-autolinking-plugin-shared:compileKotlin
+2026-05-04T16:36:01.8715251Z > Task :expo-gradle-plugin:expo-autolinking-plugin-shared:compileJava NO-SOURCE
+2026-05-04T16:36:01.8727839Z > Task :expo-gradle-plugin:expo-autolinking-plugin-shared:classes UP-TO-DATE
+2026-05-04T16:36:01.9699921Z > Task :expo-gradle-plugin:expo-autolinking-plugin-shared:jar
+2026-05-04T16:36:04.4743483Z > Task :gradle-plugin:settings-plugin:compileKotlin
+2026-05-04T16:36:04.4780623Z > Task :gradle-plugin:settings-plugin:compileJava NO-SOURCE
+2026-05-04T16:36:04.4803173Z > Task :gradle-plugin:settings-plugin:classes
+2026-05-04T16:36:04.5671522Z > Task :gradle-plugin:settings-plugin:jar
+2026-05-04T16:36:05.2692558Z > Task :expo-gradle-plugin:expo-autolinking-settings-plugin:compileKotlin
+2026-05-04T16:36:05.3684158Z > Task :expo-gradle-plugin:expo-autolinking-settings-plugin:compileJava NO-SOURCE
+2026-05-04T16:36:05.3743688Z > Task :expo-gradle-plugin:expo-autolinking-settings-plugin:classes
+2026-05-04T16:36:05.3768469Z > Task :expo-gradle-plugin:expo-autolinking-settings-plugin:jar
+2026-05-04T16:36:07.1675430Z > Task :gradle-plugin:react-native-gradle-plugin:checkKotlinGradlePluginConfigurationErrors SKIPPED
+2026-05-04T16:36:07.1703707Z > Task :expo-gradle-plugin:expo-autolinking-plugin:checkKotlinGradlePluginConfigurationErrors SKIPPED
+2026-05-04T16:36:07.1726433Z > Task :expo-module-gradle-plugin:checkKotlinGradlePluginConfigurationErrors SKIPPED
+2026-05-04T16:36:07.1741455Z > Task :expo-module-gradle-plugin:pluginDescriptors
+2026-05-04T16:36:07.1742294Z > Task :expo-module-gradle-plugin:processResources
+2026-05-04T16:36:07.2684860Z > Task :expo-gradle-plugin:expo-autolinking-plugin:pluginDescriptors
+2026-05-04T16:36:07.2713048Z > Task :expo-gradle-plugin:expo-autolinking-plugin:processResources
+2026-05-04T16:36:07.2742881Z > Task :gradle-plugin:react-native-gradle-plugin:pluginDescriptors
+2026-05-04T16:36:07.2772799Z > Task :gradle-plugin:react-native-gradle-plugin:processResources
+2026-05-04T16:36:09.7693749Z > Task :expo-gradle-plugin:expo-autolinking-plugin:compileKotlin
+2026-05-04T16:36:09.7723228Z > Task :expo-gradle-plugin:expo-autolinking-plugin:compileJava NO-SOURCE
+2026-05-04T16:36:09.7732846Z > Task :expo-gradle-plugin:expo-autolinking-plugin:classes
+2026-05-04T16:36:09.7752825Z > Task :expo-gradle-plugin:expo-autolinking-plugin:jar
+2026-05-04T16:36:12.9684424Z > Task :gradle-plugin:react-native-gradle-plugin:compileKotlin
+2026-05-04T16:36:12.9753368Z > Task :gradle-plugin:react-native-gradle-plugin:compileJava NO-SOURCE
+2026-05-04T16:36:12.9782887Z > Task :gradle-plugin:react-native-gradle-plugin:classes
+2026-05-04T16:36:13.0693533Z > Task :gradle-plugin:react-native-gradle-plugin:jar
+2026-05-04T16:36:14.7712963Z 
+2026-05-04T16:36:14.7743616Z > Task :expo-module-gradle-plugin:compileKotlin
+2026-05-04T16:36:14.7764696Z w: file:///home/runner/work/keepeat/keepeat/frontend/node_modules/expo-modules-core/expo-module-gradle-plugin/src/main/kotlin/expo/modules/plugin/android/AndroidLibraryExtension.kt:9:24 'var targetSdk: Int?' is deprecated. Will be removed from library DSL in v9.0. Use testOptions.targetSdk or/and lint.targetSdk instead.
+2026-05-04T16:36:14.7795102Z 
+2026-05-04T16:36:14.7822708Z > Task :expo-module-gradle-plugin:compileJava NO-SOURCE
+2026-05-04T16:36:14.7850152Z > Task :expo-module-gradle-plugin:classes
+2026-05-04T16:36:14.7882676Z > Task :expo-module-gradle-plugin:jar
+2026-05-04T16:36:15.9673357Z 
+2026-05-04T16:36:15.9693275Z > Configure project :
+2026-05-04T16:36:15.9694548Z [32m[ExpoRootProject][0m Using the following versions:
+2026-05-04T16:36:15.9695476Z   - buildTools:  [32m36.0.0[0m
+2026-05-04T16:36:15.9696114Z   - minSdk:      [32m24[0m
+2026-05-04T16:36:15.9696745Z   - compileSdk:  [32m36[0m
+2026-05-04T16:36:15.9697324Z   - targetSdk:   [32m36[0m
+2026-05-04T16:36:15.9697977Z   - ndk:         [32m27.1.12297006[0m
+2026-05-04T16:36:15.9698646Z   - kotlin:      [32m2.1.20[0m
+2026-05-04T16:36:15.9699298Z   - ksp:         [32m2.1.20-2.0.1[0m
+2026-05-04T16:36:34.7669651Z 
+2026-05-04T16:36:34.7674045Z > Configure project :app
+2026-05-04T16:36:34.7675296Z Checking the license for package NDK (Side by side) 27.1.12297006 in /usr/local/lib/android/sdk/licenses
+2026-05-04T16:36:34.7676617Z License for package NDK (Side by side) 27.1.12297006 accepted.
+2026-05-04T16:36:34.7677762Z Preparing "Install NDK (Side by side) 27.1.12297006 v.27.1.12297006".
+2026-05-04T16:36:34.7678774Z "Install NDK (Side by side) 27.1.12297006 v.27.1.12297006" ready.
+2026-05-04T16:36:34.7679927Z Installing NDK (Side by side) 27.1.12297006 in /usr/local/lib/android/sdk/ndk/27.1.12297006
+2026-05-04T16:36:34.7681126Z "Install NDK (Side by side) 27.1.12297006 v.27.1.12297006" complete.
+2026-05-04T16:36:34.7682396Z "Install NDK (Side by side) 27.1.12297006 v.27.1.12297006" finished.
+2026-05-04T16:36:35.6669569Z 
+2026-05-04T16:36:35.6680252Z > Configure project :expo
+2026-05-04T16:36:35.6680941Z 
+2026-05-04T16:36:35.6681360Z Using expo modules
+2026-05-04T16:36:35.6682456Z   - [32mexpo-constants[0m (18.0.13)
+2026-05-04T16:36:35.6684691Z   - [32mexpo-modules-core[0m (3.0.29)
+2026-05-04T16:36:35.6685690Z   - [33m[📦][0m [32mexpo-application[0m (7.0.8)
+2026-05-04T16:36:35.6686496Z   - [33m[📦][0m [32mexpo-asset[0m (12.0.12)
+2026-05-04T16:36:35.6692440Z   - [33m[📦][0m [32mexpo-blur[0m (15.0.8)
+2026-05-04T16:36:35.6693917Z   - [33m[📦][0m [32mexpo-camera[0m (17.0.10)
+2026-05-04T16:36:35.6695854Z   - [33m[📦][0m [32mexpo-file-system[0m (19.0.21)
+2026-05-04T16:36:35.6700727Z   - [33m[📦][0m [32mexpo-font[0m (14.0.11)
+2026-05-04T16:36:35.6701747Z   - [33m[📦][0m [32mexpo-haptics[0m (15.0.8)
+2026-05-04T16:36:35.6702785Z   - [33m[📦][0m [32mexpo-image[0m (3.0.11)
+2026-05-04T16:36:35.6703648Z   - [33m[📦][0m [32mexpo-image-loader[0m (6.0.0)
+2026-05-04T16:36:35.6706178Z   - [33m[📦][0m [32mexpo-image-manipulator[0m (14.0.8)
+2026-05-04T16:36:35.6708151Z   - [33m[📦][0m [32mexpo-image-picker[0m (17.0.10)
+2026-05-04T16:36:35.6709775Z   - [33m[📦][0m [32mexpo-keep-awake[0m (15.0.8)
+2026-05-04T16:36:35.6714866Z   - [33m[📦][0m [32mexpo-linking[0m (8.0.11)
+2026-05-04T16:36:35.6715992Z   - [33m[📦][0m [32mexpo-navigation-bar[0m (5.0.10)
+2026-05-04T16:36:35.6716877Z   - [33m[📦][0m [32mexpo-notifications[0m (0.32.16)
+2026-05-04T16:36:35.6717704Z   - [33m[📦][0m [32mexpo-secure-store[0m (15.0.8)
+2026-05-04T16:36:35.6719266Z   - [33m[📦][0m [32mexpo-splash-screen[0m (31.0.13)
+2026-05-04T16:36:35.6720091Z   - [33m[📦][0m [32mexpo-system-ui[0m (6.0.9)
+2026-05-04T16:36:35.6720906Z   - [33m[📦][0m [32mexpo-web-browser[0m (15.0.10)
+2026-05-04T16:36:35.6722412Z 
+2026-05-04T16:36:37.7684786Z 
+2026-05-04T16:36:37.7713013Z > Configure project :react-native-iap
+2026-05-04T16:36:37.7742936Z [NitroModules] 🔥 NitroIap is boosted by nitro!
+2026-05-04T16:36:38.6675615Z 
+2026-05-04T16:36:38.6683436Z > Configure project :react-native-nitro-modules
+2026-05-04T16:36:38.6688761Z [NitroModules] 🔥 Your app is boosted by nitro modules!
+2026-05-04T16:36:44.1682755Z 
+2026-05-04T16:36:44.1701463Z > Task :expo-modules-core:preBuild UP-TO-DATE
+2026-05-04T16:36:44.2724480Z > Task :app:generateAutolinkingNewArchitectureFiles
+2026-05-04T16:36:44.2782915Z > Task :app:generateAutolinkingPackageList
+2026-05-04T16:36:44.2842954Z > Task :app:generateCodegenSchemaFromJavaScript SKIPPED
+2026-05-04T16:36:44.2872998Z > Task :app:generateCodegenArtifactsFromSchema SKIPPED
+2026-05-04T16:36:44.2922852Z > Task :app:generateReactNativeEntryPoint
+2026-05-04T16:36:44.4683848Z > Task :react-native-async-storage_async-storage:generateCodegenSchemaFromJavaScript
+2026-05-04T16:36:44.5743958Z > Task :react-native-community_netinfo:generateCodegenSchemaFromJavaScript
+2026-05-04T16:36:44.7744668Z > Task :react-native-async-storage_async-storage:generateCodegenArtifactsFromSchema
+2026-05-04T16:36:44.7758126Z > Task :react-native-async-storage_async-storage:preBuild
+2026-05-04T16:36:44.8701825Z The NODE_ENV environment variable is required but was not specified. Ensure the project is bundled with Expo CLI or NODE_ENV is set. Using only .env.local and .env
+2026-05-04T16:36:44.8703070Z 
+2026-05-04T16:36:44.8732703Z > Task :expo-constants:createExpoConfig
+2026-05-04T16:36:44.8811886Z 
+2026-05-04T16:36:44.8882561Z > Task :expo-constants:preBuild
+2026-05-04T16:36:44.8942973Z > Task :react-native-iap:preBuild UP-TO-DATE
+2026-05-04T16:36:44.8962993Z > Task :react-native-ml-kit_text-recognition:preBuild UP-TO-DATE
+2026-05-04T16:36:44.9670853Z > Task :react-native-gesture-handler:generateCodegenSchemaFromJavaScript
+2026-05-04T16:36:45.0673254Z > Task :expo:generatePackagesList
+2026-05-04T16:36:45.0693081Z > Task :expo:preBuild
+2026-05-04T16:36:45.0751110Z > Task :react-native-community_netinfo:generateCodegenArtifactsFromSchema
+2026-05-04T16:36:45.0782901Z > Task :react-native-community_netinfo:preBuild
+2026-05-04T16:36:45.0801706Z > Task :react-native-nitro-modules:generateCodegenSchemaFromJavaScript
+2026-05-04T16:36:45.0822268Z > Task :react-native-reanimated:assertMinimalReactNativeVersionTask
+2026-05-04T16:36:45.0851539Z > Task :react-native-reanimated:assertNewArchitectureEnabledTask SKIPPED
+2026-05-04T16:36:45.1693725Z > Task :react-native-reanimated:assertWorkletsVersionTask
+2026-05-04T16:36:45.2676247Z > Task :react-native-gesture-handler:generateCodegenArtifactsFromSchema
+2026-05-04T16:36:45.2703209Z > Task :react-native-gesture-handler:preBuild
+2026-05-04T16:36:45.2733026Z > Task :react-native-safe-area-context:generateCodegenSchemaFromJavaScript
+2026-05-04T16:36:45.3678898Z > Task :react-native-nitro-modules:generateCodegenArtifactsFromSchema
+2026-05-04T16:36:45.3723378Z > Task :react-native-reanimated:generateCodegenSchemaFromJavaScript
+2026-05-04T16:36:45.4673327Z > Task :react-native-nitro-modules:prepareHeaders
+2026-05-04T16:36:45.4703127Z > Task :react-native-nitro-modules:preBuild
+2026-05-04T16:36:45.5727269Z > Task :react-native-safe-area-context:generateCodegenArtifactsFromSchema
+2026-05-04T16:36:45.5732902Z > Task :react-native-safe-area-context:preBuild
+2026-05-04T16:36:45.6673694Z > Task :react-native-screens:generateCodegenSchemaFromJavaScript
+2026-05-04T16:36:45.6733432Z > Task :react-native-reanimated:generateCodegenArtifactsFromSchema
+2026-05-04T16:36:45.7683588Z > Task :react-native-worklets:assertMinimalReactNativeVersionTask
+2026-05-04T16:36:45.7712956Z > Task :react-native-worklets:assertNewArchitectureEnabledTask SKIPPED
+2026-05-04T16:36:45.7713877Z > Task :react-native-webview:generateCodegenSchemaFromJavaScript
+2026-05-04T16:36:45.7743051Z > Task :react-native-reanimated:prepareReanimatedHeadersForPrefabs
+2026-05-04T16:36:45.7772929Z > Task :react-native-reanimated:preBuild
+2026-05-04T16:36:45.7803021Z > Task :app:checkKotlinGradlePluginConfigurationErrors SKIPPED
+2026-05-04T16:36:45.7803876Z > Task :expo:preDebugBuild
+2026-05-04T16:36:45.8696415Z > Task :expo:writeDebugAarMetadata
+2026-05-04T16:36:45.8756784Z > Task :expo-constants:preDebugBuild
+2026-05-04T16:36:45.8831937Z > Task :expo-constants:writeDebugAarMetadata
+2026-05-04T16:36:45.8862998Z > Task :expo-modules-core:preDebugBuild UP-TO-DATE
+2026-05-04T16:36:45.8872759Z > Task :expo-modules-core:writeDebugAarMetadata
+2026-05-04T16:36:45.8933171Z > Task :react-native-async-storage_async-storage:preDebugBuild
+2026-05-04T16:36:45.9670880Z > Task :react-native-async-storage_async-storage:writeDebugAarMetadata
+2026-05-04T16:36:45.9703282Z > Task :react-native-community_netinfo:preDebugBuild
+2026-05-04T16:36:45.9722942Z > Task :react-native-community_netinfo:writeDebugAarMetadata
+2026-05-04T16:36:45.9742848Z > Task :react-native-gesture-handler:preDebugBuild
+2026-05-04T16:36:45.9752862Z > Task :react-native-worklets:generateCodegenSchemaFromJavaScript
+2026-05-04T16:36:45.9777225Z > Task :react-native-gesture-handler:writeDebugAarMetadata
+2026-05-04T16:36:45.9804718Z > Task :react-native-iap:preDebugBuild UP-TO-DATE
+2026-05-04T16:36:45.9832925Z > Task :react-native-iap:writeDebugAarMetadata
+2026-05-04T16:36:45.9863044Z > Task :react-native-ml-kit_text-recognition:preDebugBuild UP-TO-DATE
+2026-05-04T16:36:45.9892946Z > Task :react-native-ml-kit_text-recognition:writeDebugAarMetadata
+2026-05-04T16:36:45.9893755Z > Task :react-native-nitro-modules:preDebugBuild
+2026-05-04T16:36:45.9894457Z > Task :react-native-nitro-modules:writeDebugAarMetadata
+2026-05-04T16:36:45.9895078Z > Task :react-native-reanimated:preDebugBuild
+2026-05-04T16:36:45.9895706Z > Task :react-native-screens:generateCodegenArtifactsFromSchema
+2026-05-04T16:36:45.9896319Z > Task :react-native-screens:preBuild
+2026-05-04T16:36:45.9896907Z > Task :react-native-safe-area-context:preDebugBuild
+2026-05-04T16:36:45.9897541Z > Task :react-native-reanimated:writeDebugAarMetadata
+2026-05-04T16:36:45.9898107Z > Task :react-native-screens:preDebugBuild
+2026-05-04T16:36:45.9898761Z > Task :react-native-safe-area-context:writeDebugAarMetadata
+2026-05-04T16:36:45.9899536Z > Task :expo:generateDebugResValues
+2026-05-04T16:36:45.9900095Z > Task :react-native-screens:writeDebugAarMetadata
+2026-05-04T16:36:46.0681576Z > Task :expo-constants:generateDebugResValues
+2026-05-04T16:36:46.0703236Z > Task :expo:generateDebugResources
+2026-05-04T16:36:46.0732688Z > Task :expo-constants:generateDebugResources
+2026-05-04T16:36:46.0733407Z > Task :expo:packageDebugResources
+2026-05-04T16:36:46.0760939Z > Task :expo-constants:packageDebugResources
+2026-05-04T16:36:46.0820951Z > Task :expo-modules-core:generateDebugResValues
+2026-05-04T16:36:46.0852941Z > Task :react-native-async-storage_async-storage:generateDebugResValues
+2026-05-04T16:36:46.1693868Z > Task :react-native-async-storage_async-storage:generateDebugResources
+2026-05-04T16:36:46.1723058Z > Task :expo-modules-core:generateDebugResources
+2026-05-04T16:36:46.1732790Z > Task :expo-modules-core:packageDebugResources
+2026-05-04T16:36:46.1763091Z > Task :react-native-async-storage_async-storage:packageDebugResources
+2026-05-04T16:36:46.1782920Z > Task :react-native-webview:generateCodegenArtifactsFromSchema
+2026-05-04T16:36:46.1812819Z > Task :react-native-webview:preBuild
+2026-05-04T16:36:46.1824213Z > Task :react-native-webview:preDebugBuild
+2026-05-04T16:36:46.1842874Z > Task :react-native-gesture-handler:generateDebugResValues
+2026-05-04T16:36:46.1872858Z > Task :react-native-community_netinfo:generateDebugResValues
+2026-05-04T16:36:46.1902697Z > Task :react-native-webview:writeDebugAarMetadata
+2026-05-04T16:36:46.1903422Z > Task :react-native-gesture-handler:generateDebugResources
+2026-05-04T16:36:46.1904166Z > Task :react-native-community_netinfo:generateDebugResources
+2026-05-04T16:36:46.1904830Z > Task :react-native-iap:generateDebugResValues
+2026-05-04T16:36:46.1905405Z > Task :react-native-iap:generateDebugResources
+2026-05-04T16:36:46.1906429Z > Task :react-native-gesture-handler:packageDebugResources
+2026-05-04T16:36:46.1907193Z > Task :react-native-ml-kit_text-recognition:generateDebugResValues
+2026-05-04T16:36:46.1907871Z > Task :react-native-iap:packageDebugResources
+2026-05-04T16:36:46.1908544Z > Task :react-native-community_netinfo:packageDebugResources
+2026-05-04T16:36:46.1909322Z > Task :react-native-ml-kit_text-recognition:generateDebugResources
+2026-05-04T16:36:46.1910047Z > Task :react-native-reanimated:generateDebugResValues
+2026-05-04T16:36:46.1910729Z > Task :react-native-nitro-modules:generateDebugResValues
+2026-05-04T16:36:46.2713652Z > Task :react-native-reanimated:generateDebugResources
+2026-05-04T16:36:46.2722833Z > Task :react-native-nitro-modules:generateDebugResources
+2026-05-04T16:36:46.2732192Z > Task :react-native-reanimated:packageDebugResources
+2026-05-04T16:36:46.2733072Z > Task :react-native-ml-kit_text-recognition:packageDebugResources
+2026-05-04T16:36:46.2733581Z > Task :react-native-screens:generateDebugResValues
+2026-05-04T16:36:46.2734228Z > Task :react-native-safe-area-context:generateDebugResValues
+2026-05-04T16:36:46.2735132Z > Task :react-native-safe-area-context:generateDebugResources
+2026-05-04T16:36:46.2735620Z > Task :react-native-screens:generateDebugResources
+2026-05-04T16:36:46.2736068Z > Task :react-native-safe-area-context:packageDebugResources
+2026-05-04T16:36:46.2736650Z > Task :react-native-webview:generateDebugResValues
+2026-05-04T16:36:46.2737574Z > Task :react-native-worklets:generateCodegenArtifactsFromSchema
+2026-05-04T16:36:46.2738056Z > Task :react-native-webview:generateDebugResources
+2026-05-04T16:36:46.3683450Z > Task :react-native-nitro-modules:packageDebugResources
+2026-05-04T16:36:46.3702786Z > Task :expo:extractDeepLinksDebug
+2026-05-04T16:36:46.3703493Z > Task :react-native-webview:packageDebugResources
+2026-05-04T16:36:46.3704313Z > Task :react-native-worklets:prepareWorkletsHeadersForPrefabs
+2026-05-04T16:36:46.3705019Z > Task :react-native-worklets:preBuild
+2026-05-04T16:36:46.3705568Z > Task :app:preBuild
+2026-05-04T16:36:46.3705964Z > Task :app:preDebugBuild
+2026-05-04T16:36:46.3706498Z > Task :expo-constants:extractDeepLinksDebug
+2026-05-04T16:36:46.3707110Z > Task :react-native-worklets:preDebugBuild
+2026-05-04T16:36:46.3707786Z > Task :app:mergeDebugNativeDebugMetadata NO-SOURCE
+2026-05-04T16:36:46.3708498Z > Task :react-native-screens:packageDebugResources
+2026-05-04T16:36:46.3709498Z > Task :react-native-worklets:writeDebugAarMetadata
+2026-05-04T16:36:46.3710102Z > Task :app:generateDebugBuildConfig
+2026-05-04T16:36:46.3710717Z > Task :react-native-worklets:generateDebugResValues
+2026-05-04T16:36:46.3711384Z > Task :react-native-worklets:generateDebugResources
+2026-05-04T16:36:46.4728863Z > Task :react-native-worklets:packageDebugResources
+2026-05-04T16:36:46.4757393Z > Task :expo-modules-core:extractDeepLinksDebug
+2026-05-04T16:36:46.4768467Z > Task :expo:processDebugManifest
+2026-05-04T16:36:46.4769191Z > Task :expo-constants:processDebugManifest
+2026-05-04T16:36:46.4770378Z > Task :react-native-community_netinfo:extractDeepLinksDebug
+2026-05-04T16:36:46.4771260Z > Task :react-native-async-storage_async-storage:extractDeepLinksDebug
+2026-05-04T16:36:46.5680241Z 
+2026-05-04T16:36:46.5710074Z > Task :expo-modules-core:processDebugManifest
+2026-05-04T16:36:46.5731318Z /home/runner/work/keepeat/keepeat/frontend/node_modules/expo-modules-core/android/src/main/AndroidManifest.xml:8:9-11:45 Warning:
+2026-05-04T16:36:46.5733623Z 	meta-data#com.facebook.soloader.enabled@android:value was tagged at AndroidManifest.xml:8 to replace other declarations but no other declaration present
+2026-05-04T16:36:46.5734834Z 
+2026-05-04T16:36:46.5735341Z > Task :react-native-gesture-handler:extractDeepLinksDebug
+2026-05-04T16:36:46.9724039Z > Task :react-native-gesture-handler:processDebugManifest
+2026-05-04T16:36:46.9773811Z > Task :react-native-iap:extractDeepLinksDebug
+2026-05-04T16:36:47.0693932Z 
+2026-05-04T16:36:47.0741418Z > Task :react-native-community_netinfo:processDebugManifest
+2026-05-04T16:36:47.0792778Z package="com.reactnativecommunity.netinfo" found in source AndroidManifest.xml: /home/runner/work/keepeat/keepeat/frontend/node_modules/@react-native-community/netinfo/android/src/main/AndroidManifest.xml.
+2026-05-04T16:36:47.0795903Z Setting the namespace via the package attribute in the source AndroidManifest.xml is no longer supported, and the value is ignored.
+2026-05-04T16:36:47.0864764Z Recommendation: remove package="com.reactnativecommunity.netinfo" from the source AndroidManifest.xml: /home/runner/work/keepeat/keepeat/frontend/node_modules/@react-native-community/netinfo/android/src/main/AndroidManifest.xml.
+2026-05-04T16:36:47.1669307Z 
+2026-05-04T16:36:47.1720915Z > Task :react-native-ml-kit_text-recognition:extractDeepLinksDebug
+2026-05-04T16:36:47.5672875Z 
+2026-05-04T16:36:47.5712235Z > Task :react-native-async-storage_async-storage:processDebugManifest
+2026-05-04T16:36:47.5714042Z package="com.reactnativecommunity.asyncstorage" found in source AndroidManifest.xml: /home/runner/work/keepeat/keepeat/frontend/node_modules/@react-native-async-storage/async-storage/android/src/main/AndroidManifest.xml.
+2026-05-04T16:36:47.5715551Z Setting the namespace via the package attribute in the source AndroidManifest.xml is no longer supported, and the value is ignored.
+2026-05-04T16:36:47.5717159Z Recommendation: remove package="com.reactnativecommunity.asyncstorage" from the source AndroidManifest.xml: /home/runner/work/keepeat/keepeat/frontend/node_modules/@react-native-async-storage/async-storage/android/src/main/AndroidManifest.xml.
+2026-05-04T16:36:47.5718454Z 
+2026-05-04T16:36:47.5719954Z > Task :react-native-nitro-modules:extractDeepLinksDebug
+2026-05-04T16:36:47.5720289Z 
+2026-05-04T16:36:47.5722135Z > Task :react-native-ml-kit_text-recognition:processDebugManifest
+2026-05-04T16:36:47.5725295Z package="com.rnmlkit.textrecognition" found in source AndroidManifest.xml: /home/runner/work/keepeat/keepeat/frontend/node_modules/@react-native-ml-kit/text-recognition/android/src/main/AndroidManifest.xml.
+2026-05-04T16:36:47.5728240Z Setting the namespace via the package attribute in the source AndroidManifest.xml is no longer supported, and the value is ignored.
+2026-05-04T16:36:47.5731317Z Recommendation: remove package="com.rnmlkit.textrecognition" from the source AndroidManifest.xml: /home/runner/work/keepeat/keepeat/frontend/node_modules/@react-native-ml-kit/text-recognition/android/src/main/AndroidManifest.xml.
+2026-05-04T16:36:47.5733718Z 
+2026-05-04T16:36:47.5734066Z > Task :react-native-reanimated:extractDeepLinksDebug
+2026-05-04T16:36:47.6683439Z > Task :react-native-iap:processDebugManifest
+2026-05-04T16:36:47.7688022Z > Task :react-native-safe-area-context:extractDeepLinksDebug
+2026-05-04T16:36:47.7713070Z > Task :react-native-reanimated:processDebugManifest
+2026-05-04T16:36:47.7723078Z > Task :react-native-screens:extractDeepLinksDebug
+2026-05-04T16:36:47.7724830Z > Task :react-native-screens:processDebugManifest
+2026-05-04T16:36:47.7725741Z > Task :react-native-nitro-modules:processDebugManifest
+2026-05-04T16:36:47.7728760Z > Task :react-native-webview:extractDeepLinksDebug
+2026-05-04T16:36:47.7730646Z > Task :react-native-worklets:extractDeepLinksDebug
+2026-05-04T16:36:47.8693503Z 
+2026-05-04T16:36:47.8694685Z > Task :react-native-safe-area-context:processDebugManifest
+2026-05-04T16:36:47.8696973Z package="com.th3rdwave.safeareacontext" found in source AndroidManifest.xml: /home/runner/work/keepeat/keepeat/frontend/node_modules/react-native-safe-area-context/android/src/main/AndroidManifest.xml.
+2026-05-04T16:36:47.8699395Z Setting the namespace via the package attribute in the source AndroidManifest.xml is no longer supported, and the value is ignored.
+2026-05-04T16:36:47.8702282Z Recommendation: remove package="com.th3rdwave.safeareacontext" from the source AndroidManifest.xml: /home/runner/work/keepeat/keepeat/frontend/node_modules/react-native-safe-area-context/android/src/main/AndroidManifest.xml.
+2026-05-04T16:36:47.8703919Z 
+2026-05-04T16:36:47.8704425Z > Task :react-native-webview:processDebugManifest
+2026-05-04T16:36:47.8705633Z > Task :expo:compileDebugLibraryResources
+2026-05-04T16:36:47.8706445Z > Task :react-native-worklets:processDebugManifest
+2026-05-04T16:36:48.7696689Z > Task :expo-constants:compileDebugLibraryResources
+2026-05-04T16:36:48.7733826Z > Task :expo-modules-core:compileDebugLibraryResources
+2026-05-04T16:36:48.8685408Z > Task :expo:parseDebugLocalResources
+2026-05-04T16:36:48.8737332Z > Task :expo-constants:parseDebugLocalResources
+2026-05-04T16:36:48.8793269Z > Task :expo-modules-core:parseDebugLocalResources
+2026-05-04T16:36:48.8832377Z > Task :expo:generateDebugRFile
+2026-05-04T16:36:48.8844906Z > Task :expo-constants:generateDebugRFile
+2026-05-04T16:36:48.9678090Z > Task :expo-modules-core:generateDebugRFile
+2026-05-04T16:36:48.9714526Z > Task :react-native-async-storage_async-storage:compileDebugLibraryResources
+2026-05-04T16:36:48.9773303Z > Task :react-native-community_netinfo:compileDebugLibraryResources
+2026-05-04T16:36:48.9812965Z > Task :react-native-async-storage_async-storage:parseDebugLocalResources
+2026-05-04T16:36:48.9842833Z > Task :react-native-community_netinfo:parseDebugLocalResources
+2026-05-04T16:36:48.9872766Z > Task :react-native-gesture-handler:compileDebugLibraryResources
+2026-05-04T16:36:48.9902792Z > Task :react-native-async-storage_async-storage:generateDebugRFile
+2026-05-04T16:36:48.9929493Z > Task :react-native-iap:compileDebugLibraryResources
+2026-05-04T16:36:49.0669755Z > Task :react-native-gesture-handler:parseDebugLocalResources
+2026-05-04T16:36:49.0693467Z > Task :react-native-community_netinfo:generateDebugRFile
+2026-05-04T16:36:49.0713285Z > Task :react-native-ml-kit_text-recognition:compileDebugLibraryResources
+2026-05-04T16:36:49.0714359Z > Task :react-native-iap:parseDebugLocalResources
+2026-05-04T16:36:49.0715228Z > Task :react-native-gesture-handler:generateDebugRFile
+2026-05-04T16:36:49.0716249Z > Task :react-native-ml-kit_text-recognition:parseDebugLocalResources
+2026-05-04T16:36:49.0717140Z > Task :react-native-iap:generateDebugRFile
+2026-05-04T16:36:49.0718036Z > Task :react-native-nitro-modules:compileDebugLibraryResources
+2026-05-04T16:36:49.0719004Z > Task :react-native-reanimated:compileDebugLibraryResources
+2026-05-04T16:36:49.1728940Z > Task :react-native-nitro-modules:parseDebugLocalResources
+2026-05-04T16:36:49.1752909Z > Task :react-native-ml-kit_text-recognition:generateDebugRFile
+2026-05-04T16:36:49.1783185Z > Task :react-native-reanimated:parseDebugLocalResources
+2026-05-04T16:36:49.1792594Z > Task :react-native-nitro-modules:generateDebugRFile
+2026-05-04T16:36:49.1813673Z > Task :react-native-safe-area-context:compileDebugLibraryResources
+2026-05-04T16:36:49.1842649Z > Task :react-native-reanimated:generateDebugRFile
+2026-05-04T16:36:49.1873018Z > Task :react-native-screens:parseDebugLocalResources
+2026-05-04T16:36:49.3703151Z > Task :react-native-screens:generateDebugRFile
+2026-05-04T16:36:49.3722861Z > Task :react-native-safe-area-context:parseDebugLocalResources
+2026-05-04T16:36:49.3742645Z > Task :react-native-webview:compileDebugLibraryResources
+2026-05-04T16:36:49.3766353Z > Task :react-native-screens:compileDebugLibraryResources
+2026-05-04T16:36:49.3769469Z > Task :react-native-safe-area-context:generateDebugRFile
+2026-05-04T16:36:49.3796238Z > Task :expo:checkKotlinGradlePluginConfigurationErrors SKIPPED
+2026-05-04T16:36:49.3816262Z > Task :expo:generateDebugBuildConfig
+2026-05-04T16:36:49.3842822Z > Task :expo-constants:checkKotlinGradlePluginConfigurationErrors SKIPPED
+2026-05-04T16:36:49.3870119Z > Task :react-native-worklets:compileDebugLibraryResources
+2026-05-04T16:36:49.3892556Z > Task :expo-constants:generateDebugBuildConfig
+2026-05-04T16:36:49.3922919Z > Task :expo-modules-core:checkKotlinGradlePluginConfigurationErrors SKIPPED
+2026-05-04T16:36:49.3952580Z > Task :expo-modules-core:generateDebugBuildConfig
+2026-05-04T16:36:49.4677057Z > Task :react-native-webview:parseDebugLocalResources
+2026-05-04T16:36:49.4682619Z > Task :react-native-worklets:parseDebugLocalResources
+2026-05-04T16:36:49.4723128Z > Task :react-native-webview:generateDebugRFile
+2026-05-04T16:36:49.4734315Z > Task :react-native-worklets:generateDebugRFile
+2026-05-04T16:36:49.4762670Z > Task :expo:javaPreCompileDebug
+2026-05-04T16:36:49.4792789Z > Task :react-native-async-storage_async-storage:generateDebugBuildConfig
+2026-05-04T16:36:49.4812595Z > Task :expo-constants:javaPreCompileDebug
+2026-05-04T16:36:49.5692276Z > Task :react-native-community_netinfo:generateDebugBuildConfig
+2026-05-04T16:36:49.5726129Z > Task :react-native-async-storage_async-storage:javaPreCompileDebug
+2026-05-04T16:36:49.8675401Z > Task :react-native-community_netinfo:javaPreCompileDebug
+2026-05-04T16:36:53.4673238Z /home/runner/work/keepeat/keepeat/frontend/node_modules/@react-native-community/netinfo/android/src/newarch/com/reactnativecommunity/netinfo/NetInfoModule.java:43: warning: [removal] onCatalystInstanceDestroy() in NativeModule has been deprecated and marked for removal
+2026-05-04T16:36:53.4675089Z 
+2026-05-04T16:36:53.4692606Z     public void onCatalystInstanceDestroy() {
+2026-05-04T16:36:53.4693454Z > Task :react-native-community_netinfo:compileDebugJavaWithJavac
+2026-05-04T16:36:53.4694442Z                 ^
+2026-05-04T16:36:53.4722831Z Note: Some input files use or override a deprecated API.
+2026-05-04T16:36:53.4752667Z Note: Recompile with -Xlint:deprecation for details.
+2026-05-04T16:36:53.4782480Z 1 warning
+2026-05-04T16:36:54.9670733Z Note: Some input files use or override a deprecated API.
+2026-05-04T16:36:54.9671214Z 
+2026-05-04T16:36:54.9703196Z Note: Recompile with -Xlint:deprecation for details.
+2026-05-04T16:36:54.9704155Z > Task :react-native-async-storage_async-storage:compileDebugJavaWithJavac
+2026-05-04T16:36:54.9734138Z Note: /home/runner/work/keepeat/keepeat/frontend/node_modules/@react-native-async-storage/async-storage/android/src/javaPackage/java/com/reactnativecommunity/asyncstorage/AsyncStoragePackage.java uses unchecked or unsafe operations.
+2026-05-04T16:36:54.9768081Z Note: Recompile with -Xlint:unchecked for details.
+2026-05-04T16:36:55.0671325Z 
+2026-05-04T16:36:55.0733271Z > Task :react-native-community_netinfo:bundleLibCompileToJarDebug
+2026-05-04T16:36:55.0759792Z > Task :react-native-gesture-handler:checkKotlinGradlePluginConfigurationErrors SKIPPED
+2026-05-04T16:36:55.0833015Z > Task :react-native-async-storage_async-storage:bundleLibCompileToJarDebug
+2026-05-04T16:36:55.0866671Z > Task :react-native-gesture-handler:generateDebugBuildConfig
+2026-05-04T16:36:55.0868722Z > Task :react-native-reanimated:generateDebugBuildConfig
+2026-05-04T16:36:55.0869409Z > Task :react-native-worklets:generateDebugBuildConfig
+2026-05-04T16:36:55.0870032Z > Task :react-native-reanimated:javaPreCompileDebug
+2026-05-04T16:36:55.0870641Z > Task :react-native-worklets:javaPreCompileDebug
+2026-05-04T16:36:55.0871331Z > Task :react-native-gesture-handler:javaPreCompileDebug
+2026-05-04T16:36:55.0872422Z > Task :react-native-iap:checkKotlinGradlePluginConfigurationErrors SKIPPED
+2026-05-04T16:36:55.0873199Z > Task :react-native-iap:generateDebugBuildConfig
+2026-05-04T16:36:55.0874071Z > Task :react-native-nitro-modules:checkKotlinGradlePluginConfigurationErrors SKIPPED
+2026-05-04T16:36:55.0875003Z > Task :react-native-nitro-modules:generateDebugBuildConfig
+2026-05-04T16:36:55.7669528Z 
+2026-05-04T16:36:55.7672443Z Note: /home/runner/work/keepeat/keepeat/frontend/node_modules/react-native-worklets/android/src/main/java/com/swmansion/worklets/WorkletsPackage.java uses unchecked or unsafe operations.
+2026-05-04T16:36:55.7674129Z > Task :react-native-worklets:compileDebugJavaWithJavac
+2026-05-04T16:36:55.7675187Z Note: Recompile with -Xlint:unchecked for details.
+2026-05-04T16:36:55.8702849Z 
+2026-05-04T16:36:55.8743356Z > Task :expo-modules-core:javaPreCompileDebug
+2026-05-04T16:36:55.8783168Z > Task :react-native-worklets:bundleLibCompileToJarDebug
+2026-05-04T16:36:57.1693982Z Note: Some input files use or override a deprecated API.
+2026-05-04T16:36:57.1694468Z 
+2026-05-04T16:36:57.1733242Z Note: Recompile with -Xlint:deprecation for details.
+2026-05-04T16:36:57.1734376Z > Task :react-native-reanimated:compileDebugJavaWithJavac
+2026-05-04T16:36:57.1813998Z Note: Some input files use unchecked or unsafe operations.
+2026-05-04T16:36:57.1834632Z Note: Recompile with -Xlint:unchecked for details.
+2026-05-04T16:36:57.2682888Z 
+2026-05-04T16:36:57.2710234Z > Task :react-native-reanimated:bundleLibCompileToJarDebug
+2026-05-04T16:36:59.7669832Z > Task :react-native-nitro-modules:compileDebugKotlin
+2026-05-04T16:36:59.8710491Z > Task :react-native-nitro-modules:javaPreCompileDebug
+2026-05-04T16:37:00.1673366Z > Task :react-native-nitro-modules:compileDebugJavaWithJavac
+2026-05-04T16:37:00.1697869Z > Task :react-native-nitro-modules:bundleLibCompileToJarDebug
+2026-05-04T16:37:05.8694026Z > Task :app:checkDebugAarMetadata
+2026-05-04T16:37:05.8753014Z > Task :app:generateDebugResValues
+2026-05-04T16:37:06.2683255Z > Task :app:mapDebugSourceSetPaths
+2026-05-04T16:37:06.2712975Z > Task :app:generateDebugResources
+2026-05-04T16:37:12.9673225Z > Task :app:mergeDebugResources
+2026-05-04T16:37:13.0673184Z > Task :app:packageDebugResources
+2026-05-04T16:37:13.0753018Z > Task :app:parseDebugLocalResources
+2026-05-04T16:37:13.1690778Z > Task :app:createDebugCompatibleScreenManifests
+2026-05-04T16:37:13.1736933Z > Task :app:extractDeepLinksDebug
+2026-05-04T16:37:14.3692502Z 
+2026-05-04T16:37:14.3723133Z > Task :react-native-gesture-handler:compileDebugKotlin
+2026-05-04T16:37:14.3755177Z w: file:///home/runner/work/keepeat/keepeat/frontend/node_modules/react-native-gesture-handler/android/src/main/java/com/swmansion/gesturehandler/react/RNGestureHandlerRootView.kt:41:43 The corresponding parameter in the supertype 'ReactViewGroup' is named 'ev'. This may cause problems when calling this function with named arguments.
+2026-05-04T16:37:14.4712719Z 
+2026-05-04T16:37:14.4793127Z > Task :app:processDebugMainManifest
+2026-05-04T16:37:14.4823246Z /home/runner/work/keepeat/keepeat/frontend/android/app/src/debug/AndroidManifest.xml:6:5-162 Warning:
+2026-05-04T16:37:14.4883514Z 	application@android:usesCleartextTraffic was tagged at AndroidManifest.xml:6 to replace other declarations but no other declaration present
+2026-05-04T16:37:14.4943322Z /home/runner/work/keepeat/keepeat/frontend/android/app/src/debug/AndroidManifest.xml Warning:
+2026-05-04T16:37:14.5034566Z 	provider#expo.modules.filesystem.FileSystemFileProvider@android:authorities was tagged at AndroidManifest.xml:0 to replace other declarations but no other declaration present
+2026-05-04T16:37:14.5093280Z /home/runner/work/keepeat/keepeat/frontend/android/app/src/debug/AndroidManifest.xml Warning:
+2026-05-04T16:37:14.5123825Z 	activity#expo.modules.imagepicker.ExpoCropImageActivity@android:exported was tagged at AndroidManifest.xml:0 to replace other declarations but no other declaration present
+2026-05-04T16:37:14.6672522Z 
+2026-05-04T16:37:14.6713453Z > Task :app:processDebugManifest
+2026-05-04T16:37:14.7723241Z > Task :app:processDebugManifestForPackage
+2026-05-04T16:37:15.6693425Z > Task :react-native-gesture-handler:compileDebugJavaWithJavac
+2026-05-04T16:37:15.9683480Z > Task :react-native-gesture-handler:bundleLibCompileToJarDebug
+2026-05-04T16:37:15.9712871Z > Task :react-native-iap:javaPreCompileDebug
+2026-05-04T16:37:16.0669628Z > Task :react-native-ml-kit_text-recognition:generateDebugBuildConfig
+2026-05-04T16:37:16.0708407Z > Task :react-native-ml-kit_text-recognition:javaPreCompileDebug
+2026-05-04T16:37:16.8714863Z Note: /home/runner/work/keepeat/keepeat/frontend/node_modules/@react-native-ml-kit/text-recognition/android/src/main/java/com/rnmlkit/textrecognition/TextRecognitionPackage.java uses or overrides a deprecated API.
+2026-05-04T16:37:16.8716252Z 
+2026-05-04T16:37:16.8742972Z Note: Recompile with -Xlint:deprecation for details.
+2026-05-04T16:37:16.8743845Z > Task :react-native-ml-kit_text-recognition:compileDebugJavaWithJavac
+2026-05-04T16:37:16.8772545Z 
+2026-05-04T16:37:16.8832837Z > Task :react-native-ml-kit_text-recognition:bundleLibCompileToJarDebug
+2026-05-04T16:37:16.8834102Z > Task :react-native-safe-area-context:checkKotlinGradlePluginConfigurationErrors SKIPPED
+2026-05-04T16:37:16.8835695Z > Task :react-native-safe-area-context:generateDebugBuildConfig
+2026-05-04T16:37:18.3683465Z > Task :app:processDebugResources
+2026-05-04T16:37:18.3743255Z > Task :react-native-safe-area-context:javaPreCompileDebug
+2026-05-04T16:37:18.3803412Z > Task :react-native-screens:checkKotlinGradlePluginConfigurationErrors SKIPPED
+2026-05-04T16:37:18.4683990Z > Task :react-native-screens:generateDebugBuildConfig
+2026-05-04T16:37:19.3673375Z > Task :expo-modules-core:compileDebugKotlin
+2026-05-04T16:37:20.7672935Z 
+2026-05-04T16:37:20.7698746Z > Task :react-native-safe-area-context:compileDebugKotlin
+2026-05-04T16:37:20.7754538Z w: file:///home/runner/work/keepeat/keepeat/frontend/node_modules/react-native-safe-area-context/android/src/main/java/com/th3rdwave/safeareacontext/SafeAreaView.kt:59:23 'val uiImplementation: UIImplementation!' is deprecated. Deprecated in Java.
+2026-05-04T16:37:20.9742557Z 
+2026-05-04T16:37:20.9803518Z > Task :react-native-safe-area-context:compileDebugJavaWithJavac
+2026-05-04T16:37:21.0718359Z > Task :react-native-safe-area-context:bundleLibCompileToJarDebug
+2026-05-04T16:37:21.1703325Z > Task :react-native-screens:javaPreCompileDebug
+2026-05-04T16:37:21.1733329Z > Task :react-native-webview:checkKotlinGradlePluginConfigurationErrors SKIPPED
+2026-05-04T16:37:21.1782855Z > Task :react-native-webview:generateDebugBuildConfig
+2026-05-04T16:37:21.1852452Z 
+2026-05-04T16:37:21.1883060Z > Task :react-native-iap:compileDebugKotlin
+2026-05-04T16:37:21.1945046Z w: file:///home/runner/work/keepeat/keepeat/frontend/node_modules/react-native-iap/android/src/main/java/com/margelo/nitro/iap/HybridRnIap.kt:1599:29 'suspend fun checkAlternativeBillingAvailability(): Boolean' is deprecated. Use isBillingProgramAvailable with BillingProgramAndroid.ExternalOffer instead.
+2026-05-04T16:37:21.1948869Z w: file:///home/runner/work/keepeat/keepeat/frontend/node_modules/react-native-iap/android/src/main/java/com/margelo/nitro/iap/HybridRnIap.kt:1620:29 'suspend fun showAlternativeBillingInformationDialog(activity: Activity): Boolean' is deprecated. Use launchExternalLink instead.
+2026-05-04T16:37:21.2035694Z w: file:///home/runner/work/keepeat/keepeat/frontend/node_modules/react-native-iap/android/src/main/java/com/margelo/nitro/iap/HybridRnIap.kt:1640:29 'suspend fun createAlternativeBillingReportingToken(): String?' is deprecated. Use createBillingProgramReportingDetails with BillingProgramAndroid.ExternalOffer instead.
+2026-05-04T16:37:22.1684201Z Note: /home/runner/work/keepeat/keepeat/frontend/node_modules/react-native-iap/android/src/main/java/com/margelo/nitro/iap/NitroIapPackage.java uses or overrides a deprecated API.
+2026-05-04T16:37:22.1685290Z 
+2026-05-04T16:37:22.1743657Z Note: Recompile with -Xlint:deprecation for details.
+2026-05-04T16:37:22.1744397Z > Task :react-native-iap:compileDebugJavaWithJavac
+2026-05-04T16:37:22.1812923Z 
+2026-05-04T16:37:22.1853225Z > Task :react-native-iap:bundleLibCompileToJarDebug
+2026-05-04T16:37:22.2693272Z > Task :react-native-webview:javaPreCompileDebug
+2026-05-04T16:37:22.2743094Z > Task :app:javaPreCompileDebug
+2026-05-04T16:37:22.3703178Z > Task :app:mergeDebugShaders
+2026-05-04T16:37:22.3722646Z > Task :app:compileDebugShaders NO-SOURCE
+2026-05-04T16:37:22.3758669Z > Task :app:generateDebugAssets UP-TO-DATE
+2026-05-04T16:37:22.3772864Z > Task :expo:mergeDebugShaders
+2026-05-04T16:37:22.3782843Z > Task :expo:compileDebugShaders NO-SOURCE
+2026-05-04T16:37:22.3812576Z > Task :expo:generateDebugAssets UP-TO-DATE
+2026-05-04T16:37:22.3816790Z > Task :expo:mergeDebugAssets
+2026-05-04T16:37:22.3817387Z > Task :expo-constants:mergeDebugShaders
+2026-05-04T16:37:22.3820326Z > Task :expo-constants:compileDebugShaders NO-SOURCE
+2026-05-04T16:37:22.3821344Z > Task :expo-constants:generateDebugAssets UP-TO-DATE
+2026-05-04T16:37:22.4695833Z > Task :expo-constants:mergeDebugAssets
+2026-05-04T16:37:22.4718715Z > Task :expo-modules-core:mergeDebugShaders
+2026-05-04T16:37:22.4734736Z > Task :expo-modules-core:compileDebugShaders NO-SOURCE
+2026-05-04T16:37:22.4737424Z > Task :expo-modules-core:generateDebugAssets UP-TO-DATE
+2026-05-04T16:37:22.4738223Z > Task :expo-modules-core:mergeDebugAssets
+2026-05-04T16:37:22.4739049Z > Task :react-native-async-storage_async-storage:mergeDebugShaders
+2026-05-04T16:37:22.4740150Z > Task :react-native-async-storage_async-storage:compileDebugShaders NO-SOURCE
+2026-05-04T16:37:22.4741264Z > Task :react-native-async-storage_async-storage:generateDebugAssets UP-TO-DATE
+2026-05-04T16:37:22.4742459Z > Task :react-native-async-storage_async-storage:mergeDebugAssets
+2026-05-04T16:37:22.4743303Z > Task :react-native-community_netinfo:mergeDebugShaders
+2026-05-04T16:37:22.4744171Z > Task :react-native-community_netinfo:compileDebugShaders NO-SOURCE
+2026-05-04T16:37:22.4745138Z > Task :react-native-community_netinfo:generateDebugAssets UP-TO-DATE
+2026-05-04T16:37:22.4746018Z > Task :react-native-community_netinfo:mergeDebugAssets
+2026-05-04T16:37:22.5686667Z > Task :react-native-gesture-handler:mergeDebugShaders
+2026-05-04T16:37:22.5713654Z > Task :react-native-gesture-handler:compileDebugShaders NO-SOURCE
+2026-05-04T16:37:22.5745400Z > Task :react-native-gesture-handler:generateDebugAssets UP-TO-DATE
+2026-05-04T16:37:22.5759293Z > Task :react-native-gesture-handler:mergeDebugAssets
+2026-05-04T16:37:22.5760401Z > Task :react-native-iap:mergeDebugShaders
+2026-05-04T16:37:22.5761214Z > Task :react-native-iap:compileDebugShaders NO-SOURCE
+2026-05-04T16:37:22.5762239Z > Task :react-native-iap:generateDebugAssets UP-TO-DATE
+2026-05-04T16:37:22.5762994Z > Task :react-native-iap:mergeDebugAssets
+2026-05-04T16:37:22.5763840Z > Task :react-native-ml-kit_text-recognition:mergeDebugShaders
+2026-05-04T16:37:22.5764873Z > Task :react-native-ml-kit_text-recognition:compileDebugShaders NO-SOURCE
+2026-05-04T16:37:22.5765989Z > Task :react-native-ml-kit_text-recognition:generateDebugAssets UP-TO-DATE
+2026-05-04T16:37:22.5767019Z > Task :react-native-ml-kit_text-recognition:mergeDebugAssets
+2026-05-04T16:37:22.5767903Z > Task :react-native-nitro-modules:mergeDebugShaders
+2026-05-04T16:37:22.6679384Z > Task :react-native-nitro-modules:compileDebugShaders NO-SOURCE
+2026-05-04T16:37:22.6703172Z > Task :react-native-nitro-modules:generateDebugAssets UP-TO-DATE
+2026-05-04T16:37:22.6732975Z > Task :react-native-nitro-modules:mergeDebugAssets
+2026-05-04T16:37:22.6734044Z > Task :react-native-reanimated:mergeDebugShaders
+2026-05-04T16:37:22.6768213Z > Task :react-native-reanimated:compileDebugShaders NO-SOURCE
+2026-05-04T16:37:22.6793038Z > Task :react-native-reanimated:generateDebugAssets UP-TO-DATE
+2026-05-04T16:37:22.6822720Z > Task :react-native-reanimated:mergeDebugAssets
+2026-05-04T16:37:22.6852637Z > Task :react-native-safe-area-context:mergeDebugShaders
+2026-05-04T16:37:22.6854115Z > Task :react-native-safe-area-context:compileDebugShaders NO-SOURCE
+2026-05-04T16:37:22.6881451Z > Task :react-native-safe-area-context:generateDebugAssets UP-TO-DATE
+2026-05-04T16:37:22.6902873Z > Task :react-native-safe-area-context:mergeDebugAssets
+2026-05-04T16:37:22.6935305Z > Task :react-native-screens:mergeDebugShaders
+2026-05-04T16:37:22.6962675Z > Task :react-native-screens:compileDebugShaders NO-SOURCE
+2026-05-04T16:37:22.6985971Z > Task :react-native-screens:generateDebugAssets UP-TO-DATE
+2026-05-04T16:37:22.6987149Z > Task :react-native-screens:mergeDebugAssets
+2026-05-04T16:37:22.7014951Z > Task :react-native-webview:mergeDebugShaders
+2026-05-04T16:37:22.7052790Z > Task :react-native-webview:compileDebugShaders NO-SOURCE
+2026-05-04T16:37:22.7072739Z > Task :react-native-webview:generateDebugAssets UP-TO-DATE
+2026-05-04T16:37:22.7669865Z > Task :react-native-webview:mergeDebugAssets
+2026-05-04T16:37:22.7693037Z > Task :react-native-worklets:mergeDebugShaders
+2026-05-04T16:37:22.7722989Z > Task :react-native-worklets:compileDebugShaders NO-SOURCE
+2026-05-04T16:37:22.7723918Z > Task :react-native-worklets:generateDebugAssets UP-TO-DATE
+2026-05-04T16:37:22.7724675Z > Task :react-native-worklets:mergeDebugAssets
+2026-05-04T16:37:22.9693167Z > Task :app:mergeDebugAssets
+2026-05-04T16:37:23.2680290Z > Task :app:compressDebugAssets
+2026-05-04T16:37:23.3723621Z > Task :react-native-gesture-handler:bundleLibRuntimeToJarDebug
+2026-05-04T16:37:27.0687128Z 
+2026-05-04T16:37:27.0734469Z > Task :react-native-webview:compileDebugKotlin
+2026-05-04T16:37:27.0764556Z w: file:///home/runner/work/keepeat/keepeat/frontend/node_modules/react-native-webview/android/src/main/java/com/reactnativecommunity/webview/RNCWebViewManagerImpl.kt:22:8 'object MapBuilder : Any' is deprecated. Use Kotlin's built-in collections extensions.
+2026-05-04T16:37:27.0825935Z w: file:///home/runner/work/keepeat/keepeat/frontend/node_modules/react-native-webview/android/src/main/java/com/reactnativecommunity/webview/RNCWebViewManagerImpl.kt:82:18 'var allowFileAccessFromFileURLs: Boolean' is deprecated. Deprecated in Java.
+2026-05-04T16:37:27.0855828Z w: file:///home/runner/work/keepeat/keepeat/frontend/node_modules/react-native-webview/android/src/main/java/com/reactnativecommunity/webview/RNCWebViewManagerImpl.kt:83:18 'var allowUniversalAccessFromFileURLs: Boolean' is deprecated. Deprecated in Java.
+2026-05-04T16:37:27.0914445Z w: file:///home/runner/work/keepeat/keepeat/frontend/node_modules/react-native-webview/android/src/main/java/com/reactnativecommunity/webview/RNCWebViewManagerImpl.kt:125:21 'fun allowScanningByMediaScanner(): Unit' is deprecated. Deprecated in Java.
+2026-05-04T16:37:27.1081601Z w: file:///home/runner/work/keepeat/keepeat/frontend/node_modules/react-native-webview/android/src/main/java/com/reactnativecommunity/webview/RNCWebViewManagerImpl.kt:162:36 'var systemUiVisibility: Int' is deprecated. Deprecated in Java.
+2026-05-04T16:37:27.1154641Z w: file:///home/runner/work/keepeat/keepeat/frontend/node_modules/react-native-webview/android/src/main/java/com/reactnativecommunity/webview/RNCWebViewManagerImpl.kt:301:14 'object MapBuilder : Any' is deprecated. Use Kotlin's built-in collections extensions.
+2026-05-04T16:37:27.1204200Z w: file:///home/runner/work/keepeat/keepeat/frontend/node_modules/react-native-webview/android/src/main/java/com/reactnativecommunity/webview/RNCWebViewManagerImpl.kt:351:34 Condition is always 'true'.
+2026-05-04T16:37:27.1314929Z w: file:///home/runner/work/keepeat/keepeat/frontend/node_modules/react-native-webview/android/src/main/java/com/reactnativecommunity/webview/RNCWebViewManagerImpl.kt:370:38 'var allowUniversalAccessFromFileURLs: Boolean' is deprecated. Deprecated in Java.
+2026-05-04T16:37:27.1435166Z w: file:///home/runner/work/keepeat/keepeat/frontend/node_modules/react-native-webview/android/src/main/java/com/reactnativecommunity/webview/RNCWebViewManagerImpl.kt:431:51 Unchecked cast of 'Any?' to 'HashMap<String, String>'.
+2026-05-04T16:37:27.1490848Z w: file:///home/runner/work/keepeat/keepeat/frontend/node_modules/react-native-webview/android/src/main/java/com/reactnativecommunity/webview/RNCWebViewManagerImpl.kt:487:23 'var savePassword: Boolean' is deprecated. Deprecated in Java.
+2026-05-04T16:37:27.1606290Z w: file:///home/runner/work/keepeat/keepeat/frontend/node_modules/react-native-webview/android/src/main/java/com/reactnativecommunity/webview/RNCWebViewManagerImpl.kt:488:23 'var saveFormData: Boolean' is deprecated. Deprecated in Java.
+2026-05-04T16:37:27.1664661Z w: file:///home/runner/work/keepeat/keepeat/frontend/node_modules/react-native-webview/android/src/main/java/com/reactnativecommunity/webview/RNCWebViewManagerImpl.kt:558:23 'var allowFileAccessFromFileURLs: Boolean' is deprecated. Deprecated in Java.
+2026-05-04T16:37:27.1799472Z w: file:///home/runner/work/keepeat/keepeat/frontend/node_modules/react-native-webview/android/src/main/java/com/reactnativecommunity/webview/RNCWebViewManagerImpl.kt:603:52 'static field FORCE_DARK_ON: Int' is deprecated. Deprecated in Java.
+2026-05-04T16:37:27.1935045Z w: file:///home/runner/work/keepeat/keepeat/frontend/node_modules/react-native-webview/android/src/main/java/com/reactnativecommunity/webview/RNCWebViewManagerImpl.kt:603:89 'static field FORCE_DARK_OFF: Int' is deprecated. Deprecated in Java.
+2026-05-04T16:37:27.1985533Z w: file:///home/runner/work/keepeat/keepeat/frontend/node_modules/react-native-webview/android/src/main/java/com/reactnativecommunity/webview/RNCWebViewManagerImpl.kt:604:35 'static fun setForceDark(p0: @NonNull() WebSettings, p1: Int): Unit' is deprecated. Deprecated in Java.
+2026-05-04T16:37:27.2134929Z w: file:///home/runner/work/keepeat/keepeat/frontend/node_modules/react-native-webview/android/src/main/java/com/reactnativecommunity/webview/RNCWebViewManagerImpl.kt:613:35 'static fun setForceDarkStrategy(p0: @NonNull() WebSettings, p1: Int): Unit' is deprecated. Deprecated in Java.
+2026-05-04T16:37:27.2261322Z w: file:///home/runner/work/keepeat/keepeat/frontend/node_modules/react-native-webview/android/src/main/java/com/reactnativecommunity/webview/RNCWebViewManagerImpl.kt:615:39 'static field DARK_STRATEGY_PREFER_WEB_THEME_OVER_USER_AGENT_DARKENING: Int' is deprecated. Deprecated in Java.
+2026-05-04T16:37:27.2324398Z w: file:///home/runner/work/keepeat/keepeat/frontend/node_modules/react-native-webview/android/src/main/java/com/reactnativecommunity/webview/RNCWebViewManagerImpl.kt:659:65 Unchecked cast of 'ArrayList<Any?>' to 'List<Map<String, String>>'.
+2026-05-04T16:37:27.2374804Z w: file:///home/runner/work/keepeat/keepeat/frontend/node_modules/react-native-webview/android/src/main/java/com/reactnativecommunity/webview/RNCWebViewManagerImpl.kt:680:23 'var saveFormData: Boolean' is deprecated. Deprecated in Java.
+2026-05-04T16:37:27.2434808Z w: file:///home/runner/work/keepeat/keepeat/frontend/node_modules/react-native-webview/android/src/main/java/com/reactnativecommunity/webview/events/TopCustomMenuSelectionEvent.kt:5:8 'interface RCTEventEmitter : JavaScriptModule' is deprecated. Use [RCTModernEventEmitter] instead.
+2026-05-04T16:37:27.2524905Z w: file:///home/runner/work/keepeat/keepeat/frontend/node_modules/react-native-webview/android/src/main/java/com/reactnativecommunity/webview/events/TopCustomMenuSelectionEvent.kt:11:3 'constructor<T : Event<T>>(viewTag: Int): Event<T>' is deprecated. Use constructor with explicit surfaceId instead.
+2026-05-04T16:37:27.2605517Z w: file:///home/runner/work/keepeat/keepeat/frontend/node_modules/react-native-webview/android/src/main/java/com/reactnativecommunity/webview/events/TopCustomMenuSelectionEvent.kt:22:16 This declaration overrides a deprecated member but is not marked as deprecated itself. Add the '@Deprecated' annotation or suppress the diagnostic.
+2026-05-04T16:37:27.2627974Z w: file:///home/runner/work/keepeat/keepeat/frontend/node_modules/react-native-webview/android/src/main/java/com/reactnativecommunity/webview/events/TopCustomMenuSelectionEvent.kt:22:42 'interface RCTEventEmitter : JavaScriptModule' is deprecated. Use [RCTModernEventEmitter] instead.
+2026-05-04T16:37:27.2711826Z w: file:///home/runner/work/keepeat/keepeat/frontend/node_modules/react-native-webview/android/src/main/java/com/reactnativecommunity/webview/events/TopCustomMenuSelectionEvent.kt:23:21 'fun receiveEvent(targetTag: Int, eventName: String, params: WritableMap?): Unit' is deprecated. Use [RCTModernEventEmitter.receiveEvent] instead.
+2026-05-04T16:37:27.2755036Z w: file:///home/runner/work/keepeat/keepeat/frontend/node_modules/react-native-webview/android/src/main/java/com/reactnativecommunity/webview/events/TopHttpErrorEvent.kt:5:8 'interface RCTEventEmitter : JavaScriptModule' is deprecated. Use [RCTModernEventEmitter] instead.
+2026-05-04T16:37:27.2804945Z w: file:///home/runner/work/keepeat/keepeat/frontend/node_modules/react-native-webview/android/src/main/java/com/reactnativecommunity/webview/events/TopHttpErrorEvent.kt:11:3 'constructor<T : Event<T>>(viewTag: Int): Event<T>' is deprecated. Use constructor with explicit surfaceId instead.
+2026-05-04T16:37:27.2905294Z w: file:///home/runner/work/keepeat/keepeat/frontend/node_modules/react-native-webview/android/src/main/java/com/reactnativecommunity/webview/events/TopHttpErrorEvent.kt:22:16 This declaration overrides a deprecated member but is not marked as deprecated itself. Add the '@Deprecated' annotation or suppress the diagnostic.
+2026-05-04T16:37:27.2929317Z w: file:///home/runner/work/keepeat/keepeat/frontend/node_modules/react-native-webview/android/src/main/java/com/reactnativecommunity/webview/events/TopHttpErrorEvent.kt:22:42 'interface RCTEventEmitter : JavaScriptModule' is deprecated. Use [RCTModernEventEmitter] instead.
+2026-05-04T16:37:27.2955044Z w: file:///home/runner/work/keepeat/keepeat/frontend/node_modules/react-native-webview/android/src/main/java/com/reactnativecommunity/webview/events/TopHttpErrorEvent.kt:23:21 'fun receiveEvent(targetTag: Int, eventName: String, params: WritableMap?): Unit' is deprecated. Use [RCTModernEventEmitter.receiveEvent] instead.
+2026-05-04T16:37:27.3034894Z w: file:///home/runner/work/keepeat/keepeat/frontend/node_modules/react-native-webview/android/src/main/java/com/reactnativecommunity/webview/events/TopLoadingErrorEvent.kt:5:8 'interface RCTEventEmitter : JavaScriptModule' is deprecated. Use [RCTModernEventEmitter] instead.
+2026-05-04T16:37:27.3044496Z w: file:///home/runner/work/keepeat/keepeat/frontend/node_modules/react-native-webview/android/src/main/java/com/reactnativecommunity/webview/events/TopLoadingErrorEvent.kt:11:3 'constructor<T : Event<T>>(viewTag: Int): Event<T>' is deprecated. Use constructor with explicit surfaceId instead.
+2026-05-04T16:37:27.3048237Z w: file:///home/runner/work/keepeat/keepeat/frontend/node_modules/react-native-webview/android/src/main/java/com/reactnativecommunity/webview/events/TopLoadingErrorEvent.kt:22:16 This declaration overrides a deprecated member but is not marked as deprecated itself. Add the '@Deprecated' annotation or suppress the diagnostic.
+2026-05-04T16:37:27.3051905Z w: file:///home/runner/work/keepeat/keepeat/frontend/node_modules/react-native-webview/android/src/main/java/com/reactnativecommunity/webview/events/TopLoadingErrorEvent.kt:22:42 'interface RCTEventEmitter : JavaScriptModule' is deprecated. Use [RCTModernEventEmitter] instead.
+2026-05-04T16:37:27.3055872Z w: file:///home/runner/work/keepeat/keepeat/frontend/node_modules/react-native-webview/android/src/main/java/com/reactnativecommunity/webview/events/TopLoadingErrorEvent.kt:23:21 'fun receiveEvent(targetTag: Int, eventName: String, params: WritableMap?): Unit' is deprecated. Use [RCTModernEventEmitter.receiveEvent] instead.
+2026-05-04T16:37:27.3060299Z w: file:///home/runner/work/keepeat/keepeat/frontend/node_modules/react-native-webview/android/src/main/java/com/reactnativecommunity/webview/events/TopLoadingFinishEvent.kt:5:8 'interface RCTEventEmitter : JavaScriptModule' is deprecated. Use [RCTModernEventEmitter] instead.
+2026-05-04T16:37:27.3064111Z w: file:///home/runner/work/keepeat/keepeat/frontend/node_modules/react-native-webview/android/src/main/java/com/reactnativecommunity/webview/events/TopLoadingFinishEvent.kt:11:3 'constructor<T : Event<T>>(viewTag: Int): Event<T>' is deprecated. Use constructor with explicit surfaceId instead.
+2026-05-04T16:37:27.3068127Z w: file:///home/runner/work/keepeat/keepeat/frontend/node_modules/react-native-webview/android/src/main/java/com/reactnativecommunity/webview/events/TopLoadingFinishEvent.kt:22:16 This declaration overrides a deprecated member but is not marked as deprecated itself. Add the '@Deprecated' annotation or suppress the diagnostic.
+2026-05-04T16:37:27.3160264Z w: file:///home/runner/work/keepeat/keepeat/frontend/node_modules/react-native-webview/android/src/main/java/com/reactnativecommunity/webview/events/TopLoadingFinishEvent.kt:22:42 'interface RCTEventEmitter : JavaScriptModule' is deprecated. Use [RCTModernEventEmitter] instead.
+2026-05-04T16:37:27.3165035Z w: file:///home/runner/work/keepeat/keepeat/frontend/node_modules/react-native-webview/android/src/main/java/com/reactnativecommunity/webview/events/TopLoadingFinishEvent.kt:23:21 'fun receiveEvent(targetTag: Int, eventName: String, params: WritableMap?): Unit' is deprecated. Use [RCTModernEventEmitter.receiveEvent] instead.
+2026-05-04T16:37:27.3169100Z w: file:///home/runner/work/keepeat/keepeat/frontend/node_modules/react-native-webview/android/src/main/java/com/reactnativecommunity/webview/events/TopLoadingProgressEvent.kt:5:8 'interface RCTEventEmitter : JavaScriptModule' is deprecated. Use [RCTModernEventEmitter] instead.
+2026-05-04T16:37:27.3173760Z w: file:///home/runner/work/keepeat/keepeat/frontend/node_modules/react-native-webview/android/src/main/java/com/reactnativecommunity/webview/events/TopLoadingProgressEvent.kt:11:3 'constructor<T : Event<T>>(viewTag: Int): Event<T>' is deprecated. Use constructor with explicit surfaceId instead.
+2026-05-04T16:37:27.3177986Z w: file:///home/runner/work/keepeat/keepeat/frontend/node_modules/react-native-webview/android/src/main/java/com/reactnativecommunity/webview/events/TopLoadingProgressEvent.kt:22:16 This declaration overrides a deprecated member but is not marked as deprecated itself. Add the '@Deprecated' annotation or suppress the diagnostic.
+2026-05-04T16:37:27.3232470Z w: file:///home/runner/work/keepeat/keepeat/frontend/node_modules/react-native-webview/android/src/main/java/com/reactnativecommunity/webview/events/TopLoadingProgressEvent.kt:22:42 'interface RCTEventEmitter : JavaScriptModule' is deprecated. Use [RCTModernEventEmitter] instead.
+2026-05-04T16:37:27.3236705Z w: file:///home/runner/work/keepeat/keepeat/frontend/node_modules/react-native-webview/android/src/main/java/com/reactnativecommunity/webview/events/TopLoadingProgressEvent.kt:23:21 'fun receiveEvent(targetTag: Int, eventName: String, params: WritableMap?): Unit' is deprecated. Use [RCTModernEventEmitter.receiveEvent] instead.
+2026-05-04T16:37:27.3240635Z w: file:///home/runner/work/keepeat/keepeat/frontend/node_modules/react-native-webview/android/src/main/java/com/reactnativecommunity/webview/events/TopLoadingStartEvent.kt:5:8 'interface RCTEventEmitter : JavaScriptModule' is deprecated. Use [RCTModernEventEmitter] instead.
+2026-05-04T16:37:27.3244537Z w: file:///home/runner/work/keepeat/keepeat/frontend/node_modules/react-native-webview/android/src/main/java/com/reactnativecommunity/webview/events/TopLoadingStartEvent.kt:11:3 'constructor<T : Event<T>>(viewTag: Int): Event<T>' is deprecated. Use constructor with explicit surfaceId instead.
+2026-05-04T16:37:27.3249090Z w: file:///home/runner/work/keepeat/keepeat/frontend/node_modules/react-native-webview/android/src/main/java/com/reactnativecommunity/webview/events/TopLoadingStartEvent.kt:22:16 This declaration overrides a deprecated member but is not marked as deprecated itself. Add the '@Deprecated' annotation or suppress the diagnostic.
+2026-05-04T16:37:27.3253295Z w: file:///home/runner/work/keepeat/keepeat/frontend/node_modules/react-native-webview/android/src/main/java/com/reactnativecommunity/webview/events/TopLoadingStartEvent.kt:22:42 'interface RCTEventEmitter : JavaScriptModule' is deprecated. Use [RCTModernEventEmitter] instead.
+2026-05-04T16:37:27.3257406Z w: file:///home/runner/work/keepeat/keepeat/frontend/node_modules/react-native-webview/android/src/main/java/com/reactnativecommunity/webview/events/TopLoadingStartEvent.kt:23:21 'fun receiveEvent(targetTag: Int, eventName: String, params: WritableMap?): Unit' is deprecated. Use [RCTModernEventEmitter.receiveEvent] instead.
+2026-05-04T16:37:27.3261067Z w: file:///home/runner/work/keepeat/keepeat/frontend/node_modules/react-native-webview/android/src/main/java/com/reactnativecommunity/webview/events/TopMessageEvent.kt:5:8 'interface RCTEventEmitter : JavaScriptModule' is deprecated. Use [RCTModernEventEmitter] instead.
+2026-05-04T16:37:27.3355643Z w: file:///home/runner/work/keepeat/keepeat/frontend/node_modules/react-native-webview/android/src/main/java/com/reactnativecommunity/webview/events/TopMessageEvent.kt:10:75 'constructor<T : Event<T>>(viewTag: Int): Event<T>' is deprecated. Use constructor with explicit surfaceId instead.
+2026-05-04T16:37:27.3359835Z w: file:///home/runner/work/keepeat/keepeat/frontend/node_modules/react-native-webview/android/src/main/java/com/reactnativecommunity/webview/events/TopMessageEvent.kt:21:16 This declaration overrides a deprecated member but is not marked as deprecated itself. Add the '@Deprecated' annotation or suppress the diagnostic.
+2026-05-04T16:37:27.3364383Z w: file:///home/runner/work/keepeat/keepeat/frontend/node_modules/react-native-webview/android/src/main/java/com/reactnativecommunity/webview/events/TopMessageEvent.kt:21:42 'interface RCTEventEmitter : JavaScriptModule' is deprecated. Use [RCTModernEventEmitter] instead.
+2026-05-04T16:37:27.3368560Z w: file:///home/runner/work/keepeat/keepeat/frontend/node_modules/react-native-webview/android/src/main/java/com/reactnativecommunity/webview/events/TopMessageEvent.kt:22:21 'fun receiveEvent(targetTag: Int, eventName: String, params: WritableMap?): Unit' is deprecated. Use [RCTModernEventEmitter.receiveEvent] instead.
+2026-05-04T16:37:27.3372729Z w: file:///home/runner/work/keepeat/keepeat/frontend/node_modules/react-native-webview/android/src/main/java/com/reactnativecommunity/webview/events/TopNewWindowEvent.kt:5:8 'interface RCTEventEmitter : JavaScriptModule' is deprecated. Use [RCTModernEventEmitter] instead.
+2026-05-04T16:37:27.3376647Z w: file:///home/runner/work/keepeat/keepeat/frontend/node_modules/react-native-webview/android/src/main/java/com/reactnativecommunity/webview/events/TopNewWindowEvent.kt:11:3 'constructor<T : Event<T>>(viewTag: Int): Event<T>' is deprecated. Use constructor with explicit surfaceId instead.
+2026-05-04T16:37:27.3380853Z w: file:///home/runner/work/keepeat/keepeat/frontend/node_modules/react-native-webview/android/src/main/java/com/reactnativecommunity/webview/events/TopNewWindowEvent.kt:22:16 This declaration overrides a deprecated member but is not marked as deprecated itself. Add the '@Deprecated' annotation or suppress the diagnostic.
+2026-05-04T16:37:27.3467935Z w: file:///home/runner/work/keepeat/keepeat/frontend/node_modules/react-native-webview/android/src/main/java/com/reactnativecommunity/webview/events/TopNewWindowEvent.kt:22:42 'interface RCTEventEmitter : JavaScriptModule' is deprecated. Use [RCTModernEventEmitter] instead.
+2026-05-04T16:37:27.3472448Z w: file:///home/runner/work/keepeat/keepeat/frontend/node_modules/react-native-webview/android/src/main/java/com/reactnativecommunity/webview/events/TopNewWindowEvent.kt:23:21 'fun receiveEvent(targetTag: Int, eventName: String, params: WritableMap?): Unit' is deprecated. Use [RCTModernEventEmitter.receiveEvent] instead.
+2026-05-04T16:37:27.3476451Z w: file:///home/runner/work/keepeat/keepeat/frontend/node_modules/react-native-webview/android/src/main/java/com/reactnativecommunity/webview/events/TopRenderProcessGoneEvent.kt:5:8 'interface RCTEventEmitter : JavaScriptModule' is deprecated. Use [RCTModernEventEmitter] instead.
+2026-05-04T16:37:27.3479983Z w: file:///home/runner/work/keepeat/keepeat/frontend/node_modules/react-native-webview/android/src/main/java/com/reactnativecommunity/webview/events/TopRenderProcessGoneEvent.kt:12:3 'constructor<T : Event<T>>(viewTag: Int): Event<T>' is deprecated. Use constructor with explicit surfaceId instead.
+2026-05-04T16:37:27.3484064Z w: file:///home/runner/work/keepeat/keepeat/frontend/node_modules/react-native-webview/android/src/main/java/com/reactnativecommunity/webview/events/TopRenderProcessGoneEvent.kt:23:16 This declaration overrides a deprecated member but is not marked as deprecated itself. Add the '@Deprecated' annotation or suppress the diagnostic.
+2026-05-04T16:37:27.3488001Z w: file:///home/runner/work/keepeat/keepeat/frontend/node_modules/react-native-webview/android/src/main/java/com/reactnativecommunity/webview/events/TopRenderProcessGoneEvent.kt:23:42 'interface RCTEventEmitter : JavaScriptModule' is deprecated. Use [RCTModernEventEmitter] instead.
+2026-05-04T16:37:27.3491550Z w: file:///home/runner/work/keepeat/keepeat/frontend/node_modules/react-native-webview/android/src/main/java/com/reactnativecommunity/webview/events/TopRenderProcessGoneEvent.kt:24:21 'fun receiveEvent(targetTag: Int, eventName: String, params: WritableMap?): Unit' is deprecated. Use [RCTModernEventEmitter.receiveEvent] instead.
+2026-05-04T16:37:27.3553246Z w: file:///home/runner/work/keepeat/keepeat/frontend/node_modules/react-native-webview/android/src/main/java/com/reactnativecommunity/webview/events/TopShouldStartLoadWithRequestEvent.kt:5:8 'interface RCTEventEmitter : JavaScriptModule' is deprecated. Use [RCTModernEventEmitter] instead.
+2026-05-04T16:37:27.3557912Z w: file:///home/runner/work/keepeat/keepeat/frontend/node_modules/react-native-webview/android/src/main/java/com/reactnativecommunity/webview/events/TopShouldStartLoadWithRequestEvent.kt:10:89 'constructor<T : Event<T>>(viewTag: Int): Event<T>' is deprecated. Use constructor with explicit surfaceId instead.
+2026-05-04T16:37:27.3562514Z w: file:///home/runner/work/keepeat/keepeat/frontend/node_modules/react-native-webview/android/src/main/java/com/reactnativecommunity/webview/events/TopShouldStartLoadWithRequestEvent.kt:27:16 This declaration overrides a deprecated member but is not marked as deprecated itself. Add the '@Deprecated' annotation or suppress the diagnostic.
+2026-05-04T16:37:27.3566499Z w: file:///home/runner/work/keepeat/keepeat/frontend/node_modules/react-native-webview/android/src/main/java/com/reactnativecommunity/webview/events/TopShouldStartLoadWithRequestEvent.kt:27:42 'interface RCTEventEmitter : JavaScriptModule' is deprecated. Use [RCTModernEventEmitter] instead.
+2026-05-04T16:37:27.3570631Z w: file:///home/runner/work/keepeat/keepeat/frontend/node_modules/react-native-webview/android/src/main/java/com/reactnativecommunity/webview/events/TopShouldStartLoadWithRequestEvent.kt:28:21 'fun receiveEvent(targetTag: Int, eventName: String, params: WritableMap?): Unit' is deprecated. Use [RCTModernEventEmitter.receiveEvent] instead.
+2026-05-04T16:37:29.2679029Z Note: Some input files use or override a deprecated API.
+2026-05-04T16:37:29.2679531Z 
+2026-05-04T16:37:29.2692918Z Note: Recompile with -Xlint:deprecation for details.
+2026-05-04T16:37:29.4703535Z > Task :react-native-webview:compileDebugJavaWithJavac
+2026-05-04T16:37:29.4704004Z 
+2026-05-04T16:37:29.4763266Z > Task :react-native-webview:bundleLibCompileToJarDebug
+2026-05-04T16:37:29.5673111Z > Task :react-native-iap:bundleLibRuntimeToJarDebug
+2026-05-04T16:37:31.2673373Z > Task :react-native-safe-area-context:bundleLibRuntimeToJarDebug
+2026-05-04T16:37:31.6683579Z > Task :react-native-webview:bundleLibRuntimeToJarDebug
+2026-05-04T16:37:33.4703477Z > Task :react-native-nitro-modules:bundleLibRuntimeToJarDebug
+2026-05-04T16:37:33.7694063Z > Task :react-native-async-storage_async-storage:bundleLibRuntimeToJarDebug
+2026-05-04T16:37:34.3713546Z > Task :react-native-community_netinfo:bundleLibRuntimeToJarDebug
+2026-05-04T16:37:34.7683680Z > Task :react-native-ml-kit_text-recognition:bundleLibRuntimeToJarDebug
+2026-05-04T16:37:34.8676343Z > Task :react-native-reanimated:bundleLibRuntimeToJarDebug
+2026-05-04T16:37:35.3686419Z > Task :react-native-worklets:bundleLibRuntimeToJarDebug
+2026-05-04T16:37:35.4692999Z > Task :app:desugarDebugFileDependencies
+2026-05-04T16:37:35.4693932Z > Task :react-native-async-storage_async-storage:processDebugJavaRes NO-SOURCE
+2026-05-04T16:37:35.4694950Z > Task :react-native-community_netinfo:processDebugJavaRes NO-SOURCE
+2026-05-04T16:37:35.5703529Z > Task :react-native-gesture-handler:processDebugJavaRes
+2026-05-04T16:37:35.5743014Z > Task :react-native-iap:processDebugJavaRes
+2026-05-04T16:37:35.5803311Z > Task :react-native-ml-kit_text-recognition:processDebugJavaRes NO-SOURCE
+2026-05-04T16:37:35.5863159Z > Task :react-native-nitro-modules:processDebugJavaRes
+2026-05-04T16:37:35.5953517Z > Task :react-native-reanimated:processDebugJavaRes NO-SOURCE
+2026-05-04T16:37:35.5983412Z > Task :react-native-safe-area-context:processDebugJavaRes
+2026-05-04T16:37:35.5984403Z > Task :react-native-webview:processDebugJavaRes
+2026-05-04T16:37:35.6012917Z > Task :react-native-worklets:processDebugJavaRes NO-SOURCE
+2026-05-04T16:37:36.8703181Z > Task :react-native-gesture-handler:bundleLibRuntimeToDirDebug
+2026-05-04T16:37:37.5674885Z > Task :app:checkDebugDuplicateClasses
+2026-05-04T16:37:41.4674219Z 
+2026-05-04T16:37:41.4725694Z > Task :react-native-screens:compileDebugKotlin
+2026-05-04T16:37:41.4789659Z w: file:///home/runner/work/keepeat/keepeat/frontend/node_modules/react-native-screens/android/src/main/java/com/swmansion/rnscreens/RNScreensPackage.kt:56:9 The corresponding parameter in the supertype 'BaseReactPackage' is named 'name'. This may cause problems when calling this function with named arguments.
+2026-05-04T16:37:41.4838020Z w: file:///home/runner/work/keepeat/keepeat/frontend/node_modules/react-native-screens/android/src/main/java/com/swmansion/rnscreens/RNScreensPackage.kt:57:9 The corresponding parameter in the supertype 'BaseReactPackage' is named 'reactContext'. This may cause problems when calling this function with named arguments.
+2026-05-04T16:37:41.4906502Z w: file:///home/runner/work/keepeat/keepeat/frontend/node_modules/react-native-screens/android/src/main/java/com/swmansion/rnscreens/RNScreensPackage.kt:70:17 'constructor(name: String, className: String, canOverrideExistingModule: Boolean, needsEagerInit: Boolean, hasConstants: Boolean, isCxxModule: Boolean, isTurboModule: Boolean): ReactModuleInfo' is deprecated. This constructor is deprecated and will be removed in the future. Use ReactModuleInfo(String, String, boolean, boolean, boolean, boolean)].
+2026-05-04T16:37:41.4914411Z w: file:///home/runner/work/keepeat/keepeat/frontend/node_modules/react-native-screens/android/src/main/java/com/swmansion/rnscreens/Screen.kt:48:77 Unchecked cast of '(CoordinatorLayout.Behavior<View!>?..CoordinatorLayout.Behavior<*>?)' to 'BottomSheetBehavior<Screen>'.
+2026-05-04T16:37:41.4919092Z w: file:///home/runner/work/keepeat/keepeat/frontend/node_modules/react-native-screens/android/src/main/java/com/swmansion/rnscreens/Screen.kt:383:36 'fun setTranslucent(screen: Screen, activity: Activity?, context: ReactContext?): Unit' is deprecated. For apps targeting SDK 35 or above this prop has no effect because edge-to-edge is enabled by default and the status bar is always translucent.
+2026-05-04T16:37:41.4924617Z w: file:///home/runner/work/keepeat/keepeat/frontend/node_modules/react-native-screens/android/src/main/java/com/swmansion/rnscreens/Screen.kt:402:36 'fun setColor(screen: Screen, activity: Activity?, context: ReactContext?): Unit' is deprecated. For apps targeting SDK 35 or above this prop has no effect because edge-to-edge is enabled by default and the status bar is always translucent.
+2026-05-04T16:37:41.4929765Z w: file:///home/runner/work/keepeat/keepeat/frontend/node_modules/react-native-screens/android/src/main/java/com/swmansion/rnscreens/Screen.kt:420:36 'fun setNavigationBarColor(screen: Screen, activity: Activity?): Unit' is deprecated. For all apps targeting Android SDK 35 or above edge-to-edge is enabled by default.
+2026-05-04T16:37:41.4934377Z w: file:///home/runner/work/keepeat/keepeat/frontend/node_modules/react-native-screens/android/src/main/java/com/swmansion/rnscreens/Screen.kt:437:36 'fun setNavigationBarTranslucent(screen: Screen, activity: Activity?): Unit' is deprecated. For all apps targeting Android SDK 35 or above edge-to-edge is enabled by default.
+2026-05-04T16:37:41.4938006Z w: file:///home/runner/work/keepeat/keepeat/frontend/node_modules/react-native-screens/android/src/main/java/com/swmansion/rnscreens/ScreenStackFragment.kt:217:31 'var targetElevation: Float' is deprecated. Deprecated in Java.
+2026-05-04T16:37:41.4941211Z w: file:///home/runner/work/keepeat/keepeat/frontend/node_modules/react-native-screens/android/src/main/java/com/swmansion/rnscreens/ScreenStackFragment.kt:220:13 'fun setHasOptionsMenu(p0: Boolean): Unit' is deprecated. Deprecated in Java.
+2026-05-04T16:37:41.5005522Z w: file:///home/runner/work/keepeat/keepeat/frontend/node_modules/react-native-screens/android/src/main/java/com/swmansion/rnscreens/ScreenStackFragment.kt:397:18 This declaration overrides a deprecated member but is not marked as deprecated itself. Add the '@Deprecated' annotation or suppress the diagnostic.
+2026-05-04T16:37:41.5009228Z w: file:///home/runner/work/keepeat/keepeat/frontend/node_modules/react-native-screens/android/src/main/java/com/swmansion/rnscreens/ScreenStackFragment.kt:404:22 'fun onPrepareOptionsMenu(p0: Menu): Unit' is deprecated. Deprecated in Java.
+2026-05-04T16:37:41.5013661Z w: file:///home/runner/work/keepeat/keepeat/frontend/node_modules/react-native-screens/android/src/main/java/com/swmansion/rnscreens/ScreenStackFragment.kt:407:18 This declaration overrides a deprecated member but is not marked as deprecated itself. Add the '@Deprecated' annotation or suppress the diagnostic.
+2026-05-04T16:37:41.5017427Z w: file:///home/runner/work/keepeat/keepeat/frontend/node_modules/react-native-screens/android/src/main/java/com/swmansion/rnscreens/ScreenStackFragment.kt:412:22 'fun onCreateOptionsMenu(p0: Menu, p1: MenuInflater): Unit' is deprecated. Deprecated in Java.
+2026-05-04T16:37:41.5021368Z w: file:///home/runner/work/keepeat/keepeat/frontend/node_modules/react-native-screens/android/src/main/java/com/swmansion/rnscreens/ScreenStackHeaderConfig.kt:435:18 'val reactNativeHost: ReactNativeHost' is deprecated. You should not use ReactNativeHost directly in the New Architecture. Use ReactHost instead.
+2026-05-04T16:37:41.5025856Z w: file:///home/runner/work/keepeat/keepeat/frontend/node_modules/react-native-screens/android/src/main/java/com/swmansion/rnscreens/ScreenViewManager.kt:203:14 'var statusBarColor: Int?' is deprecated. For apps targeting SDK 35 or above this prop has no effect because edge-to-edge is enabled by default and the status bar is always translucent.
+2026-05-04T16:37:41.5030336Z w: file:///home/runner/work/keepeat/keepeat/frontend/node_modules/react-native-screens/android/src/main/java/com/swmansion/rnscreens/ScreenViewManager.kt:220:14 'var isStatusBarTranslucent: Boolean?' is deprecated. For apps targeting SDK 35 or above this prop has no effect because edge-to-edge is enabled by default and the status bar is always translucent.
+2026-05-04T16:37:41.5094979Z w: file:///home/runner/work/keepeat/keepeat/frontend/node_modules/react-native-screens/android/src/main/java/com/swmansion/rnscreens/ScreenViewManager.kt:237:14 'var navigationBarColor: Int?' is deprecated. For all apps targeting Android SDK 35 or above edge-to-edge is enabled by default.
+2026-05-04T16:37:41.5099221Z w: file:///home/runner/work/keepeat/keepeat/frontend/node_modules/react-native-screens/android/src/main/java/com/swmansion/rnscreens/ScreenViewManager.kt:246:14 'var isNavigationBarTranslucent: Boolean?' is deprecated. For all apps targeting Android SDK 35 or above edge-to-edge is enabled by default.
+2026-05-04T16:37:41.5103259Z w: file:///home/runner/work/keepeat/keepeat/frontend/node_modules/react-native-screens/android/src/main/java/com/swmansion/rnscreens/ScreenWindowTraits.kt:55:42 'fun replaceSystemWindowInsets(p0: Int, p1: Int, p2: Int, p3: Int): WindowInsetsCompat' is deprecated. Deprecated in Java.
+2026-05-04T16:37:41.5106687Z w: file:///home/runner/work/keepeat/keepeat/frontend/node_modules/react-native-screens/android/src/main/java/com/swmansion/rnscreens/ScreenWindowTraits.kt:56:39 'val systemWindowInsetLeft: Int' is deprecated. Deprecated in Java.
+2026-05-04T16:37:41.5109755Z w: file:///home/runner/work/keepeat/keepeat/frontend/node_modules/react-native-screens/android/src/main/java/com/swmansion/rnscreens/ScreenWindowTraits.kt:58:39 'val systemWindowInsetRight: Int' is deprecated. Deprecated in Java.
+2026-05-04T16:37:41.5113075Z w: file:///home/runner/work/keepeat/keepeat/frontend/node_modules/react-native-screens/android/src/main/java/com/swmansion/rnscreens/ScreenWindowTraits.kt:59:39 'val systemWindowInsetBottom: Int' is deprecated. Deprecated in Java.
+2026-05-04T16:37:41.5116115Z w: file:///home/runner/work/keepeat/keepeat/frontend/node_modules/react-native-screens/android/src/main/java/com/swmansion/rnscreens/ScreenWindowTraits.kt:102:53 'var statusBarColor: Int' is deprecated. Deprecated in Java.
+2026-05-04T16:37:41.5120030Z w: file:///home/runner/work/keepeat/keepeat/frontend/node_modules/react-native-screens/android/src/main/java/com/swmansion/rnscreens/ScreenWindowTraits.kt:106:37 'var statusBarColor: Int?' is deprecated. For apps targeting SDK 35 or above this prop has no effect because edge-to-edge is enabled by default and the status bar is always translucent.
+2026-05-04T16:37:41.5163590Z w: file:///home/runner/work/keepeat/keepeat/frontend/node_modules/react-native-screens/android/src/main/java/com/swmansion/rnscreens/ScreenWindowTraits.kt:113:48 'var statusBarColor: Int' is deprecated. Deprecated in Java.
+2026-05-04T16:37:41.5166714Z w: file:///home/runner/work/keepeat/keepeat/frontend/node_modules/react-native-screens/android/src/main/java/com/swmansion/rnscreens/ScreenWindowTraits.kt:116:32 'var statusBarColor: Int' is deprecated. Deprecated in Java.
+2026-05-04T16:37:41.5170715Z w: file:///home/runner/work/keepeat/keepeat/frontend/node_modules/react-native-screens/android/src/main/java/com/swmansion/rnscreens/ScreenWindowTraits.kt:162:49 'var isStatusBarTranslucent: Boolean?' is deprecated. For apps targeting SDK 35 or above this prop has no effect because edge-to-edge is enabled by default and the status bar is always translucent.
+2026-05-04T16:37:41.5175115Z w: file:///home/runner/work/keepeat/keepeat/frontend/node_modules/react-native-screens/android/src/main/java/com/swmansion/rnscreens/ScreenWindowTraits.kt:218:43 'var navigationBarColor: Int?' is deprecated. For all apps targeting Android SDK 35 or above edge-to-edge is enabled by default.
+2026-05-04T16:37:41.5178538Z w: file:///home/runner/work/keepeat/keepeat/frontend/node_modules/react-native-screens/android/src/main/java/com/swmansion/rnscreens/ScreenWindowTraits.kt:218:72 'var navigationBarColor: Int' is deprecated. Deprecated in Java.
+2026-05-04T16:37:41.5181600Z w: file:///home/runner/work/keepeat/keepeat/frontend/node_modules/react-native-screens/android/src/main/java/com/swmansion/rnscreens/ScreenWindowTraits.kt:224:16 'var navigationBarColor: Int' is deprecated. Deprecated in Java.
+2026-05-04T16:37:41.5251459Z w: file:///home/runner/work/keepeat/keepeat/frontend/node_modules/react-native-screens/android/src/main/java/com/swmansion/rnscreens/ScreenWindowTraits.kt:241:55 'var isNavigationBarTranslucent: Boolean?' is deprecated. For all apps targeting Android SDK 35 or above edge-to-edge is enabled by default.
+2026-05-04T16:37:41.5256946Z w: file:///home/runner/work/keepeat/keepeat/frontend/node_modules/react-native-screens/android/src/main/java/com/swmansion/rnscreens/ScreenWindowTraits.kt:283:13 'fun setColor(screen: Screen, activity: Activity?, context: ReactContext?): Unit' is deprecated. For apps targeting SDK 35 or above this prop has no effect because edge-to-edge is enabled by default and the status bar is always translucent.
+2026-05-04T16:37:41.5262454Z w: file:///home/runner/work/keepeat/keepeat/frontend/node_modules/react-native-screens/android/src/main/java/com/swmansion/rnscreens/ScreenWindowTraits.kt:285:13 'fun setTranslucent(screen: Screen, activity: Activity?, context: ReactContext?): Unit' is deprecated. For apps targeting SDK 35 or above this prop has no effect because edge-to-edge is enabled by default and the status bar is always translucent.
+2026-05-04T16:37:41.5267124Z w: file:///home/runner/work/keepeat/keepeat/frontend/node_modules/react-native-screens/android/src/main/java/com/swmansion/rnscreens/ScreenWindowTraits.kt:289:13 'fun setNavigationBarColor(screen: Screen, activity: Activity?): Unit' is deprecated. For all apps targeting Android SDK 35 or above edge-to-edge is enabled by default.
+2026-05-04T16:37:41.5271473Z w: file:///home/runner/work/keepeat/keepeat/frontend/node_modules/react-native-screens/android/src/main/java/com/swmansion/rnscreens/ScreenWindowTraits.kt:290:13 'fun setNavigationBarTranslucent(screen: Screen, activity: Activity?): Unit' is deprecated. For all apps targeting Android SDK 35 or above edge-to-edge is enabled by default.
+2026-05-04T16:37:41.5317839Z w: file:///home/runner/work/keepeat/keepeat/frontend/node_modules/react-native-screens/android/src/main/java/com/swmansion/rnscreens/ScreenWindowTraits.kt:354:42 'var statusBarColor: Int?' is deprecated. For apps targeting SDK 35 or above this prop has no effect because edge-to-edge is enabled by default and the status bar is always translucent.
+2026-05-04T16:37:41.5322983Z w: file:///home/runner/work/keepeat/keepeat/frontend/node_modules/react-native-screens/android/src/main/java/com/swmansion/rnscreens/ScreenWindowTraits.kt:356:48 'var isStatusBarTranslucent: Boolean?' is deprecated. For apps targeting SDK 35 or above this prop has no effect because edge-to-edge is enabled by default and the status bar is always translucent.
+2026-05-04T16:37:41.5327313Z w: file:///home/runner/work/keepeat/keepeat/frontend/node_modules/react-native-screens/android/src/main/java/com/swmansion/rnscreens/ScreenWindowTraits.kt:359:57 'var navigationBarColor: Int?' is deprecated. For all apps targeting Android SDK 35 or above edge-to-edge is enabled by default.
+2026-05-04T16:37:41.5331388Z w: file:///home/runner/work/keepeat/keepeat/frontend/node_modules/react-native-screens/android/src/main/java/com/swmansion/rnscreens/ScreenWindowTraits.kt:360:63 'var isNavigationBarTranslucent: Boolean?' is deprecated. For all apps targeting Android SDK 35 or above edge-to-edge is enabled by default.
+2026-05-04T16:37:41.5335902Z w: file:///home/runner/work/keepeat/keepeat/frontend/node_modules/react-native-screens/android/src/main/java/com/swmansion/rnscreens/bottomsheet/BottomSheetDialogRootView.kt:7:8 'object ReactFeatureFlags : Any' is deprecated. Use com.facebook.react.internal.featureflags.ReactNativeFeatureFlags instead.
+2026-05-04T16:37:41.5340210Z w: file:///home/runner/work/keepeat/keepeat/frontend/node_modules/react-native-screens/android/src/main/java/com/swmansion/rnscreens/bottomsheet/BottomSheetDialogRootView.kt:25:13 'object ReactFeatureFlags : Any' is deprecated. Use com.facebook.react.internal.featureflags.ReactNativeFeatureFlags instead.
+2026-05-04T16:37:41.5374969Z w: file:///home/runner/work/keepeat/keepeat/frontend/node_modules/react-native-screens/android/src/main/java/com/swmansion/rnscreens/bottomsheet/BottomSheetDialogRootView.kt:32:9 The corresponding parameter in the supertype 'ReactViewGroup' is named 'left'. This may cause problems when calling this function with named arguments.
+2026-05-04T16:37:41.5379705Z w: file:///home/runner/work/keepeat/keepeat/frontend/node_modules/react-native-screens/android/src/main/java/com/swmansion/rnscreens/bottomsheet/BottomSheetDialogRootView.kt:33:9 The corresponding parameter in the supertype 'ReactViewGroup' is named 'top'. This may cause problems when calling this function with named arguments.
+2026-05-04T16:37:41.5384505Z w: file:///home/runner/work/keepeat/keepeat/frontend/node_modules/react-native-screens/android/src/main/java/com/swmansion/rnscreens/bottomsheet/BottomSheetDialogRootView.kt:34:9 The corresponding parameter in the supertype 'ReactViewGroup' is named 'right'. This may cause problems when calling this function with named arguments.
+2026-05-04T16:37:41.5389139Z w: file:///home/runner/work/keepeat/keepeat/frontend/node_modules/react-native-screens/android/src/main/java/com/swmansion/rnscreens/bottomsheet/BottomSheetDialogRootView.kt:35:9 The corresponding parameter in the supertype 'ReactViewGroup' is named 'bottom'. This may cause problems when calling this function with named arguments.
+2026-05-04T16:37:41.5393947Z w: file:///home/runner/work/keepeat/keepeat/frontend/node_modules/react-native-screens/android/src/main/java/com/swmansion/rnscreens/bottomsheet/BottomSheetDialogRootView.kt:71:9 The corresponding parameter in the supertype 'RootView' is named 'childView'. This may cause problems when calling this function with named arguments.
+2026-05-04T16:37:41.5398512Z w: file:///home/runner/work/keepeat/keepeat/frontend/node_modules/react-native-screens/android/src/main/java/com/swmansion/rnscreens/bottomsheet/BottomSheetDialogRootView.kt:72:9 The corresponding parameter in the supertype 'RootView' is named 'ev'. This may cause problems when calling this function with named arguments.
+2026-05-04T16:37:41.5408469Z w: file:///home/runner/work/keepeat/keepeat/frontend/node_modules/react-native-screens/android/src/main/java/com/swmansion/rnscreens/bottomsheet/BottomSheetDialogRootView.kt:79:46 The corresponding parameter in the supertype 'RootView' is named 'ev'. This may cause problems when calling this function with named arguments.
+2026-05-04T16:37:41.5413275Z w: file:///home/runner/work/keepeat/keepeat/frontend/node_modules/react-native-screens/android/src/main/java/com/swmansion/rnscreens/bottomsheet/BottomSheetDialogRootView.kt:83:9 The corresponding parameter in the supertype 'RootView' is named 'childView'. This may cause problems when calling this function with named arguments.
+2026-05-04T16:37:41.5417249Z w: file:///home/runner/work/keepeat/keepeat/frontend/node_modules/react-native-screens/android/src/main/java/com/swmansion/rnscreens/bottomsheet/BottomSheetDialogRootView.kt:84:9 The corresponding parameter in the supertype 'RootView' is named 'ev'. This may cause problems when calling this function with named arguments.
+2026-05-04T16:37:41.5421381Z w: file:///home/runner/work/keepeat/keepeat/frontend/node_modules/react-native-screens/android/src/main/java/com/swmansion/rnscreens/bottomsheet/BottomSheetDialogRootView.kt:95:34 The corresponding parameter in the supertype 'RootView' is named 't'. This may cause problems when calling this function with named arguments.
+2026-05-04T16:37:41.5425678Z w: file:///home/runner/work/keepeat/keepeat/frontend/node_modules/react-native-screens/android/src/main/java/com/swmansion/rnscreens/bottomsheet/DimmingView.kt:63:9 The corresponding parameter in the supertype 'ReactCompoundView' is named 'touchX'. This may cause problems when calling this function with named arguments.
+2026-05-04T16:37:41.5438611Z w: file:///home/runner/work/keepeat/keepeat/frontend/node_modules/react-native-screens/android/src/main/java/com/swmansion/rnscreens/bottomsheet/DimmingView.kt:64:9 The corresponding parameter in the supertype 'ReactCompoundView' is named 'touchY'. This may cause problems when calling this function with named arguments.
+2026-05-04T16:37:41.5442878Z w: file:///home/runner/work/keepeat/keepeat/frontend/node_modules/react-native-screens/android/src/main/java/com/swmansion/rnscreens/bottomsheet/DimmingView.kt:68:9 The corresponding parameter in the supertype 'ReactCompoundViewGroup' is named 'touchX'. This may cause problems when calling this function with named arguments.
+2026-05-04T16:37:41.5447552Z w: file:///home/runner/work/keepeat/keepeat/frontend/node_modules/react-native-screens/android/src/main/java/com/swmansion/rnscreens/bottomsheet/DimmingView.kt:69:9 The corresponding parameter in the supertype 'ReactCompoundViewGroup' is named 'touchY'. This may cause problems when calling this function with named arguments.
+2026-05-04T16:37:41.5451742Z w: file:///home/runner/work/keepeat/keepeat/frontend/node_modules/react-native-screens/android/src/main/java/com/swmansion/rnscreens/gamma/tabs/TabsHostViewManager.kt:37:9 The corresponding parameter in the supertype 'TabsHostViewManager' is named 'view'. This may cause problems when calling this function with named arguments.
+2026-05-04T16:37:42.1668982Z 
+2026-05-04T16:37:42.1753093Z > Task :expo-modules-core:compileDebugKotlin
+2026-05-04T16:37:42.1845376Z w: file:///home/runner/work/keepeat/keepeat/frontend/node_modules/expo-modules-core/android/src/main/java/expo/modules/adapters/react/apploader/RNHeadlessAppLoader.kt:48:87 'val reactNativeHost: ReactNativeHost' is deprecated. You should not use ReactNativeHost directly in the New Architecture. Use ReactHost instead.
+2026-05-04T16:37:42.1895024Z w: file:///home/runner/work/keepeat/keepeat/frontend/node_modules/expo-modules-core/android/src/main/java/expo/modules/adapters/react/apploader/RNHeadlessAppLoader.kt:91:85 'val reactNativeHost: ReactNativeHost' is deprecated. You should not use ReactNativeHost directly in the New Architecture. Use ReactHost instead.
+2026-05-04T16:37:42.1954907Z w: file:///home/runner/work/keepeat/keepeat/frontend/node_modules/expo-modules-core/android/src/main/java/expo/modules/adapters/react/apploader/RNHeadlessAppLoader.kt:120:83 'val reactNativeHost: ReactNativeHost' is deprecated. You should not use ReactNativeHost directly in the New Architecture. Use ReactHost instead.
+2026-05-04T16:37:42.2014078Z w: file:///home/runner/work/keepeat/keepeat/frontend/node_modules/expo-modules-core/android/src/main/java/expo/modules/apploader/AppLoaderProvider.kt:34:52 Unchecked cast of 'Class<*>!' to 'Class<out HeadlessAppLoader>'.
+2026-05-04T16:37:42.2044226Z w: file:///home/runner/work/keepeat/keepeat/frontend/node_modules/expo-modules-core/android/src/main/java/expo/modules/kotlin/AppContext.kt:30:8 'typealias ErrorManagerModule = JSLoggerModule' is deprecated. Use JSLoggerModule instead.
+2026-05-04T16:37:42.2074157Z w: file:///home/runner/work/keepeat/keepeat/frontend/node_modules/expo-modules-core/android/src/main/java/expo/modules/kotlin/AppContext.kt:253:21 'typealias ErrorManagerModule = JSLoggerModule' is deprecated. Use JSLoggerModule instead.
+2026-05-04T16:37:42.2134485Z w: file:///home/runner/work/keepeat/keepeat/frontend/node_modules/expo-modules-core/android/src/main/java/expo/modules/kotlin/AppContext.kt:343:21 'val DEFAULT: Int' is deprecated. UIManagerType.DEFAULT will be deleted in the next release of React Native. Use [LEGACY] instead.
+2026-05-04T16:37:42.2164605Z w: file:///home/runner/work/keepeat/keepeat/frontend/node_modules/expo-modules-core/android/src/main/java/expo/modules/kotlin/defaultmodules/NativeModulesProxyModule.kt:16:5 'fun Constants(legacyConstantsProvider: () -> Map<String, Any?>): Unit' is deprecated. Use `Constant` or `Property` instead.
+2026-05-04T16:37:42.2194081Z w: file:///home/runner/work/keepeat/keepeat/frontend/node_modules/expo-modules-core/android/src/main/java/expo/modules/kotlin/jni/PromiseImpl.kt:65:51 'val errorManager: JSLoggerModule?' is deprecated. Use AppContext.jsLogger instead.
+2026-05-04T16:37:42.2254583Z w: file:///home/runner/work/keepeat/keepeat/frontend/node_modules/expo-modules-core/android/src/main/java/expo/modules/kotlin/jni/PromiseImpl.kt:69:22 'fun reportExceptionToLogBox(codedException: CodedException): Unit' is deprecated. Use appContext.jsLogger.error(...) instead.
+2026-05-04T16:37:42.2265727Z w: file:///home/runner/work/keepeat/keepeat/frontend/node_modules/expo-modules-core/android/src/main/java/expo/modules/kotlin/views/ViewDefinitionBuilder.kt:464:16 'val errorManager: JSLoggerModule?' is deprecated. Use AppContext.jsLogger instead.
+2026-05-04T16:37:42.2270341Z w: file:///home/runner/work/keepeat/keepeat/frontend/node_modules/expo-modules-core/android/src/main/java/expo/modules/kotlin/views/ViewDefinitionBuilder.kt:464:30 'fun reportExceptionToLogBox(codedException: CodedException): Unit' is deprecated. Use appContext.jsLogger.error(...) instead.
+2026-05-04T16:37:42.2274542Z w: file:///home/runner/work/keepeat/keepeat/frontend/node_modules/expo-modules-core/android/src/main/java/expo/modules/kotlin/views/ViewManagerDefinition.kt:41:16 'val errorManager: JSLoggerModule?' is deprecated. Use AppContext.jsLogger instead.
+2026-05-04T16:37:42.2278184Z w: file:///home/runner/work/keepeat/keepeat/frontend/node_modules/expo-modules-core/android/src/main/java/expo/modules/kotlin/views/ViewManagerDefinition.kt:41:30 'fun reportExceptionToLogBox(codedException: CodedException): Unit' is deprecated. Use appContext.jsLogger.error(...) instead.
+2026-05-04T16:37:42.4712814Z 
+2026-05-04T16:37:42.4713999Z > Task :react-native-iap:bundleLibRuntimeToDirDebug
+2026-05-04T16:37:45.8703585Z > Task :react-native-safe-area-context:bundleLibRuntimeToDirDebug
+2026-05-04T16:37:48.0668955Z > Task :react-native-webview:bundleLibRuntimeToDirDebug
+2026-05-04T16:37:48.5673302Z Note: Some input files use or override a deprecated API.
+2026-05-04T16:37:48.5673807Z 
+2026-05-04T16:37:48.5699567Z Note: Recompile with -Xlint:deprecation for details.
+2026-05-04T16:37:48.5700357Z > Task :expo-modules-core:compileDebugJavaWithJavac
+2026-05-04T16:37:49.1692862Z 
+2026-05-04T16:37:49.1721938Z > Task :react-native-screens:compileDebugJavaWithJavac
+2026-05-04T16:37:49.2669391Z > Task :react-native-screens:bundleLibCompileToJarDebug
+2026-05-04T16:37:49.2693163Z > Task :react-native-nitro-modules:bundleLibRuntimeToDirDebug
+2026-05-04T16:37:49.2723086Z > Task :react-native-screens:processDebugJavaRes
+2026-05-04T16:38:07.5683261Z > Task :app:mergeExtDexDebug
+2026-05-04T16:38:19.1669680Z > Task :react-native-screens:bundleLibRuntimeToJarDebug
+2026-05-04T16:38:19.2669883Z > Task :react-native-screens:bundleLibRuntimeToDirDebug
+2026-05-04T16:38:38.4673480Z > Task :expo-modules-core:bundleLibCompileToJarDebug
+2026-05-04T16:38:38.6733338Z > Task :expo-modules-core:bundleLibRuntimeToJarDebug
+2026-05-04T16:38:38.7723514Z > Task :expo-modules-core:processDebugJavaRes
+2026-05-04T16:38:40.0694188Z 
+2026-05-04T16:38:40.0723174Z > Task :expo-constants:compileDebugKotlin
+2026-05-04T16:38:40.0755297Z w: file:///home/runner/work/keepeat/keepeat/frontend/node_modules/expo-constants/android/src/main/java/expo/modules/constants/ConstantsModule.kt:12:5 'fun Constants(legacyConstantsProvider: () -> Map<String, Any?>): Unit' is deprecated. Use `Constant` or `Property` instead.
+2026-05-04T16:38:40.6673207Z 
+2026-05-04T16:38:40.6733992Z > Task :expo-constants:compileDebugJavaWithJavac
+2026-05-04T16:38:40.6759450Z > Task :expo-constants:bundleLibCompileToJarDebug
+2026-05-04T16:38:41.6683489Z > Task :expo-constants:bundleLibRuntimeToJarDebug
+2026-05-04T16:38:41.8703456Z > Task :expo-constants:processDebugJavaRes
+2026-05-04T16:38:42.1723699Z > Task :react-native-async-storage_async-storage:bundleLibRuntimeToDirDebug
+2026-05-04T16:38:42.4713631Z > Task :react-native-community_netinfo:bundleLibRuntimeToDirDebug
+2026-05-04T16:38:42.7726238Z > Task :react-native-ml-kit_text-recognition:bundleLibRuntimeToDirDebug
+2026-05-04T16:38:42.8678069Z > Task :react-native-reanimated:bundleLibRuntimeToDirDebug
+2026-05-04T16:38:43.1672355Z > Task :react-native-worklets:bundleLibRuntimeToDirDebug
+2026-05-04T16:38:44.0673374Z > Task :expo-modules-core:bundleLibRuntimeToDirDebug
+2026-05-04T16:38:45.2722646Z 
+2026-05-04T16:38:45.2783213Z > Task :expo:compileDebugKotlin
+2026-05-04T16:38:45.2855611Z w: file:///home/runner/work/keepeat/keepeat/frontend/node_modules/expo/android/src/main/java/expo/modules/ExpoModulesPackage.kt:34:16 This declaration overrides a deprecated member but is not marked as deprecated itself. Add the '@Deprecated' annotation or suppress the diagnostic.
+2026-05-04T16:38:45.2915128Z w: file:///home/runner/work/keepeat/keepeat/frontend/node_modules/expo/android/src/main/java/expo/modules/ExpoReactHostFactory.kt:8:8 'class ReactNativeHost : Any' is deprecated. Deprecated in Java.
+2026-05-04T16:38:45.2974212Z w: file:///home/runner/work/keepeat/keepeat/frontend/node_modules/expo/android/src/main/java/expo/modules/ExpoReactHostFactory.kt:80:22 'class ReactNativeHost : Any' is deprecated. Deprecated in Java.
+2026-05-04T16:38:45.3034604Z w: file:///home/runner/work/keepeat/keepeat/frontend/node_modules/expo/android/src/main/java/expo/modules/ReactActivityDelegateWrapper.kt:24:8 'class ReactNativeHost : Any' is deprecated. Deprecated in Java.
+2026-05-04T16:38:45.3056631Z w: file:///home/runner/work/keepeat/keepeat/frontend/node_modules/expo/android/src/main/java/expo/modules/ReactActivityDelegateWrapper.kt:58:33 'class ReactNativeHost : Any' is deprecated. Deprecated in Java.
+2026-05-04T16:38:45.3124860Z w: file:///home/runner/work/keepeat/keepeat/frontend/node_modules/expo/android/src/main/java/expo/modules/ReactActivityDelegateWrapper.kt:105:16 This declaration overrides a deprecated member but is not marked as deprecated itself. Add the '@Deprecated' annotation or suppress the diagnostic.
+2026-05-04T16:38:45.3194652Z w: file:///home/runner/work/keepeat/keepeat/frontend/node_modules/expo/android/src/main/java/expo/modules/ReactActivityDelegateWrapper.kt:105:38 'class ReactNativeHost : Any' is deprecated. Deprecated in Java.
+2026-05-04T16:38:45.3264936Z w: file:///home/runner/work/keepeat/keepeat/frontend/node_modules/expo/android/src/main/java/expo/modules/ReactActivityDelegateWrapper.kt:113:16 This declaration overrides a deprecated member but is not marked as deprecated itself. Add the '@Deprecated' annotation or suppress the diagnostic.
+2026-05-04T16:38:45.3294162Z w: file:///home/runner/work/keepeat/keepeat/frontend/node_modules/expo/android/src/main/java/expo/modules/ReactActivityDelegateWrapper.kt:114:21 'val reactInstanceManager: ReactInstanceManager' is deprecated. Deprecated in Java.
+2026-05-04T16:38:45.3355284Z w: file:///home/runner/work/keepeat/keepeat/frontend/node_modules/expo/android/src/main/java/expo/modules/ReactActivityDelegateWrapper.kt:168:36 'constructor(activity: Activity, reactNativeHost: ReactNativeHost?, appKey: String?, launchOptions: Bundle?, fabricEnabled: Boolean): ReactDelegate' is deprecated. Deprecated since 0.81.0, use one of the other constructors instead.
+2026-05-04T16:38:45.3413997Z w: file:///home/runner/work/keepeat/keepeat/frontend/node_modules/expo/android/src/main/java/expo/modules/ReactActivityDelegateWrapper.kt:279:77 'val reactInstanceManager: ReactInstanceManager' is deprecated. Deprecated in Java.
+2026-05-04T16:38:45.3474174Z w: file:///home/runner/work/keepeat/keepeat/frontend/node_modules/expo/android/src/main/java/expo/modules/ReactActivityDelegateWrapper.kt:282:22 'val reactInstanceManager: ReactInstanceManager' is deprecated. Deprecated in Java.
+2026-05-04T16:38:45.3534105Z w: file:///home/runner/work/keepeat/keepeat/frontend/node_modules/expo/android/src/main/java/expo/modules/ReactActivityDelegateWrapper.kt:286:54 'val reactInstanceManager: ReactInstanceManager' is deprecated. Deprecated in Java.
+2026-05-04T16:38:45.3593882Z w: file:///home/runner/work/keepeat/keepeat/frontend/node_modules/expo/android/src/main/java/expo/modules/ReactNativeHostWrapper.kt:6:8 'class ReactNativeHost : Any' is deprecated. Deprecated in Java.
+2026-05-04T16:38:45.3624211Z w: file:///home/runner/work/keepeat/keepeat/frontend/node_modules/expo/android/src/main/java/expo/modules/ReactNativeHostWrapper.kt:15:9 'class ReactNativeHost : Any' is deprecated. Deprecated in Java.
+2026-05-04T16:38:45.3653788Z w: file:///home/runner/work/keepeat/keepeat/frontend/node_modules/expo/android/src/main/java/expo/modules/ReactNativeHostWrapper.kt:47:60 'class ReactNativeHost : Any' is deprecated. Deprecated in Java.
+2026-05-04T16:38:45.3683657Z w: file:///home/runner/work/keepeat/keepeat/frontend/node_modules/expo/android/src/main/java/expo/modules/ReactNativeHostWrapperBase.kt:7:8 'class ReactNativeHost : Any' is deprecated. Deprecated in Java.
+2026-05-04T16:38:45.3687044Z w: file:///home/runner/work/keepeat/keepeat/frontend/node_modules/expo/android/src/main/java/expo/modules/ReactNativeHostWrapperBase.kt:16:23 'class ReactNativeHost : Any' is deprecated. Deprecated in Java.
+2026-05-04T16:38:45.3713848Z w: file:///home/runner/work/keepeat/keepeat/frontend/node_modules/expo/android/src/main/java/expo/modules/ReactNativeHostWrapperBase.kt:89:16 'class ReactNativeHost : Any' is deprecated. Deprecated in Java.
+2026-05-04T16:38:45.3721529Z w: file:///home/runner/work/keepeat/keepeat/frontend/node_modules/expo/android/src/main/java/expo/modules/ReactNativeHostWrapperBase.kt:101:38 'class ReactNativeHost : Any' is deprecated. Deprecated in Java.
+2026-05-04T16:38:45.3725211Z w: file:///home/runner/work/keepeat/keepeat/frontend/node_modules/expo/android/src/main/java/expo/modules/fetch/ExpoFetchModule.kt:30:39 'constructor(reactContext: ReactContext): ForwardingCookieHandler' is deprecated. Use the default constructor.
+2026-05-04T16:38:45.3729272Z w: file:///home/runner/work/keepeat/keepeat/frontend/node_modules/expo/android/src/main/java/expo/modules/fetch/NativeResponse.kt:42:16 This declaration overrides a deprecated member but is not marked as deprecated itself. Add the '@Deprecated' annotation or suppress the diagnostic.
+2026-05-04T16:38:45.3733005Z w: file:///home/runner/work/keepeat/keepeat/frontend/node_modules/expo/android/src/main/java/expo/modules/fetch/NativeResponse.kt:44:11 'fun deallocate(): Unit' is deprecated. Use sharedObjectDidRelease() instead.
+2026-05-04T16:38:46.1668698Z 
+2026-05-04T16:38:46.1733530Z > Task :expo:compileDebugJavaWithJavac
+2026-05-04T16:38:46.2668935Z > Task :expo:bundleLibCompileToJarDebug
+2026-05-04T16:38:49.6683339Z > Task :expo:bundleLibRuntimeToJarDebug
+2026-05-04T16:38:49.6742485Z 
+2026-05-04T16:38:49.6773676Z > Task :app:compileDebugKotlin
+2026-05-04T16:38:49.6834176Z w: file:///home/runner/work/keepeat/keepeat/frontend/android/app/src/main/java/com/fesperiquette/keepeat/MainApplication.kt:9:8 'class ReactNativeHost : Any' is deprecated. Deprecated in Java.
+2026-05-04T16:38:49.6893127Z w: file:///home/runner/work/keepeat/keepeat/frontend/android/app/src/main/java/com/fesperiquette/keepeat/MainApplication.kt:21:16 This declaration overrides a deprecated member but is not marked as deprecated itself. Add the '@Deprecated' annotation or suppress the diagnostic.
+2026-05-04T16:38:49.6896212Z w: file:///home/runner/work/keepeat/keepeat/frontend/android/app/src/main/java/com/fesperiquette/keepeat/MainApplication.kt:21:33 'class ReactNativeHost : Any' is deprecated. Deprecated in Java.
+2026-05-04T16:38:50.8668511Z 
+2026-05-04T16:38:50.8669642Z > Task :app:compileDebugJavaWithJavac
+2026-05-04T16:38:51.3693098Z > Task :expo:processDebugJavaRes
+2026-05-04T16:38:51.9669614Z > Task :expo:bundleLibRuntimeToDirDebug
+2026-05-04T16:38:52.0669484Z > Task :app:dexBuilderDebug
+2026-05-04T16:38:52.9669269Z > Task :app:mergeDebugGlobalSynthetics
+2026-05-04T16:38:52.9693998Z > Task :app:processDebugJavaRes
+2026-05-04T16:38:53.2683480Z > Task :expo-constants:bundleLibRuntimeToDirDebug
+2026-05-04T16:38:55.3668749Z 
+2026-05-04T16:38:55.3669902Z > Task :react-native-nitro-modules:configureCMakeDebug[arm64-v8a]
+2026-05-04T16:38:55.3693022Z Checking the license for package CMake 3.22.1 in /usr/local/lib/android/sdk/licenses
+2026-05-04T16:38:55.3722808Z License for package CMake 3.22.1 accepted.
+2026-05-04T16:38:55.3752732Z Preparing "Install CMake 3.22.1 v.3.22.1".
+2026-05-04T16:38:55.3753484Z "Install CMake 3.22.1 v.3.22.1" ready.
+2026-05-04T16:38:55.3782928Z Installing CMake 3.22.1 in /usr/local/lib/android/sdk/cmake/3.22.1
+2026-05-04T16:38:55.3812682Z "Install CMake 3.22.1 v.3.22.1" complete.
+2026-05-04T16:38:55.3842706Z "Install CMake 3.22.1 v.3.22.1" finished.
+2026-05-04T16:38:55.6671370Z 
+2026-05-04T16:38:55.6692980Z > Task :app:mergeLibDexDebug
+2026-05-04T16:38:56.1693213Z > Task :app:mergeProjectDexDebug
+2026-05-04T16:38:57.0678504Z > Task :app:mergeDebugJavaResource
+2026-05-04T16:38:57.0728176Z > Task :app:mergeDebugJniLibFolders
+2026-05-04T16:38:57.0761778Z > Task :expo:mergeDebugJniLibFolders
+2026-05-04T16:38:57.0833487Z > Task :expo:mergeDebugNativeLibs NO-SOURCE
+2026-05-04T16:38:57.1698915Z > Task :expo:copyDebugJniLibsProjectOnly
+2026-05-04T16:38:57.1732956Z > Task :expo-constants:mergeDebugJniLibFolders
+2026-05-04T16:38:57.1853206Z > Task :expo-constants:mergeDebugNativeLibs NO-SOURCE
+2026-05-04T16:38:57.1913042Z > Task :expo-constants:copyDebugJniLibsProjectOnly
+2026-05-04T16:38:57.8684427Z > Task :react-native-worklets:configureCMakeDebug[arm64-v8a]
+2026-05-04T16:38:59.8723524Z > Task :expo-modules-core:configureCMakeDebug[arm64-v8a]
+2026-05-04T16:39:00.5693525Z > Task :react-native-worklets:configureCMakeDebug[armeabi-v7a]
+2026-05-04T16:39:00.9673675Z > Task :react-native-async-storage_async-storage:mergeDebugJniLibFolders
+2026-05-04T16:39:00.9701120Z > Task :react-native-async-storage_async-storage:mergeDebugNativeLibs NO-SOURCE
+2026-05-04T16:39:00.9793634Z > Task :react-native-async-storage_async-storage:copyDebugJniLibsProjectOnly
+2026-05-04T16:39:01.0733448Z > Task :react-native-community_netinfo:mergeDebugJniLibFolders
+2026-05-04T16:39:01.0773176Z > Task :react-native-community_netinfo:mergeDebugNativeLibs NO-SOURCE
+2026-05-04T16:39:01.0903532Z > Task :react-native-community_netinfo:copyDebugJniLibsProjectOnly
+2026-05-04T16:39:01.0963153Z > Task :react-native-gesture-handler:mergeDebugJniLibFolders
+2026-05-04T16:39:01.1023074Z > Task :react-native-iap:mergeDebugJniLibFolders
+2026-05-04T16:39:01.1063047Z > Task :react-native-ml-kit_text-recognition:mergeDebugJniLibFolders
+2026-05-04T16:39:01.1173339Z > Task :react-native-ml-kit_text-recognition:mergeDebugNativeLibs NO-SOURCE
+2026-05-04T16:39:01.1202986Z > Task :react-native-ml-kit_text-recognition:copyDebugJniLibsProjectOnly
+2026-05-04T16:39:01.1293704Z > Task :react-native-reanimated:mergeDebugJniLibFolders
+2026-05-04T16:39:01.1674092Z > Task :react-native-safe-area-context:mergeDebugJniLibFolders
+2026-05-04T16:39:01.1743229Z > Task :react-native-safe-area-context:mergeDebugNativeLibs NO-SOURCE
+2026-05-04T16:39:01.1783099Z > Task :react-native-safe-area-context:copyDebugJniLibsProjectOnly
+2026-05-04T16:39:03.2753646Z > Task :react-native-worklets:configureCMakeDebug[x86]
+2026-05-04T16:39:03.6703431Z > Task :react-native-screens:configureCMakeDebug[arm64-v8a]
+2026-05-04T16:39:06.3683434Z > Task :react-native-worklets:configureCMakeDebug[x86_64]
+2026-05-04T16:39:06.3773501Z > Task :react-native-worklets:generateJsonModelDebug
+2026-05-04T16:39:06.3873335Z > Task :react-native-worklets:prefabDebugConfigurePackage
+2026-05-04T16:39:09.3703837Z > Task :react-native-reanimated:configureCMakeDebug[arm64-v8a]
+2026-05-04T16:39:12.8693431Z > Task :react-native-reanimated:configureCMakeDebug[armeabi-v7a]
+2026-05-04T16:39:16.8673436Z > Task :react-native-reanimated:configureCMakeDebug[x86]
+2026-05-04T16:39:20.3753473Z > Task :react-native-reanimated:configureCMakeDebug[x86_64]
+2026-05-04T16:39:20.3786631Z > Task :react-native-reanimated:generateJsonModelDebug
+2026-05-04T16:39:20.3933423Z > Task :react-native-reanimated:prefabDebugConfigurePackage
+2026-05-04T16:39:24.7693570Z > Task :react-native-screens:buildCMakeDebug[arm64-v8a]
+2026-05-04T16:39:27.8678205Z > Task :react-native-nitro-modules:buildCMakeDebug[arm64-v8a]
+2026-05-04T16:39:28.2685481Z > Task :react-native-gesture-handler:configureCMakeDebug[arm64-v8a]
+2026-05-04T16:39:29.8683539Z > Task :expo-modules-core:buildCMakeDebug[arm64-v8a]
+2026-05-04T16:39:32.0727420Z > Task :react-native-gesture-handler:configureCMakeDebug[armeabi-v7a]
+2026-05-04T16:39:35.7683568Z > Task :react-native-gesture-handler:configureCMakeDebug[x86]
+2026-05-04T16:39:39.1753559Z > Task :react-native-gesture-handler:configureCMakeDebug[x86_64]
+2026-05-04T16:39:42.6793575Z > Task :react-native-screens:configureCMakeDebug[armeabi-v7a]
+2026-05-04T16:39:50.3723743Z > Task :react-native-worklets:buildCMakeDebug[arm64-v8a][worklets]
+2026-05-04T16:40:05.9713645Z > Task :react-native-screens:buildCMakeDebug[armeabi-v7a]
+2026-05-04T16:40:07.2680302Z > Task :react-native-nitro-modules:configureCMakeDebug[armeabi-v7a]
+2026-05-04T16:40:08.1753362Z > Task :react-native-screens:configureCMakeDebug[x86]
+2026-05-04T16:40:08.7764064Z > Task :expo-modules-core:configureCMakeDebug[armeabi-v7a]
+2026-05-04T16:40:34.0699977Z > Task :react-native-screens:buildCMakeDebug[x86]
+2026-05-04T16:40:37.2669416Z > Task :react-native-screens:configureCMakeDebug[x86_64]
+2026-05-04T16:40:37.2691555Z > Task :react-native-nitro-modules:buildCMakeDebug[armeabi-v7a]
+2026-05-04T16:40:38.7694619Z > Task :expo-modules-core:buildCMakeDebug[armeabi-v7a]
+2026-05-04T16:41:06.4696944Z > Task :react-native-screens:buildCMakeDebug[x86_64]
+2026-05-04T16:41:06.5713966Z > Task :react-native-screens:mergeDebugJniLibFolders
+2026-05-04T16:41:08.0703350Z > Task :react-native-screens:mergeDebugNativeLibs
+2026-05-04T16:41:08.1683423Z > Task :react-native-screens:copyDebugJniLibsProjectOnly
+2026-05-04T16:41:08.2733387Z > Task :react-native-webview:mergeDebugJniLibFolders
+2026-05-04T16:41:08.2823508Z > Task :react-native-webview:mergeDebugNativeLibs NO-SOURCE
+2026-05-04T16:41:08.2883051Z > Task :react-native-webview:copyDebugJniLibsProjectOnly
+2026-05-04T16:41:08.2953373Z > Task :app:validateSigningDebug
+2026-05-04T16:41:08.3051864Z > Task :app:writeDebugAppMetadata
+2026-05-04T16:41:08.3673279Z > Task :app:writeDebugSigningConfigVersions
+2026-05-04T16:41:08.3733417Z > Task :expo:stripDebugDebugSymbols NO-SOURCE
+2026-05-04T16:41:08.3823538Z > Task :expo:copyDebugJniLibsProjectAndLocalJars
+2026-05-04T16:41:08.4723461Z > Task :expo:extractDebugAnnotations
+2026-05-04T16:41:08.4783081Z > Task :expo:extractDeepLinksForAarDebug
+2026-05-04T16:41:08.4783846Z > Task :expo:mergeDebugGeneratedProguardFiles
+2026-05-04T16:41:08.4853571Z > Task :expo:mergeDebugConsumerProguardFiles
+2026-05-04T16:41:08.4933189Z > Task :expo:prepareDebugArtProfile
+2026-05-04T16:41:08.5683373Z > Task :expo:prepareLintJarForPublish
+2026-05-04T16:41:08.5702652Z > Task :expo:mergeDebugJavaResource
+2026-05-04T16:41:08.6683355Z > Task :expo:syncDebugLibJars
+2026-05-04T16:41:08.7723192Z > Task :expo:bundleDebugAar
+2026-05-04T16:41:08.7783209Z > Task :expo:assembleDebug
+2026-05-04T16:41:08.7903417Z > Task :expo-constants:stripDebugDebugSymbols NO-SOURCE
+2026-05-04T16:41:08.7987245Z > Task :expo-constants:copyDebugJniLibsProjectAndLocalJars
+2026-05-04T16:41:08.8056979Z > Task :expo-constants:extractDebugAnnotations
+2026-05-04T16:41:08.8705290Z > Task :expo-constants:extractDeepLinksForAarDebug
+2026-05-04T16:41:08.8733031Z > Task :expo-constants:mergeDebugGeneratedProguardFiles
+2026-05-04T16:41:08.8806850Z > Task :expo-constants:mergeDebugConsumerProguardFiles
+2026-05-04T16:41:08.8873210Z > Task :expo-constants:prepareDebugArtProfile
+2026-05-04T16:41:08.8941561Z > Task :expo-constants:prepareLintJarForPublish
+2026-05-04T16:41:08.9014119Z > Task :expo-constants:mergeDebugJavaResource
+2026-05-04T16:41:08.9073693Z > Task :expo-constants:syncDebugLibJars
+2026-05-04T16:41:08.9151210Z > Task :expo-constants:bundleDebugAar
+2026-05-04T16:41:08.9203048Z > Task :expo-constants:assembleDebug
+2026-05-04T16:41:08.9672785Z > Task :react-native-async-storage_async-storage:stripDebugDebugSymbols NO-SOURCE
+2026-05-04T16:41:08.9763565Z > Task :react-native-async-storage_async-storage:copyDebugJniLibsProjectAndLocalJars
+2026-05-04T16:41:08.9792988Z > Task :react-native-async-storage_async-storage:extractDebugAnnotations
+2026-05-04T16:41:08.9873217Z > Task :react-native-async-storage_async-storage:extractDeepLinksForAarDebug
+2026-05-04T16:41:08.9963231Z > Task :react-native-async-storage_async-storage:mergeDebugGeneratedProguardFiles
+2026-05-04T16:41:09.0753551Z > Task :react-native-async-storage_async-storage:mergeDebugConsumerProguardFiles
+2026-05-04T16:41:09.0815554Z > Task :react-native-async-storage_async-storage:prepareDebugArtProfile
+2026-05-04T16:41:09.0843132Z > Task :react-native-async-storage_async-storage:prepareLintJarForPublish
+2026-05-04T16:41:09.0903075Z > Task :react-native-async-storage_async-storage:mergeDebugJavaResource
+2026-05-04T16:41:09.1012974Z > Task :react-native-async-storage_async-storage:syncDebugLibJars
+2026-05-04T16:41:09.1168302Z > Task :react-native-async-storage_async-storage:bundleDebugAar
+2026-05-04T16:41:09.1193392Z > Task :react-native-async-storage_async-storage:assembleDebug
+2026-05-04T16:41:09.1685235Z > Task :react-native-community_netinfo:stripDebugDebugSymbols NO-SOURCE
+2026-05-04T16:41:09.1745523Z > Task :react-native-community_netinfo:copyDebugJniLibsProjectAndLocalJars
+2026-05-04T16:41:09.1837363Z > Task :react-native-community_netinfo:extractDebugAnnotations
+2026-05-04T16:41:09.1893399Z > Task :react-native-community_netinfo:extractDeepLinksForAarDebug
+2026-05-04T16:41:09.1953621Z > Task :react-native-community_netinfo:mergeDebugGeneratedProguardFiles
+2026-05-04T16:41:09.2693603Z > Task :react-native-community_netinfo:mergeDebugConsumerProguardFiles
+2026-05-04T16:41:09.2725921Z > Task :react-native-community_netinfo:prepareDebugArtProfile
+2026-05-04T16:41:09.2823438Z > Task :react-native-community_netinfo:prepareLintJarForPublish
+2026-05-04T16:41:09.2904120Z > Task :react-native-community_netinfo:mergeDebugJavaResource
+2026-05-04T16:41:09.2993345Z > Task :react-native-community_netinfo:syncDebugLibJars
+2026-05-04T16:41:09.3695119Z > Task :react-native-community_netinfo:bundleDebugAar
+2026-05-04T16:41:09.3743186Z > Task :react-native-community_netinfo:assembleDebug
+2026-05-04T16:41:09.3823370Z > Task :react-native-gesture-handler:extractDebugAnnotations
+2026-05-04T16:41:09.3863176Z > Task :react-native-gesture-handler:extractDeepLinksForAarDebug
+2026-05-04T16:41:09.4002275Z > Task :react-native-gesture-handler:mergeDebugGeneratedProguardFiles
+2026-05-04T16:41:09.4103062Z > Task :react-native-gesture-handler:mergeDebugConsumerProguardFiles
+2026-05-04T16:41:09.4163525Z > Task :react-native-gesture-handler:prepareDebugArtProfile
+2026-05-04T16:41:09.4714892Z > Task :react-native-gesture-handler:prepareLintJarForPublish
+2026-05-04T16:41:09.4753303Z > Task :react-native-gesture-handler:mergeDebugJavaResource
+2026-05-04T16:41:09.5675105Z > Task :react-native-gesture-handler:syncDebugLibJars
+2026-05-04T16:41:09.6672245Z > Task :react-native-iap:extractDebugAnnotations
+2026-05-04T16:41:09.6743406Z > Task :react-native-iap:extractDeepLinksForAarDebug
+2026-05-04T16:41:09.6873381Z > Task :react-native-iap:mergeDebugGeneratedProguardFiles
+2026-05-04T16:41:09.6953301Z > Task :react-native-iap:mergeDebugConsumerProguardFiles
+2026-05-04T16:41:09.7033415Z > Task :react-native-iap:prepareDebugArtProfile
+2026-05-04T16:41:09.7073097Z > Task :react-native-iap:prepareLintJarForPublish
+2026-05-04T16:41:09.7153306Z > Task :react-native-iap:mergeDebugJavaResource
+2026-05-04T16:41:10.0693219Z > Task :react-native-iap:syncDebugLibJars
+2026-05-04T16:41:10.0733640Z > Task :react-native-ml-kit_text-recognition:stripDebugDebugSymbols NO-SOURCE
+2026-05-04T16:41:10.0793288Z > Task :react-native-ml-kit_text-recognition:copyDebugJniLibsProjectAndLocalJars
+2026-05-04T16:41:10.0883272Z > Task :react-native-ml-kit_text-recognition:extractDebugAnnotations
+2026-05-04T16:41:10.0933192Z > Task :react-native-ml-kit_text-recognition:extractDeepLinksForAarDebug
+2026-05-04T16:41:10.1043510Z > Task :react-native-ml-kit_text-recognition:mergeDebugGeneratedProguardFiles
+2026-05-04T16:41:10.1073513Z > Task :react-native-ml-kit_text-recognition:mergeDebugConsumerProguardFiles
+2026-05-04T16:41:10.1141237Z > Task :react-native-ml-kit_text-recognition:prepareDebugArtProfile
+2026-05-04T16:41:10.1193186Z > Task :react-native-ml-kit_text-recognition:prepareLintJarForPublish
+2026-05-04T16:41:10.1703517Z > Task :react-native-ml-kit_text-recognition:mergeDebugJavaResource
+2026-05-04T16:41:10.1725148Z > Task :react-native-ml-kit_text-recognition:syncDebugLibJars
+2026-05-04T16:41:10.1768409Z > Task :react-native-ml-kit_text-recognition:bundleDebugAar
+2026-05-04T16:41:10.1833283Z > Task :react-native-ml-kit_text-recognition:assembleDebug
+2026-05-04T16:41:10.1893425Z > Task :react-native-reanimated:extractDebugAnnotations
+2026-05-04T16:41:10.2013704Z > Task :react-native-reanimated:extractDeepLinksForAarDebug
+2026-05-04T16:41:10.2018554Z > Task :react-native-reanimated:mergeDebugGeneratedProguardFiles
+2026-05-04T16:41:10.2669956Z > Task :react-native-reanimated:mergeDebugConsumerProguardFiles
+2026-05-04T16:41:10.2753573Z > Task :react-native-reanimated:prepareDebugArtProfile
+2026-05-04T16:41:10.2794001Z > Task :react-native-reanimated:prepareLintJarForPublish
+2026-05-04T16:41:10.2873298Z > Task :react-native-reanimated:mergeDebugJavaResource
+2026-05-04T16:41:10.2933043Z > Task :react-native-reanimated:syncDebugLibJars
+2026-05-04T16:41:10.3693420Z > Task :react-native-safe-area-context:stripDebugDebugSymbols NO-SOURCE
+2026-05-04T16:41:10.3708710Z > Task :react-native-safe-area-context:copyDebugJniLibsProjectAndLocalJars
+2026-05-04T16:41:10.3804102Z > Task :react-native-safe-area-context:extractDebugAnnotations
+2026-05-04T16:41:10.3913449Z > Task :react-native-safe-area-context:extractDeepLinksForAarDebug
+2026-05-04T16:41:10.3973223Z > Task :react-native-safe-area-context:mergeDebugGeneratedProguardFiles
+2026-05-04T16:41:10.4013047Z > Task :react-native-safe-area-context:mergeDebugConsumerProguardFiles
+2026-05-04T16:41:10.4089771Z > Task :react-native-safe-area-context:prepareDebugArtProfile
+2026-05-04T16:41:10.4143150Z > Task :react-native-safe-area-context:prepareLintJarForPublish
+2026-05-04T16:41:10.4683623Z > Task :react-native-safe-area-context:mergeDebugJavaResource
+2026-05-04T16:41:10.4753336Z > Task :react-native-safe-area-context:syncDebugLibJars
+2026-05-04T16:41:10.4833300Z > Task :react-native-safe-area-context:bundleDebugAar
+2026-05-04T16:41:10.4862754Z > Task :react-native-safe-area-context:assembleDebug
+2026-05-04T16:41:10.8669139Z > Task :react-native-screens:stripDebugDebugSymbols
+2026-05-04T16:41:10.8763291Z > Task :react-native-screens:copyDebugJniLibsProjectAndLocalJars
+2026-05-04T16:41:10.8903347Z > Task :react-native-screens:extractDebugAnnotations
+2026-05-04T16:41:10.9679484Z > Task :react-native-screens:extractDeepLinksForAarDebug
+2026-05-04T16:41:10.9773567Z > Task :react-native-screens:mergeDebugGeneratedProguardFiles
+2026-05-04T16:41:10.9843204Z > Task :react-native-screens:mergeDebugConsumerProguardFiles
+2026-05-04T16:41:10.9903209Z > Task :react-native-screens:prepareDebugArtProfile
+2026-05-04T16:41:11.0013231Z > Task :react-native-screens:prepareLintJarForPublish
+2026-05-04T16:41:11.0113479Z > Task :react-native-screens:mergeDebugJavaResource
+2026-05-04T16:41:11.0283510Z > Task :react-native-nitro-modules:configureCMakeDebug[x86]
+2026-05-04T16:41:11.4713583Z > Task :react-native-screens:syncDebugLibJars
+2026-05-04T16:41:12.0685264Z > Task :react-native-screens:bundleDebugAar
+2026-05-04T16:41:12.0713004Z > Task :react-native-screens:assembleDebug
+2026-05-04T16:41:12.0833755Z > Task :react-native-webview:stripDebugDebugSymbols NO-SOURCE
+2026-05-04T16:41:12.0963518Z > Task :react-native-webview:copyDebugJniLibsProjectAndLocalJars
+2026-05-04T16:41:12.1703465Z > Task :react-native-webview:extractDebugAnnotations
+2026-05-04T16:41:12.1783320Z > Task :react-native-webview:extractDeepLinksForAarDebug
+2026-05-04T16:41:12.1903400Z > Task :react-native-webview:mergeDebugGeneratedProguardFiles
+2026-05-04T16:41:12.2043413Z > Task :react-native-webview:mergeDebugConsumerProguardFiles
+2026-05-04T16:41:12.2133254Z > Task :react-native-webview:prepareDebugArtProfile
+2026-05-04T16:41:12.2223408Z > Task :react-native-webview:prepareLintJarForPublish
+2026-05-04T16:41:12.2683317Z > Task :react-native-webview:mergeDebugJavaResource
+2026-05-04T16:41:12.3669225Z > Task :react-native-webview:syncDebugLibJars
+2026-05-04T16:41:12.3743322Z > Task :react-native-webview:bundleDebugAar
+2026-05-04T16:41:12.4753520Z > Task :react-native-webview:assembleDebug
+2026-05-04T16:41:12.8683461Z > Task :react-native-worklets:buildCMakeDebug[armeabi-v7a][worklets]
+2026-05-04T16:41:20.8733443Z > Task :expo-modules-core:configureCMakeDebug[x86]
+2026-05-04T16:41:40.9713519Z > Task :react-native-nitro-modules:buildCMakeDebug[x86]
+2026-05-04T16:41:50.8683377Z > Task :expo-modules-core:buildCMakeDebug[x86]
+2026-05-04T16:42:07.0671395Z > Task :react-native-nitro-modules:configureCMakeDebug[x86_64]
+2026-05-04T16:42:21.4693364Z > Task :expo-modules-core:configureCMakeDebug[x86_64]
+2026-05-04T16:42:21.7683963Z > Task :react-native-worklets:buildCMakeDebug[x86][worklets]
+2026-05-04T16:42:37.0713581Z > Task :react-native-nitro-modules:buildCMakeDebug[x86_64]
+2026-05-04T16:42:51.4683372Z > Task :expo-modules-core:buildCMakeDebug[x86_64]
+2026-05-04T16:43:01.9693905Z > Task :react-native-nitro-modules:externalNativeBuildDebug
+2026-05-04T16:43:01.9783215Z > Task :react-native-nitro-modules:generateJsonModelDebug
+2026-05-04T16:43:01.9812893Z > Task :react-native-nitro-modules:prefabDebugConfigurePackage
+2026-05-04T16:43:02.4691256Z > Task :react-native-nitro-modules:prefabDebugPackage
+2026-05-04T16:43:05.5737151Z > Task :react-native-iap:configureCMakeDebug[arm64-v8a]
+2026-05-04T16:43:05.9683294Z > Task :app:configureCMakeDebug[arm64-v8a]
+2026-05-04T16:43:09.9712552Z > Task :app:configureCMakeDebug[armeabi-v7a]
+2026-05-04T16:43:10.6702707Z 
+2026-05-04T16:43:10.6756134Z > Task :react-native-iap:buildCMakeDebug[arm64-v8a]
+2026-05-04T16:43:10.6904190Z C/C++: ninja: Entering directory `/home/runner/work/keepeat/keepeat/frontend/node_modules/react-native-iap/android/.cxx/Debug/296x3h87/arm64-v8a'
+2026-05-04T16:43:10.6924222Z C/C++: /home/runner/work/keepeat/keepeat/frontend/node_modules/react-native-iap/android/src/main/cpp/cpp-adapter.cpp:13:31: warning: 'initialize' is deprecated: Use registerNatives() instead. [-Wdeprecated-declarations]
+2026-05-04T16:43:10.7022944Z C/C++:    13 |   return margelo::nitro::iap::initialize(vm);
+2026-05-04T16:43:10.7183125Z C/C++:       |                               ^
+2026-05-04T16:43:10.7234076Z C/C++: /home/runner/work/keepeat/keepeat/frontend/node_modules/react-native-iap/android/../nitrogen/generated/android/NitroIapOnLoad.hpp:14:5: note: 'initialize' has been explicitly marked deprecated here
+2026-05-04T16:43:10.7333018Z C/C++:    14 |   [[deprecated("Use registerNatives() instead.")]]
+2026-05-04T16:43:10.7410103Z C/C++:       |     ^
+2026-05-04T16:43:10.7559404Z C/C++: 1 warning generated.
+2026-05-04T16:43:13.5677032Z 
+2026-05-04T16:43:13.5753074Z > Task :app:configureCMakeDebug[x86]
+2026-05-04T16:43:15.5693353Z > Task :expo-modules-core:mergeDebugJniLibFolders
+2026-05-04T16:43:16.6694625Z > Task :expo-modules-core:mergeDebugNativeLibs
+2026-05-04T16:43:16.9693262Z > Task :app:configureCMakeDebug[x86_64]
+2026-05-04T16:43:16.9753149Z > Task :react-native-nitro-modules:mergeDebugJniLibFolders
+2026-05-04T16:43:17.6703418Z > Task :expo-modules-core:copyDebugJniLibsProjectOnly
+2026-05-04T16:43:17.7683318Z > Task :react-native-nitro-modules:mergeDebugNativeLibs
+2026-05-04T16:43:18.0674761Z > Task :expo-modules-core:stripDebugDebugSymbols
+2026-05-04T16:43:18.1735018Z > Task :expo-modules-core:copyDebugJniLibsProjectAndLocalJars
+2026-05-04T16:43:18.2670991Z > Task :expo-modules-core:extractDebugAnnotations
+2026-05-04T16:43:18.2725604Z > Task :expo-modules-core:extractDeepLinksForAarDebug
+2026-05-04T16:43:18.2792920Z > Task :expo-modules-core:mergeDebugGeneratedProguardFiles
+2026-05-04T16:43:18.2844616Z > Task :expo-modules-core:mergeDebugConsumerProguardFiles
+2026-05-04T16:43:18.2952982Z > Task :expo-modules-core:prepareDebugArtProfile
+2026-05-04T16:43:18.2982941Z > Task :expo-modules-core:prepareLintJarForPublish
+2026-05-04T16:43:18.3723492Z > Task :expo-modules-core:mergeDebugJavaResource
+2026-05-04T16:43:18.5733495Z > Task :react-native-nitro-modules:copyDebugJniLibsProjectOnly
+2026-05-04T16:43:18.7694355Z > Task :react-native-nitro-modules:stripDebugDebugSymbols
+2026-05-04T16:43:18.8737274Z > Task :react-native-nitro-modules:copyDebugJniLibsProjectAndLocalJars
+2026-05-04T16:43:18.8853345Z > Task :react-native-nitro-modules:extractDebugAnnotations
+2026-05-04T16:43:18.8883203Z > Task :react-native-nitro-modules:extractDeepLinksForAarDebug
+2026-05-04T16:43:18.8973237Z > Task :react-native-nitro-modules:mergeDebugGeneratedProguardFiles
+2026-05-04T16:43:18.9094582Z > Task :react-native-nitro-modules:mergeDebugConsumerProguardFiles
+2026-05-04T16:43:18.9763496Z > Task :react-native-nitro-modules:prepareDebugArtProfile
+2026-05-04T16:43:18.9843119Z > Task :react-native-nitro-modules:prepareLintJarForPublish
+2026-05-04T16:43:18.9933559Z > Task :react-native-nitro-modules:mergeDebugJavaResource
+2026-05-04T16:43:18.9992806Z > Task :react-native-nitro-modules:syncDebugLibJars
+2026-05-04T16:43:19.7723282Z > Task :expo-modules-core:syncDebugLibJars
+2026-05-04T16:43:21.2693257Z > Task :expo-modules-core:bundleDebugAar
+2026-05-04T16:43:21.2694031Z > Task :expo-modules-core:assembleDebug
+2026-05-04T16:43:23.9673411Z > Task :react-native-worklets:buildCMakeDebug[x86_64][worklets]
+2026-05-04T16:43:27.0706414Z > Task :react-native-nitro-modules:bundleDebugAar
+2026-05-04T16:43:27.0722859Z > Task :react-native-nitro-modules:assembleDebug
+2026-05-04T16:43:50.7683979Z > Task :react-native-worklets:externalNativeBuildDebug
+2026-05-04T16:43:51.0679820Z > Task :react-native-worklets:prefabDebugPackage
+2026-05-04T16:43:51.1753375Z > Task :react-native-worklets:mergeDebugJniLibFolders
+2026-05-04T16:43:51.1819580Z > Task :react-native-worklets:extractDebugAnnotations
+2026-05-04T16:43:51.1903291Z > Task :react-native-worklets:extractDeepLinksForAarDebug
+2026-05-04T16:43:51.1933037Z > Task :react-native-worklets:mergeDebugGeneratedProguardFiles
+2026-05-04T16:43:51.2053283Z > Task :react-native-worklets:mergeDebugConsumerProguardFiles
+2026-05-04T16:43:51.2683355Z > Task :react-native-worklets:prepareDebugArtProfile
+2026-05-04T16:43:51.2743132Z > Task :react-native-worklets:prepareLintJarForPublish
+2026-05-04T16:43:51.2863044Z > Task :react-native-worklets:mergeDebugJavaResource
+2026-05-04T16:43:51.2894012Z > Task :react-native-worklets:syncDebugLibJars
+2026-05-04T16:43:52.1723527Z > Task :react-native-worklets:mergeDebugNativeLibs
+2026-05-04T16:43:52.6713389Z > Task :react-native-worklets:copyDebugJniLibsProjectOnly
+2026-05-04T16:43:52.8723330Z > Task :react-native-worklets:stripDebugDebugSymbols
+2026-05-04T16:43:53.5713518Z > Task :react-native-worklets:copyDebugJniLibsProjectAndLocalJars
+2026-05-04T16:44:11.8670125Z > Task :react-native-worklets:bundleDebugAar
+2026-05-04T16:44:11.8713226Z > Task :react-native-worklets:assembleDebug
+2026-05-04T16:44:21.0693551Z > Task :react-native-reanimated:buildCMakeDebug[arm64-v8a][reanimated]
+2026-05-04T16:45:14.1673509Z > Task :react-native-iap:configureCMakeDebug[armeabi-v7a]
+2026-05-04T16:45:18.6682685Z 
+2026-05-04T16:45:18.6714510Z > Task :react-native-iap:buildCMakeDebug[armeabi-v7a]
+2026-05-04T16:45:18.6753571Z C/C++: ninja: Entering directory `/home/runner/work/keepeat/keepeat/frontend/node_modules/react-native-iap/android/.cxx/Debug/296x3h87/armeabi-v7a'
+2026-05-04T16:45:18.6814055Z C/C++: /home/runner/work/keepeat/keepeat/frontend/node_modules/react-native-iap/android/src/main/cpp/cpp-adapter.cpp:13:31: warning: 'initialize' is deprecated: Use registerNatives() instead. [-Wdeprecated-declarations]
+2026-05-04T16:45:18.6842890Z C/C++:    13 |   return margelo::nitro::iap::initialize(vm);
+2026-05-04T16:45:18.6872791Z C/C++:       |                               ^
+2026-05-04T16:45:18.6934081Z C/C++: /home/runner/work/keepeat/keepeat/frontend/node_modules/react-native-iap/android/../nitrogen/generated/android/NitroIapOnLoad.hpp:14:5: note: 'initialize' has been explicitly marked deprecated here
+2026-05-04T16:45:18.6992948Z C/C++:    14 |   [[deprecated("Use registerNatives() instead.")]]
+2026-05-04T16:45:18.7022670Z C/C++:       |     ^
+2026-05-04T16:45:18.7052548Z C/C++: 1 warning generated.
+2026-05-04T16:47:02.4682545Z 
+2026-05-04T16:47:02.4773299Z > Task :react-native-reanimated:buildCMakeDebug[armeabi-v7a][reanimated]
+2026-05-04T16:47:24.2684280Z > Task :react-native-iap:configureCMakeDebug[x86]
+2026-05-04T16:47:28.1722602Z 
+2026-05-04T16:47:28.1783351Z > Task :react-native-iap:buildCMakeDebug[x86]
+2026-05-04T16:47:28.1893805Z C/C++: ninja: Entering directory `/home/runner/work/keepeat/keepeat/frontend/node_modules/react-native-iap/android/.cxx/Debug/296x3h87/x86'
+2026-05-04T16:47:28.1924052Z C/C++: /home/runner/work/keepeat/keepeat/frontend/node_modules/react-native-iap/android/src/main/cpp/cpp-adapter.cpp:13:31: warning: 'initialize' is deprecated: Use registerNatives() instead. [-Wdeprecated-declarations]
+2026-05-04T16:47:28.1983542Z C/C++:    13 |   return margelo::nitro::iap::initialize(vm);
+2026-05-04T16:47:28.2042745Z C/C++:       |                               ^
+2026-05-04T16:47:28.2104019Z C/C++: /home/runner/work/keepeat/keepeat/frontend/node_modules/react-native-iap/android/../nitrogen/generated/android/NitroIapOnLoad.hpp:14:5: note: 'initialize' has been explicitly marked deprecated here
+2026-05-04T16:47:28.2183081Z C/C++:    14 |   [[deprecated("Use registerNatives() instead.")]]
+2026-05-04T16:47:28.2232746Z C/C++:       |     ^
+2026-05-04T16:47:28.2272780Z C/C++: 1 warning generated.
+2026-05-04T16:49:32.2668445Z 
+2026-05-04T16:49:32.2743294Z > Task :react-native-reanimated:buildCMakeDebug[x86][reanimated]
+2026-05-04T16:49:33.2683366Z > Task :react-native-iap:configureCMakeDebug[x86_64]
+2026-05-04T16:49:36.5722744Z 
+2026-05-04T16:49:36.5753453Z > Task :react-native-iap:buildCMakeDebug[x86_64]
+2026-05-04T16:49:36.5843852Z C/C++: ninja: Entering directory `/home/runner/work/keepeat/keepeat/frontend/node_modules/react-native-iap/android/.cxx/Debug/296x3h87/x86_64'
+2026-05-04T16:49:36.5874191Z C/C++: /home/runner/work/keepeat/keepeat/frontend/node_modules/react-native-iap/android/src/main/cpp/cpp-adapter.cpp:13:31: warning: 'initialize' is deprecated: Use registerNatives() instead. [-Wdeprecated-declarations]
+2026-05-04T16:49:36.5902992Z C/C++:    13 |   return margelo::nitro::iap::initialize(vm);
+2026-05-04T16:49:36.5962939Z C/C++:       |                               ^
+2026-05-04T16:49:36.5984094Z C/C++: /home/runner/work/keepeat/keepeat/frontend/node_modules/react-native-iap/android/../nitrogen/generated/android/NitroIapOnLoad.hpp:14:5: note: 'initialize' has been explicitly marked deprecated here
+2026-05-04T16:49:36.6033099Z C/C++:    14 |   [[deprecated("Use registerNatives() instead.")]]
+2026-05-04T16:49:36.6052657Z C/C++:       |     ^
+2026-05-04T16:49:36.6112723Z C/C++: 1 warning generated.
+2026-05-04T16:51:40.0692530Z 
+2026-05-04T16:51:40.0783233Z > Task :react-native-iap:mergeDebugNativeLibs
+2026-05-04T16:51:40.3683059Z > Task :react-native-iap:stripDebugDebugSymbols
+2026-05-04T16:51:40.4693460Z > Task :react-native-iap:copyDebugJniLibsProjectAndLocalJars
+2026-05-04T16:51:41.7673320Z > Task :react-native-iap:copyDebugJniLibsProjectOnly
+2026-05-04T16:51:41.9694328Z > Task :react-native-iap:bundleDebugAar
+2026-05-04T16:51:41.9752975Z > Task :react-native-iap:assembleDebug
+2026-05-04T16:52:01.1669320Z > Task :react-native-reanimated:buildCMakeDebug[x86_64][reanimated]
+2026-05-04T16:52:48.8669097Z > Task :react-native-reanimated:externalNativeBuildDebug
+2026-05-04T16:52:49.3763499Z > Task :react-native-reanimated:prefabDebugPackage
+2026-05-04T16:52:51.4673296Z > Task :react-native-reanimated:mergeDebugNativeLibs
+2026-05-04T16:52:53.5693492Z > Task :react-native-reanimated:copyDebugJniLibsProjectOnly
+2026-05-04T16:52:53.7673480Z > Task :react-native-reanimated:stripDebugDebugSymbols
+2026-05-04T16:52:55.2673479Z > Task :react-native-reanimated:copyDebugJniLibsProjectAndLocalJars
+2026-05-04T16:52:56.1683447Z > Task :react-native-gesture-handler:buildCMakeDebug[arm64-v8a]
+2026-05-04T16:53:02.0669035Z > Task :react-native-gesture-handler:buildCMakeDebug[armeabi-v7a]
+2026-05-04T16:53:09.9053333Z > Task :react-native-gesture-handler:buildCMakeDebug[x86]
+2026-05-04T16:53:16.6682910Z > Task :react-native-gesture-handler:buildCMakeDebug[x86_64]
+2026-05-04T16:53:16.7684761Z > Task :react-native-gesture-handler:mergeDebugNativeLibs
+2026-05-04T16:53:16.9688197Z > Task :react-native-gesture-handler:stripDebugDebugSymbols
+2026-05-04T16:53:16.9692869Z > Task :react-native-gesture-handler:copyDebugJniLibsProjectAndLocalJars
+2026-05-04T16:53:16.9733023Z > Task :react-native-gesture-handler:copyDebugJniLibsProjectOnly
+2026-05-04T16:53:17.0669112Z > Task :react-native-gesture-handler:bundleDebugAar
+2026-05-04T16:53:17.0702802Z > Task :react-native-gesture-handler:assembleDebug
+2026-05-04T16:53:19.3693252Z > Task :app:buildCMakeDebug[arm64-v8a]
+2026-05-04T16:53:25.2669225Z > Task :react-native-reanimated:bundleDebugAar
+2026-05-04T16:53:45.2673862Z > Task :react-native-reanimated:assembleDebug
+2026-05-04T16:54:39.2683587Z > Task :app:buildCMakeDebug[armeabi-v7a]
+2026-05-04T16:55:47.8693234Z > Task :app:buildCMakeDebug[x86]
+2026-05-04T16:56:56.5694285Z > Task :app:buildCMakeDebug[x86_64]
+2026-05-04T16:57:40.8670751Z > Task :app:mergeDebugNativeLibs
+2026-05-04T16:57:42.1669444Z > Task :app:stripDebugDebugSymbols
+2026-05-04T16:57:43.7683271Z > Task :app:packageDebug
+2026-05-04T16:57:43.7702672Z > Task :app:createDebugApkListingFileRedirect
+2026-05-04T16:57:43.7732808Z > Task :app:assembleDebug
+2026-05-04T16:57:43.7762252Z 
+2026-05-04T16:57:43.7793419Z [Incubating] Problems report is available at: file:///home/runner/work/keepeat/keepeat/frontend/android/build/reports/problems/problems-report.html
+2026-05-04T16:57:43.7822240Z 
+2026-05-04T16:57:43.7844635Z Deprecated Gradle features were used in this build, making it incompatible with Gradle 9.0.
+2026-05-04T16:57:43.7872277Z 
+2026-05-04T16:57:43.7873347Z You can use '--warning-mode all' to show the individual deprecation warnings and determine if they come from your own scripts or plugins.
+2026-05-04T16:57:43.7874229Z 
+2026-05-04T16:57:43.7875353Z For more on this, please refer to https://docs.gradle.org/8.14.3/userguide/command_line_interface.html#sec:command_line_warnings in the Gradle documentation.
+2026-05-04T16:57:43.7876305Z 
+2026-05-04T16:57:43.7876490Z BUILD SUCCESSFUL in 22m 5s
+2026-05-04T16:57:43.7876968Z 601 actionable tasks: 601 executed
+2026-05-04T16:57:44.3451131Z ##[group]Run set -euo pipefail
+2026-05-04T16:57:44.3451633Z [36;1mset -euo pipefail[0m
+2026-05-04T16:57:44.3452488Z [36;1mmkdir -p e2e-apk[0m
+2026-05-04T16:57:44.3452932Z [36;1mcat > e2e-apk/apk-build-metadata.json <<EOF[0m
+2026-05-04T16:57:44.3453394Z [36;1m{[0m
+2026-05-04T16:57:44.3453803Z [36;1m  "head_sha": "fe2028bb3d5069962828ba00696a6c4963e2eb89",[0m
+2026-05-04T16:57:44.3454324Z [36;1m  "build_run_id": "25330693711",[0m
+2026-05-04T16:57:44.3454811Z [36;1m  "backend_url_e2e": "http://10.0.2.2:8000",[0m
+2026-05-04T16:57:44.3455411Z [36;1m  "build_timestamp": "$(date -u +%Y-%m-%dT%H:%M:%SZ)",[0m
+2026-05-04T16:57:44.3455897Z [36;1m  "package_name": "com.fesperiquette.keepeat",[0m
+2026-05-04T16:57:44.3456313Z [36;1m  "app_variant": "debug"[0m
+2026-05-04T16:57:44.3456696Z [36;1m}[0m
+2026-05-04T16:57:44.3456978Z [36;1mEOF[0m
+2026-05-04T16:57:44.3457320Z [36;1mecho "✅ APK build metadata created:"[0m
+2026-05-04T16:57:44.3457905Z [36;1mcat e2e-apk/apk-build-metadata.json[0m
+2026-05-04T16:57:44.6293499Z shell: /usr/bin/bash -e {0}
+2026-05-04T16:57:44.6293789Z env:
+2026-05-04T16:57:44.6294120Z   JAVA_HOME: /opt/hostedtoolcache/Java_Temurin-Hotspot_jdk/17.0.18-8/x64
+2026-05-04T16:57:44.6294619Z   JAVA_HOME_17_X64: /opt/hostedtoolcache/Java_Temurin-Hotspot_jdk/17.0.18-8/x64
+2026-05-04T16:57:44.6295048Z   EXPO_PUBLIC_BACKEND_URL: http://10.0.2.2:8000
+2026-05-04T16:57:44.6295332Z ##[endgroup]
+2026-05-04T16:57:44.6401574Z ✅ APK build metadata created:
+2026-05-04T16:57:44.6412249Z {
+2026-05-04T16:57:44.6412976Z   "head_sha": "fe2028bb3d5069962828ba00696a6c4963e2eb89",
+2026-05-04T16:57:44.6413536Z   "build_run_id": "25330693711",
+2026-05-04T16:57:44.6413968Z   "backend_url_e2e": "http://10.0.2.2:8000",
+2026-05-04T16:57:44.6414305Z   "build_timestamp": "2026-05-04T16:57:44Z",
+2026-05-04T16:57:44.6414629Z   "package_name": "com.fesperiquette.keepeat",
+2026-05-04T16:57:44.6415042Z   "app_variant": "debug"
+2026-05-04T16:57:44.6415387Z }
+2026-05-04T16:57:44.6449209Z ##[group]Run set -euo pipefail
+2026-05-04T16:57:44.6449538Z [36;1mset -euo pipefail[0m
+2026-05-04T16:57:44.6449801Z [36;1m[0m
+2026-05-04T16:57:44.6450000Z [36;1mAPK_READY="false"[0m
+2026-05-04T16:57:44.6450229Z [36;1mAPK_SOURCE="none"[0m
+2026-05-04T16:57:44.6450448Z [36;1mSOURCE_RUN_ID=""[0m
+2026-05-04T16:57:44.6450696Z [36;1mSOURCE_HEAD_SHA=""[0m
+2026-05-04T16:57:44.6450930Z [36;1m[0m
+2026-05-04T16:57:44.6451162Z [36;1m# Check if APK was built in current run[0m
+2026-05-04T16:57:44.6451541Z [36;1mif [ "true" = "true" ] && [ -f e2e-apk/app-debug.apk ]; then[0m
+2026-05-04T16:57:44.6451881Z [36;1m  APK_READY="true"[0m
+2026-05-04T16:57:44.6452366Z [36;1m  APK_SOURCE="built"[0m
+2026-05-04T16:57:44.6452616Z [36;1m  SOURCE_RUN_ID="25330693711"[0m
+2026-05-04T16:57:44.6453116Z [36;1m  SOURCE_HEAD_SHA="fe2028bb3d5069962828ba00696a6c4963e2eb89"[0m
+2026-05-04T16:57:44.6453706Z [36;1m# Check if APK was reused from a previous run[0m
+2026-05-04T16:57:44.6454339Z [36;1melif [ "false" = "true" ] && [ -f e2e-apk/app-debug.apk ]; then[0m
+2026-05-04T16:57:44.6454871Z [36;1m  APK_READY="true"[0m
+2026-05-04T16:57:44.6455240Z [36;1m  APK_SOURCE="reused"[0m
+2026-05-04T16:57:44.6455612Z [36;1m  SOURCE_RUN_ID=""[0m
+2026-05-04T16:57:44.6455966Z [36;1m  SOURCE_HEAD_SHA=""[0m
+2026-05-04T16:57:44.6456315Z [36;1mfi[0m
+2026-05-04T16:57:44.6456591Z [36;1m[0m
+2026-05-04T16:57:44.6456907Z [36;1mecho "apk_ready=$APK_READY" >> "$GITHUB_OUTPUT"[0m
+2026-05-04T16:57:44.6457267Z [36;1mecho "apk_source=$APK_SOURCE" >> "$GITHUB_OUTPUT"[0m
+2026-05-04T16:57:44.6457807Z [36;1mecho "source_run_id=$SOURCE_RUN_ID" >> "$GITHUB_OUTPUT"[0m
+2026-05-04T16:57:44.6458451Z [36;1mecho "source_head_sha=$SOURCE_HEAD_SHA" >> "$GITHUB_OUTPUT"[0m
+2026-05-04T16:57:44.6458970Z [36;1m[0m
+2026-05-04T16:57:44.6459301Z [36;1m# Compute diagnostic flags for logging[0m
+2026-05-04T16:57:44.6459751Z [36;1mTRY_REUSE_APK="false"[0m
+2026-05-04T16:57:44.6460197Z [36;1mif [ "true" = "false" ] && [ "true" = "true" ]; then[0m
+2026-05-04T16:57:44.6460682Z [36;1m  TRY_REUSE_APK="true"[0m
+2026-05-04T16:57:44.6461048Z [36;1mfi[0m
+2026-05-04T16:57:44.6461608Z [36;1mREUSE_APK_SUCCESS="false"[0m
+2026-05-04T16:57:44.6461894Z [36;1mif [ "$APK_SOURCE" = "reused" ]; then[0m
+2026-05-04T16:57:44.6462470Z [36;1m  REUSE_APK_SUCCESS="true"[0m
+2026-05-04T16:57:44.6462725Z [36;1mfi[0m
+2026-05-04T16:57:44.6463014Z [36;1m[0m
+2026-05-04T16:57:44.6463331Z [36;1mecho "try_reuse_apk=$TRY_REUSE_APK"[0m
+2026-05-04T16:57:44.6463827Z [36;1mecho "reuse_apk_success=$REUSE_APK_SUCCESS"[0m
+2026-05-04T16:57:44.6464334Z [36;1mecho "build_apk_step_should_run=true"[0m
+2026-05-04T16:57:44.6465173Z [36;1mecho "APK final decision: mobile_apk_required=true maestro_required=true apk_ready=$APK_READY apk_source=$APK_SOURCE source_run_id=$SOURCE_RUN_ID source_head_sha=$SOURCE_HEAD_SHA"[0m
+2026-05-04T16:57:44.6466449Z [36;1mecho "try_reuse_apk=$TRY_REUSE_APK reuse_apk_success=$REUSE_APK_SUCCESS build_apk_step_should_run=true"[0m
+2026-05-04T16:57:44.6493448Z shell: /usr/bin/bash -e {0}
+2026-05-04T16:57:44.6493712Z env:
+2026-05-04T16:57:44.6494105Z   JAVA_HOME: /opt/hostedtoolcache/Java_Temurin-Hotspot_jdk/17.0.18-8/x64
+2026-05-04T16:57:44.6494869Z   JAVA_HOME_17_X64: /opt/hostedtoolcache/Java_Temurin-Hotspot_jdk/17.0.18-8/x64
+2026-05-04T16:57:44.6495450Z ##[endgroup]
+2026-05-04T16:57:44.6543272Z try_reuse_apk=false
+2026-05-04T16:57:44.6543853Z reuse_apk_success=false
+2026-05-04T16:57:44.6548608Z build_apk_step_should_run=true
+2026-05-04T16:57:44.6568078Z APK final decision: mobile_apk_required=true maestro_required=true apk_ready=true apk_source=built source_run_id=25330693711 source_head_sha=fe2028bb3d5069962828ba00696a6c4963e2eb89
+2026-05-04T16:57:44.6572223Z try_reuse_apk=false reuse_apk_success=false build_apk_step_should_run=true
+2026-05-04T16:57:44.6609421Z ##[group]Run set -euo pipefail
+2026-05-04T16:57:44.6609910Z [36;1mset -euo pipefail[0m
+2026-05-04T16:57:44.6610164Z [36;1m[0m
+2026-05-04T16:57:44.6610433Z [36;1mEXPECTED_E2E_BACKEND_URL="http://10.0.2.2:8000"[0m
+2026-05-04T16:57:44.6610793Z [36;1mAPK_BACKEND_URL_FROM_METADATA=""[0m
+2026-05-04T16:57:44.6611101Z [36;1mAPK_METADATA_EXISTS="false"[0m
+2026-05-04T16:57:44.6611458Z [36;1m[0m
+2026-05-04T16:57:44.6611828Z [36;1mif [ -f e2e-apk/apk-build-metadata.json ]; then[0m
+2026-05-04T16:57:44.6612619Z [36;1m  APK_METADATA_EXISTS="true"[0m
+2026-05-04T16:57:44.6613443Z [36;1m  APK_BACKEND_URL_FROM_METADATA="$(jq -r '.backend_url_e2e // empty' e2e-apk/apk-build-metadata.json 2>/dev/null || echo '')"[0m
+2026-05-04T16:57:44.6614277Z [36;1mfi[0m
+2026-05-04T16:57:44.6614544Z [36;1m[0m
+2026-05-04T16:57:44.6614875Z [36;1mecho "=========================================="[0m
+2026-05-04T16:57:44.6615425Z [36;1mecho "APK Backend URL Compatibility Diagnostics"[0m
+2026-05-04T16:57:44.6615993Z [36;1mecho "=========================================="[0m
+2026-05-04T16:57:44.6616459Z [36;1mecho "APK source: built"[0m
+2026-05-04T16:57:44.6616940Z [36;1mecho "Expected E2E backend URL: $EXPECTED_E2E_BACKEND_URL"[0m
+2026-05-04T16:57:44.6617544Z [36;1mecho "APK metadata exists: $APK_METADATA_EXISTS"[0m
+2026-05-04T16:57:44.6618103Z [36;1mif [ "$APK_METADATA_EXISTS" = "true" ]; then[0m
+2026-05-04T16:57:44.6618715Z [36;1m  echo "APK metadata file: e2e-apk/apk-build-metadata.json"[0m
+2026-05-04T16:57:44.6619405Z [36;1m  echo "APK backend URL from metadata: $APK_BACKEND_URL_FROM_METADATA"[0m
+2026-05-04T16:57:44.6619935Z [36;1m  if [ -z "$APK_BACKEND_URL_FROM_METADATA" ]; then[0m
+2026-05-04T16:57:44.6620349Z [36;1m    echo "⚠️  WARNING: APK metadata missing backend_url_e2e field"[0m
+2026-05-04T16:57:44.6621125Z [36;1m  elif [ "$APK_BACKEND_URL_FROM_METADATA" = "$EXPECTED_E2E_BACKEND_URL" ]; then[0m
+2026-05-04T16:57:44.6621843Z [36;1m    echo "✅ APK backend URL is E2E compatible"[0m
+2026-05-04T16:57:44.6622486Z [36;1m  else[0m
+2026-05-04T16:57:44.6622909Z [36;1m    echo "❌ APK backend URL is INCOMPATIBLE with E2E:"[0m
+2026-05-04T16:57:44.6623563Z [36;1m    echo "   APK will connect to: $APK_BACKEND_URL_FROM_METADATA"[0m
+2026-05-04T16:57:44.6624207Z [36;1m    echo "   E2E test expects:   $EXPECTED_E2E_BACKEND_URL"[0m
+2026-05-04T16:57:44.6625123Z [36;1m    echo "   Consequence: App login requests will NOT reach local backend"[0m
+2026-05-04T16:57:44.6625497Z [36;1m  fi[0m
+2026-05-04T16:57:44.6625686Z [36;1melse[0m
+2026-05-04T16:57:44.6626006Z [36;1m  echo "⚠️  WARNING: APK metadata not available - cannot verify backend URL"[0m
+2026-05-04T16:57:44.6626559Z [36;1m  if [ "built" = "reused" ]; then[0m
+2026-05-04T16:57:44.6626994Z [36;1m    echo "   Reused APK has no provenance metadata"[0m
+2026-05-04T16:57:44.6627392Z [36;1m    echo "   Backend URL is unknown - app may use incorrect URL"[0m
+2026-05-04T16:57:44.6627742Z [36;1m  fi[0m
+2026-05-04T16:57:44.6628063Z [36;1mfi[0m
+2026-05-04T16:57:44.6628417Z [36;1mecho "=========================================="[0m
+2026-05-04T16:57:44.6653028Z shell: /usr/bin/bash -e {0}
+2026-05-04T16:57:44.6653512Z env:
+2026-05-04T16:57:44.6653839Z   JAVA_HOME: /opt/hostedtoolcache/Java_Temurin-Hotspot_jdk/17.0.18-8/x64
+2026-05-04T16:57:44.6654350Z   JAVA_HOME_17_X64: /opt/hostedtoolcache/Java_Temurin-Hotspot_jdk/17.0.18-8/x64
+2026-05-04T16:57:44.6654746Z ##[endgroup]
+2026-05-04T16:57:44.6754276Z ==========================================
+2026-05-04T16:57:44.6755019Z APK Backend URL Compatibility Diagnostics
+2026-05-04T16:57:44.6755834Z ==========================================
+2026-05-04T16:57:44.6756268Z APK source: built
+2026-05-04T16:57:44.6757387Z Expected E2E backend URL: http://10.0.2.2:8000
+2026-05-04T16:57:44.6758275Z APK metadata exists: true
+2026-05-04T16:57:44.6759239Z APK metadata file: e2e-apk/apk-build-metadata.json
+2026-05-04T16:57:44.6760133Z APK backend URL from metadata: http://10.0.2.2:8000
+2026-05-04T16:57:44.6761302Z ✅ APK backend URL is E2E compatible
+2026-05-04T16:57:44.6762266Z ==========================================
+2026-05-04T16:57:44.6834021Z ##[group]Run actions/upload-artifact@v4
+2026-05-04T16:57:44.6834458Z with:
+2026-05-04T16:57:44.6834759Z   name: android-debug-apk
+2026-05-04T16:57:44.6835139Z   path: e2e-apk/app-debug.apk
+2026-05-04T16:57:44.6835467Z   if-no-files-found: warn
+2026-05-04T16:57:44.6835836Z   compression-level: 6
+2026-05-04T16:57:44.6836142Z   overwrite: false
+2026-05-04T16:57:44.6836457Z   include-hidden-files: false
+2026-05-04T16:57:44.6837016Z env:
+2026-05-04T16:57:44.6837461Z   JAVA_HOME: /opt/hostedtoolcache/Java_Temurin-Hotspot_jdk/17.0.18-8/x64
+2026-05-04T16:57:44.6838221Z   JAVA_HOME_17_X64: /opt/hostedtoolcache/Java_Temurin-Hotspot_jdk/17.0.18-8/x64
+2026-05-04T16:57:44.6838823Z ##[endgroup]
+2026-05-04T16:57:44.9233887Z With the provided path, there will be 1 file uploaded
+2026-05-04T16:57:44.9237263Z Artifact name is valid!
+2026-05-04T16:57:44.9238531Z Root directory input is valid!
+2026-05-04T16:57:45.1004520Z Beginning upload of artifact content to blob storage
+2026-05-04T16:57:45.7567523Z Uploaded bytes 8388608
+2026-05-04T16:57:46.0117568Z Uploaded bytes 16777216
+2026-05-04T16:57:46.7515983Z Uploaded bytes 25165824
+2026-05-04T16:57:47.3837019Z Uploaded bytes 33554432
+2026-05-04T16:57:48.0113633Z Uploaded bytes 41943040
+2026-05-04T16:57:48.6073334Z Uploaded bytes 50331648
+2026-05-04T16:57:49.2820601Z Uploaded bytes 58720256
+2026-05-04T16:57:50.0323137Z Uploaded bytes 67108864
+2026-05-04T16:57:50.9537448Z Uploaded bytes 75497472
+2026-05-04T16:57:51.7115950Z Uploaded bytes 83886080
+2026-05-04T16:57:52.5287394Z Uploaded bytes 92274688
+2026-05-04T16:57:52.9183704Z Uploaded bytes 100663296
+2026-05-04T16:57:52.9977807Z Uploaded bytes 103413048
+2026-05-04T16:57:53.0161616Z Finished uploading artifact content to blob storage!
+2026-05-04T16:57:53.0165406Z SHA256 digest of uploaded artifact zip is 2a4f41c564764cf319aaa8ed590c97843c0b59ae5e7bdd88c9e30b7b4dce43ac
+2026-05-04T16:57:53.0167607Z Finalizing artifact upload
+2026-05-04T16:57:53.1721168Z Artifact android-debug-apk.zip successfully finalized. Artifact ID 6788839215
+2026-05-04T16:57:53.1722779Z Artifact android-debug-apk has been successfully uploaded! Final size is 103413048 bytes. Artifact ID is 6788839215
+2026-05-04T16:57:53.1731244Z Artifact download URL: https://github.com/fesperiquette82/keepeat/actions/runs/25330693711/artifacts/6788839215
+2026-05-04T16:57:53.1886985Z ##[group]Run actions/upload-artifact@v4
+2026-05-04T16:57:53.1887287Z with:
+2026-05-04T16:57:53.1887511Z   name: apk-build-metadata
+2026-05-04T16:57:53.1887781Z   path: e2e-apk/apk-build-metadata.json
+2026-05-04T16:57:53.1888071Z   if-no-files-found: warn
+2026-05-04T16:57:53.1903438Z   compression-level: 6
+2026-05-04T16:57:53.1903813Z   overwrite: false
+2026-05-04T16:57:53.1904133Z   include-hidden-files: false
+2026-05-04T16:57:53.1904474Z env:
+2026-05-04T16:57:53.1904892Z   JAVA_HOME: /opt/hostedtoolcache/Java_Temurin-Hotspot_jdk/17.0.18-8/x64
+2026-05-04T16:57:53.1905380Z   JAVA_HOME_17_X64: /opt/hostedtoolcache/Java_Temurin-Hotspot_jdk/17.0.18-8/x64
+2026-05-04T16:57:53.1905750Z ##[endgroup]
+2026-05-04T16:57:53.4043594Z With the provided path, there will be 1 file uploaded
+2026-05-04T16:57:53.4044214Z Artifact name is valid!
+2026-05-04T16:57:53.4063139Z Root directory input is valid!
+2026-05-04T16:57:53.5409040Z Beginning upload of artifact content to blob storage
+2026-05-04T16:57:53.6043172Z Uploaded bytes 347
+2026-05-04T16:57:53.6226269Z Finished uploading artifact content to blob storage!
+2026-05-04T16:57:53.6229213Z SHA256 digest of uploaded artifact zip is f792c6e039755ad9131a1cf124b2e789ac63a49f006af3cbac9d828c739bc546
+2026-05-04T16:57:53.6231173Z Finalizing artifact upload
+2026-05-04T16:57:53.7410889Z Artifact apk-build-metadata.zip successfully finalized. Artifact ID 6788839390
+2026-05-04T16:57:53.7412670Z Artifact apk-build-metadata has been successfully uploaded! Final size is 347 bytes. Artifact ID is 6788839390
+2026-05-04T16:57:53.7420188Z Artifact download URL: https://github.com/fesperiquette82/keepeat/actions/runs/25330693711/artifacts/6788839390
+2026-05-04T16:57:53.7561155Z Post job cleanup.
+2026-05-04T16:57:53.9152504Z Cache hit occurred on the primary key setup-java-Linux-x64-gradle-ffbbd95830615dda34e1501a1f85f6ebf4dc6fce97208760cbf1aada27b7a181, not saving cache.
+2026-05-04T16:57:53.9297316Z Post job cleanup.
+2026-05-04T16:57:54.0578496Z (node:8722) [DEP0040] DeprecationWarning: The `punycode` module is deprecated. Please use a userland alternative instead.
+2026-05-04T16:57:54.0579789Z (Use `node --trace-deprecation ...` to show where the warning was created)
+2026-05-04T16:57:54.0581699Z Cache hit occurred on the primary key node-cache-Linux-x64-npm-07ee83690cbaac8c828e80941ec81b0f066556f5660a774826e9a87521fb671f, not saving cache.
+2026-05-04T16:57:54.0740943Z Post job cleanup.
+2026-05-04T16:57:54.1598045Z [command]/usr/bin/git version
+2026-05-04T16:57:54.1667036Z git version 2.53.0
+2026-05-04T16:57:54.1702322Z Temporarily overriding HOME='/home/runner/work/_temp/97114e3a-a959-4e89-a63e-c7b458b84a7a' before making global git config changes
+2026-05-04T16:57:54.1703746Z Adding repository directory to the temporary git global config as a safe directory
+2026-05-04T16:57:54.1707473Z [command]/usr/bin/git config --global --add safe.directory /home/runner/work/keepeat/keepeat
+2026-05-04T16:57:54.1743398Z [command]/usr/bin/git config --local --name-only --get-regexp core\.sshCommand
+2026-05-04T16:57:54.1777136Z [command]/usr/bin/git submodule foreach --recursive sh -c "git config --local --name-only --get-regexp 'core\.sshCommand' && git config --local --unset-all 'core.sshCommand' || :"
+2026-05-04T16:57:54.2054559Z [command]/usr/bin/git config --local --name-only --get-regexp http\.https\:\/\/github\.com\/\.extraheader
+2026-05-04T16:57:54.2078540Z http.https://github.com/.extraheader
+2026-05-04T16:57:54.2088666Z [command]/usr/bin/git config --local --unset-all http.https://github.com/.extraheader
+2026-05-04T16:57:54.2120269Z [command]/usr/bin/git submodule foreach --recursive sh -c "git config --local --name-only --get-regexp 'http\.https\:\/\/github\.com\/\.extraheader' && git config --local --unset-all 'http.https://github.com/.extraheader' || :"
+2026-05-04T16:57:54.2361116Z [command]/usr/bin/git config --local --name-only --get-regexp ^includeIf\.gitdir:
+2026-05-04T16:57:54.2393089Z [command]/usr/bin/git submodule foreach --recursive git config --local --show-origin --name-only --get-regexp remote.origin.url
+2026-05-04T16:57:54.2778043Z Evaluate and set job outputs
+2026-05-04T16:57:54.2783673Z Set output 'apk_ready'
+2026-05-04T16:57:54.2785298Z Set output 'apk_source'
+2026-05-04T16:57:54.2786081Z Set output 'source_run_id'
+2026-05-04T16:57:54.2786466Z Set output 'source_head_sha'
+2026-05-04T16:57:54.2787099Z Cleaning up orphan processes
+2026-05-04T16:57:54.3125338Z ##[warning]Node.js 20 actions are deprecated. The following actions are running on Node.js 20 and may not work as expected: actions/upload-artifact@v4. Actions will be forced to run with Node.js 24 by default starting June 2nd, 2026. Node.js 20 will be removed from the runner on September 16th, 2026. Please check if updated versions of these actions are available that support Node.js 24. To opt into Node.js 24 now, set the FORCE_JAVASCRIPT_ACTIONS_TO_NODE24=true environment variable on the runner or in your workflow file. Once Node.js 24 becomes the default, you can temporarily opt out by setting ACTIONS_ALLOW_USE_UNSECURE_NODE_VERSION=true. For more information see: https://github.blog/changelog/2025-09-19-deprecation-of-node-20-on-github-actions-runners/

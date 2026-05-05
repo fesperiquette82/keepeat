@@ -202,6 +202,8 @@ export default function LoginScreen() {
                   autoCapitalize="none"
                   autoComplete="email"
                   importantForAutofill="yes"
+                  editable={true}
+                  selectTextOnFocus={false}
                 />
               </View>
             </View>
