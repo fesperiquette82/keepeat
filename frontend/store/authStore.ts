@@ -171,7 +171,8 @@ export const useAuthStore = create<AuthStore>((set) => ({
           hasBiometricCredentials = true;
         } catch (biometricError) {
           if (!isBiometricAuthenticationCancellationError(biometricError)) {
-            throw biometricError;
+            console.warn('[AUTH_STORE] biometric save failed (non-cancellation), continuing without biometric', biometricError);
+            hasBiometricCredentials = false;
           }
         }
       }
@@ -298,12 +299,16 @@ export const useAuthStore = create<AuthStore>((set) => ({
 
   refreshEntitlements: async () => {
     const token = useAuthStore.getState().token;
-    if (!token) return;
+    if (!token) {
+      console.log('[AUTH_STORE] refreshEntitlements skipped: no token');
+      return;
+    }
     try {
       const response = await fetch(buildApiUrl('/api/billing/entitlements'), {
         headers: { Authorization: `Bearer ${token}` },
       });
       if (response.status === 401) {
+        console.warn('[AUTH_STORE] refreshEntitlements: 401 Unauthorized, logging out');
         await useAuthStore.getState().logout();
         return;
       }
@@ -312,6 +317,7 @@ export const useAuthStore = create<AuthStore>((set) => ({
         throw new Error(data?.detail || `Error ${response.status}`);
       }
       const entitlements = data as BillingEntitlements;
+      console.log('[AUTH_STORE] refreshEntitlements succeeded', { plan: entitlements.plan });
       set((state) => ({
         entitlements,
         plan: entitlements.plan,
@@ -324,18 +330,23 @@ export const useAuthStore = create<AuthStore>((set) => ({
         await SecureStore.setItemAsync(USER_KEY, JSON.stringify(nextUser));
       }
     } catch (err: any) {
+      console.error('[AUTH_STORE] refreshEntitlements failed', { message: err.message });
       set({ error: err.message || 'Erreur de synchronisation premium' });
     }
   },
 
   refreshUsage: async () => {
     const token = useAuthStore.getState().token;
-    if (!token) return;
+    if (!token) {
+      console.log('[AUTH_STORE] refreshUsage skipped: no token');
+      return;
+    }
     try {
       const response = await fetch(buildApiUrl('/api/billing/usage'), {
         headers: { Authorization: `Bearer ${token}` },
       });
       if (response.status === 401) {
+        console.warn('[AUTH_STORE] refreshUsage: 401 Unauthorized, logging out');
         await useAuthStore.getState().logout();
         return;
       }
@@ -343,8 +354,10 @@ export const useAuthStore = create<AuthStore>((set) => ({
       if (!response.ok) {
         throw new Error(data?.detail || `Error ${response.status}`);
       }
+      console.log('[AUTH_STORE] refreshUsage succeeded');
       set({ usage: data as BillingUsage });
     } catch (err: any) {
+      console.error('[AUTH_STORE] refreshUsage failed', { message: err.message });
       set({ error: err.message || 'Erreur de synchronisation quota' });
     }
   },
