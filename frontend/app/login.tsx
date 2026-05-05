@@ -79,6 +79,7 @@ export default function LoginScreen() {
       logger.error('[LOGIN_FORM] authStore.login() failed', err);
       if (err.message === 'EMAIL_NOT_VERIFIED') {
         logger.info('[LOGIN_FORM] email not verified');
+        clearError();
         setEmailNotVerified(true);
       } else {
         logger.error('[LOGIN_FORM] login error', { message: err.message });
