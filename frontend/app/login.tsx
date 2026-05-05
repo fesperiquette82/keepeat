@@ -18,6 +18,7 @@ import { useAuthStore } from '../store/authStore';
 import { useLanguageStore } from '../store/languageStore';
 import { APP_CONFIG } from '../utils/appConfig';
 import { shouldDisplayBiometricLoginButton } from '../utils/biometricAuth';
+import { logger } from '../utils/logger';
 
 
 export default function LoginScreen() {
