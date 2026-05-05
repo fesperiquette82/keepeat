@@ -16,8 +16,8 @@ const mockLanguageStore = {
 };
 
 const mockRouter = {
-  push: (path) => {},
-  replace: (path) => {},
+  push: (path: string) => {},
+  replace: (path: string) => {},
 };
 
 test('LoginScreen: email not verified message displayed without duplicate error', () => {
