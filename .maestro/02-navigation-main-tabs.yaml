@@ -1,28 +1,66 @@
 appId: com.fesperiquette.keepeat
 ---
 - launchApp
+- waitForAnimationToEnd
+- takeScreenshot: 02-navigation-initial-state
+
+# If already authenticated, skip login
+- runFlow:
+    when:
+      visible:
+        id: tab-home
+    commands:
+      - takeScreenshot: 02-navigation-already-authenticated
+
+# If login screen is visible, perform login
 - runFlow:
     when:
       visible:
         id: login-email-input
     commands:
+      - takeScreenshot: 02-navigation-login-screen-visible
       - tapOn:
           id: login-email-input
       - inputText: e2e.free@keepeat.test
       - tapOn:
           id: login-password-input
       - inputText: TestPassword123!
+      - hideKeyboard
+      - waitForAnimationToEnd
       - tapOn:
           id: login-submit-button
+      - waitForAnimationToEnd
+      - takeScreenshot: 02-navigation-after-login-submit
+      - extendedWaitUntil:
+          visible:
+            id: tab-home
+          timeout: 60000
+
+# Final assertion: Home must be visible before testing navigation
 - assertVisible:
     id: tab-home
+
+# Test navigation to stock tab
+- takeScreenshot: 02-navigation-before-stock-tap
 - tapOn:
     id: tab-stock
+- waitForAnimationToEnd
+- takeScreenshot: 02-navigation-stock-screen
 - assertVisible:
     id: stock-screen-title
+
+# Test navigation to recipes tab
+- takeScreenshot: 02-navigation-before-recipes-tap
 - tapOn:
     id: tab-recipes
+- waitForAnimationToEnd
+- takeScreenshot: 02-navigation-recipes-screen
 - assertVisible: "Recettes"
+
+# Test navigation to stats tab
+- takeScreenshot: 02-navigation-before-stats-tap
 - tapOn:
     id: tab-stats
+- waitForAnimationToEnd
+- takeScreenshot: 02-navigation-stats-screen
 - assertVisible: "Stats"

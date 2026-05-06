@@ -48,7 +48,8 @@ Schéma :
 3. Si `mobile_apk_required=true` et `maestro_required=true` : job `PR smoke Maestro suite` (Mongo test + backend test-mode + download APK + flows smoke).
 4. Si `maestro_required=true` et `mobile_apk_required=false`, la CI tente de **réutiliser** un artifact `android-debug-apk` existant.
 5. Si un artifact valide est trouvé : exécution du smoke Maestro en téléchargeant l’APK depuis le `source_run_id` (sans rebuild local).
-6. Si aucun artifact valide n’est trouvé : job `Not required (changes filter)` avec message de skip explicite.
+6. Si aucun artifact valide n’est trouvé alors que `maestro_required=true` : le job de gate échoue explicitement avec :
+   `Maestro is required but no compatible APK artifact was found. Re-run with workflow_dispatch force_mobile_apk_build=true or provide a compatible APK artifact.`
 
 Le backend écoute sur `0.0.0.0:8000` en CI, et l’émulateur Android l’atteint via `10.0.2.2:8000`.
 
@@ -68,9 +69,12 @@ Maestro smoke est requis si un changement touche :
 - **ou** `scripts/run-maestro-e2e.sh` / `scripts/e2e-*`,
 - **ou** `.github/workflows/mobile-e2e.yml`.
 
-Si `maestro_required=true` mais `mobile_apk_required=false`, le workflow **ne recompile pas** l’APK ; s’il ne trouve aucune APK compatible à réutiliser, il skippe proprement avec le message :
-`No valid reusable APK was found for this PR/head SHA and rebuild was not required.`
-Ce skip doit rester explicite dans les logs CI (pas de masquage de skip Maestro).
+Si `maestro_required=true` mais `mobile_apk_required=false`, le workflow **ne recompile pas** l’APK ; il tente de réutiliser une APK compatible existante.
+- Si une APK compatible est trouvée : Maestro smoke s’exécute.
+- Si aucune APK compatible n’est trouvée : **échec explicite** (pas de skip vert silencieux) avec le message :
+  `Maestro is required but no compatible APK artifact was found. Re-run with workflow_dispatch force_mobile_apk_build=true or provide a compatible APK artifact.`
+- Politique CI : **pas de masquage de skip Maestro** quand `maestro_required=true` (doit être run ou fail explicite).
+- Le skip vert est autorisé uniquement quand `maestro_required=false`.
 
 ### Critères de validité pour réutiliser une APK
 - run GitHub Actions `Mobile E2E (Maestro)` en succès ;
@@ -89,7 +93,7 @@ Les changements purement backend/docs/policy ne doivent pas déclencher de build
 - `true` : force `mobile_apk_required=true` + build APK + smoke Maestro ;
 - `false` : conserve la détection automatique.
 
-Si aucun artifact réutilisable n’est trouvé, relancer manuellement avec `force_mobile_apk_build=true`.
+Si aucun artifact réutilisable n’est trouvé alors que Maestro est requis, relancer manuellement avec `force_mobile_apk_build=true`.
 
 Le filtre est maintenu manuellement. Donc si un jour un nouveau dossier ou fichier impactant l’application mobile est ajouté, il faudra l’ajouter explicitement à la liste des chemins qui déclenchent Mobile E2E.
 

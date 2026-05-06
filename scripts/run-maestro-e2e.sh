@@ -29,12 +29,20 @@ if [ "$MAESTRO_SUITE" != "smoke" ] && [ "$MAESTRO_SUITE" != "full" ]; then
   exit 2
 fi
 
-adb install -r e2e-apk/app-debug.apk
-
 ensure_emulator_ready() {
   echo "==> Verifying emulator connectivity"
   adb wait-for-device
   adb devices -l || true
+}
+
+forward_backend_to_emulator() {
+  echo "==> Setting up port forwarding for backend"
+  echo "Forwarding emulator localhost:8000 → runner backend 127.0.0.1:8000"
+  if adb reverse tcp:8000 tcp:8000; then
+    echo "✅ adb reverse tcp:8000 tcp:8000 succeeded"
+  else
+    echo "❌ adb reverse tcp:8000 tcp:8000 failed (non-blocking, app may use localhost)" >&2
+  fi
 }
 
 wait_for_boot_completed() {
@@ -55,6 +63,116 @@ wait_for_boot_completed() {
   return 1
 }
 
+wait_for_package_manager_ready() {
+  echo "==> Waiting for Android Package Manager to be ready"
+  local max_attempts=30
+  local attempt=1
+
+  while [ $attempt -le $max_attempts ]; do
+    if adb shell cmd package list packages >/dev/null 2>&1; then
+      echo "==> Android Package Manager is ready"
+      return 0
+    fi
+
+    local attempt_msg="(attempt $attempt/$max_attempts)"
+    if [ $((attempt % 5)) -eq 0 ]; then
+      echo "  Package Manager not ready yet $attempt_msg, retrying..."
+    fi
+
+    sleep 1
+    attempt=$((attempt + 1))
+  done
+
+  echo "Package Manager did not become ready within timeout ($max_attempts attempts)" >&2
+  echo "Diagnostics:" >&2
+  adb devices -l || true
+  adb shell getprop sys.boot_completed 2>/dev/null || echo "  (sys.boot_completed unavailable)" >&2
+  return 1
+}
+
+wait_for_settings_provider_ready() {
+  echo "==> Waiting for Android Settings provider to be ready"
+  local max_attempts=30
+  local attempt=1
+
+  while [ $attempt -le $max_attempts ]; do
+    if adb shell settings get global device_provisioned >/dev/null 2>&1; then
+      echo "==> Android Settings provider is ready"
+      return 0
+    fi
+
+    local attempt_msg="(attempt $attempt/$max_attempts)"
+    if [ $((attempt % 5)) -eq 0 ]; then
+      echo "  Settings provider not ready yet $attempt_msg, retrying..."
+    fi
+
+    sleep 1
+    attempt=$((attempt + 1))
+  done
+
+  echo "Settings provider did not become ready within timeout ($max_attempts attempts)" >&2
+  return 1
+}
+
+is_transient_install_error() {
+  local error_msg="$1"
+
+  # Check for known transient errors that should trigger retry
+  if echo "$error_msg" | grep -qiE "(can't find service|Cannot access system provider|device offline|device not found|Broken pipe|Package Manager not ready)"; then
+    return 0  # transient error
+  fi
+
+  return 1  # not transient
+}
+
+install_apk_with_retry() {
+  echo "==> Installing APK $E2E_ANDROID_APP_ID"
+  local max_attempts=3
+  local attempt=1
+  local last_error=""
+
+  while [ $attempt -le $max_attempts ]; do
+    last_error="$(adb install -r e2e-apk/app-debug.apk 2>&1)" || true
+
+    if [ $? -eq 0 ]; then
+      echo "✅ APK installation succeeded"
+      return 0
+    fi
+
+    echo "❌ APK installation attempt $attempt failed" >&2
+
+    if is_transient_install_error "$last_error"; then
+      echo "   Error is transient: $last_error" >&2
+      if [ $attempt -lt $max_attempts ]; then
+        echo "   Retrying in 3s..." >&2
+        sleep 3
+
+        echo "   Waiting for Android system to stabilize before retry..." >&2
+        if ! wait_for_package_manager_ready; then
+          echo "   Package Manager not ready on retry attempt $attempt" >&2
+        fi
+        if ! wait_for_activity_manager_ready; then
+          echo "   Activity Manager not ready on retry attempt $attempt" >&2
+        fi
+        if ! wait_for_settings_provider_ready; then
+          echo "   Settings provider not ready on retry attempt $attempt" >&2
+        fi
+      fi
+    else
+      echo "   Error appears non-transient: $last_error" >&2
+      echo "   Aborting (not retrying permanent failures like APK parsing, signature, etc)" >&2
+      echo "APK installation failed with non-transient error" >&2
+      return 1
+    fi
+
+    attempt=$((attempt + 1))
+  done
+
+  echo "APK installation failed after $max_attempts attempts" >&2
+  echo "Last error: $last_error" >&2
+  return 1
+}
+
 ensure_apk_installed() {
   echo "==> Verifying APK installation for $E2E_ANDROID_APP_ID"
   if ! adb shell pm list packages "$E2E_ANDROID_APP_ID" | tr -d '\r' | grep -q "package:$E2E_ANDROID_APP_ID"; then
@@ -64,12 +182,71 @@ ensure_apk_installed() {
   fi
 }
 
+diagnose_app_state_before_flows() {
+  echo "==> Diagnosing app state before launching flows"
+  echo "==> Launching app briefly to check initial screen"
+  adb shell am start -n "com.fesperiquette.keepeat/.MainActivity" 2>&1 || true
+  sleep 3
+
+  echo "==> Dumping app window hierarchy"
+  local dump_path="/sdcard/window_dump.xml"
+  local dump_success="false"
+
+  # Dump UI hierarchy to reliable sdcard path
+  if adb shell uiautomator dump "$dump_path" 2>&1 | grep -q "Dump hierarchy saved"; then
+    # Verify file exists on device
+    if adb shell test -f "$dump_path" 2>/dev/null; then
+      echo "==> UI hierarchy dumped to $dump_path"
+
+      # Pull to local maestro-results for inspection
+      if adb pull "$dump_path" maestro-results/preflight-ui.xml >/dev/null 2>&1; then
+        echo "==> UI hierarchy pulled to maestro-results/preflight-ui.xml"
+        dump_success="true"
+      else
+        echo "⚠️  UI hierarchy pull failed (device → host)"
+      fi
+    else
+      echo "⚠️  UI hierarchy file does not exist on device ($dump_path)"
+    fi
+  else
+    echo "⚠️  UI hierarchy dump failed or returned unexpected output"
+  fi
+
+  # Only assert about UI elements if dump succeeded
+  if [ "$dump_success" = "true" ]; then
+    echo "==> Checking for login-email-input visibility"
+    if grep -i "login.*email" maestro-results/preflight-ui.xml >/dev/null 2>&1; then
+      echo "   ✓ login-email-input found in UI hierarchy"
+    else
+      echo "   ℹ  login-email-input NOT found in current UI hierarchy (app may not be on login screen)"
+    fi
+  else
+    echo "⚠️  Skipping UI element checks: dump could not be retrieved"
+  fi
+
+  echo "==> Stopping app for clean flow execution"
+  adb shell am force-stop "com.fesperiquette.keepeat" || true
+  sleep 1
+}
+
 ensure_emulator_ready
 wait_for_boot_completed
+wait_for_package_manager_ready
+wait_for_settings_provider_ready
+echo "==> Android system providers are ready"
+echo "==> Waiting briefly for Android services to stabilize"
+sleep 3
+forward_backend_to_emulator
+install_apk_with_retry
 ensure_apk_installed
 sleep 8
 
 mkdir -p maestro-results
+
+echo "==> Starting logcat capture for diagnostics"
+bash scripts/capture-logcat.sh start maestro-results || true
+
+diagnose_app_state_before_flows
 
 FLOW_FILES=()
 if [ "$MAESTRO_SUITE" = "smoke" ]; then
@@ -89,13 +266,65 @@ if [ "${#FLOW_FILES[@]}" -eq 0 ]; then
   exit 1
 fi
 
+wait_app_fully_initialized() {
+  local max_attempts=60
+  local attempt=1
+
+  while [ $attempt -le $max_attempts ]; do
+    # Check if app is visible (dumpsys shows app in mCurrentFocus)
+    local current_focus="$(adb shell dumpsys window | grep "mCurrentFocus" | grep -o "com\.fesperiquette\.keepeat" || true)"
+
+    if [ -n "$current_focus" ]; then
+      echo "==> App detected in foreground (attempt $attempt/$max_attempts)"
+      return 0
+    fi
+
+    if [ $((attempt % 10)) -eq 0 ]; then
+      echo "  App not fully visible yet (attempt $attempt/$max_attempts, waiting...)"
+    fi
+
+    sleep 1
+    attempt=$((attempt + 1))
+  done
+
+  echo "⚠️  App did not appear in foreground within timeout (may still be initializing)" >&2
+  return 1
+}
+
 stabilize_between_flows() {
   ensure_emulator_ready
   adb shell input keyevent 3 || true
   adb shell am force-stop "$E2E_ANDROID_APP_ID" || true
   adb shell am force-stop dev.mobile.maestro || true
-  sleep 2
+  # Critical: Clear app data to reset secure store (tokens, user state)
+  # When backend is reset/seeded between flows, app must not retain stale tokens
+  adb shell pm clear "$E2E_ANDROID_APP_ID" || true
+  # Ensure app is fully stopped after pm clear (pm clear may auto-restart app)
+  adb shell am force-stop "$E2E_ANDROID_APP_ID" || true
+
+  # Warmup boot: Launch app to let React Native initialize completely
+  # Don't wait for success - am start returns immediately, app loads in background
+  adb shell am start -n "com.fesperiquette.keepeat/.MainActivity" 2>&1 || true
+
+  # Wait for app to actually appear in foreground (indicates React Native initialization complete)
+  # This can take 10-30 seconds on slow CI emulators
+  wait_app_fully_initialized || true
+
+  # Critical: Let app settle after pm clear
+  # After pm clear, React Native bundle cache + navigation state need extra time to stabilize.
+  # The app appears in mCurrentFocus but may not have valid UI rendered yet.
+  # Without sufficient time, Maestro relaunches to a blank state (neither login nor home visible).
+  # This extended sleep ensures React Native completes full initialization + renders valid UI.
+  sleep 15
+
+  # Cold kill: Force-stop after warmup so Maestro relaunches with clean initialization
+  adb shell am force-stop "$E2E_ANDROID_APP_ID" || true
+  sleep 1
 }
+
+declare -a FLOW_RESULTS
+FLOW_RESULTS_PASSED=0
+FLOW_RESULTS_FAILED=0
 
 for flow_file in "${FLOW_FILES[@]}"; do
   stabilize_between_flows
@@ -111,8 +340,20 @@ for flow_file in "${FLOW_FILES[@]}"; do
   echo "MAESTRO_DRIVER_STARTUP_TIMEOUT=${MAESTRO_DRIVER_STARTUP_TIMEOUT}"
   node scripts/e2e-reset-seed.mjs --mode "$mode" --base-url "$E2E_RESET_SEED_BASE_URL"
   export MAESTRO_DRIVER_STARTUP_TIMEOUT
-  if ! ~/.maestro/bin/maestro test "$flow_file" --format junit --output "maestro-results/$flow_name"; then
+
+  echo "==> Emulator state before Maestro flow:"
+  adb shell getprop sys.boot_completed || echo "  (boot_completed unavailable)"
+  echo "==> App package status:"
+  adb shell pm list packages "$E2E_ANDROID_APP_ID" | tr -d '\r' || echo "  (package list failed)"
+
+  if ~/.maestro/bin/maestro test "$flow_file" --format junit --output "maestro-results/$flow_name"; then
+    echo "✅ Maestro flow passed: $flow_name"
+    FLOW_RESULTS+=("PASSED|$flow_name")
+    FLOW_RESULTS_PASSED=$((FLOW_RESULTS_PASSED + 1))
+  else
     echo "❌ Maestro flow failed: $flow_name"
+    FLOW_RESULTS+=("FAILED|$flow_name")
+    FLOW_RESULTS_FAILED=$((FLOW_RESULTS_FAILED + 1))
     echo "==> adb devices state on failure"
     adb devices -l || true
     echo "==> Capturing emulator logcat on failure"
@@ -123,8 +364,39 @@ for flow_file in "${FLOW_FILES[@]}"; do
       echo "==> backend-e2e.log tail"
       tail -n 200 backend-e2e.log || true
     fi
-    exit 1
   fi
 done
 
+echo "==> Stopping logcat capture"
+bash scripts/capture-logcat.sh stop || true
+
+echo "==> Generating diagnostic HTML report"
+bash scripts/generate-e2e-report.sh maestro-results maestro-results/e2e-report.html || true
+
 adb logcat -d > emulator-logcat.txt || true
+
+echo ""
+echo "=========================================="
+echo "Maestro E2E Suite Summary (suite=$MAESTRO_SUITE)"
+echo "=========================================="
+for result in "${FLOW_RESULTS[@]}"; do
+  IFS="|" read -r status flow_name <<< "$result"
+  if [ "$status" = "PASSED" ]; then
+    echo "✅ $flow_name: PASSED"
+  else
+    echo "❌ $flow_name: FAILED"
+  fi
+done
+echo "=========================================="
+echo "Total: $FLOW_RESULTS_PASSED passed, $FLOW_RESULTS_FAILED failed"
+echo "=========================================="
+
+if [ $FLOW_RESULTS_FAILED -gt 0 ]; then
+  echo ""
+  echo "❌ Maestro suite failed: $FLOW_RESULTS_FAILED flow(s) failed"
+  exit 1
+else
+  echo ""
+  echo "✅ Maestro suite passed: all flows succeeded"
+  exit 0
+fi

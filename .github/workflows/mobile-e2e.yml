@@ -37,6 +37,11 @@ jobs:
       reason: ${{ steps.decision.outputs.reason }}
 
     steps:
+      - name: Checkout
+        uses: actions/checkout@v5
+        with:
+          fetch-depth: 0
+
       - name: Detect mobile-impacting changes
         id: filter
         uses: dorny/paths-filter@v3
@@ -165,7 +170,7 @@ jobs:
           echo "Looking for reusable android-debug-apk artifact for PR #$PR_NUMBER"
           echo "current_head_sha=$CURRENT_HEAD_SHA"
 
-          CANDIDATE_RUNS_JSON="$(gh api "repos/$REPO/actions/runs?event=pull_request&status=success&per_page=100" \
+          CANDIDATE_RUNS_JSON="$(gh api "repos/$REPO/actions/runs?event=pull_request&per_page=100" \
             --jq '.workflow_runs
               | map(select(.name == "Mobile E2E (Maestro)"))
               | map(select(.id != ('"$CURRENT_RUN_ID"'|tonumber)))
@@ -247,18 +252,68 @@ jobs:
               continue
             fi
 
-            echo "✅ Reusing APK: e2e-apk/app-debug.apk (run_id=$RUN_ID source_head_sha=$RUN_HEAD_SHA)"
-            echo "reuse_apk_success=true"
-            echo "found=true" >> "$GITHUB_OUTPUT"
-            echo "source_run_id=$RUN_ID" >> "$GITHUB_OUTPUT"
-            echo "source_head_sha=$RUN_HEAD_SHA" >> "$GITHUB_OUTPUT"
-            exit 0
+            # Verify APK compatibility: check build metadata
+            METADATA_COMPATIBLE="true"
+            if gh run download "$RUN_ID" --name apk-build-metadata --dir e2e-apk 2>/dev/null; then
+              if [ -f e2e-apk/apk-build-metadata.json ]; then
+                BACKEND_URL_FROM_METADATA="$(jq -r '.backend_url_e2e // empty' e2e-apk/apk-build-metadata.json 2>/dev/null || echo '')"
+                EXPECTED_BACKEND_URL="http://10.0.2.2:8000"
+                if [ -z "$BACKEND_URL_FROM_METADATA" ] || [ "$BACKEND_URL_FROM_METADATA" != "$EXPECTED_BACKEND_URL" ]; then
+                  echo "Skip run_id=$RUN_ID: APK backend URL mismatch or missing"
+                  echo "  expected: $EXPECTED_BACKEND_URL"
+                  echo "  from_metadata: $BACKEND_URL_FROM_METADATA"
+                  METADATA_COMPATIBLE="false"
+                  rm -rf e2e-apk
+                  mkdir -p e2e-apk
+                  continue
+                fi
+              else
+                echo "Skip run_id=$RUN_ID: APK build metadata file missing (cannot verify backend URL)"
+                METADATA_COMPATIBLE="false"
+                rm -rf e2e-apk
+                mkdir -p e2e-apk
+                continue
+              fi
+            else
+              echo "Skip run_id=$RUN_ID: APK build metadata artifact not found (cannot verify backend URL)"
+              METADATA_COMPATIBLE="false"
+              rm -rf e2e-apk
+              mkdir -p e2e-apk
+              continue
+            fi
+
+            if [ "$METADATA_COMPATIBLE" = "true" ]; then
+              echo "✅ Reusing APK: e2e-apk/app-debug.apk (run_id=$RUN_ID source_head_sha=$RUN_HEAD_SHA backend_url=$BACKEND_URL_FROM_METADATA)"
+              echo "reuse_apk_success=true"
+              echo "found=true" >> "$GITHUB_OUTPUT"
+              echo "source_run_id=$RUN_ID" >> "$GITHUB_OUTPUT"
+              echo "source_head_sha=$RUN_HEAD_SHA" >> "$GITHUB_OUTPUT"
+              exit 0
+            fi
           done
 
           echo "No valid reusable APK found after evaluating PR artifacts."
 
+      - name: Decide whether to build APK
+        id: decide_build
+        run: |
+          set -euo pipefail
+
+          BUILD_APK_STEP_SHOULD_RUN="false"
+          REUSE_APK_SUCCESS="${{ steps.reuse_apk.outputs.found || 'false' }}"
+
+          if [ "${{ needs.changes.outputs.mobile_apk_required }}" = "true" ]; then
+            BUILD_APK_STEP_SHOULD_RUN="true"
+          elif [ "${{ needs.changes.outputs.maestro_required }}" = "true" ] && [ "$REUSE_APK_SUCCESS" = "false" ]; then
+            echo "ℹ️  Maestro required but no reusable APK found — will build APK automatically"
+            BUILD_APK_STEP_SHOULD_RUN="true"
+          fi
+
+          echo "build_apk_step_should_run=$BUILD_APK_STEP_SHOULD_RUN" >> "$GITHUB_OUTPUT"
+          echo "APK build decision: build_apk_step_should_run=$BUILD_APK_STEP_SHOULD_RUN (mobile_apk_required=${{ needs.changes.outputs.mobile_apk_required }} maestro_required=${{ needs.changes.outputs.maestro_required }} reuse_apk_success=$REUSE_APK_SUCCESS)"
+
       - name: Setup Node
-        if: needs.changes.outputs.mobile_apk_required == 'true'
+        if: steps.decide_build.outputs.build_apk_step_should_run == 'true'
         uses: actions/setup-node@v5
         with:
           node-version: 22
@@ -266,12 +321,12 @@ jobs:
           cache-dependency-path: frontend/package-lock.json
 
       - name: Install frontend dependencies
-        if: needs.changes.outputs.mobile_apk_required == 'true'
+        if: steps.decide_build.outputs.build_apk_step_should_run == 'true'
         working-directory: frontend
         run: npm ci
 
       - name: Setup Java
-        if: needs.changes.outputs.mobile_apk_required == 'true'
+        if: steps.decide_build.outputs.build_apk_step_should_run == 'true'
         uses: actions/setup-java@v5
         with:
           distribution: temurin
@@ -279,7 +334,7 @@ jobs:
           cache: gradle
 
       - name: Prebuild Android app
-        if: needs.changes.outputs.mobile_apk_required == 'true'
+        if: steps.decide_build.outputs.build_apk_step_should_run == 'true'
         working-directory: frontend
         env:
           EXPO_PUBLIC_BACKEND_URL: http://10.0.2.2:8000
@@ -288,13 +343,33 @@ jobs:
         run: npx expo prebuild --platform android --clean
 
       - name: Build debug APK
-        if: needs.changes.outputs.mobile_apk_required == 'true'
+        if: steps.decide_build.outputs.build_apk_step_should_run == 'true'
         working-directory: frontend/android
         run: |
           chmod +x ./gradlew
           ./gradlew assembleDebug --no-daemon
           mkdir -p "$GITHUB_WORKSPACE/e2e-apk"
           cp app/build/outputs/apk/debug/app-debug.apk "$GITHUB_WORKSPACE/e2e-apk/app-debug.apk"
+
+      - name: Create APK build metadata
+        if: steps.decide_build.outputs.build_apk_step_should_run == 'true'
+        env:
+          EXPO_PUBLIC_BACKEND_URL: http://10.0.2.2:8000
+        run: |
+          set -euo pipefail
+          mkdir -p e2e-apk
+          cat > e2e-apk/apk-build-metadata.json <<EOF
+          {
+            "head_sha": "${{ github.sha }}",
+            "build_run_id": "${{ github.run_id }}",
+            "backend_url_e2e": "${{ env.EXPO_PUBLIC_BACKEND_URL }}",
+            "build_timestamp": "$(date -u +%Y-%m-%dT%H:%M:%SZ)",
+            "package_name": "com.fesperiquette.keepeat",
+            "app_variant": "debug"
+          }
+          EOF
+          echo "✅ APK build metadata created:"
+          cat e2e-apk/apk-build-metadata.json
 
       - name: Decide APK availability
         id: apk_decision
@@ -306,13 +381,13 @@ jobs:
           SOURCE_RUN_ID=""
           SOURCE_HEAD_SHA=""
 
-          if [ "${{ needs.changes.outputs.mobile_apk_required }}" = "true" ]; then
-            if [ -f e2e-apk/app-debug.apk ]; then
-              APK_READY="true"
-              APK_SOURCE="built"
-              SOURCE_RUN_ID="${{ github.run_id }}"
-              SOURCE_HEAD_SHA="${{ github.sha }}"
-            fi
+          # Check if APK was built in current run
+          if [ "${{ steps.decide_build.outputs.build_apk_step_should_run }}" = "true" ] && [ -f e2e-apk/app-debug.apk ]; then
+            APK_READY="true"
+            APK_SOURCE="built"
+            SOURCE_RUN_ID="${{ github.run_id }}"
+            SOURCE_HEAD_SHA="${{ github.sha }}"
+          # Check if APK was reused from a previous run
           elif [ "${{ steps.reuse_apk.outputs.found || 'false' }}" = "true" ] && [ -f e2e-apk/app-debug.apk ]; then
             APK_READY="true"
             APK_SOURCE="reused"
@@ -325,6 +400,7 @@ jobs:
           echo "source_run_id=$SOURCE_RUN_ID" >> "$GITHUB_OUTPUT"
           echo "source_head_sha=$SOURCE_HEAD_SHA" >> "$GITHUB_OUTPUT"
 
+          # Compute diagnostic flags for logging
           TRY_REUSE_APK="false"
           if [ "${{ needs.changes.outputs.mobile_apk_required }}" = "false" ] && [ "${{ needs.changes.outputs.maestro_required }}" = "true" ]; then
             TRY_REUSE_APK="true"
@@ -333,16 +409,54 @@ jobs:
           if [ "$APK_SOURCE" = "reused" ]; then
             REUSE_APK_SUCCESS="true"
           fi
-          BUILD_APK_STEP_SHOULD_RUN="false"
-          if [ "${{ needs.changes.outputs.mobile_apk_required }}" = "true" ]; then
-            BUILD_APK_STEP_SHOULD_RUN="true"
-          fi
 
           echo "try_reuse_apk=$TRY_REUSE_APK"
           echo "reuse_apk_success=$REUSE_APK_SUCCESS"
-          echo "build_apk_step_should_run=$BUILD_APK_STEP_SHOULD_RUN"
-          echo "APK decision: mobile_apk_required=${{ needs.changes.outputs.mobile_apk_required }} maestro_required=${{ needs.changes.outputs.maestro_required }} apk_ready=$APK_READY apk_source=$APK_SOURCE source_run_id=$SOURCE_RUN_ID source_head_sha=$SOURCE_HEAD_SHA"
-          echo "try_reuse_apk=$TRY_REUSE_APK reuse_apk_success=$REUSE_APK_SUCCESS build_apk_step_should_run=$BUILD_APK_STEP_SHOULD_RUN"
+          echo "build_apk_step_should_run=${{ steps.decide_build.outputs.build_apk_step_should_run }}"
+          echo "APK final decision: mobile_apk_required=${{ needs.changes.outputs.mobile_apk_required }} maestro_required=${{ needs.changes.outputs.maestro_required }} apk_ready=$APK_READY apk_source=$APK_SOURCE source_run_id=$SOURCE_RUN_ID source_head_sha=$SOURCE_HEAD_SHA"
+          echo "try_reuse_apk=$TRY_REUSE_APK reuse_apk_success=$REUSE_APK_SUCCESS build_apk_step_should_run=${{ steps.decide_build.outputs.build_apk_step_should_run }}"
+
+      - name: Diagnose APK backend URL compatibility
+        if: needs.changes.outputs.maestro_required == 'true'
+        run: |
+          set -euo pipefail
+
+          EXPECTED_E2E_BACKEND_URL="http://10.0.2.2:8000"
+          APK_BACKEND_URL_FROM_METADATA=""
+          APK_METADATA_EXISTS="false"
+
+          if [ -f e2e-apk/apk-build-metadata.json ]; then
+            APK_METADATA_EXISTS="true"
+            APK_BACKEND_URL_FROM_METADATA="$(jq -r '.backend_url_e2e // empty' e2e-apk/apk-build-metadata.json 2>/dev/null || echo '')"
+          fi
+
+          echo "=========================================="
+          echo "APK Backend URL Compatibility Diagnostics"
+          echo "=========================================="
+          echo "APK source: ${{ steps.apk_decision.outputs.apk_source }}"
+          echo "Expected E2E backend URL: $EXPECTED_E2E_BACKEND_URL"
+          echo "APK metadata exists: $APK_METADATA_EXISTS"
+          if [ "$APK_METADATA_EXISTS" = "true" ]; then
+            echo "APK metadata file: e2e-apk/apk-build-metadata.json"
+            echo "APK backend URL from metadata: $APK_BACKEND_URL_FROM_METADATA"
+            if [ -z "$APK_BACKEND_URL_FROM_METADATA" ]; then
+              echo "⚠️  WARNING: APK metadata missing backend_url_e2e field"
+            elif [ "$APK_BACKEND_URL_FROM_METADATA" = "$EXPECTED_E2E_BACKEND_URL" ]; then
+              echo "✅ APK backend URL is E2E compatible"
+            else
+              echo "❌ APK backend URL is INCOMPATIBLE with E2E:"
+              echo "   APK will connect to: $APK_BACKEND_URL_FROM_METADATA"
+              echo "   E2E test expects:   $EXPECTED_E2E_BACKEND_URL"
+              echo "   Consequence: App login requests will NOT reach local backend"
+            fi
+          else
+            echo "⚠️  WARNING: APK metadata not available - cannot verify backend URL"
+            if [ "${{ steps.apk_decision.outputs.apk_source }}" = "reused" ]; then
+              echo "   Reused APK has no provenance metadata"
+              echo "   Backend URL is unknown - app may use incorrect URL"
+            fi
+          fi
+          echo "=========================================="
 
       - name: Upload Android debug APK artifact
         if: steps.apk_decision.outputs.apk_source == 'built'
@@ -350,6 +464,13 @@ jobs:
         with:
           name: android-debug-apk
           path: e2e-apk/app-debug.apk
+
+      - name: Upload APK build metadata artifact
+        if: steps.apk_decision.outputs.apk_source == 'built'
+        uses: actions/upload-artifact@v4
+        with:
+          name: apk-build-metadata
+          path: e2e-apk/apk-build-metadata.json
 
   maestro-e2e:
     name: Mobile E2E / PR smoke Maestro suite
@@ -520,6 +641,25 @@ jobs:
       - name: Install Maestro CLI
         run: curl -Ls "https://get.maestro.mobile.dev" | bash
 
+      - name: Diagnose KVM and hardware acceleration availability
+        run: |
+          echo "=== KVM and Hardware Acceleration Diagnostics ==="
+          if [ -e /dev/kvm ]; then
+            echo "✓ /dev/kvm exists"
+            if [ -r /dev/kvm ] && [ -w /dev/kvm ]; then
+              echo "✓ /dev/kvm is readable and writable (KVM available)"
+              HARDWARE_ACCEL="enabled"
+            else
+              echo "✗ /dev/kvm not readable/writable (KVM not usable)"
+              HARDWARE_ACCEL="disabled"
+            fi
+          else
+            echo "✗ /dev/kvm does not exist (KVM not available on this runner)"
+            HARDWARE_ACCEL="disabled"
+          fi
+          echo "Hardware acceleration: $HARDWARE_ACCEL"
+          echo "Note: Emulator may run slowly without KVM. Expected boot time: 3-7 minutes."
+
       - name: Run Maestro E2E suite
         uses: reactivecircus/android-emulator-runner@v2
         env:
@@ -529,6 +669,7 @@ jobs:
         with:
           api-level: 34
           arch: x86_64
+          emulator-options: -accel auto -no-window -gpu swiftshader_indirect -no-snapshot -noaudio -no-boot-anim
           script: |
             bash scripts/run-maestro-e2e.sh --suite "$MAESTRO_SUITE"
 
@@ -545,15 +686,17 @@ jobs:
             ~/.maestro/tests
 
   mobile-e2e-not-required:
-    name: Mobile E2E / Not required (changes filter)
+    name: Mobile E2E / Not required or missing required APK
     needs:
       - changes
       - build-android-debug-apk
     if: needs.changes.outputs.maestro_required == 'false' || needs.build-android-debug-apk.outputs.apk_ready != 'true'
     runs-on: ubuntu-latest
     steps:
-      - name: Explain skip decision
+      - name: Explain gate decision
         run: |
+          mkdir -p ci-diagnostics
+          {
           echo "Mobile E2E skipped by changes filter or reusable APK policy."
           echo "mobile_apk_required=${{ needs.changes.outputs.mobile_apk_required }}"
           echo "maestro_required=${{ needs.changes.outputs.maestro_required }}"
@@ -578,7 +721,22 @@ jobs:
           fi
           echo "source_run_id=${{ needs.build-android-debug-apk.outputs.source_run_id }}"
           echo "source_head_sha=${{ needs.build-android-debug-apk.outputs.source_head_sha }}"
-          if [ "${{ needs.changes.outputs.maestro_required }}" = "true" ] && [ "${{ needs.build-android-debug-apk.outputs.apk_ready }}" != "true" ]; then
-            echo "No valid reusable APK was found for this PR/head SHA and rebuild was not required."
-            echo "Use workflow_dispatch with force_mobile_apk_build=true to force an APK rebuild then rerun smoke Maestro."
-          fi
+          } | tee ci-diagnostics/mobile-e2e-gate.txt
+
+      - name: Fail when Maestro is required but no compatible APK is available
+        if: needs.changes.outputs.maestro_required == 'true' && needs.build-android-debug-apk.outputs.apk_ready != 'true'
+        run: |
+          echo "Maestro is required but no compatible APK artifact was found. Re-run with workflow_dispatch force_mobile_apk_build=true or provide a compatible APK artifact."
+          exit 1
+
+      - name: Upload Mobile E2E gate diagnostics
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: mobile-e2e-gate-diagnostics
+          path: ci-diagnostics/mobile-e2e-gate.txt
+
+      - name: Explain skip reason when Maestro is not required
+        if: needs.changes.outputs.maestro_required == 'false'
+        run: |
+          echo "Mobile E2E skipped: Maestro is not required for this change set."
