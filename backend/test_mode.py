@@ -5,7 +5,7 @@ from copy import deepcopy
 from datetime import timedelta
 from typing import Any
 
-from backend.app_core import utc_now
+from app_core import utc_now
 
 _TRUE_VALUES = {"1", "true", "yes", "on"}
 

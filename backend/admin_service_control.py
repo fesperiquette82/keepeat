@@ -8,7 +8,7 @@ from typing import Any
 
 import httpx
 
-from backend.app_core import utc_now
+from app_core import utc_now
 
 
 SERVICE_REGISTRY: list[dict[str, Any]] = [

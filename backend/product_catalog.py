@@ -5,8 +5,8 @@ from typing import Optional
 
 import httpx
 
-from backend.app_core import logger, utc_now
-from backend.models import ProductBase, ShelfLife
+from app_core import logger, utc_now
+from models import ProductBase, ShelfLife
 
 OFF_USER_AGENT = os.getenv("OFF_USER_AGENT", "KeepEat/1.0 (https://keepeat.app)")
 

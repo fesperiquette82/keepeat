@@ -11,7 +11,7 @@ from fastapi.security import HTTPAuthorizationCredentials, HTTPBearer
 from jose import JWTError, jwt
 from passlib.context import CryptContext
 
-from backend.app_core import serialize_mongo, utc_now
+from app_core import serialize_mongo, utc_now
 
 
 def get_jwt_secret_key() -> str:
