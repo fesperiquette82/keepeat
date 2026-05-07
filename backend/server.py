@@ -38,7 +38,7 @@ from slowapi import Limiter, _rate_limit_exceeded_handler
 from slowapi.errors import RateLimitExceeded
 from slowapi.util import get_remote_address
 
-from backend.alerts import (
+from alerts import (
     AlertDependencies,
     alert_loop,
     check_daily_expiry_alert,
@@ -49,9 +49,9 @@ from backend.alerts import (
     seed_default_user,
     send_expo_push,
 )
-from backend.app_core import days_until, logger, redirect_html, serialize_mongo, utc_now
-from backend.auth_utils import create_token, get_current_user, hash_password, http_bearer, validate_password, verify_password
-from backend.models import (
+from app_core import days_until, logger, redirect_html, serialize_mongo, utc_now
+from auth_utils import create_token, get_current_user, hash_password, http_bearer, validate_password, verify_password
+from models import (
     BillingEntitlementsResponse,
     BillingRestoreResponse,
     BillingUsageResponse,
@@ -81,7 +81,7 @@ from backend.models import (
     UserResponse,
     VerifyEmailBody,
 )
-from backend.entitlements import (
+from entitlements import (
     FEATURE_AI,
     FEATURE_OCR,
     FEATURE_PREDICTIONS,
@@ -94,9 +94,9 @@ from backend.entitlements import (
     feature_policy,
     resolve_plan,
 )
-from backend.ocr_service import OcrApiError, ocr_receipt
-from backend.priority_refresh import build_priority_refresh_state
-from backend.observability import (
+from ocr_service import OcrApiError, ocr_receipt
+from priority_refresh import build_priority_refresh_state
+from observability import (
     build_operational_overview,
     build_monitoring_kpis,
     extract_user_id_from_auth_header,
@@ -107,10 +107,10 @@ from backend.observability import (
     track_business_event,
     track_service_usage,
 )
-from backend.admin_service_control import build_cost_recommendations, build_services_status, build_usage_metrics
-from backend.service_limits import build_external_services_quota_snapshot
-from backend.product_catalog import infer_food_category, infer_shelf_life, lookup_product_openfoodfacts
-from backend.recipes_service import (
+from admin_service_control import build_cost_recommendations, build_services_status, build_usage_metrics
+from service_limits import build_external_services_quota_snapshot
+from product_catalog import infer_food_category, infer_shelf_life, lookup_product_openfoodfacts
+from recipes_service import (
     _FRIGO_CATS,
     _PLACARD_CATS,
     append_recipe_to_catalog,
@@ -124,7 +124,7 @@ from backend.recipes_service import (
     suggest_recipe_groups_from_catalog,
     suggest_recipes_from_catalog,
 )
-from backend.test_mode import (
+from test_mode import (
     build_seed_stock,
     clone_fixtures,
     ensure_external_allowed,
@@ -1021,12 +1021,12 @@ async def test_seed_data():
     premium_password_hash = hash_password(premium_fixture["password"])
     await users_col.update_one(
         {"email": free_fixture["email"]},
-        {"$set": {"email": free_fixture["email"], "hashed_password": free_password_hash, "is_premium": False, "subscription_status": "inactive", "email_verified": True}},
+        {"$set": {"email": free_fixture["email"], "password_hash": free_password_hash, "is_premium": False, "subscription_status": "inactive", "email_verified": True}},
         upsert=True,
     )
     await users_col.update_one(
         {"email": premium_fixture["email"]},
-        {"$set": {"email": premium_fixture["email"], "hashed_password": premium_password_hash, "is_premium": True, "subscription_status": "active", "email_verified": True}},
+        {"$set": {"email": premium_fixture["email"], "password_hash": premium_password_hash, "is_premium": True, "subscription_status": "active", "email_verified": True}},
         upsert=True,
     )
     free_user = await users_col.find_one({"email": free_fixture["email"]}, {"_id": 1})
@@ -1035,34 +1035,6 @@ async def test_seed_data():
     await stock_col.delete_many({"user_id": str(free_user["_id"])})
     await stock_col.insert_many(build_seed_stock(str(free_user["_id"])))
     return {"ok": True, "action": "seed", "fixtures": TEST_FIXTURES}
-
-
-@app.get("/api/test/e2e-diagnostics")
-async def e2e_diagnostics():
-    _ensure_test_mode_route()
-    app_env = os.getenv("APP_ENV", "unknown").strip().lower()
-    backend_url = os.getenv("BACKEND_URL", "http://127.0.0.1:8000").strip()
-    free_user = await users_col.find_one({"email": "e2e.free@keepeat.test"})
-    premium_user = await users_col.find_one({"email": "premium-user@keepeat.test"})
-    return {
-        "ok": True,
-        "e2e_backend_url": backend_url,
-        "app_env": app_env,
-        "test_users": {
-            "free": {
-                "email": "e2e.free@keepeat.test",
-                "exists": bool(free_user),
-                "id": str(free_user["_id"]) if free_user else None,
-                "email_verified": free_user.get("email_verified") if free_user else None,
-            },
-            "premium": {
-                "email": "premium-user@keepeat.test",
-                "exists": bool(premium_user),
-                "id": str(premium_user["_id"]) if premium_user else None,
-                "email_verified": premium_user.get("email_verified") if premium_user else None,
-            },
-        },
-    }
 
 
 cors_origins = os.getenv("CORS_ORIGINS", "*").strip()
@@ -1365,46 +1337,29 @@ async def register(request: Request, body: UserCreate):
 @_resolve_annotations
 @limiter.limit("10/minute")
 async def login(request: Request, body: UserLogin):
-    logger.info('[E2E_LOGIN_ATTEMPT] email=%s password_len=%d', body.email.lower(), len(body.password))
-    try:
-        doc = await users_col.find_one({"email": body.email.lower()})
-        if not doc:
-            logger.info('[E2E_LOGIN_ATTEMPT] user not found: %s', body.email.lower())
-        else:
-            logger.info('[E2E_LOGIN_ATTEMPT] user found: %s (verified=%s premium=%s)', body.email.lower(), doc.get("email_verified", True), doc.get("is_premium", False))
+    doc = await users_col.find_one({"email": body.email.lower()})
+    # Toujours appeler verify_password (même avec hash factice) pour éviter
+    # l'énumération d'emails par différence de temps de réponse
+    hash_to_check = doc["hashed_password"] if doc else _DUMMY_HASH
+    password_ok = verify_password(body.password, hash_to_check)
+    if not doc or not password_ok:
+        raise HTTPException(status_code=401, detail="Invalid email or password")
 
-        # Toujours appeler verify_password (même avec hash factice) pour éviter
-        # l'énumération d'emails par différence de temps de réponse
-        hash_to_check = doc["hashed_password"] if doc else _DUMMY_HASH
-        password_ok = verify_password(body.password, hash_to_check)
-        logger.info('[E2E_LOGIN_ATTEMPT] password_ok=%s', password_ok)
+    if not doc.get("email_verified", True):
+        raise HTTPException(status_code=403, detail="EMAIL_NOT_VERIFIED")
 
-        if not doc or not password_ok:
-            logger.warning('[E2E_LOGIN_ATTEMPT] login failed: invalid credentials for %s', body.email.lower())
-            raise HTTPException(status_code=401, detail="Invalid email or password")
-
-        if not doc.get("email_verified", True):
-            logger.warning('[E2E_LOGIN_ATTEMPT] login failed: email not verified for %s', body.email.lower())
-            raise HTTPException(status_code=403, detail="EMAIL_NOT_VERIFIED")
-
-        user_id = str(doc["_id"])
-        await users_col.update_one({"_id": doc["_id"]}, {"$set": {"last_login": utc_now().isoformat()}})
-        token = create_token(user_id)
-        logger.info('[E2E_LOGIN_ATTEMPT] login successful for %s', body.email.lower())
-        return TokenResponse(
-            access_token=token,
-            user=UserResponse(
-                id=user_id,
-                email=doc["email"],
-                is_premium=doc.get("is_premium", False),
-                is_verified=doc.get("email_verified", True),
-            ),
-        )
-    except HTTPException:
-        raise
-    except Exception as exc:
-        logger.error('[E2E_LOGIN_ATTEMPT] unexpected error: %s', exc)
-        raise
+    user_id = str(doc["_id"])
+    await users_col.update_one({"_id": doc["_id"]}, {"$set": {"last_login": utc_now().isoformat()}})
+    token = create_token(user_id)
+    return TokenResponse(
+        access_token=token,
+        user=UserResponse(
+            id=user_id,
+            email=doc["email"],
+            is_premium=doc.get("is_premium", False),
+            is_verified=doc.get("email_verified", True),
+        ),
+    )
 
 
 @api_router.post("/auth/verify-email", response_model=TokenResponse)
