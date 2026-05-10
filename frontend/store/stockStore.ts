@@ -19,6 +19,7 @@ import type { AxiosError, AxiosRequestConfig } from 'axios';
 import { shouldSkipStockFetch } from '../utils/stockFetchPolicy';
 import { buildRestoredItemsList } from '../utils/stockRestoreInsert';
 import { buildUpdateItemOfflineState } from '../utils/stockUpdateOffline';
+import { debugSwipeLogger } from '../utils/debugSwipeLogger';
 
 const authHeaders = () => {
   const token = useAuthStore.getState().token;
@@ -402,10 +403,21 @@ export const useStockStore = create<StockStore>()(
       },
 
       markConsumed: async (itemId: string) => {
+        debugSwipeLogger.info('stockStore.markConsumed', `Starting`, {
+          itemId,
+          storeItemsCount: get().items.length,
+        });
+
         const { isOnline } = get();
 
         // Capturer le snapshot AVANT la mise à jour optimiste pour pouvoir rollback
         const { items, priorityItems, stats } = useStockStore.getState();
+
+        debugSwipeLogger.info('stockStore.markConsumed', `Captured snapshot`, {
+          itemId,
+          snapshotItemsCount: items.length,
+          isOnline,
+        });
 
         // Optimistic update
         set(state => ({
@@ -417,6 +429,12 @@ export const useStockStore = create<StockStore>()(
             consumed_this_week: state.stats.consumed_this_week + 1,
           },
         }));
+
+        debugSwipeLogger.info('stockStore.markConsumed', `Optimistic update applied`, {
+          itemId,
+          newStoreItemsCount: get().items.length,
+        });
+
         await useRecipesStore.getState().refreshRecipeAssociationsForStockMutation({
           source: 'stock.consume',
           stockItems: get().items as DashboardStockItem[],
@@ -430,11 +448,15 @@ export const useStockStore = create<StockStore>()(
               { id: uuid(), type: 'CONSUME', payload: { itemId }, timestamp: Date.now() },
             ],
           }));
+          debugSwipeLogger.info('stockStore.markConsumed', `Offline mode: mutation queued`, { itemId });
           return;
         }
 
         try {
+          debugSwipeLogger.info('stockStore.markConsumed', `Posting to API`, { itemId });
           await axios.post(buildApiUrl(`/api/stock/${itemId}/consume`), {}, authRequestConfig());
+          debugSwipeLogger.info('stockStore.markConsumed', `API POST succeeded`, { itemId });
+
           // Ne PAS appeler fetchStock() ici : cela créerait une race condition.
           // Si l'utilisateur swipe deux items rapidement, le GET de fetchStock() peut
           // arriver APRÈS l'update optimiste du 2ème item mais AVANT son POST — le serveur
@@ -443,8 +465,17 @@ export const useStockStore = create<StockStore>()(
           // L'update optimiste (set ci-dessus) est suffisant : l'item est déjà retiré du store.
           const s = get();
           await Promise.all([s.fetchPriorityItems(), s.fetchStats()]);
+          debugSwipeLogger.info('stockStore.markConsumed', `Secondary fetches completed`, { itemId });
         } catch (err: any) {
+          const errMsg = err?.message ?? String(err);
+          const errStatus = err?.response?.status ?? null;
+
           if (isNetworkError(err)) {
+            debugSwipeLogger.warn('stockStore.markConsumed', `Network error, queuing mutation`, {
+              itemId,
+              errMsg,
+              errStatus,
+            });
             set(state => ({
               pendingMutations: [
                 ...state.pendingMutations,
@@ -453,6 +484,14 @@ export const useStockStore = create<StockStore>()(
             }));
           } else {
             // Rollback sur erreur API
+            debugSwipeLogger.error('stockStore.markConsumed', `API error, rolling back`, {
+              itemId,
+              errMsg,
+              errStatus,
+              snapshotItemsCount: items.length,
+              currentItemsCount: get().items.length,
+            });
+
             set({ items, priorityItems, stats, error: err.message });
             await useRecipesStore.getState().refreshRecipeAssociationsForStockMutation({
               source: 'stock.consume',
@@ -464,10 +503,21 @@ export const useStockStore = create<StockStore>()(
       },
 
       markThrown: async (itemId: string) => {
+        debugSwipeLogger.info('stockStore.markThrown', `Starting`, {
+          itemId,
+          storeItemsCount: get().items.length,
+        });
+
         const { isOnline } = get();
 
         // Capturer le snapshot AVANT la mise à jour optimiste pour pouvoir rollback
         const { items, priorityItems, stats } = useStockStore.getState();
+
+        debugSwipeLogger.info('stockStore.markThrown', `Captured snapshot`, {
+          itemId,
+          snapshotItemsCount: items.length,
+          isOnline,
+        });
 
         // Optimistic update
         set(state => ({
@@ -479,6 +529,12 @@ export const useStockStore = create<StockStore>()(
             thrown_this_week: state.stats.thrown_this_week + 1,
           },
         }));
+
+        debugSwipeLogger.info('stockStore.markThrown', `Optimistic update applied`, {
+          itemId,
+          newStoreItemsCount: get().items.length,
+        });
+
         await useRecipesStore.getState().refreshRecipeAssociationsForStockMutation({
           source: 'stock.throw',
           stockItems: get().items as DashboardStockItem[],
@@ -492,17 +548,30 @@ export const useStockStore = create<StockStore>()(
               { id: uuid(), type: 'THROW', payload: { itemId }, timestamp: Date.now() },
             ],
           }));
+          debugSwipeLogger.info('stockStore.markThrown', `Offline mode: mutation queued`, { itemId });
           return;
         }
 
         try {
+          debugSwipeLogger.info('stockStore.markThrown', `Posting to API`, { itemId });
           await axios.post(buildApiUrl(`/api/stock/${itemId}/throw`), {}, authRequestConfig());
+          debugSwipeLogger.info('stockStore.markThrown', `API POST succeeded`, { itemId });
+
           // Même raison que markConsumed : ne pas appeler fetchStock() pour éviter la race
           // condition qui restaure l'update optimiste d'un autre item supprimé en parallèle.
           const s = get();
           await Promise.all([s.fetchPriorityItems(), s.fetchStats()]);
+          debugSwipeLogger.info('stockStore.markThrown', `Secondary fetches completed`, { itemId });
         } catch (err: any) {
+          const errMsg = err?.message ?? String(err);
+          const errStatus = err?.response?.status ?? null;
+
           if (isNetworkError(err)) {
+            debugSwipeLogger.warn('stockStore.markThrown', `Network error, queuing mutation`, {
+              itemId,
+              errMsg,
+              errStatus,
+            });
             set(state => ({
               pendingMutations: [
                 ...state.pendingMutations,
@@ -510,6 +579,15 @@ export const useStockStore = create<StockStore>()(
               ],
             }));
           } else {
+            // Rollback sur erreur API
+            debugSwipeLogger.error('stockStore.markThrown', `API error, rolling back`, {
+              itemId,
+              errMsg,
+              errStatus,
+              snapshotItemsCount: items.length,
+              currentItemsCount: get().items.length,
+            });
+
             set({ items, priorityItems, stats, error: err.message });
             await useRecipesStore.getState().refreshRecipeAssociationsForStockMutation({
               source: 'stock.throw',

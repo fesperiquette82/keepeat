@@ -14,6 +14,7 @@ import { countLabelFr } from '../../utils/uiText';
 import { storageZoneLabel, UI_LABELS } from '../../utils/uiLabels';
 import { expiryColor } from '../../utils/expiryLabels';
 import { createSwipeActionQueue, resolveStockRemovalBanner, resolveSwipeActionFromOpenSide } from '../../utils/stockSwipe';
+import { debugSwipeLogger } from '../../utils/debugSwipeLogger';
 
 type StockFilter = 'tous' | 'urgents' | 'frigo' | 'placard';
 type StockSort = 'expiry' | 'alpha' | 'recent' | 'oldest';
@@ -121,14 +122,44 @@ export default function StockScreen() {
   }, [activeFilter, items.length, searchQuery]);
 
   const handleSwipeAction = async (itemId: string, action: 'used' | 'thrown') => {
-    if (processingIds[itemId]) return;
+    debugSwipeLogger.info('StockScreen.handleSwipeAction', `Starting for item=${itemId} action=${action}`, {
+      itemId,
+      action,
+      isProcessing: !!processingIds[itemId],
+    });
+
+    if (processingIds[itemId]) {
+      debugSwipeLogger.warn('StockScreen.handleSwipeAction', `Item already processing, skipping`, { itemId });
+      return;
+    }
+
     setProcessingIds((prev) => ({ ...prev, [itemId]: true }));
     try {
+      debugSwipeLogger.info('StockScreen.handleSwipeAction', `Calling removeStockItems`, { itemId, action });
       const result = await removeStockItems([itemId], action);
+      debugSwipeLogger.info('StockScreen.handleSwipeAction', `removeStockItems result`, {
+        itemId,
+        action,
+        removedItemsCount: result.removedItems.length,
+        notFoundCount: result.notFoundCount,
+        failedCount: result.failedCount,
+      });
+
       const nextBanner = resolveStockRemovalBanner(action, result);
       setUndoItems(nextBanner.canUndo ? result.removedItems : []);
       setBanner(nextBanner);
-    } catch {
+
+      debugSwipeLogger.info('StockScreen.handleSwipeAction', `Banner set`, {
+        itemId,
+        message: nextBanner.message,
+        canUndo: nextBanner.canUndo,
+      });
+    } catch (err) {
+      debugSwipeLogger.error('StockScreen.handleSwipeAction', `Exception caught`, {
+        itemId,
+        action,
+        error: err instanceof Error ? err.message : String(err),
+      });
       Alert.alert('Erreur', "Impossible de mettre à jour l'élément.");
     } finally {
       setProcessingIds((prev) => {
@@ -136,6 +167,7 @@ export default function StockScreen() {
         delete next[itemId];
         return next;
       });
+      debugSwipeLogger.info('StockScreen.handleSwipeAction', `Finished for item=${itemId}`, { itemId });
     }
   };
 
@@ -248,21 +280,37 @@ export default function StockScreen() {
                 renderLeftActions={() => renderSwipeAction('Utilisé', '#16A34A', 'restaurant-outline')}
                 renderRightActions={() => renderSwipeAction('Jeté', '#DC2626', 'trash-outline')}
                 onSwipeableLeftOpen={() => {
+                  debugSwipeLogger.info('StockScreen.onSwipeableLeftOpen', `Swiped left`, {
+                    itemId: item.id,
+                    itemName: item.name,
+                    queueSize: swipeActionQueueRef.current ? 'pending' : 'unknown',
+                  });
                   // Fermer tous les autres Swipeable d'abord (pattern std pour FlatList).
                   // Puis close() le courant pour libérer le gesture handler RNGH après l'action.
                   swipeableRefs.current.forEach((ref, key) => {
                     if (key !== item.id) ref?.close();
                   });
                   swipeableRefs.current.get(item.id)?.close();
+                  debugSwipeLogger.info('StockScreen.onSwipeableLeftOpen', `Swipeable closed, enqueueing action`, {
+                    itemId: item.id,
+                  });
                   void swipeActionQueueRef.current.enqueue(
                     () => handleSwipeAction(item.id, resolveSwipeActionFromOpenSide('left')),
                   );
                 }}
                 onSwipeableRightOpen={() => {
+                  debugSwipeLogger.info('StockScreen.onSwipeableRightOpen', `Swiped right`, {
+                    itemId: item.id,
+                    itemName: item.name,
+                    queueSize: swipeActionQueueRef.current ? 'pending' : 'unknown',
+                  });
                   swipeableRefs.current.forEach((ref, key) => {
                     if (key !== item.id) ref?.close();
                   });
                   swipeableRefs.current.get(item.id)?.close();
+                  debugSwipeLogger.info('StockScreen.onSwipeableRightOpen', `Swipeable closed, enqueueing action`, {
+                    itemId: item.id,
+                  });
                   void swipeActionQueueRef.current.enqueue(
                     () => handleSwipeAction(item.id, resolveSwipeActionFromOpenSide('right')),
                   );
