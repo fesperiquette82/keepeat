@@ -14,8 +14,8 @@ from typing import Any, Iterable, Literal
 import httpx
 from pydantic import ValidationError
 
-from .app_core import logger
-from .models import Recipe, RecipeDifficulty, RecipeGroupedSuggestion, RecipeMealType, RecipeSuggestion, RecipeSuggestionIngredient
+from backend.app_core import logger
+from backend.models import Recipe, RecipeDifficulty, RecipeGroupedSuggestion, RecipeMealType, RecipeSuggestion, RecipeSuggestionIngredient
 
 _FRIGO_CATS = ["frais", "proteines", "legumes", "boissons"]
 _PLACARD_CATS = ["feculents", "desserts", "epicerie", "autres"]

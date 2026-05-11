@@ -9,8 +9,8 @@ from typing import Any, Callable
 import httpx
 from fastapi import HTTPException
 
-from .app_core import logger, utc_now
-from .auth_utils import hash_password, validate_password
+from backend.app_core import logger, utc_now
+from backend.auth_utils import hash_password, validate_password
 
 
 def _resolve_alert_prefs(user_doc: dict[str, Any]) -> dict[str, bool]:

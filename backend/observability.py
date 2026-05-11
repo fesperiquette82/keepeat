@@ -8,7 +8,7 @@ from typing import Any, Optional
 
 from jose import JWTError, jwt
 
-from .app_core import logger, utc_now
+from backend.app_core import logger, utc_now
 
 JWT_SECRET_KEY = os.getenv("JWT_SECRET_KEY", "")
 JWT_ALGORITHM = "HS256"
