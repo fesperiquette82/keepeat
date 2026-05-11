@@ -6,7 +6,7 @@ from pathlib import Path
 
 os.environ.setdefault("JWT_SECRET_KEY", "test-secret")
 
-sys.path.insert(0, str(Path(__file__).resolve().parents[1] / "backend"))
+sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 
 from alerts import AlertDependencies, _resolve_alert_prefs, check_daily_expiry_alert
 

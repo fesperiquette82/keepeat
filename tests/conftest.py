@@ -1,11 +1,11 @@
 """Pytest configuration for keepeat tests.
 
-Adds the backend directory to sys.path so that imports work consistently.
+Adds the keepeat root directory to sys.path so that package imports work correctly.
 """
 import sys
 from pathlib import Path
 
-# Add backend directory to sys.path for imports within backend modules
-backend_dir = Path(__file__).resolve().parents[1] / "backend"
-if str(backend_dir) not in sys.path:
-    sys.path.insert(0, str(backend_dir))
+# Add keepeat root to sys.path for package imports like 'from backend.alerts import ...'
+root_dir = Path(__file__).resolve().parents[1]
+if str(root_dir) not in sys.path:
+    sys.path.insert(0, str(root_dir))

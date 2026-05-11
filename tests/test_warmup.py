@@ -11,9 +11,9 @@ os.environ.setdefault("MONGO_URL", "mongodb://localhost:27017")
 os.environ.setdefault("JWT_SECRET_KEY", "test-secret")
 
 # Ajout du backend au PYTHONPATH
-sys.path.insert(0, str(Path(__file__).resolve().parents[1] / "backend"))
+sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 
-import server
+from backend import server
 from scripts import warmup_ping
 
 

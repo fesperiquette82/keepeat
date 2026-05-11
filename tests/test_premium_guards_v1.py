@@ -8,9 +8,9 @@ from unittest.mock import patch
 os.environ.setdefault("MONGO_URL", "mongodb://localhost:27017")
 os.environ.setdefault("JWT_SECRET_KEY", "test-secret")
 
-sys.path.insert(0, str(Path(__file__).resolve().parents[1] / "backend"))
+sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 
-import server
+from backend import server
 from fastapi import HTTPException
 
 from server import OcrReceiptRequest, get_ai_recipes, get_monthly_stats, get_predictions, ocr_receipt_route

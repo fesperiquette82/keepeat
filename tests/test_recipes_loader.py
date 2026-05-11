@@ -4,7 +4,7 @@ import tempfile
 import unittest
 from pathlib import Path
 
-sys.path.insert(0, str(Path(__file__).resolve().parents[1] / "backend"))
+sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 
 from recipes_service import RecipeCatalogError, clear_recipe_catalog_cache, load_local_recipes, load_recipe_catalog
 

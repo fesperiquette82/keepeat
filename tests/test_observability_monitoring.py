@@ -8,7 +8,7 @@ from unittest.mock import patch
 os.environ.setdefault("MONGO_URL", "mongodb://localhost:27017")
 os.environ.setdefault("JWT_SECRET_KEY", "test-secret")
 
-sys.path.insert(0, str(Path(__file__).resolve().parents[1] / "backend"))
+sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 
 from observability import build_monitoring_kpis, classify_error_type, log_api_request, normalize_endpoint_key
 from fastapi import HTTPException
