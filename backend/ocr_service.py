@@ -11,7 +11,7 @@ from typing import Any
 import httpx
 from fastapi import HTTPException, Request
 
-from backend.app_core import logger, utc_now
+from .app_core import logger, utc_now
 
 
 class OcrApiError(RuntimeError):

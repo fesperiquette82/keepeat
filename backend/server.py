@@ -38,7 +38,7 @@ from slowapi import Limiter, _rate_limit_exceeded_handler
 from slowapi.errors import RateLimitExceeded
 from slowapi.util import get_remote_address
 
-from backend.alerts import (
+from .alerts import (
     AlertDependencies,
     alert_loop,
     check_daily_expiry_alert,
@@ -49,9 +49,9 @@ from backend.alerts import (
     seed_default_user,
     send_expo_push,
 )
-from backend.app_core import days_until, logger, redirect_html, serialize_mongo, utc_now
-from backend.auth_utils import create_token, get_current_user, hash_password, http_bearer, validate_password, verify_password
-from backend.models import (
+from .app_core import days_until, logger, redirect_html, serialize_mongo, utc_now
+from .auth_utils import create_token, get_current_user, hash_password, http_bearer, validate_password, verify_password
+from .models import (
     BillingEntitlementsResponse,
     BillingRestoreResponse,
     BillingUsageResponse,
@@ -94,9 +94,9 @@ from entitlements import (
     feature_policy,
     resolve_plan,
 )
-from backend.ocr_service import OcrApiError, ocr_receipt
-from backend.priority_refresh import build_priority_refresh_state
-from backend.observability import (
+from .ocr_service import OcrApiError, ocr_receipt
+from .priority_refresh import build_priority_refresh_state
+from .observability import (
     build_operational_overview,
     build_monitoring_kpis,
     extract_user_id_from_auth_header,
@@ -107,10 +107,10 @@ from backend.observability import (
     track_business_event,
     track_service_usage,
 )
-from backend.admin_service_control import build_cost_recommendations, build_services_status, build_usage_metrics
-from backend.service_limits import build_external_services_quota_snapshot
-from backend.product_catalog import infer_food_category, infer_shelf_life, lookup_product_openfoodfacts
-from backend.recipes_service import (
+from .admin_service_control import build_cost_recommendations, build_services_status, build_usage_metrics
+from .service_limits import build_external_services_quota_snapshot
+from .product_catalog import infer_food_category, infer_shelf_life, lookup_product_openfoodfacts
+from .recipes_service import (
     _FRIGO_CATS,
     _PLACARD_CATS,
     append_recipe_to_catalog,

@@ -4,7 +4,7 @@ import os
 from datetime import datetime, timedelta, timezone
 from typing import Any
 
-from backend.app_core import utc_now
+from .app_core import utc_now
 
 
 def _parse_int_env(name: str) -> int | None:
