@@ -61,5 +61,5 @@ jobs:
           JWT_SECRET: "test_secret_ci"
           GEMINI_OCR_API_KEY: "dummy_for_tests"
           GEMINI_RECIPES_API_KEY: "dummy_for_tests"
-          PYTHONPATH: ${{ github.workspace }}
+          PYTHONPATH: ${{ github.workspace }}/backend
         run: python -m pytest tests backend/tests --tb=short -q

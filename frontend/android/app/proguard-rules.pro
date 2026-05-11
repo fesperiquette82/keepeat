@@ -2,8 +2,17 @@
 -keep class expo.modules.kotlin.runtime.** { *; }
 -keep class expo.modules.kotlin.runtime.Runtime { *; }
 -keep class expo.modules.kotlin.services.** { *; }
+-keep class expo.modules.kotlin.services.FilePermissionService { *; }
+-keep class expo.modules.kotlin.services.FilePermissionService$Permission { *; }
 -keep class expo.modules.kotlin.types.** { *; }
 -keep class expo.modules.kotlin.types.JSTypeConverterProvider { *; }
+
+# Keep Expo filesystem
+-keep class expo.modules.filesystem.** { *; }
+-keep class expo.modules.filesystem.FileSystemFile { *; }
+-keep class expo.modules.filesystem.FileSystemPath { *; }
+-keep class expo.modules.filesystem.FileSystemFileHandle { *; }
+-keep class expo.modules.filesystem.FileSystemModule { *; }
 
 # Keep Expo image manipulator
 -keep class expo.modules.imagemanipulator.** { *; }
