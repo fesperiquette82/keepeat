@@ -95,7 +95,7 @@ jobs:
           MOCK_PUSH: "true"
           JWT_SECRET: test-secret
           BACKEND_URL: http://127.0.0.1:8000
-          PYTHONPATH: ${{ github.workspace }}
+          PYTHONPATH: ${{ github.workspace }}/backend
         run: |
           set -euo pipefail
           nohup python -m uvicorn backend.server:app --host 0.0.0.0 --port 8000 --log-level debug > backend-e2e.log 2>&1 &

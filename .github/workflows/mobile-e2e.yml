@@ -522,7 +522,7 @@ jobs:
           MOCK_PUSH: "true"
           JWT_SECRET: test-secret
           BACKEND_URL: http://127.0.0.1:8000
-          PYTHONPATH: ${{ github.workspace }}
+          PYTHONPATH: ${{ github.workspace }}/backend
         run: |
           set -euo pipefail
 
