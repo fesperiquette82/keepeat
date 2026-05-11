@@ -2,6 +2,13 @@
 from __future__ import annotations
 
 import os
+import sys
+from pathlib import Path
+
+# Ensure parent directory is in sys.path for relative imports to work when uvicorn launches backend.server:app
+parent_dir = str(Path(__file__).resolve().parent.parent)
+if parent_dir not in sys.path:
+    sys.path.insert(0, parent_dir)
 
 from dotenv import load_dotenv
 load_dotenv()
