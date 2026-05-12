@@ -1,7 +1,7 @@
 import uvicorn
 
-from runtime_server import get_bind_port_from_env
-from server import app, logger
+from backend.runtime_server import get_bind_port_from_env
+from backend.server import app, logger
 
 
 if __name__ == "__main__":
