@@ -3,7 +3,9 @@ services:
     name: keepeat-backend
     runtime: python
     rootDir: .
-    buildCommand: pip install -r backend/requirements.txt && chmod +x run.sh
-    startCommand: ./run.sh
+    buildCommand: pip install -r backend/requirements.txt
+    env:
+      PYTHONPATH: .
+    startCommand: python -m uvicorn asgi:app --host 0.0.0.0 --port $PORT
     healthCheckPath: /health
     autoDeploy: true
