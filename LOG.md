@@ -19,17 +19,26 @@ ls LOGS/logs_*/  # Shows all log directories with their contents
 
 ## Current Issues (2026-05-12)
 
-### 1. **Android R8 Minification Error** (logs_68591306175)
-- **Status**: FAILED - 2026-05-12T11:41:16
+### 1. **Android R8 Minification Error** (logs_68632241158) ⚠️ PERSISTING
+- **Status**: FAILED - 2026-05-12T15:36:08 (Latest)
+- **Previous Attempts**: logs_68591306175 (2026-05-12T11:41:16)
 - **Error**: Missing classes during R8 compilation
-- **Root Cause**: Expo modules classes not being kept by ProGuard rules
+- **Root Cause**: Expo modules classes not being kept despite ProGuard rules defined
 - **Classes Missing**:
   - `expo.modules.kotlin.runtime.Runtime`
   - `expo.modules.kotlin.services.FilePermissionService`
   - `expo.modules.kotlin.services.FilePermissionService$Permission`
-- **Location**: `frontend/android/app/build/outputs/mapping/release/missing_rules.txt`
-- **Fix Applied**: Added keep rules to `backend/proguard-rules.pro` (but may need frontend rules too)
-- **Next Steps**: Review `frontend/android/app/proguard-rules.pro` to ensure Expo classes are preserved
+- **ProGuard Rules Status**: ✅ Defined in `frontend/android/app/proguard-rules.pro` (lines 1-34)
+- **Problem**: Rules exist but not being applied by R8
+- **Possible Causes**:
+  1. Expo dependencies not installed or at wrong version
+  2. Build configuration not using ProGuard rules
+  3. R8 minification overriding rules
+  4. Classes don't exist at specified paths
+- **Investigation Needed**: 
+  - Check `frontend/android/build.gradle` for minification config
+  - Verify Expo module versions in package.json
+  - Ensure ProGuard rules are included in build process
 
 ### 2. **Production Deployment ModuleNotFoundError** (Previous - FIXED)
 - **Status**: FIXED - Commit 06e9ac1
@@ -91,7 +100,24 @@ Structure: `LOGS/logs_XXXXXXXXX/`
 | 235a21c | 2026-05-12 | warmup_ping import | Fixed backend/scripts import path |
 | 06e9ac1 | 2026-05-12 | Production deployment | Shell wrapper sets PYTHONPATH |
 
+## Diagnostics Performed
+
+### Android R8 Investigation (2026-05-12 17:39)
+- ✅ ProGuard rules verified: Defined in `frontend/android/app/proguard-rules.pro` (lines 1-34)
+- ✅ Expo dependencies verified: `expo@^54.0.33`, `expo-file-system@^55.0.19` present
+- ⚠️ Missing classes persist despite ProGuard rules
+- **Finding**: The classes are referenced by `expo.modules.filesystem` but not found in Expo runtime
+
+### Possible Root Causes
+1. **Dynamic Class Loading**: Expo may use reflection for class loading that R8 can't follow
+2. **Build Configuration**: `build.gradle` may not be properly configured to use ProGuard rules
+3. **Native Library Issue**: Classes may be in native/compiled dependencies not visible to R8
+4. **Version Mismatch**: Expo version may have changed class paths or removed these classes
+
 ## Next Actions
-1. Check frontend Android R8 rules for Expo modules
-2. Verify shell wrapper works on Render deployment
-3. Run test suite to confirm all tests pass
+1. ❌ Add -dontwarn rules for missing Expo classes as fallback
+2. Check Expo GitHub issues for R8 compatibility 
+3. Verify Android build process includes ProGuard rules correctly
+4. Test with consumer-rules.pro files from Expo modules (if they exist)
+5. Verify shell wrapper works on Render deployment
+6. Run test suite to confirm backend tests pass

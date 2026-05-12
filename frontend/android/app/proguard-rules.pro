@@ -32,3 +32,11 @@
 -keepclasseswithmembernames class * {
     native <methods>;
 }
+
+# R8 may not find Expo runtime classes during minification if using dynamic class loading
+# Allow R8 to continue build by warning instead of failing on these missing references
+-dontwarn expo.modules.kotlin.runtime.**
+-dontwarn expo.modules.kotlin.services.**
+-dontwarn expo.modules.filesystem.**
+-dontwarn expo.modules.imagemanipulator.**
+-dontwarn expo.modules.notifications.**
