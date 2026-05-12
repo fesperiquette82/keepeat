@@ -14,7 +14,7 @@ os.environ.setdefault("JWT_SECRET_KEY", "test-secret")
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 
 from backend import server
-from scripts import warmup_ping
+from backend.scripts import warmup_ping
 
 
 class WarmupBackendTests(unittest.TestCase):
