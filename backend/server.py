@@ -81,7 +81,7 @@ from backend.models import (
     UserResponse,
     VerifyEmailBody,
 )
-from entitlements import (
+from backend.entitlements import (
     FEATURE_AI,
     FEATURE_OCR,
     FEATURE_PREDICTIONS,
