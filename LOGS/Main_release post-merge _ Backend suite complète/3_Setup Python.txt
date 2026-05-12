@@ -1,0 +1,22 @@
+﻿2026-05-12T07:49:14.7978675Z ##[group]Run actions/setup-python@v5
+2026-05-12T07:49:14.7979136Z with:
+2026-05-12T07:49:14.7979387Z   python-version: 3.12
+2026-05-12T07:49:14.7979671Z   cache: pip
+2026-05-12T07:49:14.7979969Z   cache-dependency-path: backend/requirements.txt
+2026-05-12T07:49:14.7980369Z   check-latest: false
+2026-05-12T07:49:14.7980789Z   token: ***
+2026-05-12T07:49:14.7981043Z   update-environment: true
+2026-05-12T07:49:14.7981346Z   allow-prereleases: false
+2026-05-12T07:49:14.7981626Z   freethreaded: false
+2026-05-12T07:49:14.7981891Z ##[endgroup]
+2026-05-12T07:49:14.9701014Z ##[group]Installed versions
+2026-05-12T07:49:14.9781713Z Successfully set up CPython (3.12.13)
+2026-05-12T07:49:14.9782836Z ##[endgroup]
+2026-05-12T07:49:15.0071358Z [command]/opt/hostedtoolcache/Python/3.12.13/x64/bin/pip cache dir
+2026-05-12T07:49:15.3279554Z /home/runner/.cache/pip
+2026-05-12T07:49:15.4693266Z Cache hit for: setup-python-Linux-x64-24.04-Ubuntu-python-3.12.13-pip-0e36ea9993b375daff9db3f8c908c04666baf3137abb3802fae3103f7f986333
+2026-05-12T07:49:16.1210089Z Received 17852614 of 17852614 (100.0%), 33.7 MBs/sec
+2026-05-12T07:49:16.1211032Z Cache Size: ~17 MB (17852614 B)
+2026-05-12T07:49:16.1241323Z [command]/usr/bin/tar -xf /home/runner/work/_temp/a89ed75f-dd6f-4fa1-b656-d62c122ebae9/cache.tzst -P -C /home/runner/work/keepeat/keepeat --use-compress-program unzstd
+2026-05-12T07:49:16.1830207Z Cache restored successfully
+2026-05-12T07:49:16.1844537Z Cache restored from key: setup-python-Linux-x64-24.04-Ubuntu-python-3.12.13-pip-0e36ea9993b375daff9db3f8c908c04666baf3137abb3802fae3103f7f986333

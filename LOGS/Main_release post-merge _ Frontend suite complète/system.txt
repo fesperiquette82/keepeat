@@ -1,0 +1,8 @@
+2026-05-12T07:49:08.4690000Z Requested labels: ubuntu-latest
+2026-05-12T07:49:08.4690000Z Job defined at: fesperiquette82/keepeat/.github/workflows/main-release-post-merge.yml@refs/heads/main
+2026-05-12T07:49:08.4690000Z Waiting for a runner to pick up this job...
+2026-05-12T07:49:08.4650000Z Evaluating frontend-main-release-full.if
+2026-05-12T07:49:08.4650000Z Evaluating: success()
+2026-05-12T07:49:08.4650000Z Result: true
+2026-05-12T07:49:08.6730000Z Job is about to start running on the hosted runner: GitHub Actions 1000003104
+2026-05-12T07:49:08.6720000Z Job is waiting for a hosted runner to come online.

@@ -2,12 +2,12 @@
   "schema_version": "1.1",
   "project_name": "keepeat",
   "project_path": "C:\\Perso\\PERSO-USB\\Projets\\KeepEat\\KeepEat-main\\keepeat",
-  "last_scan": "2026-05-06T23:12:33.198644",
+  "last_scan": "2026-05-11T14:02:22.498365",
   "stats": {
-    "total_files_found": 9780,
-    "indexed": 9726,
+    "total_files_found": 9803,
+    "indexed": 9748,
     "skipped_binary": 5,
-    "skipped_too_large": 14,
+    "skipped_too_large": 15,
     "skipped_excluded_ext": 35,
     "error": 0
   },
@@ -135,8 +135,8 @@
     "render.yaml": {
       "hash_sha256": "7393f7c75315457bd76718c9b45432f2aa097ca70a945409876204a74f815518",
       "size_bytes": 234,
-      "last_modified": "2026-04-18T00:29:07.737622",
-      "last_modified_ts": 1776464947.737622,
+      "last_modified": "2026-05-07T09:59:38.885528",
+      "last_modified_ts": 1778140778.8855276,
       "file_type": "yaml",
       "status": "indexed",
       "summary": null,
@@ -293,14 +293,14 @@
       "indexed_at": "2026-05-06T15:20:31.981720"
     },
     ".github/workflows/mobile-e2e.yml": {
-      "hash_sha256": "17dcfc784b2032601c83fafe3aa8a17d529bfba4c78d5242d1d4e67b1c27715a",
-      "size_bytes": 23077,
-      "last_modified": "2026-05-06T23:02:02.624560",
-      "last_modified_ts": 1778101322.6245596,
+      "hash_sha256": "d2e62e3126ced6be3ee241cd9bed10179b80475285f648282cdcec1404f5dd56",
+      "size_bytes": 30689,
+      "last_modified": "2026-05-07T09:48:56.691465",
+      "last_modified_ts": 1778140136.691465,
       "file_type": "yml",
       "status": "indexed",
       "summary": null,
-      "indexed_at": "2026-05-06T23:08:30.315556"
+      "indexed_at": "2026-05-07T10:19:39.926120"
     },
     ".maestro/00-smoke-launch.yaml": {
       "hash_sha256": "0c6e77c5ef53d7361b7ba8fe7fbe39b24eca4c0a24085f4d81cd93a8cbfe2131",
@@ -313,24 +313,24 @@
       "indexed_at": "2026-05-06T15:20:31.999397"
     },
     ".maestro/01-auth-session.yaml": {
-      "hash_sha256": "fcc142157934511541d5b4e2c1f8648da22ece09b18a9135e634efab0a1fafa7",
-      "size_bytes": 1914,
-      "last_modified": "2026-05-06T22:42:43.270121",
-      "last_modified_ts": 1778100163.2701213,
+      "hash_sha256": "0b3f02f7afd99f1a8b2ff374ecbda27b93b90ee31ada58cdf3ad5d5232a1f118",
+      "size_bytes": 3319,
+      "last_modified": "2026-05-07T09:48:56.700475",
+      "last_modified_ts": 1778140136.7004745,
       "file_type": "yaml",
       "status": "indexed",
       "summary": null,
-      "indexed_at": "2026-05-06T22:43:35.953704"
+      "indexed_at": "2026-05-07T10:19:39.930316"
     },
     ".maestro/02-navigation-main-tabs.yaml": {
-      "hash_sha256": "90d9fd5a18686772365f40d81425ac1ae62d68276b8e41c9c81b989943ebfe88",
-      "size_bytes": 594,
-      "last_modified": "2026-05-06T22:42:43.272963",
-      "last_modified_ts": 1778100163.2729626,
+      "hash_sha256": "0d877ea53805233903c1b22bb3629d771220efda4b9467796bcfa9b2747d7034",
+      "size_bytes": 1734,
+      "last_modified": "2026-05-07T09:48:56.707469",
+      "last_modified_ts": 1778140136.7074685,
       "file_type": "yaml",
       "status": "indexed",
       "summary": null,
-      "indexed_at": "2026-05-06T22:43:35.961127"
+      "indexed_at": "2026-05-07T10:19:39.932010"
     },
     ".maestro/03-stock-empty-state.yaml": {
       "hash_sha256": "49071f82e88e37f9f2e112031721b15c3b12296d19f160c43983bd280f9332d3",
@@ -473,24 +473,24 @@
       "indexed_at": "2026-05-06T15:20:32.859276"
     },
     "backend/admin_service_control.py": {
-      "hash_sha256": "1456c888afc1de30283b3a9f3877e90fd8054fb6a1898b4eec5e38ed32849487",
-      "size_bytes": 16254,
-      "last_modified": "2026-04-26T21:56:21.809709",
-      "last_modified_ts": 1777233381.8097086,
+      "hash_sha256": "e38cb77361a004b73dbe34095c0dec59be10e09b2bfbe1c8b01db83faf98cc52",
+      "size_bytes": 15848,
+      "last_modified": "2026-05-07T10:27:24.207079",
+      "last_modified_ts": 1778142444.207079,
       "file_type": "py",
       "status": "indexed",
       "summary": null,
-      "indexed_at": "2026-05-06T15:20:32.889064"
+      "indexed_at": "2026-05-07T10:28:36.664217"
     },
     "backend/alerts.py": {
-      "hash_sha256": "18eee93af1a41cc72a3b91dd743613c8198dbe93fc1beb080241bb9f6ad8a1a9",
-      "size_bytes": 14819,
-      "last_modified": "2026-04-26T21:56:21.822097",
-      "last_modified_ts": 1777233381.822097,
+      "hash_sha256": "d9853ea6b22ffb5ddd7e83405d6d04aca6c4e57df8e8fefabc08efddfa775231",
+      "size_bytes": 14447,
+      "last_modified": "2026-05-07T10:27:24.404596",
+      "last_modified_ts": 1778142444.4045956,
       "file_type": "py",
       "status": "indexed",
       "summary": null,
-      "indexed_at": "2026-05-06T15:20:32.904931"
+      "indexed_at": "2026-05-07T10:28:36.666651"
     },
     "backend/app_core.py": {
       "hash_sha256": "3ecdaca55cad95071723b845bae0399ef7a923de01b94b8a156bf33c22b33070",
@@ -503,14 +503,14 @@
       "indexed_at": "2026-05-06T15:20:32.917464"
     },
     "backend/auth_utils.py": {
-      "hash_sha256": "f5e9f16509d47f216069ca5855f087e7cf8ae7ab9e7c824ddd29cb0881c3c78e",
-      "size_bytes": 2892,
-      "last_modified": "2026-04-26T21:56:21.829667",
-      "last_modified_ts": 1777233381.8296666,
+      "hash_sha256": "136f34432cf557475996c80c9a0400b4e31f4a50d2320cae3434b4391b81819e",
+      "size_bytes": 2801,
+      "last_modified": "2026-05-07T10:27:24.608303",
+      "last_modified_ts": 1778142444.6083028,
       "file_type": "py",
       "status": "indexed",
       "summary": null,
-      "indexed_at": "2026-05-06T15:20:32.945456"
+      "indexed_at": "2026-05-07T10:28:36.673976"
     },
     "backend/entitlements.py": {
       "hash_sha256": "1d4d85ed83feb29f5995dd246d41e6863df7bd0d9bd2834f6898c8c5d748625d",
@@ -533,24 +533,24 @@
       "indexed_at": "2026-05-06T15:20:32.994238"
     },
     "backend/observability.py": {
-      "hash_sha256": "b221e6c1e4e61b623d14fbdfe1b44ecf75d5c4bb5e8fd116b4060498c5e2a25a",
-      "size_bytes": 24215,
-      "last_modified": "2026-04-26T21:56:21.841076",
-      "last_modified_ts": 1777233381.8410757,
+      "hash_sha256": "5ba807277be4790a80f179d172072e80713a9162202eb84e4a12e4d57bf376ba",
+      "size_bytes": 23601,
+      "last_modified": "2026-05-07T10:27:24.879971",
+      "last_modified_ts": 1778142444.8799708,
       "file_type": "py",
       "status": "indexed",
       "summary": null,
-      "indexed_at": "2026-05-06T15:20:33.020184"
+      "indexed_at": "2026-05-07T10:28:36.678097"
     },
     "backend/ocr_service.py": {
-      "hash_sha256": "3d7d171790212370b16572d8e3acd05517dd3f8c4112b07f3dafdf1fc6d7ddd0",
-      "size_bytes": 27615,
-      "last_modified": "2026-04-26T21:56:21.849140",
-      "last_modified_ts": 1777233381.8491402,
+      "hash_sha256": "3c93cf3e1377e22fb54f95d83c92d527248ffe19bb005d17f077fa3ffea036ee",
+      "size_bytes": 26908,
+      "last_modified": "2026-05-07T10:27:25.397791",
+      "last_modified_ts": 1778142445.397791,
       "file_type": "py",
       "status": "indexed",
       "summary": null,
-      "indexed_at": "2026-05-06T15:20:33.286927"
+      "indexed_at": "2026-05-07T10:28:36.680231"
     },
     "backend/priority_refresh.py": {
       "hash_sha256": "4395f8768b8244ff06cc717d379269a2dd28c3a5076677ff0c6f5fbf381fb493",
@@ -563,24 +563,24 @@
       "indexed_at": "2026-05-06T15:20:33.318346"
     },
     "backend/product_catalog.py": {
-      "hash_sha256": "ca8ca1547e5e7f0ebf46da273d7bac5f584e3f45b04c8d0c063d88acb721181e",
-      "size_bytes": 8566,
-      "last_modified": "2026-04-26T21:56:21.854625",
-      "last_modified_ts": 1777233381.854625,
+      "hash_sha256": "42d7f6444b313e34153b93cd174d4d0a5bfc356518866545d4a504fae03e14a2",
+      "size_bytes": 8387,
+      "last_modified": "2026-05-07T10:27:25.916059",
+      "last_modified_ts": 1778142445.9160588,
       "file_type": "py",
       "status": "indexed",
       "summary": null,
-      "indexed_at": "2026-05-06T15:20:33.347767"
+      "indexed_at": "2026-05-07T10:28:36.683308"
     },
     "backend/recipes_service.py": {
-      "hash_sha256": "c5f31b7d5dbacaa465bf4ea741bf408689012ab510983dcd13d35f9f57341f84",
-      "size_bytes": 42441,
-      "last_modified": "2026-04-26T21:56:21.859663",
-      "last_modified_ts": 1777233381.8596635,
+      "hash_sha256": "df0b28f6b8770cf54ae3b0caed7bae76ac8a53689a0a9725434302a08778a9e4",
+      "size_bytes": 41384,
+      "last_modified": "2026-05-07T10:27:26.440085",
+      "last_modified_ts": 1778142446.4400847,
       "file_type": "py",
       "status": "indexed",
       "summary": null,
-      "indexed_at": "2026-05-06T15:20:33.379384"
+      "indexed_at": "2026-05-07T10:28:36.685571"
     },
     "backend/requirements.txt": {
       "hash_sha256": "279fa80ffd49c4dbf27c9ccda57d1a91cff341d2d6fee5f44017c441f19a5694",
@@ -613,44 +613,44 @@
       "indexed_at": "2026-05-06T15:20:33.445021"
     },
     "backend/serve.py": {
-      "hash_sha256": "dbf8b8ab61edfbd0f41642a58175007c331744ee2d86d3d52042f656f5496192",
-      "size_bytes": 310,
-      "last_modified": "2026-04-26T21:56:21.866517",
-      "last_modified_ts": 1777233381.866517,
+      "hash_sha256": "01d8c1c769ed1ed8ed67173267f1fed6ff01ad2396bdbb0464da9e9c29605777",
+      "size_bytes": 284,
+      "last_modified": "2026-05-07T10:03:51.829337",
+      "last_modified_ts": 1778141031.829337,
       "file_type": "py",
       "status": "indexed",
       "summary": null,
-      "indexed_at": "2026-05-06T15:20:33.445021"
+      "indexed_at": "2026-05-07T10:19:40.232582"
     },
     "backend/server.py": {
-      "hash_sha256": "ee82b6cdb6caa804f735ed5ca882267099aa9f3ec762706330652ed1293357a7",
-      "size_bytes": 285693,
-      "last_modified": "2026-05-06T22:42:43.272963",
-      "last_modified_ts": 1778100163.2729626,
+      "hash_sha256": "c6f7de0d5edb4969b57f83e3288aba3e0bc49740b04e6ef8c76d0f2a10e525ae",
+      "size_bytes": 279105,
+      "last_modified": "2026-05-07T10:03:51.454968",
+      "last_modified_ts": 1778141031.4549677,
       "file_type": "py",
       "status": "indexed",
       "summary": null,
-      "indexed_at": "2026-05-06T22:43:36.241582"
+      "indexed_at": "2026-05-07T10:19:40.254010"
     },
     "backend/service_limits.py": {
-      "hash_sha256": "78aae9350a1f206a52f441dfea506a85635c66ca14a376af8fae1dfc96098b67",
-      "size_bytes": 10003,
-      "last_modified": "2026-04-26T21:56:21.885080",
-      "last_modified_ts": 1777233381.8850799,
+      "hash_sha256": "1a9ba0c8a26f25b4c9d5e79b522a2544bc3b2563045142bc813e9bdb1e23d5c6",
+      "size_bytes": 9763,
+      "last_modified": "2026-05-07T10:27:26.722867",
+      "last_modified_ts": 1778142446.7228675,
       "file_type": "py",
       "status": "indexed",
       "summary": null,
-      "indexed_at": "2026-05-06T15:20:33.506630"
+      "indexed_at": "2026-05-07T10:28:36.695417"
     },
     "backend/test_mode.py": {
-      "hash_sha256": "47feced4e0dc37a03896d83af2cac52e9d4cec6f1c93d103ed52021f2822d4a6",
-      "size_bytes": 4316,
-      "last_modified": "2026-04-26T21:56:21.890110",
-      "last_modified_ts": 1777233381.89011,
+      "hash_sha256": "6832d85f5f575dec45994e6f3b975409b14f04b966d8b0f546a56206016d471d",
+      "size_bytes": 4160,
+      "last_modified": "2026-05-07T10:27:27.013427",
+      "last_modified_ts": 1778142447.0134268,
       "file_type": "py",
       "status": "indexed",
       "summary": null,
-      "indexed_at": "2026-05-06T15:20:33.535481"
+      "indexed_at": "2026-05-07T10:28:36.697567"
     },
     "backend/__init__.py": {
       "hash_sha256": "13ebc9408709e883e3f6fdf2878582fb8bb38c2b8d2f2a211f77647501265e1d",
@@ -983,14 +983,14 @@
       "indexed_at": "2026-05-06T15:20:33.933222"
     },
     "docs/non-regression-tests.md": {
-      "hash_sha256": "1b4a6f67301b898d9ecd4c6ec312d258f1b0bf57367630a4954ad8e7a46ccd75",
-      "size_bytes": 7528,
-      "last_modified": "2026-05-06T22:42:43.288848",
-      "last_modified_ts": 1778100163.2888484,
+      "hash_sha256": "109ebed5e90094c01999a2b3d1db51c558e27577a230e80a12996af6594da362",
+      "size_bytes": 8062,
+      "last_modified": "2026-05-07T09:48:56.932907",
+      "last_modified_ts": 1778140136.932907,
       "file_type": "md",
       "status": "indexed",
       "summary": null,
-      "indexed_at": "2026-05-06T22:43:36.630316"
+      "indexed_at": "2026-05-07T10:19:40.595139"
     },
     "docs/testing.md": {
       "hash_sha256": "d1c2c320be0588a674aa39204201f31363b9a523ecef006c3b2a6f21dcc3a7ca",
@@ -1072,6 +1072,26 @@
       "summary": null,
       "indexed_at": "2026-05-06T15:20:33.971225"
     },
+    "frontend/DEBUG_SWIPE_LOGS.md": {
+      "hash_sha256": "967fdabf4c70850bbbb923d69912d18eae070c8442b661fa546d95ad035853d2",
+      "size_bytes": 6809,
+      "last_modified": "2026-05-10T20:27:48.736380",
+      "last_modified_ts": 1778437668.7363799,
+      "file_type": "md",
+      "status": "indexed",
+      "summary": null,
+      "indexed_at": "2026-05-11T11:33:43.001549"
+    },
+    "frontend/DEBUG_SWIPE_SETUP.md": {
+      "hash_sha256": "ace6c1882b289fa66cf41d3f21893051399d4c09e4bce6508bee0dd4d15d0036",
+      "size_bytes": 3851,
+      "last_modified": "2026-05-10T20:28:46.207378",
+      "last_modified_ts": 1778437726.207378,
+      "file_type": "md",
+      "status": "indexed",
+      "summary": null,
+      "indexed_at": "2026-05-11T11:33:43.008398"
+    },
     "frontend/eas.json": {
       "hash_sha256": "c90d8a18140ed089e6fe77bfce689720fbdd4ca8768ac49e635d8eea5eb78f9b",
       "size_bytes": 703,
@@ -1123,14 +1143,14 @@
       "indexed_at": "2026-05-06T15:20:33.994234"
     },
     "frontend/package.json": {
-      "hash_sha256": "8d7af7139029b87b0df0fd751d0f77794c65d878ab16a4eaade4b1fcec630cc6",
-      "size_bytes": 3187,
-      "last_modified": "2026-04-24T13:24:25.299518",
-      "last_modified_ts": 1777029865.2995179,
+      "hash_sha256": "f99bd8cc6df0279a0dd96f059fab9897977b2ce9bb6586938a182fe5de586c9a",
+      "size_bytes": 3257,
+      "last_modified": "2026-05-10T20:21:04.676071",
+      "last_modified_ts": 1778437264.676071,
       "file_type": "json",
       "status": "indexed",
       "summary": null,
-      "indexed_at": "2026-05-06T15:20:34.005774"
+      "indexed_at": "2026-05-11T11:33:43.031973"
     },
     "frontend/README.md": {
       "hash_sha256": "8fb1316188e6f7bd49cb17fc31b13e2fff8e8dc407102c5a9d3522e802b49f75",
@@ -94525,8 +94545,8 @@
     "frontend/.test-dist/app.config.js": {
       "hash_sha256": "75036fbaf51274fb67428c0220d2255f3ca1e302756b5a24a57782d1091b1b7b",
       "size_bytes": 962,
-      "last_modified": "2026-05-05T11:08:32.064743",
-      "last_modified_ts": 1777972112.0647428,
+      "last_modified": "2026-05-10T20:28:29.341981",
+      "last_modified_ts": 1778437709.3419812,
       "file_type": "js",
       "status": "indexed",
       "summary": null,
@@ -94535,8 +94555,8 @@
     "frontend/.test-dist/app.json": {
       "hash_sha256": "9d9bc6ac2fab24dc37d790157ec43ab24baf09aad4df4085f05e02ad9589bbb1",
       "size_bytes": 3415,
-      "last_modified": "2026-05-05T11:08:32.056744",
-      "last_modified_ts": 1777972112.0567436,
+      "last_modified": "2026-05-10T20:28:29.327571",
+      "last_modified_ts": 1778437709.3275712,
       "file_type": "json",
       "status": "indexed",
       "summary": null,
@@ -94545,8 +94565,8 @@
     "frontend/.test-dist/data/mockDashboardData.js": {
       "hash_sha256": "9c417bd53eaa6343ea46f5e733a152d475d46ef094defbd05b24a89334b16f06",
       "size_bytes": 19218,
-      "last_modified": "2026-05-05T11:08:31.310294",
-      "last_modified_ts": 1777972111.3102937,
+      "last_modified": "2026-05-10T20:28:28.402899",
+      "last_modified_ts": 1778437708.402899,
       "file_type": "js",
       "status": "indexed",
       "summary": null,
@@ -94555,8 +94575,8 @@
     "frontend/.test-dist/data/mockDashboardData.test.js": {
       "hash_sha256": "6184d85c689a21f7ed3e4d38a0f971f13572adea16efd4b679c7d4644f0ab930",
       "size_bytes": 9692,
-      "last_modified": "2026-05-05T11:08:32.041746",
-      "last_modified_ts": 1777972112.041746,
+      "last_modified": "2026-05-10T20:28:29.323923",
+      "last_modified_ts": 1778437709.323923,
       "file_type": "js",
       "status": "indexed",
       "summary": null,
@@ -94565,8 +94585,8 @@
     "frontend/.test-dist/integration/recipesPresentation.integration.test.js": {
       "hash_sha256": "b5cb9affb03de220bbbb8e57f2ff576871ec28d674e1d5b56bb385bc5241216b",
       "size_bytes": 1502,
-      "last_modified": "2026-05-05T11:08:32.048741",
-      "last_modified_ts": 1777972112.0487406,
+      "last_modified": "2026-05-10T20:28:29.327571",
+      "last_modified_ts": 1778437709.3275712,
       "file_type": "js",
       "status": "indexed",
       "summary": null,
@@ -94575,8 +94595,8 @@
     "frontend/.test-dist/smoke/appConfig.smoke.test.js": {
       "hash_sha256": "62bfba85e638967cc7b57eab7d8cab4c2eac87d1881796ee89a8c3baa34a0c7c",
       "size_bytes": 819,
-      "last_modified": "2026-05-05T11:08:32.075950",
-      "last_modified_ts": 1777972112.0759497,
+      "last_modified": "2026-05-10T20:28:29.354753",
+      "last_modified_ts": 1778437709.3547528,
       "file_type": "js",
       "status": "indexed",
       "summary": null,
@@ -94585,8 +94605,8 @@
     "frontend/.test-dist/store/authStore.js": {
       "hash_sha256": "02331a19f99a6d39831f9f38f1216df7b0c106defefb14b9989b4c8736d32929",
       "size_bytes": 14110,
-      "last_modified": "2026-05-05T11:08:31.489505",
-      "last_modified_ts": 1777972111.4895053,
+      "last_modified": "2026-05-10T20:28:28.594414",
+      "last_modified_ts": 1778437708.5944142,
       "file_type": "js",
       "status": "indexed",
       "summary": null,
@@ -94595,8 +94615,8 @@
     "frontend/.test-dist/store/premiumUiStore.js": {
       "hash_sha256": "0b80d35a43c2a57f37c94ec9ef78c82ec5ede3d492ac5a675a537d13ab18bd2d",
       "size_bytes": 381,
-      "last_modified": "2026-05-05T11:08:31.228945",
-      "last_modified_ts": 1777972111.2289448,
+      "last_modified": "2026-05-10T20:28:28.347083",
+      "last_modified_ts": 1778437708.3470829,
       "file_type": "js",
       "status": "indexed",
       "summary": null,
@@ -94605,28 +94625,28 @@
     "frontend/.test-dist/store/recipesStore.js": {
       "hash_sha256": "a071bcd725747a13425ab8c8543cba03b455ec3bcc37a77c5b5d59fa6c968878",
       "size_bytes": 11769,
-      "last_modified": "2026-05-05T11:08:31.383649",
-      "last_modified_ts": 1777972111.3836493,
+      "last_modified": "2026-05-10T20:28:28.447766",
+      "last_modified_ts": 1778437708.4477663,
       "file_type": "js",
       "status": "indexed",
       "summary": null,
       "indexed_at": "2026-05-06T15:21:01.931328"
     },
     "frontend/.test-dist/store/stockStore.js": {
-      "hash_sha256": "ce413d2b058851d3abadf6ba02939ff48e419bbd50fce42ac93e1f9a01e2443c",
-      "size_bytes": 25163,
-      "last_modified": "2026-05-05T11:08:31.438353",
-      "last_modified_ts": 1777972111.438353,
+      "hash_sha256": "58f5b53afd22dd2146caf110d8c7e5dd9bb81c7c846192e6938764df52d320e1",
+      "size_bytes": 28685,
+      "last_modified": "2026-05-10T20:28:28.535722",
+      "last_modified_ts": 1778437708.5357223,
       "file_type": "js",
       "status": "indexed",
       "summary": null,
-      "indexed_at": "2026-05-06T15:21:01.931328"
+      "indexed_at": "2026-05-11T11:34:19.033809"
     },
     "frontend/.test-dist/utils/adminAccess.js": {
       "hash_sha256": "7c5bfe3deb367ce80c706cc57de60193117f4b061260b7b17bedbd77e590414f",
       "size_bytes": 661,
-      "last_modified": "2026-05-05T11:08:31.496161",
-      "last_modified_ts": 1777972111.4961615,
+      "last_modified": "2026-05-10T20:28:28.604140",
+      "last_modified_ts": 1778437708.6041398,
       "file_type": "js",
       "status": "indexed",
       "summary": null,
@@ -94635,8 +94655,8 @@
     "frontend/.test-dist/utils/adminAccess.test.js": {
       "hash_sha256": "ab7e719b6312ebb5820fa91d3159f3dd95514046ffec6203cdb065a8c330e97a",
       "size_bytes": 538,
-      "last_modified": "2026-05-05T11:08:31.501831",
-      "last_modified_ts": 1777972111.5018306,
+      "last_modified": "2026-05-10T20:28:28.611261",
+      "last_modified_ts": 1778437708.6112607,
       "file_type": "js",
       "status": "indexed",
       "summary": null,
@@ -94645,8 +94665,8 @@
     "frontend/.test-dist/utils/adminMonitoringApi.js": {
       "hash_sha256": "aa111217038eba85d0e41f2b906f8124c597a4454be1e5f1da929610f9512136",
       "size_bytes": 3738,
-      "last_modified": "2026-05-05T11:08:31.511966",
-      "last_modified_ts": 1777972111.5119665,
+      "last_modified": "2026-05-10T20:28:28.621966",
+      "last_modified_ts": 1778437708.6219664,
       "file_type": "js",
       "status": "indexed",
       "summary": null,
@@ -94655,8 +94675,8 @@
     "frontend/.test-dist/utils/adminMonitoringApi.test.js": {
       "hash_sha256": "0d831c654f3f03cd5dff6fb7c1235434365f1dbf36fc952c0fd7c40bcd944c5d",
       "size_bytes": 1209,
-      "last_modified": "2026-05-05T11:08:31.518968",
-      "last_modified_ts": 1777972111.5189683,
+      "last_modified": "2026-05-10T20:28:28.635791",
+      "last_modified_ts": 1778437708.6357906,
       "file_type": "js",
       "status": "indexed",
       "summary": null,
@@ -94665,8 +94685,8 @@
     "frontend/.test-dist/utils/appConfig.js": {
       "hash_sha256": "9fc05fb6e52c31597e89926a752db4ccc348a367855fa2bfb41d2e1395dc2096",
       "size_bytes": 1845,
-      "last_modified": "2026-05-05T11:08:31.170553",
-      "last_modified_ts": 1777972111.1705532,
+      "last_modified": "2026-05-10T20:28:28.301553",
+      "last_modified_ts": 1778437708.301553,
       "file_type": "js",
       "status": "indexed",
       "summary": null,
@@ -94675,8 +94695,8 @@
     "frontend/.test-dist/utils/appConfig.test.js": {
       "hash_sha256": "cdf51f338e267784c7df2c2f4896545082c0dbfdeada9f6bb68b9e2f155bc67a",
       "size_bytes": 2128,
-      "last_modified": "2026-05-05T11:08:31.527494",
-      "last_modified_ts": 1777972111.5274942,
+      "last_modified": "2026-05-10T20:28:28.651994",
+      "last_modified_ts": 1778437708.6519942,
       "file_type": "js",
       "status": "indexed",
       "summary": null,
@@ -94685,8 +94705,8 @@
     "frontend/.test-dist/utils/authNavigationGuard.js": {
       "hash_sha256": "5a0715077b7376b3c0283e6815732184bbbdd52325fb8795dec383172b740fba",
       "size_bytes": 769,
-      "last_modified": "2026-05-05T11:08:31.533496",
-      "last_modified_ts": 1777972111.533496,
+      "last_modified": "2026-05-10T20:28:28.662467",
+      "last_modified_ts": 1778437708.662467,
       "file_type": "js",
       "status": "indexed",
       "summary": null,
@@ -94695,8 +94715,8 @@
     "frontend/.test-dist/utils/authNavigationGuard.test.js": {
       "hash_sha256": "6dcad3b9603fef3ab3be860822cc51dddcbc8695b23496f63eac72bfe865bad2",
       "size_bytes": 2527,
-      "last_modified": "2026-05-05T11:08:31.540560",
-      "last_modified_ts": 1777972111.54056,
+      "last_modified": "2026-05-10T20:28:28.673279",
+      "last_modified_ts": 1778437708.673279,
       "file_type": "js",
       "status": "indexed",
       "summary": null,
@@ -94705,8 +94725,8 @@
     "frontend/.test-dist/utils/authStore.test.js": {
       "hash_sha256": "a6f8cb17211d81486534b5d1ad66b0f29c77e3461ba9f1999ed26fc98368a7f2",
       "size_bytes": 1436,
-      "last_modified": "2026-05-05T11:08:31.546560",
-      "last_modified_ts": 1777972111.5465596,
+      "last_modified": "2026-05-10T20:28:28.680156",
+      "last_modified_ts": 1778437708.6801562,
       "file_type": "js",
       "status": "indexed",
       "summary": null,
@@ -94715,8 +94735,8 @@
     "frontend/.test-dist/utils/biometricAuth.js": {
       "hash_sha256": "9f3dcf49e3ff96844370ba6e118fbb6ef8453dcf63d06a3372e2cc92ff9583f7",
       "size_bytes": 1936,
-      "last_modified": "2026-05-05T11:08:31.454962",
-      "last_modified_ts": 1777972111.454962,
+      "last_modified": "2026-05-10T20:28:28.571125",
+      "last_modified_ts": 1778437708.5711246,
       "file_type": "js",
       "status": "indexed",
       "summary": null,
@@ -94725,8 +94745,8 @@
     "frontend/.test-dist/utils/biometricAuth.test.js": {
       "hash_sha256": "e7a7bf4c77d0618c853182ad6c9a7307abecc8a80b26f29175970ec8a9476a7b",
       "size_bytes": 2982,
-      "last_modified": "2026-05-05T11:08:31.553990",
-      "last_modified_ts": 1777972111.5539901,
+      "last_modified": "2026-05-10T20:28:28.694307",
+      "last_modified_ts": 1778437708.6943066,
       "file_type": "js",
       "status": "indexed",
       "summary": null,
@@ -94735,8 +94755,8 @@
     "frontend/.test-dist/utils/buildMetadataScript.test.js": {
       "hash_sha256": "6a3d8e4e9e02d9ac5a5ea7278ad1f8af6bb360fc71d4fcab7e3356537a075fb9",
       "size_bytes": 1779,
-      "last_modified": "2026-05-05T11:08:31.553990",
-      "last_modified_ts": 1777972111.5539901,
+      "last_modified": "2026-05-10T20:28:28.704385",
+      "last_modified_ts": 1778437708.7043846,
       "file_type": "js",
       "status": "indexed",
       "summary": null,
@@ -94745,18 +94765,38 @@
     "frontend/.test-dist/utils/config.js": {
       "hash_sha256": "b5d4c9ea4e5113f79eb8c5dadb1600f5c5e61a750daf4dccb3b5ee3a87a80f48",
       "size_bytes": 3646,
-      "last_modified": "2026-05-05T11:08:31.204899",
-      "last_modified_ts": 1777972111.2048988,
+      "last_modified": "2026-05-10T20:28:28.324442",
+      "last_modified_ts": 1778437708.3244424,
       "file_type": "js",
       "status": "indexed",
       "summary": null,
       "indexed_at": "2026-05-06T15:21:01.960989"
     },
+    "frontend/.test-dist/utils/debugConfig.js": {
+      "hash_sha256": "5c800a1383b7815cf8e5343af8be2959264c0d2affde83d860ea970a69c48992",
+      "size_bytes": 723,
+      "last_modified": "2026-05-10T20:28:28.471452",
+      "last_modified_ts": 1778437708.4714518,
+      "file_type": "js",
+      "status": "indexed",
+      "summary": null,
+      "indexed_at": "2026-05-11T11:34:19.160391"
+    },
+    "frontend/.test-dist/utils/debugSwipeLogger.js": {
+      "hash_sha256": "29bde8dc349898bdadb08c2c71f3f9f2e6d399c348bb082e6782d2570fb403d8",
+      "size_bytes": 10267,
+      "last_modified": "2026-05-10T20:28:28.494198",
+      "last_modified_ts": 1778437708.4941978,
+      "file_type": "js",
+      "status": "indexed",
+      "summary": null,
+      "indexed_at": "2026-05-11T11:34:19.169981"
+    },
     "frontend/.test-dist/utils/expiryLabels.js": {
       "hash_sha256": "438b017c49df756c4a311343e425c403931cf37c1414a6acbdf2111a60042bf4",
       "size_bytes": 691,
-      "last_modified": "2026-05-05T11:08:31.553990",
-      "last_modified_ts": 1777972111.5539901,
+      "last_modified": "2026-05-10T20:28:28.711195",
+      "last_modified_ts": 1778437708.7111945,
       "file_type": "js",
       "status": "indexed",
       "summary": null,
@@ -94765,8 +94805,8 @@
     "frontend/.test-dist/utils/expiryLabels.test.js": {
       "hash_sha256": "938cfb5a1133e25cb6b82dd0e6c3a01663fc4d4de3afddce9c5ca4a7f891e644",
       "size_bytes": 1464,
-      "last_modified": "2026-05-05T11:08:31.573366",
-      "last_modified_ts": 1777972111.573366,
+      "last_modified": "2026-05-10T20:28:28.723330",
+      "last_modified_ts": 1778437708.7233305,
       "file_type": "js",
       "status": "indexed",
       "summary": null,
@@ -94775,8 +94815,8 @@
     "frontend/.test-dist/utils/ingredientMatching.js": {
       "hash_sha256": "76cca2dfb98604693d52a8ae607485788966753dd68b33c39dcca2e0b596ef9c",
       "size_bytes": 13792,
-      "last_modified": "2026-05-05T11:08:31.271178",
-      "last_modified_ts": 1777972111.2711785,
+      "last_modified": "2026-05-10T20:28:28.371922",
+      "last_modified_ts": 1778437708.3719218,
       "file_type": "js",
       "status": "indexed",
       "summary": null,
@@ -94785,8 +94825,8 @@
     "frontend/.test-dist/utils/ingredientMatching.test.js": {
       "hash_sha256": "12c649fba454ff39ba17ba04f004e137e1c9f1422775068ef2ed0a68f286baf3",
       "size_bytes": 3118,
-      "last_modified": "2026-05-05T11:08:31.582100",
-      "last_modified_ts": 1777972111.5821,
+      "last_modified": "2026-05-10T20:28:28.737762",
+      "last_modified_ts": 1778437708.7377622,
       "file_type": "js",
       "status": "indexed",
       "summary": null,
@@ -94795,8 +94835,8 @@
     "frontend/.test-dist/utils/logger.js": {
       "hash_sha256": "9e4e94843f01f3cb96e94f00a54fd6b3bdeb10247aeee1ea3954840a7da9bc11",
       "size_bytes": 1291,
-      "last_modified": "2026-05-05T11:08:31.187817",
-      "last_modified_ts": 1777972111.1878166,
+      "last_modified": "2026-05-10T20:28:28.313638",
+      "last_modified_ts": 1778437708.313638,
       "file_type": "js",
       "status": "indexed",
       "summary": null,
@@ -94805,8 +94845,8 @@
     "frontend/.test-dist/utils/login.test.js": {
       "hash_sha256": "5bd46afb7f2e92006a1c10f7f5013ba9e2be64d0718b75d931db9f148b3c4c93",
       "size_bytes": 4812,
-      "last_modified": "2026-05-05T11:08:31.589150",
-      "last_modified_ts": 1777972111.5891504,
+      "last_modified": "2026-05-10T20:28:28.744411",
+      "last_modified_ts": 1778437708.744411,
       "file_type": "js",
       "status": "indexed",
       "summary": null,
@@ -94815,8 +94855,8 @@
     "frontend/.test-dist/utils/monthlyLabels.js": {
       "hash_sha256": "724c41a2d9e93ef65c9c0f4c2008cf0fb0b9806bec1b96cebce77ffb6f9abc69",
       "size_bytes": 1232,
-      "last_modified": "2026-05-05T11:08:31.589150",
-      "last_modified_ts": 1777972111.5891504,
+      "last_modified": "2026-05-10T20:28:28.763387",
+      "last_modified_ts": 1778437708.7633874,
       "file_type": "js",
       "status": "indexed",
       "summary": null,
@@ -94825,8 +94865,8 @@
     "frontend/.test-dist/utils/monthlyLabels.test.js": {
       "hash_sha256": "a66ca8097e6352ac6d08bf1de1205b93d7b7e42be7b45292359e74e2b4a3348f",
       "size_bytes": 1867,
-      "last_modified": "2026-05-05T11:08:31.607071",
-      "last_modified_ts": 1777972111.6070707,
+      "last_modified": "2026-05-10T20:28:28.768709",
+      "last_modified_ts": 1778437708.7687092,
       "file_type": "js",
       "status": "indexed",
       "summary": null,
@@ -94835,8 +94875,8 @@
     "frontend/.test-dist/utils/navigationBack.js": {
       "hash_sha256": "8ae0944b5c6c34289725eb5170e34429a7ef26e341341414949160b491fee145",
       "size_bytes": 396,
-      "last_modified": "2026-05-05T11:08:31.609085",
-      "last_modified_ts": 1777972111.609085,
+      "last_modified": "2026-05-10T20:28:28.780509",
+      "last_modified_ts": 1778437708.7805085,
       "file_type": "js",
       "status": "indexed",
       "summary": null,
@@ -94845,8 +94885,8 @@
     "frontend/.test-dist/utils/navigationBack.test.js": {
       "hash_sha256": "6e29363ba08f2ac5ff44a1dc18f5b6b42507f3850333e3a64593a7d81a826fff",
       "size_bytes": 1638,
-      "last_modified": "2026-05-05T11:08:31.618588",
-      "last_modified_ts": 1777972111.6185882,
+      "last_modified": "2026-05-10T20:28:28.793408",
+      "last_modified_ts": 1778437708.793408,
       "file_type": "js",
       "status": "indexed",
       "summary": null,
@@ -94855,8 +94895,8 @@
     "frontend/.test-dist/utils/notificationService.js": {
       "hash_sha256": "3e583d946fa90e191dcf14a1783bbbbed8e8305f239dc0a3e7c064ba055e86f3",
       "size_bytes": 10998,
-      "last_modified": "2026-05-05T11:08:31.454962",
-      "last_modified_ts": 1777972111.454962,
+      "last_modified": "2026-05-10T20:28:28.555056",
+      "last_modified_ts": 1778437708.5550556,
       "file_type": "js",
       "status": "indexed",
       "summary": null,
@@ -94865,8 +94905,8 @@
     "frontend/.test-dist/utils/premiumErrors.js": {
       "hash_sha256": "e34fecf9d19ef748ad68d806ff145508f8d55514470be0b118eae7c4b1a2dac2",
       "size_bytes": 735,
-      "last_modified": "2026-05-05T11:08:31.212914",
-      "last_modified_ts": 1777972111.2129142,
+      "last_modified": "2026-05-10T20:28:28.329851",
+      "last_modified_ts": 1778437708.3298507,
       "file_type": "js",
       "status": "indexed",
       "summary": null,
@@ -94875,8 +94915,8 @@
     "frontend/.test-dist/utils/productEditFlow.js": {
       "hash_sha256": "e336e1a395209d05d93101c2aa4b5654d849c3bdcace0f76247cd8f869a8d9d6",
       "size_bytes": 586,
-      "last_modified": "2026-05-05T11:08:31.622886",
-      "last_modified_ts": 1777972111.6228862,
+      "last_modified": "2026-05-10T20:28:28.801465",
+      "last_modified_ts": 1778437708.8014648,
       "file_type": "js",
       "status": "indexed",
       "summary": null,
@@ -94885,8 +94925,8 @@
     "frontend/.test-dist/utils/productEditFlow.test.js": {
       "hash_sha256": "bd9794d601d7c1f4ce5c23992b1f02e82f4fbd8951447a1a3d645f59bae3dfbf",
       "size_bytes": 1908,
-      "last_modified": "2026-05-05T11:08:31.632875",
-      "last_modified_ts": 1777972111.6328754,
+      "last_modified": "2026-05-10T20:28:28.816010",
+      "last_modified_ts": 1778437708.8160102,
       "file_type": "js",
       "status": "indexed",
       "summary": null,
@@ -94895,8 +94935,8 @@
     "frontend/.test-dist/utils/productEditNavigation.js": {
       "hash_sha256": "1600ef3b20d76f2b47241c4e4537ca149aa467840e9c171e38d93a33b9530db4",
       "size_bytes": 520,
-      "last_modified": "2026-05-05T11:08:31.638647",
-      "last_modified_ts": 1777972111.6386473,
+      "last_modified": "2026-05-10T20:28:28.818103",
+      "last_modified_ts": 1778437708.8181028,
       "file_type": "js",
       "status": "indexed",
       "summary": null,
@@ -94905,8 +94945,8 @@
     "frontend/.test-dist/utils/productEditNavigation.test.js": {
       "hash_sha256": "a385043e1c842525d9f2fd1e5c58a1d62c3773de5df8a4a00e4392a05e587cad",
       "size_bytes": 1038,
-      "last_modified": "2026-05-05T11:08:31.644644",
-      "last_modified_ts": 1777972111.6446435,
+      "last_modified": "2026-05-10T20:28:28.834384",
+      "last_modified_ts": 1778437708.834384,
       "file_type": "js",
       "status": "indexed",
       "summary": null,
@@ -94915,8 +94955,8 @@
     "frontend/.test-dist/utils/receiptExpiry.js": {
       "hash_sha256": "9152e459abf6ab2cafe223f48541d0bedad04258ac818a436f81edd9490a4de7",
       "size_bytes": 2065,
-      "last_modified": "2026-05-05T11:08:31.651646",
-      "last_modified_ts": 1777972111.6516457,
+      "last_modified": "2026-05-10T20:28:28.847450",
+      "last_modified_ts": 1778437708.8474498,
       "file_type": "js",
       "status": "indexed",
       "summary": null,
@@ -94925,8 +94965,8 @@
     "frontend/.test-dist/utils/receiptExpiry.test.js": {
       "hash_sha256": "0805e51b814fb8cb96e45621322e3c17215bbb5ac1616899bcc46fe8204ab468",
       "size_bytes": 2379,
-      "last_modified": "2026-05-05T11:08:31.659653",
-      "last_modified_ts": 1777972111.6596527,
+      "last_modified": "2026-05-10T20:28:28.861280",
+      "last_modified_ts": 1778437708.8612804,
       "file_type": "js",
       "status": "indexed",
       "summary": null,
@@ -94935,8 +94975,8 @@
     "frontend/.test-dist/utils/receiptScanFlow.js": {
       "hash_sha256": "04fa5154feec9903ae96422e0edf39561d98f0be1726d9d461e2a091023ba999",
       "size_bytes": 701,
-      "last_modified": "2026-05-05T11:08:31.664649",
-      "last_modified_ts": 1777972111.6646488,
+      "last_modified": "2026-05-10T20:28:28.868286",
+      "last_modified_ts": 1778437708.8682864,
       "file_type": "js",
       "status": "indexed",
       "summary": null,
@@ -94945,8 +94985,8 @@
     "frontend/.test-dist/utils/receiptScanFlow.test.js": {
       "hash_sha256": "2226486dd135bee2aa7baf4d4a1f49c15877d1cc34026dab4a63ee2a4398e9bf",
       "size_bytes": 2050,
-      "last_modified": "2026-05-05T11:08:31.674667",
-      "last_modified_ts": 1777972111.6746666,
+      "last_modified": "2026-05-10T20:28:28.884413",
+      "last_modified_ts": 1778437708.884413,
       "file_type": "js",
       "status": "indexed",
       "summary": null,
@@ -94955,8 +94995,8 @@
     "frontend/.test-dist/utils/recipeAssociations.js": {
       "hash_sha256": "1b5e7d2c19f9d9be3dde36d73d118cee4ac3749351c22ec81db1bf4b35ee1ae2",
       "size_bytes": 1061,
-      "last_modified": "2026-05-05T11:08:31.340359",
-      "last_modified_ts": 1777972111.3403592,
+      "last_modified": "2026-05-10T20:28:28.420336",
+      "last_modified_ts": 1778437708.4203355,
       "file_type": "js",
       "status": "indexed",
       "summary": null,
@@ -94965,8 +95005,8 @@
     "frontend/.test-dist/utils/recipeAssociations.test.js": {
       "hash_sha256": "3bff54b1f38b404d9684baf3fcb68593b2f82390e4a94adf44aaad7757b8a826",
       "size_bytes": 4866,
-      "last_modified": "2026-05-05T11:08:31.686246",
-      "last_modified_ts": 1777972111.6862464,
+      "last_modified": "2026-05-10T20:28:28.915049",
+      "last_modified_ts": 1778437708.9150486,
       "file_type": "js",
       "status": "indexed",
       "summary": null,
@@ -94975,8 +95015,8 @@
     "frontend/.test-dist/utils/recipeCacheBootstrap.js": {
       "hash_sha256": "c71d292b1235b077ecb9a9d0bf0cd5c725c5007ffd7e4fca07a29637e194c444",
       "size_bytes": 500,
-      "last_modified": "2026-05-05T11:08:31.346361",
-      "last_modified_ts": 1777972111.3463607,
+      "last_modified": "2026-05-10T20:28:28.422343",
+      "last_modified_ts": 1778437708.4223433,
       "file_type": "js",
       "status": "indexed",
       "summary": null,
@@ -94985,8 +95025,8 @@
     "frontend/.test-dist/utils/recipeCacheBootstrap.test.js": {
       "hash_sha256": "fa3285076855cfe2ca39958e2dfe0ad5caba479ac43b5be3e5843c881ee4256f",
       "size_bytes": 1372,
-      "last_modified": "2026-05-05T11:08:31.693797",
-      "last_modified_ts": 1777972111.6937966,
+      "last_modified": "2026-05-10T20:28:28.929358",
+      "last_modified_ts": 1778437708.9293582,
       "file_type": "js",
       "status": "indexed",
       "summary": null,
@@ -94995,8 +95035,8 @@
     "frontend/.test-dist/utils/recipeDetailLoadPolicy.js": {
       "hash_sha256": "167ce6c96b3cfd483f1c69522212b1de5e5703cb0f0c03a1e2d63dceb19565aa",
       "size_bytes": 692,
-      "last_modified": "2026-05-05T11:08:31.352357",
-      "last_modified_ts": 1777972111.3523571,
+      "last_modified": "2026-05-10T20:28:28.427528",
+      "last_modified_ts": 1778437708.4275277,
       "file_type": "js",
       "status": "indexed",
       "summary": null,
@@ -95005,8 +95045,8 @@
     "frontend/.test-dist/utils/recipeDetailLoadPolicy.test.js": {
       "hash_sha256": "a53cb911887107f09bc0b84ca883f9b3373aa185d6d88394a94a58e58ea8185f",
       "size_bytes": 1832,
-      "last_modified": "2026-05-05T11:08:31.693797",
-      "last_modified_ts": 1777972111.6937966,
+      "last_modified": "2026-05-10T20:28:28.941018",
+      "last_modified_ts": 1778437708.941018,
       "file_type": "js",
       "status": "indexed",
       "summary": null,
@@ -95015,8 +95055,8 @@
     "frontend/.test-dist/utils/recipeDetailNavigation.js": {
       "hash_sha256": "76a543df7c3634fd611e1c5639d5ee59a5d2e4e51749d389ae02dea1373f531e",
       "size_bytes": 387,
-      "last_modified": "2026-05-05T11:08:31.708864",
-      "last_modified_ts": 1777972111.7088642,
+      "last_modified": "2026-05-10T20:28:28.949059",
+      "last_modified_ts": 1778437708.9490595,
       "file_type": "js",
       "status": "indexed",
       "summary": null,
@@ -95025,8 +95065,8 @@
     "frontend/.test-dist/utils/recipeDetailNavigation.test.js": {
       "hash_sha256": "83269a9cd081d082ac91921f1283857a694d33fdb69f2bca8ea0285a34e9b3e5",
       "size_bytes": 881,
-      "last_modified": "2026-05-05T11:08:31.710878",
-      "last_modified_ts": 1777972111.710878,
+      "last_modified": "2026-05-10T20:28:28.961156",
+      "last_modified_ts": 1778437708.9611564,
       "file_type": "js",
       "status": "indexed",
       "summary": null,
@@ -95035,8 +95075,8 @@
     "frontend/.test-dist/utils/recipeFrenchTypography.js": {
       "hash_sha256": "4f7e5f6d4192d6ae0f076616f8b6f13c1003ba3c7b8e7442f32b6e9982398db5",
       "size_bytes": 1419,
-      "last_modified": "2026-05-05T11:08:31.245179",
-      "last_modified_ts": 1777972111.2451787,
+      "last_modified": "2026-05-10T20:28:28.352369",
+      "last_modified_ts": 1778437708.3523686,
       "file_type": "js",
       "status": "indexed",
       "summary": null,
@@ -95045,8 +95085,8 @@
     "frontend/.test-dist/utils/recipeFrenchTypography.test.js": {
       "hash_sha256": "9b59a91ce7acbdc802ccf44a555c690442aecba9a9a31e515c2db92db0bf4a18",
       "size_bytes": 1209,
-      "last_modified": "2026-05-05T11:08:31.724585",
-      "last_modified_ts": 1777972111.7245848,
+      "last_modified": "2026-05-10T20:28:28.973703",
+      "last_modified_ts": 1778437708.9737034,
       "file_type": "js",
       "status": "indexed",
       "summary": null,
@@ -95055,8 +95095,8 @@
     "frontend/.test-dist/utils/recipeIngredientDisplay.js": {
       "hash_sha256": "6d65dd7b519b34765321956b1b707b9311947810560da1f4edca3b5c54c8c5dc",
       "size_bytes": 959,
-      "last_modified": "2026-05-05T11:08:31.728822",
-      "last_modified_ts": 1777972111.7288225,
+      "last_modified": "2026-05-10T20:28:28.984298",
+      "last_modified_ts": 1778437708.9842985,
       "file_type": "js",
       "status": "indexed",
       "summary": null,
@@ -95065,8 +95105,8 @@
     "frontend/.test-dist/utils/recipeIngredientDisplay.test.js": {
       "hash_sha256": "04963d9ea56a3726ddba6378f51e4392f812880a6e5799d01d7dbcd5160452e4",
       "size_bytes": 2941,
-      "last_modified": "2026-05-05T11:08:31.742493",
-      "last_modified_ts": 1777972111.742493,
+      "last_modified": "2026-05-10T20:28:29.003411",
+      "last_modified_ts": 1778437709.003411,
       "file_type": "js",
       "status": "indexed",
       "summary": null,
@@ -95075,8 +95115,8 @@
     "frontend/.test-dist/utils/recipeIngredients.js": {
       "hash_sha256": "cb45c9515d4123e5622f37758ac24ea59cb8c48bf7792314c5ce34e3cc6c762f",
       "size_bytes": 4524,
-      "last_modified": "2026-05-05T11:08:31.753490",
-      "last_modified_ts": 1777972111.7534902,
+      "last_modified": "2026-05-10T20:28:29.024478",
+      "last_modified_ts": 1778437709.0244784,
       "file_type": "js",
       "status": "indexed",
       "summary": null,
@@ -95085,8 +95125,8 @@
     "frontend/.test-dist/utils/recipeIngredients.test.js": {
       "hash_sha256": "ff062592df6b5f8c364d381c6f2764782de9b490747f4fed4fd999c78943b04c",
       "size_bytes": 3063,
-      "last_modified": "2026-05-05T11:08:31.763535",
-      "last_modified_ts": 1777972111.763535,
+      "last_modified": "2026-05-10T20:28:29.044431",
+      "last_modified_ts": 1778437709.0444307,
       "file_type": "js",
       "status": "indexed",
       "summary": null,
@@ -95095,8 +95135,8 @@
     "frontend/.test-dist/utils/recipeIngredientsResolver.js": {
       "hash_sha256": "a765a49ae7240b837c7051233eaf295b893cd2c96de55304fad0696cacf7d8b1",
       "size_bytes": 1421,
-      "last_modified": "2026-05-05T11:08:31.775122",
-      "last_modified_ts": 1777972111.775122,
+      "last_modified": "2026-05-10T20:28:29.055379",
+      "last_modified_ts": 1778437709.0553792,
       "file_type": "js",
       "status": "indexed",
       "summary": null,
@@ -95105,8 +95145,8 @@
     "frontend/.test-dist/utils/recipeIngredientsResolver.test.js": {
       "hash_sha256": "023fbbf9a8c1b9aab792134bc8531108166308a69d863849a5815aac09be9885",
       "size_bytes": 2008,
-      "last_modified": "2026-05-05T11:08:31.783120",
-      "last_modified_ts": 1777972111.7831197,
+      "last_modified": "2026-05-10T20:28:29.063836",
+      "last_modified_ts": 1778437709.0638359,
       "file_type": "js",
       "status": "indexed",
       "summary": null,
@@ -95115,8 +95155,8 @@
     "frontend/.test-dist/utils/recipeListSplit.js": {
       "hash_sha256": "b8685316f45c8dcbac77a8d6438e2ade5b325dcdede82ca28e190dc759d945c7",
       "size_bytes": 623,
-      "last_modified": "2026-05-05T11:08:31.789560",
-      "last_modified_ts": 1777972111.78956,
+      "last_modified": "2026-05-10T20:28:29.063836",
+      "last_modified_ts": 1778437709.0638359,
       "file_type": "js",
       "status": "indexed",
       "summary": null,
@@ -95125,8 +95165,8 @@
     "frontend/.test-dist/utils/recipeListSplit.test.js": {
       "hash_sha256": "897795ca584c3202b45eeeabe2495470b9766afe66ace80d9dd50b60c40bab16",
       "size_bytes": 3490,
-      "last_modified": "2026-05-05T11:08:31.789560",
-      "last_modified_ts": 1777972111.78956,
+      "last_modified": "2026-05-10T20:28:29.085498",
+      "last_modified_ts": 1778437709.0854979,
       "file_type": "js",
       "status": "indexed",
       "summary": null,
@@ -95135,8 +95175,8 @@
     "frontend/.test-dist/utils/recipesApi.js": {
       "hash_sha256": "3bd07ecd12a74319c2d224c3eb58b5997558076af6542f81beff0b5401174795",
       "size_bytes": 1292,
-      "last_modified": "2026-05-05T11:08:31.839281",
-      "last_modified_ts": 1777972111.839281,
+      "last_modified": "2026-05-10T20:28:29.127309",
+      "last_modified_ts": 1778437709.1273088,
       "file_type": "js",
       "status": "indexed",
       "summary": null,
@@ -95145,8 +95185,8 @@
     "frontend/.test-dist/utils/recipesFilter.js": {
       "hash_sha256": "5bb829cf39bb9115bf36e2e59c150044e9b06c803ddee996957d255a03b32b69",
       "size_bytes": 340,
-      "last_modified": "2026-05-05T11:08:31.804775",
-      "last_modified_ts": 1777972111.8047745,
+      "last_modified": "2026-05-10T20:28:29.089024",
+      "last_modified_ts": 1778437709.0890236,
       "file_type": "js",
       "status": "indexed",
       "summary": null,
@@ -95155,8 +95195,8 @@
     "frontend/.test-dist/utils/recipesFilter.test.js": {
       "hash_sha256": "4cb809955a9b64f1d7d4b8258d22495b8ba6e434b90e5d1b64354a56cbac30b3",
       "size_bytes": 1205,
-      "last_modified": "2026-05-05T11:08:31.808710",
-      "last_modified_ts": 1777972111.80871,
+      "last_modified": "2026-05-10T20:28:29.094710",
+      "last_modified_ts": 1778437709.09471,
       "file_type": "js",
       "status": "indexed",
       "summary": null,
@@ -95165,8 +95205,8 @@
     "frontend/.test-dist/utils/recipesSafetyGuardrail.js": {
       "hash_sha256": "53b2afa0e5861e36262710cebf6ed8a46795024f1f34f7fbb40fc252f752a7a0",
       "size_bytes": 5003,
-      "last_modified": "2026-05-05T11:08:31.818857",
-      "last_modified_ts": 1777972111.8188574,
+      "last_modified": "2026-05-10T20:28:29.106149",
+      "last_modified_ts": 1778437709.106149,
       "file_type": "js",
       "status": "indexed",
       "summary": null,
@@ -95175,8 +95215,8 @@
     "frontend/.test-dist/utils/recipesSafetyGuardrail.test.js": {
       "hash_sha256": "43b916bf6ca457790c3937c79b83c3800bd96e8072cb5c8149c3035f3bfed1b0",
       "size_bytes": 1307,
-      "last_modified": "2026-05-05T11:08:31.823276",
-      "last_modified_ts": 1777972111.8232763,
+      "last_modified": "2026-05-10T20:28:29.110798",
+      "last_modified_ts": 1778437709.110798,
       "file_type": "js",
       "status": "indexed",
       "summary": null,
@@ -95185,8 +95225,8 @@
     "frontend/.test-dist/utils/recipesScoping.js": {
       "hash_sha256": "a27efb2ede7945e322a3b28405ed8ff0ae9d1fe06a31b4ee4b19086ab647a6ec",
       "size_bytes": 4018,
-      "last_modified": "2026-05-05T11:08:31.284180",
-      "last_modified_ts": 1777972111.28418,
+      "last_modified": "2026-05-10T20:28:28.377516",
+      "last_modified_ts": 1778437708.3775163,
       "file_type": "js",
       "status": "indexed",
       "summary": null,
@@ -95195,8 +95235,8 @@
     "frontend/.test-dist/utils/recipesScoping.test.js": {
       "hash_sha256": "7c2486575acfffb3968eb491e53409e300d90069e25402a6482e5e70476aa157",
       "size_bytes": 8754,
-      "last_modified": "2026-05-05T11:08:31.839281",
-      "last_modified_ts": 1777972111.839281,
+      "last_modified": "2026-05-10T20:28:29.121271",
+      "last_modified_ts": 1778437709.121271,
       "file_type": "js",
       "status": "indexed",
       "summary": null,
@@ -95205,8 +95245,8 @@
     "frontend/.test-dist/utils/recipesSuggestionsFallback.js": {
       "hash_sha256": "9afd1f6fa1aae9f0aae01f885c7597c2adf3de35c030ccd1f9641e6923b5b4fc",
       "size_bytes": 1012,
-      "last_modified": "2026-05-05T11:08:31.854274",
-      "last_modified_ts": 1777972111.854274,
+      "last_modified": "2026-05-10T20:28:29.133352",
+      "last_modified_ts": 1778437709.1333518,
       "file_type": "js",
       "status": "indexed",
       "summary": null,
@@ -95215,8 +95255,8 @@
     "frontend/.test-dist/utils/recipesSuggestionsFallback.test.js": {
       "hash_sha256": "1b144801b483d016ab8b314f0e45b46aec4711f785e433b1c6ae14358a13383f",
       "size_bytes": 5440,
-      "last_modified": "2026-05-05T11:08:31.855322",
-      "last_modified_ts": 1777972111.8553224,
+      "last_modified": "2026-05-10T20:28:29.141404",
+      "last_modified_ts": 1778437709.141404,
       "file_type": "js",
       "status": "indexed",
       "summary": null,
@@ -95225,8 +95265,8 @@
     "frontend/.test-dist/utils/settingsLogout.js": {
       "hash_sha256": "9d8f231092dee2c3ce037aff9d50b604845ac4787c69b7af74c7e03806b0920e",
       "size_bytes": 367,
-      "last_modified": "2026-05-05T11:08:31.870897",
-      "last_modified_ts": 1777972111.8708966,
+      "last_modified": "2026-05-10T20:28:29.147899",
+      "last_modified_ts": 1778437709.147899,
       "file_type": "js",
       "status": "indexed",
       "summary": null,
@@ -95235,8 +95275,8 @@
     "frontend/.test-dist/utils/settingsLogout.test.js": {
       "hash_sha256": "e9adec00d4cf76ecf6d2573d1d0e4d7e89cdf9f610a8d91279452b3da5fc97ae",
       "size_bytes": 1811,
-      "last_modified": "2026-05-05T11:08:31.877909",
-      "last_modified_ts": 1777972111.877909,
+      "last_modified": "2026-05-10T20:28:29.153311",
+      "last_modified_ts": 1778437709.1533108,
       "file_type": "js",
       "status": "indexed",
       "summary": null,
@@ -95245,8 +95285,8 @@
     "frontend/.test-dist/utils/stockFetchPolicy.js": {
       "hash_sha256": "019a7493dfeb267017295deb57a0c9b1fd2b766b26d52d3cca66c6a87096b40f",
       "size_bytes": 538,
-      "last_modified": "2026-05-05T11:08:31.389522",
-      "last_modified_ts": 1777972111.389522,
+      "last_modified": "2026-05-10T20:28:28.450719",
+      "last_modified_ts": 1778437708.4507186,
       "file_type": "js",
       "status": "indexed",
       "summary": null,
@@ -95255,8 +95295,8 @@
     "frontend/.test-dist/utils/stockFetchPolicy.test.js": {
       "hash_sha256": "3c5d14787fe13b64c76f264085599ee8bab408c5767167f11266ab4a32a2b87e",
       "size_bytes": 4578,
-      "last_modified": "2026-05-05T11:08:31.884907",
-      "last_modified_ts": 1777972111.8849072,
+      "last_modified": "2026-05-10T20:28:29.160844",
+      "last_modified_ts": 1778437709.160844,
       "file_type": "js",
       "status": "indexed",
       "summary": null,
@@ -95265,8 +95305,8 @@
     "frontend/.test-dist/utils/stockItemDetailRecipes.js": {
       "hash_sha256": "ddd9402875596a9d9058c827f910b459189d3bd3b1caac8358bac91d56b89175",
       "size_bytes": 433,
-      "last_modified": "2026-05-05T11:08:31.898910",
-      "last_modified_ts": 1777972111.89891,
+      "last_modified": "2026-05-10T20:28:29.174486",
+      "last_modified_ts": 1778437709.1744864,
       "file_type": "js",
       "status": "indexed",
       "summary": null,
@@ -95275,8 +95315,8 @@
     "frontend/.test-dist/utils/stockItemImage.js": {
       "hash_sha256": "c61aa5b162a80c77a8faa1da47b26948becce471614a3b8c60e99799832840ac",
       "size_bytes": 1925,
-      "last_modified": "2026-05-05T11:08:31.226935",
-      "last_modified_ts": 1777972111.2269351,
+      "last_modified": "2026-05-10T20:28:28.342395",
+      "last_modified_ts": 1778437708.3423953,
       "file_type": "js",
       "status": "indexed",
       "summary": null,
@@ -95285,8 +95325,8 @@
     "frontend/.test-dist/utils/stockItemImage.test.js": {
       "hash_sha256": "0dbb18b9911ac4d9a0a098535774f7601ffaef5b09538808dcab1f813caa791e",
       "size_bytes": 2715,
-      "last_modified": "2026-05-05T11:08:31.892917",
-      "last_modified_ts": 1777972111.8929172,
+      "last_modified": "2026-05-10T20:28:29.167818",
+      "last_modified_ts": 1778437709.1678178,
       "file_type": "js",
       "status": "indexed",
       "summary": null,
@@ -95295,8 +95335,8 @@
     "frontend/.test-dist/utils/stockItemRecipes.js": {
       "hash_sha256": "a33093d77bf885b95a2b6bb1637a8a71b984dc8342acadd846e0430072433b5b",
       "size_bytes": 6377,
-      "last_modified": "2026-05-05T11:08:31.332156",
-      "last_modified_ts": 1777972111.3321562,
+      "last_modified": "2026-05-10T20:28:28.413664",
+      "last_modified_ts": 1778437708.4136639,
       "file_type": "js",
       "status": "indexed",
       "summary": null,
@@ -95305,28 +95345,28 @@
     "frontend/.test-dist/utils/stockItemRecipes.test.js": {
       "hash_sha256": "10150d4fb96112b07ddd947360fa5bd4fb24a30b9c8540bca285f16445939bb4",
       "size_bytes": 7148,
-      "last_modified": "2026-05-05T11:08:31.913539",
-      "last_modified_ts": 1777972111.9135392,
+      "last_modified": "2026-05-10T20:28:29.189587",
+      "last_modified_ts": 1778437709.189587,
       "file_type": "js",
       "status": "indexed",
       "summary": null,
       "indexed_at": "2026-05-06T15:21:02.074020"
     },
     "frontend/.test-dist/utils/stockRemoval.js": {
-      "hash_sha256": "52cab21bbeae3dfb9a7471cce5eae70c91a0536851797a5295cc51adaf1921f7",
-      "size_bytes": 1389,
-      "last_modified": "2026-05-05T11:08:31.925510",
-      "last_modified_ts": 1777972111.9255104,
+      "hash_sha256": "379d8c0edad41074bb71c2bd58e5f01ba0fdebdcdf0de8dd2cce0b8de88f8fab",
+      "size_bytes": 3123,
+      "last_modified": "2026-05-10T20:28:29.209566",
+      "last_modified_ts": 1778437709.2095656,
       "file_type": "js",
       "status": "indexed",
       "summary": null,
-      "indexed_at": "2026-05-06T15:21:02.074020"
+      "indexed_at": "2026-05-11T11:34:19.616021"
     },
     "frontend/.test-dist/utils/stockRestoreInsert.js": {
       "hash_sha256": "de2b9622ddbfecac74ca54643f6c96f87d676959031ddb65d1c2a6ba1a182edb",
       "size_bytes": 876,
-      "last_modified": "2026-05-05T11:08:31.395530",
-      "last_modified_ts": 1777972111.39553,
+      "last_modified": "2026-05-10T20:28:28.457774",
+      "last_modified_ts": 1778437708.4577744,
       "file_type": "js",
       "status": "indexed",
       "summary": null,
@@ -95335,8 +95375,8 @@
     "frontend/.test-dist/utils/stockRestoreInsert.test.js": {
       "hash_sha256": "dfffe6dff338e96827c0970f3189a925ece6a1a0533a90d5920bc8a8b8986cfe",
       "size_bytes": 3245,
-      "last_modified": "2026-05-05T11:08:31.920987",
-      "last_modified_ts": 1777972111.9209867,
+      "last_modified": "2026-05-10T20:28:29.197754",
+      "last_modified_ts": 1778437709.197754,
       "file_type": "js",
       "status": "indexed",
       "summary": null,
@@ -95345,8 +95385,8 @@
     "frontend/.test-dist/utils/stockSwipe.js": {
       "hash_sha256": "bcb68f3d13b8a23797686069c2ca821e84ec24fefaf67ed3f649704684c7dda6",
       "size_bytes": 1235,
-      "last_modified": "2026-05-05T11:08:31.936579",
-      "last_modified_ts": 1777972111.9365785,
+      "last_modified": "2026-05-10T20:28:29.214594",
+      "last_modified_ts": 1778437709.214594,
       "file_type": "js",
       "status": "indexed",
       "summary": null,
@@ -95355,8 +95395,8 @@
     "frontend/.test-dist/utils/stockSwipe.test.js": {
       "hash_sha256": "769be58d6a74a18bee03be562255d79ec7e4c2809b0b7d39c9f28b1e9f031abd",
       "size_bytes": 4763,
-      "last_modified": "2026-05-05T11:08:31.936579",
-      "last_modified_ts": 1777972111.9365785,
+      "last_modified": "2026-05-10T20:28:29.222051",
+      "last_modified_ts": 1778437709.2220507,
       "file_type": "js",
       "status": "indexed",
       "summary": null,
@@ -95365,8 +95405,8 @@
     "frontend/.test-dist/utils/stockUpdateOffline.js": {
       "hash_sha256": "e457b8f0858f947e59cea4583f9c3ee13e0ebd1ad2939d6370d3a71031439caa",
       "size_bytes": 720,
-      "last_modified": "2026-05-05T11:08:31.401522",
-      "last_modified_ts": 1777972111.4015224,
+      "last_modified": "2026-05-10T20:28:28.464919",
+      "last_modified_ts": 1778437708.4649186,
       "file_type": "js",
       "status": "indexed",
       "summary": null,
@@ -95375,8 +95415,8 @@
     "frontend/.test-dist/utils/stockUpdateOffline.test.js": {
       "hash_sha256": "fb30bf6dc37211a999a54d808e16512cbace55efe4005c81e8a6a6905b084585",
       "size_bytes": 3116,
-      "last_modified": "2026-05-05T11:08:31.952423",
-      "last_modified_ts": 1777972111.9524226,
+      "last_modified": "2026-05-10T20:28:29.236173",
+      "last_modified_ts": 1778437709.2361727,
       "file_type": "js",
       "status": "indexed",
       "summary": null,
@@ -95385,8 +95425,8 @@
     "frontend/.test-dist/utils/tabNavigationGuard.js": {
       "hash_sha256": "763dec6e628095e44708dee4cbdc7114779d92c93516dfa9cabeea79c5b98849",
       "size_bytes": 522,
-      "last_modified": "2026-05-05T11:08:31.952423",
-      "last_modified_ts": 1777972111.9524226,
+      "last_modified": "2026-05-10T20:28:29.244205",
+      "last_modified_ts": 1778437709.2442048,
       "file_type": "js",
       "status": "indexed",
       "summary": null,
@@ -95395,8 +95435,8 @@
     "frontend/.test-dist/utils/tabNavigationGuard.test.js": {
       "hash_sha256": "433db91aeccc6fed89c6de7749c991c7c37df2938eec289e3f0441bf3d86e552",
       "size_bytes": 1690,
-      "last_modified": "2026-05-05T11:08:31.952423",
-      "last_modified_ts": 1777972111.9524226,
+      "last_modified": "2026-05-10T20:28:29.253218",
+      "last_modified_ts": 1778437709.2532177,
       "file_type": "js",
       "status": "indexed",
       "summary": null,
@@ -95405,8 +95445,8 @@
     "frontend/.test-dist/utils/theme.js": {
       "hash_sha256": "69dfc1af6e617cfd71f4b9c41290bb8b7a8d8735d50115aee8e569829ae56c53",
       "size_bytes": 2360,
-      "last_modified": "2026-05-05T11:08:31.974150",
-      "last_modified_ts": 1777972111.9741502,
+      "last_modified": "2026-05-10T20:28:29.258765",
+      "last_modified_ts": 1778437709.2587647,
       "file_type": "js",
       "status": "indexed",
       "summary": null,
@@ -95415,8 +95455,8 @@
     "frontend/.test-dist/utils/theme.test.js": {
       "hash_sha256": "89dabd08d27ac12741a9cc2f647b2e5126b026f8cbcea3f7f803688402e8cfda",
       "size_bytes": 1022,
-      "last_modified": "2026-05-05T11:08:31.974578",
-      "last_modified_ts": 1777972111.9745777,
+      "last_modified": "2026-05-10T20:28:29.265967",
+      "last_modified_ts": 1778437709.2659671,
       "file_type": "js",
       "status": "indexed",
       "summary": null,
@@ -95425,8 +95465,8 @@
     "frontend/.test-dist/utils/themePreference.js": {
       "hash_sha256": "244625f7c178313e2a33e29d20c2f5aa5aa1ed4e7fd874920cc73d660dbbf03d",
       "size_bytes": 999,
-      "last_modified": "2026-05-05T11:08:31.974578",
-      "last_modified_ts": 1777972111.9745777,
+      "last_modified": "2026-05-10T20:28:29.272061",
+      "last_modified_ts": 1778437709.272061,
       "file_type": "js",
       "status": "indexed",
       "summary": null,
@@ -95435,8 +95475,8 @@
     "frontend/.test-dist/utils/themePreference.test.js": {
       "hash_sha256": "542f90ec6f9164ba038f273c937f64b4316f70b4ab36fbb14e5e82a3c79b83e4",
       "size_bytes": 1421,
-      "last_modified": "2026-05-05T11:08:31.991690",
-      "last_modified_ts": 1777972111.9916904,
+      "last_modified": "2026-05-10T20:28:29.279486",
+      "last_modified_ts": 1778437709.2794857,
       "file_type": "js",
       "status": "indexed",
       "summary": null,
@@ -95445,8 +95485,8 @@
     "frontend/.test-dist/utils/uiLabels.js": {
       "hash_sha256": "df8e2644f1ed13c22928a68e11b3a6e68af3a4432eac8876a42e4684aecdd591",
       "size_bytes": 862,
-      "last_modified": "2026-05-05T11:08:31.997686",
-      "last_modified_ts": 1777972111.9976857,
+      "last_modified": "2026-05-10T20:28:29.285484",
+      "last_modified_ts": 1778437709.2854843,
       "file_type": "js",
       "status": "indexed",
       "summary": null,
@@ -95455,8 +95495,8 @@
     "frontend/.test-dist/utils/uiLabels.test.js": {
       "hash_sha256": "b710147178a38e25727a7298c2bf588623f3365518b123b400efb6542f8e5ccf",
       "size_bytes": 1559,
-      "last_modified": "2026-05-05T11:08:32.004632",
-      "last_modified_ts": 1777972112.004632,
+      "last_modified": "2026-05-10T20:28:29.291525",
+      "last_modified_ts": 1778437709.2915251,
       "file_type": "js",
       "status": "indexed",
       "summary": null,
@@ -95465,8 +95505,8 @@
     "frontend/.test-dist/utils/uiText.js": {
       "hash_sha256": "2f0def82fb6e12e41de24dd16fb812e309b060ba33da5efbff6798c588059d1c",
       "size_bytes": 676,
-      "last_modified": "2026-05-05T11:08:32.009862",
-      "last_modified_ts": 1777972112.0098624,
+      "last_modified": "2026-05-10T20:28:29.295552",
+      "last_modified_ts": 1778437709.2955525,
       "file_type": "js",
       "status": "indexed",
       "summary": null,
@@ -95475,8 +95515,8 @@
     "frontend/.test-dist/utils/uiText.test.js": {
       "hash_sha256": "05ba049dd0f7210e0d7335da4e32acc8aa9e9eecee205f5f1f0fd234bf53fee9",
       "size_bytes": 1219,
-      "last_modified": "2026-05-05T11:08:32.016824",
-      "last_modified_ts": 1777972112.016824,
+      "last_modified": "2026-05-10T20:28:29.301837",
+      "last_modified_ts": 1778437709.301837,
       "file_type": "js",
       "status": "indexed",
       "summary": null,
@@ -95485,8 +95525,8 @@
     "frontend/.test-dist/utils/undoRemovalCore.js": {
       "hash_sha256": "135004b05951a69d437e397bc1ac53aab3564ba16d9e39941ae86bdcf4118f50",
       "size_bytes": 940,
-      "last_modified": "2026-05-05T11:08:31.925510",
-      "last_modified_ts": 1777972111.9255104,
+      "last_modified": "2026-05-10T20:28:29.203524",
+      "last_modified_ts": 1778437709.203524,
       "file_type": "js",
       "status": "indexed",
       "summary": null,
@@ -95495,8 +95535,8 @@
     "frontend/.test-dist/utils/undoRemovalCore.test.js": {
       "hash_sha256": "8e1d6e8df1a9bd4c708bb33102e14dbe062bf4e5d864c4ccbfdee44c12e03eca",
       "size_bytes": 3169,
-      "last_modified": "2026-05-05T11:08:32.029815",
-      "last_modified_ts": 1777972112.0298152,
+      "last_modified": "2026-05-10T20:28:29.310835",
+      "last_modified_ts": 1778437709.310835,
       "file_type": "js",
       "status": "indexed",
       "summary": null,
@@ -95553,24 +95593,24 @@
       "indexed_at": "2026-05-06T15:21:02.127890"
     },
     "frontend/app/index.tsx": {
-      "hash_sha256": "a941149421ea3400e3b58f6e85967a312aa5fbba0761d2c198bec01a0f6bfbfb",
-      "size_bytes": 119,
-      "last_modified": "2026-05-06T22:42:43.288848",
-      "last_modified_ts": 1778100163.2888484,
+      "hash_sha256": "4074bdefa1298906455e3e55bfe77e12c0aacbe94d5d15d5221ae5e251e52444",
+      "size_bytes": 942,
+      "last_modified": "2026-05-07T09:48:56.945632",
+      "last_modified_ts": 1778140136.9456322,
       "file_type": "tsx",
       "status": "indexed",
       "summary": null,
-      "indexed_at": "2026-05-06T22:43:57.073544"
+      "indexed_at": "2026-05-07T10:20:12.936438"
     },
     "frontend/app/login.tsx": {
-      "hash_sha256": "7843d4fa9057fb16d4f88628e12e258e026c6b265f05e939bb2aacdeaeef7e1b",
-      "size_bytes": 14048,
-      "last_modified": "2026-05-06T22:42:43.288848",
-      "last_modified_ts": 1778100163.2888484,
+      "hash_sha256": "26672f7a4a51e42e43afd3dd13ed8f60dd40b1c288cfcf7072031586b6be57bf",
+      "size_bytes": 14942,
+      "last_modified": "2026-05-07T09:48:56.954650",
+      "last_modified_ts": 1778140136.9546504,
       "file_type": "tsx",
       "status": "indexed",
       "summary": null,
-      "indexed_at": "2026-05-06T22:43:57.073544"
+      "indexed_at": "2026-05-07T10:20:12.939331"
     },
     "frontend/app/premium.tsx": {
       "hash_sha256": "c5c5d99bee5d2235c7f84a1263c904e320d280d1ad41b20c8be19269deb458b4",
@@ -95683,14 +95723,14 @@
       "indexed_at": "2026-05-06T15:21:02.151755"
     },
     "frontend/app/(tabs)/stock.tsx": {
-      "hash_sha256": "ed04db947d8b0055fda196898934b8ef6511d1890306f5f1c894a6202fac24f3",
-      "size_bytes": 17872,
-      "last_modified": "2026-04-26T21:56:21.969807",
-      "last_modified_ts": 1777233381.9698067,
+      "hash_sha256": "c68516c2109da074ccd42fd049258f640a2471e60262fbe2086fec5d8d059c42",
+      "size_bytes": 20071,
+      "last_modified": "2026-05-10T20:15:45.273867",
+      "last_modified_ts": 1778436945.273867,
       "file_type": "tsx",
       "status": "indexed",
       "summary": null,
-      "indexed_at": "2026-05-06T15:21:02.155517"
+      "indexed_at": "2026-05-11T11:34:19.729202"
     },
     "frontend/app/(tabs)/_layout.tsx": {
       "hash_sha256": "b6f79170ebc5fd984098fe92d158103f51b1f041b482b53d1b3e4d2ac0eadf8d",
@@ -95993,14 +96033,14 @@
       "indexed_at": "2026-05-06T15:21:02.216546"
     },
     "frontend/store/authStore.ts": {
-      "hash_sha256": "10bcf39912912487fc92e90780f2fbc9dbd53691695eda32c4f89a8f6cd9177e",
-      "size_bytes": 11241,
-      "last_modified": "2026-05-06T22:42:43.306680",
-      "last_modified_ts": 1778100163.3066802,
+      "hash_sha256": "4a8135ec3fb049285ee12fb42fccbd5914922f430dd6f6cc343913ea69ba4936",
+      "size_bytes": 13071,
+      "last_modified": "2026-05-07T09:48:56.964071",
+      "last_modified_ts": 1778140136.9640713,
       "file_type": "ts",
       "status": "indexed",
       "summary": null,
-      "indexed_at": "2026-05-06T22:43:57.213442"
+      "indexed_at": "2026-05-07T10:20:13.102464"
     },
     "frontend/store/languageStore.ts": {
       "hash_sha256": "3562e414f953ef59ab657cf4cab069b55c8da6b23c6b7c7b67855475a2fa5e84",
@@ -96033,14 +96073,14 @@
       "indexed_at": "2026-05-06T15:21:02.232410"
     },
     "frontend/store/stockStore.ts": {
-      "hash_sha256": "5abfc99c92d1dacf4247f8f00c3f65ae73abb5111a0ab14dba6a1c880a80cbb7",
-      "size_bytes": 27060,
-      "last_modified": "2026-04-24T00:10:40.339514",
-      "last_modified_ts": 1776982240.339514,
+      "hash_sha256": "4e67df2449fd5b0727963fe6ae6041de6a4a53e57ff245cbdb616a9ea43ec7d8",
+      "size_bytes": 30145,
+      "last_modified": "2026-05-10T20:16:30.043905",
+      "last_modified_ts": 1778436990.043905,
       "file_type": "ts",
       "status": "indexed",
       "summary": null,
-      "indexed_at": "2026-05-06T15:21:02.232410"
+      "indexed_at": "2026-05-11T11:34:19.830668"
     },
     "frontend/utils/adminAccess.test.ts": {
       "hash_sha256": "9d565eaa917b05bed1a492eb055f7e3abb27efff3f1a11e4a56403dae9ad0aa3",
@@ -96122,6 +96162,16 @@
       "summary": null,
       "indexed_at": "2026-05-06T15:21:02.248190"
     },
+    "frontend/utils/authStore.test.ts": {
+      "hash_sha256": "871704360d7af67c53470c46cb91921c1b765aaee8227cf8f74cb078ffe04443",
+      "size_bytes": 1053,
+      "last_modified": "2026-05-07T09:48:56.970105",
+      "last_modified_ts": 1778140136.9701052,
+      "file_type": "ts",
+      "status": "indexed",
+      "summary": null,
+      "indexed_at": "2026-05-07T10:20:13.143352"
+    },
     "frontend/utils/billingService.ts": {
       "hash_sha256": "96a2572675635a52faa727d41ff55989b9bcc04158dfda53bdb79f7d22d8b452",
       "size_bytes": 1088,
@@ -96181,6 +96231,26 @@
       "status": "indexed",
       "summary": null,
       "indexed_at": "2026-05-06T15:21:02.266218"
+    },
+    "frontend/utils/debugConfig.ts": {
+      "hash_sha256": "ab0f9c10cfe3c3c9bb62692c10bbd66bd97bc3398ae19e91716e59b1243af74f",
+      "size_bytes": 563,
+      "last_modified": "2026-05-10T20:15:10.435350",
+      "last_modified_ts": 1778436910.4353497,
+      "file_type": "ts",
+      "status": "indexed",
+      "summary": null,
+      "indexed_at": "2026-05-11T11:34:19.871518"
+    },
+    "frontend/utils/debugSwipeLogger.ts": {
+      "hash_sha256": "ae6ed838c413455aab90f8acf7dec8c2b45aabfc28647ffaee8d13b4396e970a",
+      "size_bytes": 8834,
+      "last_modified": "2026-05-10T20:27:21.212959",
+      "last_modified_ts": 1778437641.2129586,
+      "file_type": "ts",
+      "status": "indexed",
+      "summary": null,
+      "indexed_at": "2026-05-11T11:34:19.874729"
     },
     "frontend/utils/expiryLabels.test.ts": {
       "hash_sha256": "34d961cb6c8a0ced097ba3737f7cd38c22e2aaede6ac34cd249b61df5b7ba77a",
@@ -96251,6 +96321,16 @@
       "status": "indexed",
       "summary": null,
       "indexed_at": "2026-05-06T15:21:02.279862"
+    },
+    "frontend/utils/login.test.ts": {
+      "hash_sha256": "8d79344fe8431ef0ddf902697808e4086b0d9e639212038f88f56b8b641815e4",
+      "size_bytes": 4206,
+      "last_modified": "2026-05-07T09:48:56.990232",
+      "last_modified_ts": 1778140136.9902315,
+      "file_type": "ts",
+      "status": "indexed",
+      "summary": null,
+      "indexed_at": "2026-05-07T10:20:13.186608"
     },
     "frontend/utils/monthlyLabels.test.ts": {
       "hash_sha256": "2b9245097a72fde0425ab6f5de1a7c7b8736ce8159ba3b2491c939e867458457",
@@ -96783,14 +96863,14 @@
       "indexed_at": "2026-05-06T15:21:02.375180"
     },
     "frontend/utils/stockRemoval.ts": {
-      "hash_sha256": "25e5c0ba26304e273dae4d9180107942aa48bb2c0fc6073a82760fb0dac2be42",
-      "size_bytes": 1409,
-      "last_modified": "2026-04-22T23:59:24.667227",
-      "last_modified_ts": 1776895164.6672273,
+      "hash_sha256": "ccfda3e92532b590fab0ff184ef77a63002b0d29baaa554cdc4e4dc33a01b2e7",
+      "size_bytes": 2821,
+      "last_modified": "2026-05-10T20:15:57.745090",
+      "last_modified_ts": 1778436957.7450898,
       "file_type": "ts",
       "status": "indexed",
       "summary": null,
-      "indexed_at": "2026-05-06T15:21:02.375180"
+      "indexed_at": "2026-05-11T11:34:20.057556"
     },
     "frontend/utils/stockRestoreInsert.test.ts": {
       "hash_sha256": "2214e77ac6ba0b7aeea5d12a7bf5ee6212d9bd48c2de257c93ef34e5b55f1820",
@@ -97002,6 +97082,126 @@
       "summary": null,
       "indexed_at": "2026-05-06T15:21:02.422644"
     },
+    "LOGS/logs_67386749873/2_Mobile E2E _ Build Android debug APK.txt": {
+      "hash_sha256": "f6d1f6719f5c418e60524546092df0c8574663abc8dd1e6bf04b09f45ebb1ee9",
+      "size_bytes": 179128,
+      "last_modified": "2026-05-07T09:48:56.794123",
+      "last_modified_ts": 1778140136.794123,
+      "file_type": "txt",
+      "status": "indexed",
+      "summary": null,
+      "indexed_at": "2026-05-07T10:20:13.424192"
+    },
+    "LOGS/logs_67386749873/3_Mobile E2E _ Changes detection gate.txt": {
+      "hash_sha256": "44bd8cb823ea5410c856b9f0af915baffe104139b1a348c8e5f35c0771bd1f76",
+      "size_bytes": 18656,
+      "last_modified": "2026-05-07T09:48:56.805138",
+      "last_modified_ts": 1778140136.8051376,
+      "file_type": "txt",
+      "status": "indexed",
+      "summary": null,
+      "indexed_at": "2026-05-07T10:20:13.427520"
+    },
+    "LOGS/logs_67386749873/Mobile E2E _ Build Android debug APK/system.txt": {
+      "hash_sha256": "dbdb6911ad2b5da810eae6668d36498be759080154ee447df8da7120ab066f9a",
+      "size_bytes": 736,
+      "last_modified": "2026-05-07T09:48:56.815293",
+      "last_modified_ts": 1778140136.8152928,
+      "file_type": "txt",
+      "status": "indexed",
+      "summary": null,
+      "indexed_at": "2026-05-07T10:20:13.431221"
+    },
+    "LOGS/logs_67386749873/Mobile E2E _ Changes detection gate/system.txt": {
+      "hash_sha256": "6d52d51bef2619aa77d20ea769a71cd3f305e4045fa4f8284831e8aff18da739",
+      "size_bytes": 593,
+      "last_modified": "2026-05-07T09:48:56.833565",
+      "last_modified_ts": 1778140136.8335655,
+      "file_type": "txt",
+      "status": "indexed",
+      "summary": null,
+      "indexed_at": "2026-05-07T10:20:13.434508"
+    },
+    "LOGS/logs_67386749873/Mobile E2E _ Not required or missing required APK/system.txt": {
+      "hash_sha256": "f681c390403f3eef1f801888192bc1ac6734b4e698af3945db28c575479f666f",
+      "size_bytes": 380,
+      "last_modified": "2026-05-07T09:48:56.841622",
+      "last_modified_ts": 1778140136.841622,
+      "file_type": "txt",
+      "status": "indexed",
+      "summary": null,
+      "indexed_at": "2026-05-07T10:20:13.437918"
+    },
+    "LOGS/logs_67386749873/Mobile E2E _ PR smoke Maestro suite/system.txt": {
+      "hash_sha256": "ede1b8dfdf20012478be9df1db7851fc7e8370cfd7cad32f0ed98d1df4ddf5ab",
+      "size_bytes": 813,
+      "last_modified": "2026-05-07T09:48:56.847714",
+      "last_modified_ts": 1778140136.8477142,
+      "file_type": "txt",
+      "status": "indexed",
+      "summary": null,
+      "indexed_at": "2026-05-07T10:20:13.441852"
+    },
+    "LOGS/logs_67474710139/0_Backend regression tests.txt": {
+      "hash_sha256": "79750e699ace63ec4d68c2e5dc5867730ab8058b6b86019f1ad46078291868aa",
+      "size_bytes": 33301,
+      "last_modified": "2026-05-07T09:48:56.859109",
+      "last_modified_ts": 1778140136.859109,
+      "file_type": "txt",
+      "status": "indexed",
+      "summary": null,
+      "indexed_at": "2026-05-07T10:20:13.445673"
+    },
+    "LOGS/logs_67474710139/1_Non-regression policy checks.txt": {
+      "hash_sha256": "bbfbcd72aa93705967b68529beb0df5d98eeb90b31eaec81a7899f01bc657dbb",
+      "size_bytes": 12198,
+      "last_modified": "2026-05-07T09:48:56.867829",
+      "last_modified_ts": 1778140136.8678293,
+      "file_type": "txt",
+      "status": "indexed",
+      "summary": null,
+      "indexed_at": "2026-05-07T10:20:13.449245"
+    },
+    "LOGS/logs_67474710139/2_Frontend regression tests.txt": {
+      "hash_sha256": "7f15e2f70098a90af7716297702e4ef4e54f1df0030aad20b9c9d00fa1c5573d",
+      "size_bytes": 94516,
+      "last_modified": "2026-05-07T09:48:56.877264",
+      "last_modified_ts": 1778140136.8772645,
+      "file_type": "txt",
+      "status": "indexed",
+      "summary": null,
+      "indexed_at": "2026-05-07T10:20:13.453565"
+    },
+    "LOGS/logs_67474710139/Backend regression tests/system.txt": {
+      "hash_sha256": "9519b089307b11c9e20ea4659dd1a51b22f01956b4645e18fbafc845de590b97",
+      "size_bytes": 624,
+      "last_modified": "2026-05-07T09:48:56.885312",
+      "last_modified_ts": 1778140136.8853123,
+      "file_type": "txt",
+      "status": "indexed",
+      "summary": null,
+      "indexed_at": "2026-05-07T10:20:13.457751"
+    },
+    "LOGS/logs_67474710139/Frontend regression tests/system.txt": {
+      "hash_sha256": "627b432a21ff8c04e6e2a32e648d79140c2db39e61a8650d5de1f3bf29c2d704",
+      "size_bytes": 625,
+      "last_modified": "2026-05-07T09:48:56.899362",
+      "last_modified_ts": 1778140136.8993618,
+      "file_type": "txt",
+      "status": "indexed",
+      "summary": null,
+      "indexed_at": "2026-05-07T10:20:13.461319"
+    },
+    "LOGS/logs_67474710139/Non-regression policy checks/system.txt": {
+      "hash_sha256": "e62c2c1da8da0e95ab3a56734d1a8f0cab0d5ff4a34aefb6929d01008564a036",
+      "size_bytes": 623,
+      "last_modified": "2026-05-07T09:48:56.907153",
+      "last_modified_ts": 1778140136.9071527,
+      "file_type": "txt",
+      "status": "indexed",
+      "summary": null,
+      "indexed_at": "2026-05-07T10:20:13.465123"
+    },
     "memory/.gitkeep": {
       "hash_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
       "size_bytes": 0,
@@ -97012,15 +97212,35 @@
       "summary": null,
       "indexed_at": "2026-05-06T15:21:02.454386"
     },
+    "scripts/capture-logcat.sh": {
+      "hash_sha256": "b261036890aba9ca8c0313c6dd8633bdd30c61f0f6ed883776c050872a2008db",
+      "size_bytes": 2224,
+      "last_modified": "2026-05-07T09:48:56.998033",
+      "last_modified_ts": 1778140136.9980333,
+      "file_type": "sh",
+      "status": "indexed",
+      "summary": null,
+      "indexed_at": "2026-05-07T10:20:13.468618"
+    },
     "scripts/e2e-reset-seed.mjs": {
-      "hash_sha256": "da44107416bed6e0e123c5f22fbf5f80875730bc15cd3696cb2d5bd9413cc997",
-      "size_bytes": 1954,
-      "last_modified": "2026-05-06T22:42:43.317740",
-      "last_modified_ts": 1778100163.3177397,
+      "hash_sha256": "980a188761b93998ad02e46d0737ab6ee0f1c95ec29213a24b672d36a22ff376",
+      "size_bytes": 3667,
+      "last_modified": "2026-05-07T09:48:57.006090",
+      "last_modified_ts": 1778140137.0060902,
       "file_type": "mjs",
       "status": "indexed",
       "summary": null,
-      "indexed_at": "2026-05-06T22:43:57.449567"
+      "indexed_at": "2026-05-07T10:20:13.470497"
+    },
+    "scripts/generate-e2e-report.sh": {
+      "hash_sha256": "9994e9d6ccc0a4e0c00fe86a026518ff37e4010af4641b4300a4b1f317fc8ad7",
+      "size_bytes": 6694,
+      "last_modified": "2026-05-07T09:48:57.013889",
+      "last_modified_ts": 1778140137.0138888,
+      "file_type": "sh",
+      "status": "indexed",
+      "summary": null,
+      "indexed_at": "2026-05-07T10:20:13.472226"
     },
     "scripts/report-frontend-regression-suites.mjs": {
       "hash_sha256": "4ca74669f907163ac3df7bd2db29154a7bb4507e03432acd4a118bf6d9b17b22",
@@ -97033,14 +97253,14 @@
       "indexed_at": "2026-05-06T15:21:02.470223"
     },
     "scripts/run-maestro-e2e.sh": {
-      "hash_sha256": "d3b8cf363bcb23b6768a0f7d5f343683dfb2fb2a719bf668e3452fedca458098",
-      "size_bytes": 3759,
-      "last_modified": "2026-05-06T22:42:43.322796",
-      "last_modified_ts": 1778100163.3227956,
+      "hash_sha256": "056402665cfbb4828d0e3e7e4ca63a189613ec6da8230a1f7a735bd1e1429498",
+      "size_bytes": 13466,
+      "last_modified": "2026-05-07T09:48:57.019928",
+      "last_modified_ts": 1778140137.019928,
       "file_type": "sh",
       "status": "indexed",
       "summary": null,
-      "indexed_at": "2026-05-06T22:43:57.449567"
+      "indexed_at": "2026-05-07T10:20:13.475517"
     },
     "scripts/verify-tests-added.mjs": {
       "hash_sha256": "2f4fbfe8e8cb6739f91fa8eb295c6ee97c009a3f8d969d584ed2ea4ee4de9e02",
@@ -97093,14 +97313,14 @@
       "indexed_at": "2026-05-06T15:21:02.470223"
     },
     "tests/test_ci_non_regression_policy.py": {
-      "hash_sha256": "b8d7e6bb178e94d37fb00ca56bddb83a0ebcfd449a86eb13d305292a9ea31568",
-      "size_bytes": 22870,
-      "last_modified": "2026-05-06T22:42:43.322796",
-      "last_modified_ts": 1778100163.3227956,
+      "hash_sha256": "7f9c97c5a1ad8403553027bc5d1794a41d5630076dbe3034c101de80d869be24",
+      "size_bytes": 85397,
+      "last_modified": "2026-05-07T09:48:57.047036",
+      "last_modified_ts": 1778140137.0470357,
       "file_type": "py",
       "status": "indexed",
       "summary": null,
-      "indexed_at": "2026-05-06T22:43:57.465365"
+      "indexed_at": "2026-05-07T10:20:13.482687"
     },
     "tests/test_critical_regressions.py": {
       "hash_sha256": "0b9b03fa08870bb73aa648345ccc4bc03fbb3d67ee881cc29efc8f2a525bfa29",

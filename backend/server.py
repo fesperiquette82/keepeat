@@ -124,7 +124,7 @@ from backend.recipes_service import (
     suggest_recipe_groups_from_catalog,
     suggest_recipes_from_catalog,
 )
-from test_mode import (
+from backend.test_mode import (
     build_seed_stock,
     clone_fixtures,
     ensure_external_allowed,

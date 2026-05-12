@@ -13,7 +13,7 @@ sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 from backend import server
 from fastapi import HTTPException
 
-from server import OcrReceiptRequest, get_ai_recipes, get_monthly_stats, get_predictions, ocr_receipt_route
+from backend.server import OcrReceiptRequest, get_ai_recipes, get_monthly_stats, get_predictions, ocr_receipt_route
 
 
 class _FakeAppStateCol:
@@ -89,7 +89,7 @@ class PremiumGuardsV1Tests(unittest.TestCase):
                 return []
 
             payload = OcrReceiptRequest(image="data:image/jpeg;base64,AAA=")
-            with patch("server.app_state_col", fake_state), patch("server.ocr_receipt", side_effect=_fake_ocr):
+            with patch("backend.server.app_state_col", fake_state), patch("backend.server.ocr_receipt", side_effect=_fake_ocr):
                 await ocr_receipt_route(payload=payload, current_user={"id": "u1", "is_premium": False})
                 with self.assertRaises(HTTPException) as cm:
                     # quota free OCR = 10 ; on force rapidement en bouclant
@@ -108,7 +108,7 @@ class PremiumGuardsV1Tests(unittest.TestCase):
                 _ = length
                 return [{"name": "oeufs", "food_category": "proteines"}]
 
-            with patch("server.app_state_col", fake_state), patch.dict("os.environ", {"GEMINI_RECIPES_API_KEY": "x"}, clear=False), patch("server.stock_col") as stock_mock, patch("server.httpx.AsyncClient", return_value=_FakeAsyncClient(_FakeOpenAiResponse())), patch("server.track_service_usage"), patch("server.track_business_event"):
+            with patch("backend.server.app_state_col", fake_state), patch.dict("os.environ", {"GEMINI_RECIPES_API_KEY": "x"}, clear=False), patch("backend.server.stock_col") as stock_mock, patch("backend.server.httpx.AsyncClient", return_value=_FakeAsyncClient(_FakeOpenAiResponse())), patch("backend.server.track_service_usage"), patch("backend.server.track_business_event"):
                 stock_mock.find.return_value.sort.return_value.limit.return_value.to_list = _stock_to_list
                 for _ in range(5):
                     server._ai_recipe_cache.clear()
@@ -129,7 +129,7 @@ class PremiumGuardsV1Tests(unittest.TestCase):
                 _ = length
                 return []
 
-            with patch("server.app_state_col", fake_state), patch.dict("os.environ", {"GEMINI_RECIPES_API_KEY": "x"}, clear=False), patch("server.stock_col") as stock_mock:
+            with patch("backend.server.app_state_col", fake_state), patch.dict("os.environ", {"GEMINI_RECIPES_API_KEY": "x"}, clear=False), patch("backend.server.stock_col") as stock_mock:
                 stock_mock.find.return_value.sort.return_value.limit.return_value.to_list = _stock_to_list
                 payload = await get_ai_recipes(current_user={"id": "u1", "is_premium": False})
                 self.assertEqual(payload, [])
@@ -145,7 +145,7 @@ class PremiumGuardsV1Tests(unittest.TestCase):
                 _ = length
                 return [{"name": "oeufs", "food_category": "proteines"}]
 
-            with patch("server.app_state_col", fake_state), patch.dict("os.environ", {"GEMINI_RECIPES_API_KEY": "x"}, clear=False), patch("server.stock_col") as stock_mock, patch("server.httpx.AsyncClient", return_value=_FakeAsyncClient(_FakeOpenAiResponse(status_code=500, content="boom"))), patch("server.track_service_usage"), patch("server.track_business_event"):
+            with patch("backend.server.app_state_col", fake_state), patch.dict("os.environ", {"GEMINI_RECIPES_API_KEY": "x"}, clear=False), patch("backend.server.stock_col") as stock_mock, patch("backend.server.httpx.AsyncClient", return_value=_FakeAsyncClient(_FakeOpenAiResponse(status_code=500, content="boom"))), patch("backend.server.track_service_usage"), patch("backend.server.track_business_event"):
                 stock_mock.find.return_value.sort.return_value.limit.return_value.to_list = _stock_to_list
                 with self.assertRaises(HTTPException) as cm:
                     await get_ai_recipes(current_user={"id": "u1", "is_premium": False})
@@ -156,7 +156,7 @@ class PremiumGuardsV1Tests(unittest.TestCase):
 
     def test_monthly_stats_clamped_to_six_for_free(self):
         async def _run():
-            with patch("server.stock_col", _FakeStockCol()), patch("server.resolve_plan", return_value="free"):
+            with patch("backend.server.stock_col", _FakeStockCol()), patch("backend.server.resolve_plan", return_value="free"):
                 payload = await get_monthly_stats(months=24, current_user={"id": "u1", "is_premium": False})
                 self.assertEqual(len(payload), 6)
 

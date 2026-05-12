@@ -33,8 +33,8 @@ class WarmupBackendTests(unittest.TestCase):
             async def command(self, _name):
                 raise RuntimeError("db down")
 
-        with patch("server.load_local_recipes", side_effect=RuntimeError("catalog broken")):
-            with patch("server.db", FakeDb()):
+        with patch("backend.server.load_local_recipes", side_effect=RuntimeError("catalog broken")):
+            with patch("backend.server.db", FakeDb()):
                 summary = asyncio.run(server.run_backend_warmup())
 
         self.assertFalse(summary["catalog_loaded"])

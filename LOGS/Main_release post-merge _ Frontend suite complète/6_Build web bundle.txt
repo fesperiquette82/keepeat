@@ -1,0 +1,99 @@
+﻿2026-05-12T07:49:50.3237134Z ##[group]Run npm run build
+2026-05-12T07:49:50.3237423Z [36;1mnpm run build[0m
+2026-05-12T07:49:50.3259875Z shell: /usr/bin/bash -e {0}
+2026-05-12T07:49:50.3260123Z ##[endgroup]
+2026-05-12T07:49:50.4249089Z 
+2026-05-12T07:49:50.4249660Z > frontend@1.0.0 build
+2026-05-12T07:49:50.4250311Z > node ./scripts/generate-build-info.js && expo export --platform web
+2026-05-12T07:49:50.4250606Z 
+2026-05-12T07:49:50.4591676Z build info written: /home/runner/work/keepeat/keepeat/frontend/public/build-info.json
+2026-05-12T07:49:51.6136353Z Starting Metro Bundler
+2026-05-12T07:49:51.6652049Z Static rendering is enabled. Learn more: https://docs.expo.dev/router/reference/static-rendering/
+2026-05-12T07:49:55.1718517Z Web node_modules/expo-router/entry.js ▓▓▓▓▓▓░░░░░░░░░░ 42.3% ( 20/134)
+2026-05-12T07:49:55.1720431Z λ node_modules/expo-router/node/render.js ▓░░░░░░░░░░░░░░░  6.3% ( 18/124)
+2026-05-12T07:49:58.6718670Z Web node_modules/expo-router/entry.js ▓▓▓▓▓▓░░░░░░░░░░ 42.3% ( 51/223)
+2026-05-12T07:49:58.6720354Z λ node_modules/expo-router/node/render.js ▓░░░░░░░░░░░░░░░ 12.2% (114/326)
+2026-05-12T07:50:02.1715349Z Web node_modules/expo-router/entry.js ▓▓▓▓▓▓░░░░░░░░░░ 42.3% (134/345)
+2026-05-12T07:50:02.1717774Z λ node_modules/expo-router/node/render.js ▓▓░░░░░░░░░░░░░░ 13.9% (137/376)
+2026-05-12T07:50:05.6783520Z Web node_modules/expo-router/entry.js ▓▓▓▓▓▓░░░░░░░░░░ 42.3% (216/429)
+2026-05-12T07:50:05.6784947Z λ node_modules/expo-router/node/render.js ▓▓▓▓▓▓░░░░░░░░░░ 37.7% (324/528)
+2026-05-12T07:50:09.1823463Z Web node_modules/expo-router/entry.js ▓▓▓▓▓▓░░░░░░░░░░ 42.3% (336/880)
+2026-05-12T07:50:09.1825208Z λ node_modules/expo-router/node/render.js ▓▓▓▓▓▓░░░░░░░░░░ 41.0% (384/943)
+2026-05-12T07:50:12.6988417Z Web node_modules/expo-router/entry.js ▓▓▓▓▓▓░░░░░░░░░░ 42.3% (423/947)
+2026-05-12T07:50:12.6989743Z λ node_modules/expo-router/node/render.js ▓▓▓▓▓▓░░░░░░░░░░ 41.0% ( 540/1018)
+2026-05-12T07:50:16.2843105Z Web node_modules/expo-router/entry.js ▓▓▓▓▓▓░░░░░░░░░░ 42.3% ( 609/1422)
+2026-05-12T07:50:16.2844414Z λ node_modules/expo-router/node/render.js ▓▓▓▓▓▓░░░░░░░░░░ 41.0% ( 541/1018)
+2026-05-12T07:50:19.7844236Z Web node_modules/expo-router/entry.js ▓▓▓▓▓▓░░░░░░░░░░ 42.3% ( 863/1552)
+2026-05-12T07:50:19.7845664Z λ node_modules/expo-router/node/render.js ▓▓▓▓▓▓░░░░░░░░░░ 41.0% ( 832/1584)
+2026-05-12T07:50:23.2857678Z Web node_modules/expo-router/entry.js ▓▓▓▓▓▓░░░░░░░░░░ 43.2% (1106/1683)
+2026-05-12T07:50:23.2858885Z λ node_modules/expo-router/node/render.js ▓▓▓▓▓▓░░░░░░░░░░ 41.0% (1007/1622)
+2026-05-12T07:50:26.8149011Z Web node_modules/expo-router/entry.js ▓▓▓▓▓▓▓▓▓▓▓▓▓░░░ 83.0% (1546/1697)
+2026-05-12T07:50:26.8151173Z λ node_modules/expo-router/node/render.js ▓▓▓▓▓▓░░░░░░░░░░ 41.0% (1054/1666)
+2026-05-12T07:50:30.3150291Z Web node_modules/expo-router/entry.js ▓▓▓▓▓▓▓▓▓▓▓▓▓░░░ 83.0% (1546/1697)
+2026-05-12T07:50:30.3151846Z λ node_modules/expo-router/node/render.js ▓▓▓▓▓▓▓▓▓▓▓▓▓░░░ 83.8% (1568/1713)
+2026-05-12T07:50:33.8158430Z Web node_modules/expo-router/entry.js ▓▓▓▓▓▓▓▓▓▓▓▓▓▓░░ 92.4% (1800/1897)
+2026-05-12T07:50:33.8159615Z λ node_modules/expo-router/node/render.js ▓▓▓▓▓▓▓▓▓▓▓▓▓▓░░ 90.9% (1776/1863)
+2026-05-12T07:50:37.3511671Z Web node_modules/expo-router/entry.js ▓▓▓▓▓▓▓▓▓▓▓▓▓▓░░ 92.4% (1916/2056)
+2026-05-12T07:50:37.3513113Z λ node_modules/expo-router/node/render.js ▓▓▓▓▓▓▓▓▓▓▓▓▓▓░░ 93.0% (1924/2043)
+2026-05-12T07:50:40.8511855Z Web node_modules/expo-router/entry.js ▓▓▓▓▓▓▓▓▓▓▓▓▓▓░░ 92.4% (2053/2166)
+2026-05-12T07:50:40.8512984Z λ node_modules/expo-router/node/render.js ▓▓▓▓▓▓▓▓▓▓▓▓▓▓░░ 93.0% (2049/2207)
+2026-05-12T07:50:44.3509717Z Web node_modules/expo-router/entry.js ▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓░ 94.4% (2163/2250)
+2026-05-12T07:50:44.3511026Z λ node_modules/expo-router/node/render.js ▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓░ 93.8% (2198/2270)
+2026-05-12T07:50:47.8830280Z Web node_modules/expo-router/entry.js ▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓░ 98.8% (2390/2404)
+2026-05-12T07:50:47.8834385Z λ node_modules/expo-router/node/render.js ▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓░ 97.8% (2363/2401)
+2026-05-12T07:50:48.4726267Z λ Bundled 54902ms node_modules/expo-router/node/render.js (2427 modules)
+2026-05-12T07:50:49.6184177Z [expo-notifications] Listening to push token changes is not yet fully supported on web. Adding a listener will have no effect.
+2026-05-12T07:50:49.6370143Z expo-file-system is not supported on web
+2026-05-12T07:50:49.6374115Z expo-file-system is not supported on web
+2026-05-12T07:50:49.6390937Z [DebugSwipeLogger] Failed to initialize log file: TypeError: this.validatePath is not a function
+2026-05-12T07:50:49.6392261Z     at new o (/home/runner/work/keepeat/keepeat/frontend/node_modules/expo-file-system/src/FileSystem.ts:180:10)
+2026-05-12T07:50:49.6393731Z     at Function.document (/home/runner/work/keepeat/keepeat/frontend/node_modules/expo-file-system/src/FileSystem.ts:25:12)
+2026-05-12T07:50:49.6395146Z     at Object.initializeFile (/home/runner/work/keepeat/keepeat/frontend/utils/debugSwipeLogger.ts:58:37)
+2026-05-12T07:50:49.6396441Z     at new <anonymous> (/home/runner/work/keepeat/keepeat/frontend/utils/debugSwipeLogger.ts:31:10)
+2026-05-12T07:50:49.6397827Z     at factory (/home/runner/work/keepeat/keepeat/frontend/utils/debugSwipeLogger.ts:272:33)
+2026-05-12T07:50:49.6399386Z     at loadModuleImplementation (/home/runner/work/keepeat/keepeat/frontend/node_modules/expo/node_modules/@expo/cli/build/metro-require/require.js:248:36)
+2026-05-12T07:50:49.6401245Z     at guardedLoadModule (/home/runner/work/keepeat/keepeat/frontend/node_modules/expo/node_modules/@expo/cli/build/metro-require/require.js:163:16)
+2026-05-12T07:50:49.6402920Z     at _r (/home/runner/work/keepeat/keepeat/frontend/node_modules/expo/node_modules/@expo/cli/build/metro-require/require.js:74:75)
+2026-05-12T07:50:49.6404174Z     at factory (/home/runner/work/keepeat/keepeat/frontend/store/stockStore.ts:22:1)
+2026-05-12T07:50:49.6405440Z     at f (/home/runner/work/keepeat/keepeat/frontend/node_modules/expo/node_modules/@expo/cli/build/metro-require/require.js:248:36)
+2026-05-12T07:50:49.7146024Z Web Bundled 56145ms node_modules/expo-router/entry.js (2412 modules)
+2026-05-12T07:50:50.0327990Z 
+2026-05-12T07:50:50.0329322Z › web bundles (1):
+2026-05-12T07:50:50.0330907Z _expo/static/js/web/entry-f2b2b1f0459e8278fa09b8157658576e.js (3.97 MB)
+2026-05-12T07:50:50.0331678Z 
+2026-05-12T07:50:50.0332760Z › Static routes (32):
+2026-05-12T07:50:50.0336221Z /scan (32.4 kB)
+2026-05-12T07:50:50.0339916Z / (index) (32 kB)
+2026-05-12T07:50:50.0346063Z /login (34.9 kB)
+2026-05-12T07:50:50.0347191Z /stats (39.9 kB)
+2026-05-12T07:50:50.0347725Z /stock (42.7 kB)
+2026-05-12T07:50:50.0348873Z /premium (31.2 kB)
+2026-05-12T07:50:50.0349437Z /recipes (40.9 kB)
+2026-05-12T07:50:50.0357221Z /register (35.7 kB)
+2026-05-12T07:50:50.0363866Z /settings (38.4 kB)
+2026-05-12T07:50:50.0364479Z /_sitemap (31.2 kB)
+2026-05-12T07:50:50.0365016Z /email-sent (33.3 kB)
+2026-05-12T07:50:50.0365570Z /+not-found (31.2 kB)
+2026-05-12T07:50:50.0366107Z /stock/[id] (32.4 kB)
+2026-05-12T07:50:50.0366919Z /add-product (37 kB)
+2026-05-12T07:50:50.0367511Z /admin (31.9 kB)
+2026-05-12T07:50:50.0368054Z /edit-product (32.5 kB)
+2026-05-12T07:50:50.0368626Z /scan-receipt (32.5 kB)
+2026-05-12T07:50:50.0369494Z /verify-email (32.7 kB)
+2026-05-12T07:50:50.0370020Z /(tabs) (45.1 kB)
+2026-05-12T07:50:50.0370546Z /(tabs)/stats (39.9 kB)
+2026-05-12T07:50:50.0371106Z /(tabs)/stock (42.7 kB)
+2026-05-12T07:50:50.0371673Z /recipes/[id] (32.2 kB)
+2026-05-12T07:50:50.0372224Z /reset-password (34.7 kB)
+2026-05-12T07:50:50.0372851Z /(tabs)/recipes (40.9 kB)
+2026-05-12T07:50:50.0373437Z /forgot-password (33.7 kB)
+2026-05-12T07:50:50.0374120Z /admin/monitoring/apis (31.9 kB)
+2026-05-12T07:50:50.0374764Z /admin/monitoring (31.9 kB)
+2026-05-12T07:50:50.0375418Z /admin/monitoring/users (31.9 kB)
+2026-05-12T07:50:50.0376083Z /admin/monitoring/events (31.9 kB)
+2026-05-12T07:50:50.0376980Z /admin/monitoring/subscriptions (31.9 kB)
+2026-05-12T07:50:50.0378100Z /admin/monitoring/services-usage (31.9 kB)
+2026-05-12T07:50:50.0378910Z /admin/monitoring/receipt-tickets (31.9 kB)
+2026-05-12T07:50:50.0517883Z 
+2026-05-12T07:50:50.0534449Z Exported: dist
+2026-05-12T07:51:00.0869417Z Something prevented Expo from exiting, forcefully exiting now.

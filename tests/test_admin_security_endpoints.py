@@ -94,13 +94,13 @@ class AdminSecurityEndpointTests(unittest.TestCase):
         server.app.dependency_overrides = {}
 
     def test_admin_health_without_auth_returns_401(self):
-        with patch("server.api_request_logs_col", _FakeApiLogsCol()), patch("server.db", _FakeDB()):
+        with patch("backend.server.api_request_logs_col", _FakeApiLogsCol()), patch("backend.server.db", _FakeDB()):
             client = TestClient(server.app)
             response = client.get("/api/admin/monitoring/health")
         self.assertEqual(response.status_code, 401)
 
     def test_admin_services_without_auth_returns_401(self):
-        with patch("server.api_request_logs_col", _FakeApiLogsCol()), patch("server.db", _FakeDB()):
+        with patch("backend.server.api_request_logs_col", _FakeApiLogsCol()), patch("backend.server.db", _FakeDB()):
             client = TestClient(server.app)
             response = client.get("/api/admin/monitoring/services")
         self.assertEqual(response.status_code, 401)
@@ -110,7 +110,7 @@ class AdminSecurityEndpointTests(unittest.TestCase):
             return {"id": self.user_id, "email": "user@keepeat.app", "is_admin": False}
 
         server.app.dependency_overrides[server._get_current_user] = _override_user
-        with patch("server.users_col", _FakeUsersCol({"email": "user@keepeat.app", "is_admin": False})), patch("server.api_request_logs_col", _FakeApiLogsCol()), patch("server.db", _FakeDB()):
+        with patch("backend.server.users_col", _FakeUsersCol({"email": "user@keepeat.app", "is_admin": False})), patch("backend.server.api_request_logs_col", _FakeApiLogsCol()), patch("backend.server.db", _FakeDB()):
             client = TestClient(server.app)
             response = client.get("/api/admin/monitoring/health")
         self.assertEqual(response.status_code, 403)
@@ -121,7 +121,7 @@ class AdminSecurityEndpointTests(unittest.TestCase):
 
         server.app.dependency_overrides[server._get_current_user] = _override_user
         rows = [{"_id": "evt1", "event_name": "user_registered", "event_category": "auth", "created_at": "2026-03-31T00:00:00+00:00"}]
-        with patch("server.users_col", _FakeUsersCol({"email": "admin@keepeat.app", "is_admin": True})), patch("server.api_request_logs_col", _FakeApiLogsCol()), patch("server.business_events_col", _FakeBusinessEventsCol(rows)):
+        with patch("backend.server.users_col", _FakeUsersCol({"email": "admin@keepeat.app", "is_admin": True})), patch("backend.server.api_request_logs_col", _FakeApiLogsCol()), patch("backend.server.business_events_col", _FakeBusinessEventsCol(rows)):
             client = TestClient(server.app)
             response = client.get("/api/admin/monitoring/events")
         self.assertEqual(response.status_code, 200)
@@ -132,7 +132,7 @@ class AdminSecurityEndpointTests(unittest.TestCase):
             return {"id": self.user_id, "email": "user@keepeat.app", "is_admin": False}
 
         server.app.dependency_overrides[server._get_current_user] = _override_user
-        with patch("server.users_col", _FakeUsersCol({"email": "user@keepeat.app", "is_admin": False})), patch("server.api_request_logs_col", _FakeApiLogsCol()):
+        with patch("backend.server.users_col", _FakeUsersCol({"email": "user@keepeat.app", "is_admin": False})), patch("backend.server.api_request_logs_col", _FakeApiLogsCol()):
             client = TestClient(server.app)
             response = client.put("/api/admin/users/a@b.com/set-premium?premium=true")
         self.assertEqual(response.status_code, 403)
@@ -142,7 +142,7 @@ class AdminSecurityEndpointTests(unittest.TestCase):
             return {"id": self.user_id, "email": "admin@keepeat.app", "is_admin": True}
 
         server.app.dependency_overrides[server._get_current_user] = _override_user
-        with patch("server.users_col", _FakeUsersCol({"email": "admin@keepeat.app", "is_admin": True}, matched_count=1)), patch("server.api_request_logs_col", _FakeApiLogsCol()):
+        with patch("backend.server.users_col", _FakeUsersCol({"email": "admin@keepeat.app", "is_admin": True}, matched_count=1)), patch("backend.server.api_request_logs_col", _FakeApiLogsCol()):
             client = TestClient(server.app)
             response = client.put("/api/admin/users/a@b.com/set-premium?premium=true")
         self.assertEqual(response.status_code, 200)
