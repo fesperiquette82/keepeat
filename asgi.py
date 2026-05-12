@@ -1,8 +1,18 @@
 """ASGI entry point for production deployment.
 
-Used by uvicorn in Render deployment. Requires PYTHONPATH to include the project root.
-Set in render.yaml: env.PYTHONPATH = .
+Explicitly adds the project root to sys.path before importing backend modules.
+This ensures backend package can be found regardless of how the app is invoked.
 """
+import sys
+from pathlib import Path
+
+# Add project root to sys.path BEFORE any relative imports
+# This is needed because uvicorn calls import_from_string which may not inherit PYTHONPATH
+project_root = str(Path(__file__).parent.resolve())
+if project_root not in sys.path:
+    sys.path.insert(0, project_root)
+
+# Now import after sys.path is set
 from backend.server import app
 
 if __name__ == "__main__":
