@@ -65,6 +65,20 @@ tail -100 LOGS/logs_*/0_*.txt
 grep -r "ERROR\|FAILED" LOGS/logs_*/ --include="*.txt"
 ```
 
+### ⚠️ Clean Up After Processing
+Once issues are analyzed, fixed, and verified to be resolved:
+```bash
+# Delete processed log directories
+rm -rf LOGS/logs_*
+rm -f LOGS/*.zip
+```
+
+**Important**: Only delete after:
+1. ✅ Issue has been identified and fixed in code
+2. ✅ Fix has been committed and pushed
+3. ✅ Workflow has been re-run to confirm fix works
+4. ✅ New logs show issue is resolved (no errors)
+
 ### Finding Specific Job Logs
 Structure: `LOGS/logs_XXXXXXXXX/`
 - `0_*.txt` = Main job summary
