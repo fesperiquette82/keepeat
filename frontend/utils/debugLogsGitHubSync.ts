@@ -8,7 +8,7 @@ import { logger } from './logger';
 export async function shareDebugLogsToGitHub(): Promise<{ success: boolean; message: string; url?: string }> {
   try {
     const token = process.env.EXPO_PUBLIC_GITHUB_TOKEN;
-    const repo = process.env.EXPO_PUBLIC_GITHUB_REPO || 'fesperiquette82/keepeat';
+    const repo = process.env.EXPO_PUBLIC_GITHUB_REPO || 'fesperiquette82/keepeat-debug-logs';
 
     if (!token) {
       return {

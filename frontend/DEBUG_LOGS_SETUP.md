@@ -14,8 +14,8 @@ To enable this feature, add the following environment variables to your `.env.lo
 EXPO_PUBLIC_GITHUB_TOKEN=ghp_xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx
 
 # Repository where issues will be created (format: owner/repo)
-# Defaults to: fesperiquette82/keepeat
-EXPO_PUBLIC_GITHUB_REPO=fesperiquette82/keepeat
+# Defaults to: fesperiquette82/keepeat-debug-logs (PUBLIC)
+EXPO_PUBLIC_GITHUB_REPO=fesperiquette82/keepeat-debug-logs
 ```
 
 ## Getting a GitHub Token
@@ -40,13 +40,13 @@ EXPO_PUBLIC_GITHUB_REPO=fesperiquette82/keepeat
 
 ## Privacy
 
-- Issues are created in a **private repository** (fesperiquette82/keepeat is private)
-- Only you and Claude can access these logs
+- Issues are created in a **public repository** (`fesperiquette82/keepeat-debug-logs`)
 - Logs contain:
   - Timestamp of export
   - Gesture state transitions
   - Ref lifecycle information
-  - No sensitive user data
+  - **No sensitive user data** (no emails, passwords, or personal info)
+- All debug logs are purely technical information about swipe gesture handling
 
 ## Troubleshooting
 
