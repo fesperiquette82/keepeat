@@ -1,4 +1,4 @@
-import React, { useCallback, useMemo } from 'react';
+import React, { useCallback, useMemo, useState } from 'react';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { View, Text, StyleSheet, TouchableOpacity, Switch, ActivityIndicator, Alert } from 'react-native';
 import Ionicons from '@expo/vector-icons/Ionicons';
@@ -13,6 +13,7 @@ import { isAdminUser } from '../utils/adminAccess';
 import { logger } from '../utils/logger';
 import { resolvePremiumStatus } from '../utils/premiumStatus';
 import { buildLogoutConfirmationCopy } from '../utils/settingsLogout';
+import { shareDebugLogsToGitHub } from '../utils/debugLogsGitHubSync';
 
 function formatLastUpdate(value: string | null, language: 'fr' | 'en', fallbackText: string): string {
   if (!value) return fallbackText;
@@ -39,6 +40,7 @@ function formatPremiumDate(value: string, language: 'fr' | 'en'): string {
 
 export default function SettingsScreen() {
   const router = useRouter();
+  const [debugLogsUploading, setDebugLogsUploading] = useState(false);
   const {
     language,
     householdSize,
@@ -75,6 +77,28 @@ export default function SettingsScreen() {
     logger.info('[SETTINGS] calling forceRefreshReminderProducts');
     void forceRefreshReminderProducts();
   }, [forceRefreshReminderProducts]);
+
+  const onPressExportDebugLogs = useCallback(async () => {
+    setDebugLogsUploading(true);
+    try {
+      const result = await shareDebugLogsToGitHub();
+      if (result.success) {
+        Alert.alert('Debug Logs Uploaded', result.message, [
+          { text: 'OK', style: 'default' },
+          ...(result.url ? [{ text: 'Open Issue', onPress: () => {
+            // TODO: Open URL in browser
+            logger.info('[SETTINGS] Issue URL', { url: result.url });
+          } }] : []),
+        ]);
+      } else {
+        Alert.alert('Upload Failed', result.message);
+      }
+    } catch (error) {
+      Alert.alert('Error', `Failed to upload logs: ${error instanceof Error ? error.message : 'Unknown error'}`);
+    } finally {
+      setDebugLogsUploading(false);
+    }
+  }, []);
 
   const reminderOptions: ReminderLeadDays[] = useMemo(() => [1, 2, 3], []);
   const premiumStatus = useMemo(() => resolvePremiumStatus({
@@ -266,6 +290,25 @@ export default function SettingsScreen() {
         )}
 
         <View style={styles.card}>
+          <Text style={styles.sectionTitle}>Debug</Text>
+          <Text style={styles.systemInfo}>Export swipe gesture debug logs to GitHub for troubleshooting</Text>
+          <TouchableOpacity
+            style={[styles.refreshButton, debugLogsUploading && styles.disabledButton]}
+            onPress={onPressExportDebugLogs}
+            disabled={debugLogsUploading}
+          >
+            {debugLogsUploading ? (
+              <ActivityIndicator size="small" color="#FFFFFF" />
+            ) : (
+              <Ionicons name="cloud-upload-outline" size={16} color="#FFFFFF" />
+            )}
+            <Text style={styles.refreshButtonText}>
+              {debugLogsUploading ? 'Uploading...' : '📤 Export Logs'}
+            </Text>
+          </TouchableOpacity>
+        </View>
+
+        <View style={styles.card}>
           <Text style={styles.sectionTitle}>{t('accountSection')}</Text>
           <TouchableOpacity style={styles.logoutButton} onPress={onPressLogout}>
             <Ionicons name="log-out-outline" size={16} color="#FFFFFF" />
@@ -297,6 +340,7 @@ const createStyles = (C: ReturnType<typeof getThemeColors>, T: ReturnType<typeof
   hint: { ...T.secondarySmall },
   inlineRow: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between' },
   disabledText: { opacity: 0.5 },
+  disabledButton: { opacity: 0.6 },
   systemInfo: { color: C.textLight, fontSize: 12, fontWeight: '500' },
   refreshButton: {
     marginTop: 4,
