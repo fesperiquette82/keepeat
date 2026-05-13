@@ -71,6 +71,17 @@ export default function StockScreen() {
     fetchStock({ reason: 'stock.tab.mount' });
   }, [fetchStock]);
 
+  // Cleanup swipeable refs for removed items to prevent gesture handler lingering
+  useEffect(() => {
+    const currentIds = new Set(displayedItems.map((item) => item.id));
+    swipeableRefs.current.forEach((_, key) => {
+      if (!currentIds.has(key)) {
+        debugSwipeLogger.info('StockScreen.cleanup', `Removing orphaned swipeable ref`, { itemId: key });
+        swipeableRefs.current.delete(key);
+      }
+    });
+  }, [displayedItems]);
+
   const { items, isMock } = useMemo(() => resolveStockItems(storeItems, { useMockFallback: false }), [storeItems]);
 
   const mostUrgentDays = useMemo(() => {
@@ -286,17 +297,17 @@ export default function StockScreen() {
                     queueSize: swipeActionQueueRef.current ? 'pending' : 'unknown',
                   });
                   // Fermer tous les autres Swipeable d'abord (pattern std pour FlatList).
-                  // Puis close() le courant pour libérer le gesture handler RNGH après l'action.
                   swipeableRefs.current.forEach((ref, key) => {
                     if (key !== item.id) ref?.close();
                   });
-                  swipeableRefs.current.get(item.id)?.close();
-                  debugSwipeLogger.info('StockScreen.onSwipeableLeftOpen', `Swipeable closed, enqueueing action`, {
+                  debugSwipeLogger.info('StockScreen.onSwipeableLeftOpen', `Other swipeables closed, enqueueing action`, {
                     itemId: item.id,
                   });
-                  void swipeActionQueueRef.current.enqueue(
-                    () => handleSwipeAction(item.id, resolveSwipeActionFromOpenSide('left')),
-                  );
+                  void swipeActionQueueRef.current.enqueue(async () => {
+                    await handleSwipeAction(item.id, resolveSwipeActionFromOpenSide('left'));
+                    // Close AFTER action completes to avoid gesture handler lingering
+                    swipeableRefs.current.get(item.id)?.close();
+                  });
                 }}
                 onSwipeableRightOpen={() => {
                   debugSwipeLogger.info('StockScreen.onSwipeableRightOpen', `Swiped right`, {
@@ -307,13 +318,14 @@ export default function StockScreen() {
                   swipeableRefs.current.forEach((ref, key) => {
                     if (key !== item.id) ref?.close();
                   });
-                  swipeableRefs.current.get(item.id)?.close();
-                  debugSwipeLogger.info('StockScreen.onSwipeableRightOpen', `Swipeable closed, enqueueing action`, {
+                  debugSwipeLogger.info('StockScreen.onSwipeableRightOpen', `Other swipeables closed, enqueueing action`, {
                     itemId: item.id,
                   });
-                  void swipeActionQueueRef.current.enqueue(
-                    () => handleSwipeAction(item.id, resolveSwipeActionFromOpenSide('right')),
-                  );
+                  void swipeActionQueueRef.current.enqueue(async () => {
+                    await handleSwipeAction(item.id, resolveSwipeActionFromOpenSide('right'));
+                    // Close AFTER action completes to avoid gesture handler lingering
+                    swipeableRefs.current.get(item.id)?.close();
+                  });
                 }}
               >
                 <TouchableOpacity
