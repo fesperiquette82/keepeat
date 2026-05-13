@@ -1,0 +1,201 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "title": "KeepEat Project Profile",
+  "description": "Configuration schema for KeepEat project governance and validation",
+  "type": "object",
+  "required": ["projectName", "stacks"],
+  "properties": {
+    "projectName": {
+      "type": "string",
+      "description": "Human-readable project name",
+      "examples": ["KeepEat"]
+    },
+    "description": {
+      "type": "string",
+      "description": "Brief project description",
+      "examples": ["Mobile meal planning & expense management app"]
+    },
+    "stacks": {
+      "type": "array",
+      "description": "Technology stacks in use",
+      "items": {
+        "type": "string",
+        "enum": [
+          "react-native-expo",
+          "python-fastapi",
+          "e2e-maestro",
+          "nextjs",
+          "node-ts",
+          "flutter"
+        ]
+      },
+      "minItems": 1,
+      "examples": [
+        ["react-native-expo", "python-fastapi", "e2e-maestro"]
+      ]
+    },
+    "packageManager": {
+      "type": "string",
+      "description": "Package manager for Node.js projects",
+      "enum": ["npm", "yarn", "pnpm", "bun"],
+      "default": "npm"
+    },
+    "sourceDirs": {
+      "type": "object",
+      "description": "Source code directories by component",
+      "additionalProperties": {
+        "type": "string"
+      },
+      "examples": [
+        {
+          "frontend": "frontend",
+          "backend": "backend",
+          "api": "api"
+        }
+      ]
+    },
+    "testDirs": {
+      "type": "object",
+      "description": "Test directories by component",
+      "additionalProperties": {
+        "oneOf": [
+          {
+            "type": "string"
+          },
+          {
+            "type": "array",
+            "items": {
+              "type": "string"
+            }
+          }
+        ]
+      },
+      "examples": [
+        {
+          "frontend": ["frontend/__tests__", "frontend/integration", "frontend/smoke"],
+          "backend": "backend/tests"
+        }
+      ]
+    },
+    "skipE2E": {
+      "type": "boolean",
+      "description": "Skip E2E tests in validation",
+      "default": false
+    },
+    "skipLint": {
+      "type": "boolean",
+      "description": "Skip linting in validation",
+      "default": false
+    },
+    "skipTypecheck": {
+      "type": "boolean",
+      "description": "Skip type checking in validation",
+      "default": false
+    },
+    "skipTests": {
+      "type": "boolean",
+      "description": "Skip unit/integration tests in validation",
+      "default": false
+    },
+    "coverageThreshold": {
+      "type": "object",
+      "description": "Minimum code coverage requirements",
+      "properties": {
+        "frontend": {
+          "type": "number",
+          "minimum": 0,
+          "maximum": 100,
+          "default": 70
+        },
+        "backend": {
+          "type": "number",
+          "minimum": 0,
+          "maximum": 100,
+          "default": 80
+        }
+      }
+    },
+    "externalServices": {
+      "type": "object",
+      "description": "External services (database, APIs, queues) used by project",
+      "additionalProperties": {
+        "type": "object",
+        "properties": {
+          "type": {
+            "type": "string",
+            "enum": ["mongodb", "postgresql", "mysql", "redis", "elasticsearch", "grpc", "http"],
+            "description": "Service type"
+          },
+          "test": {
+            "type": "string",
+            "enum": ["local", "docker", "mock", "skip"],
+            "description": "How to test this service"
+          },
+          "required": {
+            "type": "boolean",
+            "description": "Is this service required for core functionality",
+            "default": true
+          }
+        }
+      },
+      "examples": [
+        {
+          "database": {
+            "type": "mongodb",
+            "test": "local",
+            "required": true
+          },
+          "cache": {
+            "type": "redis",
+            "test": "docker",
+            "required": false
+          }
+        }
+      ]
+    },
+    "nodeVersion": {
+      "type": "string",
+      "description": "Minimum required Node.js version",
+      "examples": ["20.0.0", "22.x"]
+    },
+    "pythonVersion": {
+      "type": "string",
+      "description": "Minimum required Python version",
+      "examples": ["3.10", "3.12"]
+    }
+  },
+  "additionalProperties": false,
+  "examples": [
+    {
+      "projectName": "KeepEat",
+      "description": "Mobile meal planning & expense management app",
+      "stacks": ["react-native-expo", "python-fastapi", "e2e-maestro"],
+      "packageManager": "npm",
+      "sourceDirs": {
+        "frontend": "frontend",
+        "backend": "backend"
+      },
+      "testDirs": {
+        "frontend": ["frontend/__tests__", "frontend/integration", "frontend/smoke"],
+        "backend": "backend/tests"
+      },
+      "skipE2E": false,
+      "skipLint": false,
+      "skipTypecheck": false,
+      "externalServices": {
+        "database": {
+          "type": "mongodb",
+          "test": "local",
+          "required": true
+        },
+        "api": {
+          "type": "http",
+          "test": "mock",
+          "required": false
+        }
+      },
+      "nodeVersion": "20.0.0",
+      "pythonVersion": "3.12"
+    }
+  ]
+}

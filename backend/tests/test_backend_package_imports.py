@@ -1,5 +1,7 @@
 from pathlib import Path
 
+REPO_ROOT = Path(__file__).resolve().parents[2]
+
 
 def test_backend_modules_use_absolute_package_imports():
     """Verify all backend modules use absolute imports (from backend.X import).
@@ -13,15 +15,15 @@ def test_backend_modules_use_absolute_package_imports():
     with no known parent package" in production when uvicorn cannot resolve the package context.
     """
     backend_modules = [
-        "backend/alerts.py",
-        "backend/auth_utils.py",
-        "backend/observability.py",
-        "backend/ocr_service.py",
-        "backend/product_catalog.py",
-        "backend/recipes_service.py",
-        "backend/admin_service_control.py",
-        "backend/service_limits.py",
-        "backend/test_mode.py",
+        "alerts.py",
+        "auth_utils.py",
+        "observability.py",
+        "ocr_service.py",
+        "product_catalog.py",
+        "recipes_service.py",
+        "admin_service_control.py",
+        "service_limits.py",
+        "test_mode.py",
     ]
 
     fragile_patterns = [
@@ -41,14 +43,15 @@ def test_backend_modules_use_absolute_package_imports():
         "from .",  # Relative imports
     ]
 
-    for module_path in backend_modules:
-        content = Path(module_path).read_text(encoding="utf-8")
+    for module_name in backend_modules:
+        module_path = REPO_ROOT / "backend" / module_name
+        content = module_path.read_text(encoding="utf-8")
         for pattern in fragile_patterns:
             assert pattern not in content, f"{module_path} contains fragile import: {pattern}"
 
 
 def test_backend_server_uses_package_imports_for_internal_modules():
-    server = Path("backend/server.py").read_text(encoding="utf-8")
+    server = (REPO_ROOT / "backend" / "server.py").read_text(encoding="utf-8")
 
     fragile_imports = [
         "from alerts import",

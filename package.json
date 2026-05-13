@@ -1,0 +1,15 @@
+{
+  "name": "keepeat",
+  "version": "1.0.0",
+  "description": "KeepEat - Mobile meal planning & expense management app",
+  "private": true,
+  "scripts": {
+    "prepare": "husky",
+    "validate": "./scripts/ai-validate.sh",
+    "validate:quick": "./scripts/ai-validate.sh --quick",
+    "verify:tests": "node scripts/verify-tests-added.mjs"
+  },
+  "devDependencies": {
+    "husky": "^9.1.7"
+  }
+}

@@ -1,0 +1,27 @@
+{
+  "projectName": "KeepEat",
+  "description": "Mobile meal planning & expense management app (React Native Expo + FastAPI)",
+  "stacks": ["react-native-expo", "python-fastapi", "e2e-maestro"],
+  "packageManager": "npm",
+  "sourceDirs": {
+    "frontend": "frontend",
+    "backend": "backend"
+  },
+  "testDirs": {
+    "frontend": ["frontend/__tests__", "frontend/integration", "frontend/smoke"],
+    "backend": ["backend/tests"]
+  },
+  "skipE2E": false,
+  "skipLint": false,
+  "skipTypecheck": false,
+  "externalServices": {
+    "database": {
+      "type": "mongodb",
+      "test": "local"
+    },
+    "api": {
+      "type": "fastapi",
+      "test": "local"
+    }
+  }
+}

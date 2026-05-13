@@ -1,0 +1,9 @@
+# Quick test: verify that tests are added for code changes
+# This runs before every commit
+# Skip for governance-only commits (docs, rules, config)
+if command -v node &> /dev/null; then
+  # Use HEAD~1 if available, otherwise skip (first commit or detached state)
+  if git rev-parse HEAD~1 &>/dev/null; then
+    node scripts/verify-tests-added.mjs HEAD~1 || exit 1
+  fi
+fi

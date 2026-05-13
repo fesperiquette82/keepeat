@@ -1,0 +1,54 @@
+# Project Rules for KeepEat (Cursor IDE)
+
+> Automatically loaded by Cursor IDE when opening this project
+> Source of truth: `.ai/core-rules.md`
+
+## Rule Priority (in case of conflict)
+
+1. `.ai/core-rules.md` — universal, non-negotiable rules
+2. `.ai/task-flow.md` — development workflow
+3. `.ai/test-policy.md` — testing architecture
+4. `.ai/review-checklist.md` — self-review template
+5. `.ai/stacks/<stack>.md` — stack-specific conventions
+
+Load these files and follow strictly.
+
+## Critical Rules (Summary)
+
+### Testing Mandate
+- **Bug fix** → Regression test (mandatory, must fail first)
+- **Feature** → Acceptance test (mandatory)
+- Never suppress or weaken existing tests
+- Never mock business logic (only I/O, external services)
+
+### Development Discipline
+- Inspect existing code first, then modify
+- Reuse hooks, utilities, components (three+ lines → extract)
+- Follow KeepEat product rules:
+  - No fake-personalized UI
+  - No scattered `console.log`
+  - No parallel data flows for same product
+  - Debug tools via config only
+  - Never suppress errors silently
+
+### Validation & Commits
+- **Before every commit**: `./scripts/ai-validate.sh --quick`
+- **Before every push**: `./scripts/ai-validate.sh` (full)
+- Pre-commit hook enforces: `verify-tests-added.mjs`
+- Pre-push hook enforces: full `ai-validate.sh`
+
+### Git Discipline
+- ❌ `git push --force`
+- ❌ `git commit --no-verify`
+- ✅ Feature branch → PR → merge
+- Commit format: `<type>(<scope>): <description>`
+
+### Code Quality
+- **Frontend**: TypeScript strict, no `any`
+- **Backend**: mypy strict, no `type: ignore`
+- **Both**: ESLint clean (frontend), ruff/black (backend)
+
+### When in Doubt
+Ask: "Which `.ai/` file addresses this?"
+
+Don't invent rules. Don't bypass tests. Don't hide errors.

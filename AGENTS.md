@@ -1,5 +1,22 @@
 # AGENTS.md
 
+> Automatiquement chargé par les agents IA (Claude Code, Cursor, Copilot, Codex)
+> **Source de vérité centralisée**: `.ai/core-rules.md`
+
+## 🔗 Règles centralisées dans `.ai/`
+
+Lire et appliquer strictement, dans cet ordre de priorité :
+
+1. **`.ai/core-rules.md`** — Règles universelles non négociables
+2. **`.ai/task-flow.md`** — Workflow de développement (TDD, phases)
+3. **`.ai/test-policy.md`** — Politique de tests (pyramide, conventions)
+4. **`.ai/review-checklist.md`** — Checklist auto-revue
+5. **`.ai/stacks/react-native-expo.md`** — Conventions frontend (Node.js --test, TypeScript strict)
+6. **`.ai/stacks/python-fastapi.md`** — Conventions backend (pytest, mypy strict)
+7. **`.ai/stacks/e2e-maestro.md`** — Conventions E2E (Maestro, testID)
+
+Tous les points suivants sont des résumés ; **en cas d'ambiguïté, `.ai/core-rules.md` prime.**
+
 ## Objectif
 Faire des correctifs incrémentaux, fiables, et faciles à relire.
 

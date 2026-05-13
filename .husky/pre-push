@@ -1,0 +1,4 @@
+# Full validation before push
+# This runs before every git push
+# Ensures all tests pass, linting passes, types check, etc.
+./scripts/ai-validate.sh || exit 1

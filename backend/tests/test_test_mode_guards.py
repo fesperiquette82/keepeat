@@ -3,7 +3,8 @@ import sys
 
 import pytest
 
-sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
+REPO_ROOT = Path(__file__).resolve().parents[2]
+sys.path.insert(0, str(REPO_ROOT / "backend"))
 from test_mode import ensure_external_allowed, external_services_disabled, is_test_env, mock_openfoodfacts_enabled
 
 
@@ -26,7 +27,7 @@ def test_test_mode_blocks_external_calls_when_disabled(monkeypatch):
 
 
 def test_server_declares_test_seed_and_reset_routes():
-    content = Path("backend/server.py").read_text(encoding="utf-8")
+    content = (REPO_ROOT / "backend" / "server.py").read_text(encoding="utf-8")
 
     assert '@app.post("/api/test/reset")' in content
     assert '@app.post("/api/test/seed")' in content
@@ -34,7 +35,7 @@ def test_server_declares_test_seed_and_reset_routes():
 
 
 def test_server_blocks_external_services_in_test_mode():
-    content = Path("backend/server.py").read_text(encoding="utf-8")
+    content = (REPO_ROOT / "backend" / "server.py").read_text(encoding="utf-8")
 
     assert 'ensure_external_allowed("emails")' in content
     assert 'ensure_external_allowed("billing")' in content
@@ -44,7 +45,7 @@ def test_server_blocks_external_services_in_test_mode():
 
 
 def test_test_mode_fixtures_define_deterministic_e2e_free_account():
-    content = Path("backend/test_mode.py").read_text(encoding="utf-8")
+    content = (REPO_ROOT / "backend" / "test_mode.py").read_text(encoding="utf-8")
 
     assert '"email": "e2e.free@keepeat.test"' in content
     assert '"password": "TestPassword123!"' in content
@@ -53,7 +54,7 @@ def test_test_mode_fixtures_define_deterministic_e2e_free_account():
 
 
 def test_test_seed_route_upserts_verified_test_users():
-    content = Path("backend/server.py").read_text(encoding="utf-8")
+    content = (REPO_ROOT / "backend" / "server.py").read_text(encoding="utf-8")
 
     assert 'free_fixture = TEST_FIXTURES["users"]["free"]' in content
     assert '{"$set": {"email": free_fixture["email"], "password_hash": free_password_hash, "is_premium": False, "subscription_status": "inactive", "email_verified": True}}' in content

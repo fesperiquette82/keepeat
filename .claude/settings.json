@@ -1,5 +1,11 @@
 {
   "permissions": {
+    "deny": [
+      "Bash(git commit *--no-verify*)",
+      "Bash(git push *--no-verify*)",
+      "Bash(git push *--force*)",
+      "Bash(rm *-rf*)"
+    ],
     "allow": [
       "Bash(node -e \"const p=require\\(''./package.json''\\); console.log\\(''expo-image-manipulator:'', p.dependencies[''expo-image-manipulator'']\\)\")",
       "Bash(git add frontend/app/add-product.tsx frontend/app/edit-product.tsx frontend/package.json frontend/package-lock.json)",
@@ -8,7 +14,31 @@
       "Bash(git add backend/requirements.txt)",
       "Bash(python analyse_modules_en.py)",
       "Bash(python architecture_solution_en.py)",
-      "Bash(python couplage_modules_en.py)"
+      "Bash(python couplage_modules_en.py)",
+      "Bash(./scripts/ai-validate.sh *)"
+    ]
+  },
+  "hooks": {
+    "PostToolUse": [
+      {
+        "matcher": "Edit|Write",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "./scripts/ai-validate.sh --quick || true"
+          }
+        ]
+      }
+    ],
+    "Stop": [
+      {
+        "hooks": [
+          {
+            "type": "command",
+            "command": "echo '[Claude Stop] Remember: run ./scripts/ai-validate.sh before git push (pre-push hook will run it).'"
+          }
+        ]
+      }
     ]
   }
 }
