@@ -4,6 +4,8 @@ services:
     runtime: python
     rootDir: .
     buildCommand: pip install -r backend/requirements.txt
-    startCommand: sh -c 'export PYTHONPATH=$PWD && python -m uvicorn asgi:app --host 0.0.0.0 --port $PORT'
+    env:
+      PYTHONPATH: .
+    startCommand: python asgi.py
     healthCheckPath: /health
     autoDeploy: true
