@@ -6,7 +6,7 @@
  */
 
 // 🔴 MODIFIER CETTE VALEUR POUR ACTIVER/DÉSACTIVER LES LOGS
-export const DEBUG_SWIPE_ACTIONS = false; // ← Change to true to enable
+export const DEBUG_SWIPE_ACTIONS = true; // ← Change to true to enable
 
 // Taille du buffer circulaire (nombre de logs à conserver en mémoire)
 export const DEBUG_LOG_BUFFER_SIZE = 500;

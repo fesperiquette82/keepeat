@@ -74,12 +74,24 @@ export default function StockScreen() {
   // Cleanup swipeable refs for removed items to prevent gesture handler lingering
   useEffect(() => {
     const currentIds = new Set(displayedItems.map((item) => item.id));
+    const refsCountBefore = swipeableRefs.current.size;
+    const refIdsToRemove: string[] = [];
+
     swipeableRefs.current.forEach((_, key) => {
       if (!currentIds.has(key)) {
-        debugSwipeLogger.info('StockScreen.cleanup', `Removing orphaned swipeable ref`, { itemId: key });
+        refIdsToRemove.push(key);
         swipeableRefs.current.delete(key);
       }
     });
+
+    if (refIdsToRemove.length > 0) {
+      debugSwipeLogger.info('StockScreen.cleanup', `Removed orphaned refs`, {
+        removedRefIds: refIdsToRemove,
+        refCountBefore: refsCountBefore,
+        refCountAfter: swipeableRefs.current.size,
+        displayedItemsCount: displayedItems.length,
+      });
+    }
   }, [displayedItems]);
 
   const { items, isMock } = useMemo(() => resolveStockItems(storeItems, { useMockFallback: false }), [storeItems]);
@@ -137,6 +149,8 @@ export default function StockScreen() {
       itemId,
       action,
       isProcessing: !!processingIds[itemId],
+      refsCount: swipeableRefs.current.size,
+      allRefIds: Array.from(swipeableRefs.current.keys()),
     });
 
     if (processingIds[itemId]) {
@@ -154,6 +168,8 @@ export default function StockScreen() {
         removedItemsCount: result.removedItems.length,
         notFoundCount: result.notFoundCount,
         failedCount: result.failedCount,
+        refsCountAfterRemoval: swipeableRefs.current.size,
+        refStillExists: swipeableRefs.current.has(itemId),
       });
 
       const nextBanner = resolveStockRemovalBanner(action, result);
@@ -178,7 +194,11 @@ export default function StockScreen() {
         delete next[itemId];
         return next;
       });
-      debugSwipeLogger.info('StockScreen.handleSwipeAction', `Finished for item=${itemId}`, { itemId });
+      debugSwipeLogger.info('StockScreen.handleSwipeAction', `Finished for item=${itemId}`, {
+        itemId,
+        refsCount: swipeableRefs.current.size,
+        allRefIds: Array.from(swipeableRefs.current.keys()),
+      });
     }
   };
 
@@ -283,48 +303,87 @@ export default function StockScreen() {
             return (
               <Swipeable
                 ref={(ref) => {
-                  if (ref) swipeableRefs.current.set(item.id, ref);
-                  else swipeableRefs.current.delete(item.id);
+                  if (ref) {
+                    swipeableRefs.current.set(item.id, ref);
+                    debugSwipeLogger.info('StockScreen.Swipeable.ref', `Ref added`, {
+                      itemId: item.id,
+                      itemName: item.name,
+                      refsCount: swipeableRefs.current.size,
+                    });
+                  } else {
+                    swipeableRefs.current.delete(item.id);
+                    debugSwipeLogger.info('StockScreen.Swipeable.ref', `Ref removed`, {
+                      itemId: item.id,
+                      itemName: item.name,
+                      refsCount: swipeableRefs.current.size,
+                    });
+                  }
                 }}
                 overshootLeft={false}
                 overshootRight={false}
                 renderLeftActions={() => renderSwipeAction('Utilisé', '#16A34A', 'restaurant-outline')}
                 renderRightActions={() => renderSwipeAction('Jeté', '#DC2626', 'trash-outline')}
                 onSwipeableLeftOpen={() => {
+                  const refCountBefore = swipeableRefs.current.size;
                   debugSwipeLogger.info('StockScreen.onSwipeableLeftOpen', `Swiped left`, {
                     itemId: item.id,
                     itemName: item.name,
-                    queueSize: swipeActionQueueRef.current ? 'pending' : 'unknown',
+                    refsCountBefore: refCountBefore,
+                    allRefIds: Array.from(swipeableRefs.current.keys()),
+                    processingIds: Object.keys(processingIds).filter((id) => processingIds[id]),
                   });
                   // Fermer tous les autres Swipeable d'abord (pattern std pour FlatList).
+                  const closedRefs: string[] = [];
                   swipeableRefs.current.forEach((ref, key) => {
-                    if (key !== item.id) ref?.close();
+                    if (key !== item.id) {
+                      ref?.close();
+                      closedRefs.push(key);
+                    }
                   });
                   debugSwipeLogger.info('StockScreen.onSwipeableLeftOpen', `Other swipeables closed, enqueueing action`, {
                     itemId: item.id,
+                    closedRefIds: closedRefs,
+                    refsCountAfterClose: swipeableRefs.current.size,
                   });
                   void swipeActionQueueRef.current.enqueue(async () => {
+                    debugSwipeLogger.info('StockScreen.onSwipeableLeftOpen.queue', `Action starting`, { itemId: item.id });
                     await handleSwipeAction(item.id, resolveSwipeActionFromOpenSide('left'));
                     // Close AFTER action completes to avoid gesture handler lingering
+                    debugSwipeLogger.info('StockScreen.onSwipeableLeftOpen.queue', `Action complete, closing ref`, { itemId: item.id });
+                    const refExists = swipeableRefs.current.has(item.id);
                     swipeableRefs.current.get(item.id)?.close();
+                    debugSwipeLogger.info('StockScreen.onSwipeableLeftOpen.queue', `Ref closed`, { itemId: item.id, refExistedBeforeClose: refExists });
                   });
                 }}
                 onSwipeableRightOpen={() => {
+                  const refCountBefore = swipeableRefs.current.size;
                   debugSwipeLogger.info('StockScreen.onSwipeableRightOpen', `Swiped right`, {
                     itemId: item.id,
                     itemName: item.name,
-                    queueSize: swipeActionQueueRef.current ? 'pending' : 'unknown',
+                    refsCountBefore: refCountBefore,
+                    allRefIds: Array.from(swipeableRefs.current.keys()),
+                    processingIds: Object.keys(processingIds).filter((id) => processingIds[id]),
                   });
+                  const closedRefs: string[] = [];
                   swipeableRefs.current.forEach((ref, key) => {
-                    if (key !== item.id) ref?.close();
+                    if (key !== item.id) {
+                      ref?.close();
+                      closedRefs.push(key);
+                    }
                   });
                   debugSwipeLogger.info('StockScreen.onSwipeableRightOpen', `Other swipeables closed, enqueueing action`, {
                     itemId: item.id,
+                    closedRefIds: closedRefs,
+                    refsCountAfterClose: swipeableRefs.current.size,
                   });
                   void swipeActionQueueRef.current.enqueue(async () => {
+                    debugSwipeLogger.info('StockScreen.onSwipeableRightOpen.queue', `Action starting`, { itemId: item.id });
                     await handleSwipeAction(item.id, resolveSwipeActionFromOpenSide('right'));
                     // Close AFTER action completes to avoid gesture handler lingering
+                    debugSwipeLogger.info('StockScreen.onSwipeableRightOpen.queue', `Action complete, closing ref`, { itemId: item.id });
+                    const refExists = swipeableRefs.current.has(item.id);
                     swipeableRefs.current.get(item.id)?.close();
+                    debugSwipeLogger.info('StockScreen.onSwipeableRightOpen.queue', `Ref closed`, { itemId: item.id, refExistedBeforeClose: refExists });
                   });
                 }}
               >
