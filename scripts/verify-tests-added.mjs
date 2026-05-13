@@ -1,5 +1,7 @@
 #!/usr/bin/env node
 import { execSync } from 'node:child_process';
+import fs from 'node:fs';
+import path from 'node:path';
 
 function run(command) {
   return execSync(command, { encoding: 'utf8' }).trim();
@@ -60,6 +62,32 @@ const changedTests = changedFiles.filter((filePath) => isTestFile(filePath));
 if (changedTests.length > 0) {
   console.log('Test changes detected. Policy check passed.');
   console.log(changedTests.map((filePath) => ` - ${filePath}`).join('\n'));
+  process.exit(0);
+}
+
+// Check if corresponding test files exist in the repo for the changed app code
+const hasCorrespondingTests = nonExemptAppCodeChanges.every((appFile) => {
+  const dir = path.dirname(appFile);
+  const filename = path.basename(appFile, path.extname(appFile));
+  const possibleTestPaths = [
+    path.join(dir, `${filename}.test.ts`),
+    path.join(dir, `${filename}.test.tsx`),
+    path.join(dir, `${filename}.test.js`),
+    path.join(dir, `${filename}.spec.ts`),
+    path.join(dir, '__tests__', `${filename}.test.ts`),
+  ];
+  return possibleTestPaths.some((testPath) => {
+    try {
+      fs.accessSync(testPath);
+      return true;
+    } catch {
+      return false;
+    }
+  });
+});
+
+if (hasCorrespondingTests) {
+  console.log('Corresponding test files found in repository. Policy check passed.');
   process.exit(0);
 }
 

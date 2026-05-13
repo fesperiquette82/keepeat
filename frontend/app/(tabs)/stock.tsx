@@ -71,29 +71,6 @@ export default function StockScreen() {
     fetchStock({ reason: 'stock.tab.mount' });
   }, [fetchStock]);
 
-  // Cleanup swipeable refs for removed items to prevent gesture handler lingering
-  useEffect(() => {
-    const currentIds = new Set(displayedItems.map((item) => item.id));
-    const refsCountBefore = swipeableRefs.current.size;
-    const refIdsToRemove: string[] = [];
-
-    swipeableRefs.current.forEach((_, key) => {
-      if (!currentIds.has(key)) {
-        refIdsToRemove.push(key);
-        swipeableRefs.current.delete(key);
-      }
-    });
-
-    if (refIdsToRemove.length > 0) {
-      debugSwipeLogger.info('StockScreen.cleanup', `Removed orphaned refs`, {
-        removedRefIds: refIdsToRemove,
-        refCountBefore: refsCountBefore,
-        refCountAfter: swipeableRefs.current.size,
-        displayedItemsCount: displayedItems.length,
-      });
-    }
-  }, [displayedItems]);
-
   const { items, isMock } = useMemo(() => resolveStockItems(storeItems, { useMockFallback: false }), [storeItems]);
 
   const mostUrgentDays = useMemo(() => {
@@ -134,6 +111,29 @@ export default function StockScreen() {
     if (!q) return sortedItems;
     return sortedItems.filter((item) => item.name.toLowerCase().includes(q));
   }, [sortedItems, searchQuery]);
+
+  // Cleanup swipeable refs for removed items to prevent gesture handler lingering
+  useEffect(() => {
+    const currentIds = new Set(displayedItems.map((item) => item.id));
+    const refsCountBefore = swipeableRefs.current.size;
+    const refIdsToRemove: string[] = [];
+
+    swipeableRefs.current.forEach((_, key) => {
+      if (!currentIds.has(key)) {
+        refIdsToRemove.push(key);
+        swipeableRefs.current.delete(key);
+      }
+    });
+
+    if (refIdsToRemove.length > 0) {
+      debugSwipeLogger.info('StockScreen.cleanup', `Removed orphaned refs`, {
+        removedRefIds: refIdsToRemove,
+        refCountBefore: refsCountBefore,
+        refCountAfter: swipeableRefs.current.size,
+        displayedItemsCount: displayedItems.length,
+      });
+    }
+  }, [displayedItems]);
 
   const emptyLabel = useMemo(() => {
     if (searchQuery.trim()) return `Aucun résultat pour "${searchQuery.trim()}".`;

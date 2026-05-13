@@ -31,9 +31,9 @@ export const debugLogsExport: DebugLogsExport = {
     try {
       const text = debugSwipeLogger.exportLogsAsText();
       const filename = `keepeat_swipe_debug_${new Date().toISOString().split('T')[0]}.txt`;
-      const filePath = `${FileSystem.documentDirectoryPath}/${filename}`;
+      const filePath = `${FileSystem.documentDirectory}${filename}`;
 
-      await FileSystem.writeAsStringAsync(filePath, text, { encoding: FileSystem.EncodingType.UTF8 });
+      await FileSystem.writeAsStringAsync(filePath, text, { encoding: 'utf8' });
 
       const canShare = await Sharing.isAvailableAsync();
       if (canShare) {
