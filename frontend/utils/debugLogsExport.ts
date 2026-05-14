@@ -1,11 +1,8 @@
 import { debugSwipeLogger } from './debugSwipeLogger';
-import * as FileSystem from 'expo-file-system';
-import * as Sharing from 'expo-sharing';
 
 export interface DebugLogsExport {
   exportAsText: () => string;
   exportAsJSON: () => string;
-  shareLogsFile: () => Promise<void>;
   getLogs: () => any[];
   clearLogs: () => void;
 }
@@ -25,26 +22,6 @@ export const debugLogsExport: DebugLogsExport = {
 
   clearLogs: () => {
     debugSwipeLogger.clear();
-  },
-
-  shareLogsFile: async () => {
-    try {
-      const text = debugSwipeLogger.exportLogsAsText();
-      const filename = `keepeat_swipe_debug_${new Date().toISOString().split('T')[0]}.txt`;
-      const filePath = `${FileSystem.cacheDirectory}${filename}`;
-
-      await FileSystem.writeAsStringAsync(filePath, text, { encoding: 'utf8' });
-
-      const canShare = await Sharing.isAvailableAsync();
-      if (canShare) {
-        await Sharing.shareAsync(filePath, {
-          mimeType: 'text/plain',
-          dialogTitle: 'Share KeepEat Debug Logs',
-        });
-      }
-    } catch (err) {
-      console.error('[debugLogsExport] Failed to share logs:', err);
-    }
   },
 };
 
