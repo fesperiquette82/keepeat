@@ -31,7 +31,7 @@ export const debugLogsExport: DebugLogsExport = {
     try {
       const text = debugSwipeLogger.exportLogsAsText();
       const filename = `keepeat_swipe_debug_${new Date().toISOString().split('T')[0]}.txt`;
-      const filePath = `${FileSystem.documentDirectory}${filename}`;
+      const filePath = `${FileSystem.cacheDirectory}${filename}`;
 
       await FileSystem.writeAsStringAsync(filePath, text, { encoding: 'utf8' });
 
