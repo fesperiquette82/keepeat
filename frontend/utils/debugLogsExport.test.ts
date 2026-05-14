@@ -31,3 +31,10 @@ test('debugLogsExport is globally accessible', () => {
   assert(typeof (globalThis as any).__KEEPEAT_DEBUG_EXPORT__ !== 'undefined', 'debugLogsExport should be global');
   assert(typeof (globalThis as any).__KEEPEAT_DEBUG_EXPORT__.exportAsText === 'function', 'global export should have exportAsText');
 });
+
+test('debugLogsExport global object has all required methods', () => {
+  const global = (globalThis as any).__KEEPEAT_DEBUG_EXPORT__;
+  assert(typeof global.exportAsJSON === 'function', 'should expose exportAsJSON');
+  assert(typeof global.getLogs === 'function', 'should expose getLogs');
+  assert(typeof global.clearLogs === 'function', 'should expose clearLogs');
+});

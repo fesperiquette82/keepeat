@@ -34,4 +34,6 @@ declare global {
 
 if (typeof window !== 'undefined') {
   (window as any).__KEEPEAT_DEBUG_EXPORT__ = debugLogsExport;
+} else if (typeof globalThis !== 'undefined') {
+  (globalThis as any).__KEEPEAT_DEBUG_EXPORT__ = debugLogsExport;
 }
