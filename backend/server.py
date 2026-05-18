@@ -4962,14 +4962,14 @@ async def upload_debug_logs(
     Les logs sont stockés localement dans le dossier LOGS/ du backend.
     Utile pour déboguer les problèmes de l'utilisateur ou du frontend.
     """
+    user_email = current_user.get("email", "unknown")
+    filename = body.filename
+
+    # Validation du filename (éviter les chemins dangereux)
+    if "/" in filename or "\\" in filename or ".." in filename:
+        raise HTTPException(status_code=400, detail="Invalid filename")
+
     try:
-        user_email = current_user.get("email", "unknown")
-        filename = body.filename
-
-        # Validation du filename (éviter les chemins dangereux)
-        if "/" in filename or "\\" in filename or ".." in filename:
-            raise HTTPException(status_code=400, detail="Invalid filename")
-
         # Crée le dossier LOGS s'il n'existe pas
         logs_dir = os.path.join(os.getcwd(), "LOGS")
         os.makedirs(logs_dir, exist_ok=True)
@@ -4993,6 +4993,8 @@ async def upload_debug_logs(
             message="Debug logs uploaded successfully",
             filename=unique_filename
         )
+    except HTTPException:
+        raise
     except Exception as e:
         logger.error(f"Failed to upload debug logs: {e}", exc_info=True)
         raise HTTPException(status_code=500, detail=f"Failed to upload logs: {str(e)}")
