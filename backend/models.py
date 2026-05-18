@@ -308,3 +308,14 @@ class RecipeSuggestion(BaseModel):
     used_ingredients_count: int = Field(default=0, ge=0)
     missing_ingredients_count: int = Field(default=0, ge=0)
     debug: dict[str, object] = Field(default_factory=dict)
+
+
+class DebugLogsUploadBody(BaseModel):
+    content: str = Field(..., description="Log file content")
+    filename: str = Field(..., description="Log filename")
+
+
+class DebugLogsUploadResponse(BaseModel):
+    ok: bool
+    message: str
+    filename: str

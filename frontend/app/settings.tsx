@@ -14,6 +14,7 @@ import { logger } from '../utils/logger';
 import { resolvePremiumStatus } from '../utils/premiumStatus';
 import { buildLogoutConfirmationCopy } from '../utils/settingsLogout';
 import { shareDebugLogsToGitHub } from '../utils/debugLogsGitHubSync';
+import { uploadDebugLogsToBackend } from '../utils/debugLogsBackendUpload';
 
 function formatLastUpdate(value: string | null, language: 'fr' | 'en', fallbackText: string): string {
   if (!value) return fallbackText;
@@ -90,6 +91,22 @@ export default function SettingsScreen() {
             logger.info('[SETTINGS] Issue URL', { url: result.url });
           } }] : []),
         ]);
+      } else {
+        Alert.alert('Upload Failed', result.message);
+      }
+    } catch (error) {
+      Alert.alert('Error', `Failed to upload logs: ${error instanceof Error ? error.message : 'Unknown error'}`);
+    } finally {
+      setDebugLogsUploading(false);
+    }
+  }, []);
+
+  const onPressUploadDebugLogsToBackend = useCallback(async () => {
+    setDebugLogsUploading(true);
+    try {
+      const result = await uploadDebugLogsToBackend();
+      if (result.success) {
+        Alert.alert('Debug Logs Uploaded', result.message);
       } else {
         Alert.alert('Upload Failed', result.message);
       }
@@ -291,10 +308,10 @@ export default function SettingsScreen() {
 
         <View style={styles.card}>
           <Text style={styles.sectionTitle}>Debug</Text>
-          <Text style={styles.systemInfo}>Export swipe gesture debug logs to GitHub for troubleshooting</Text>
+          <Text style={styles.systemInfo}>Export swipe gesture debug logs for troubleshooting</Text>
           <TouchableOpacity
             style={[styles.refreshButton, debugLogsUploading && styles.disabledButton]}
-            onPress={onPressExportDebugLogs}
+            onPress={onPressUploadDebugLogsToBackend}
             disabled={debugLogsUploading}
           >
             {debugLogsUploading ? (
@@ -303,7 +320,21 @@ export default function SettingsScreen() {
               <Ionicons name="cloud-upload-outline" size={16} color="#FFFFFF" />
             )}
             <Text style={styles.refreshButtonText}>
-              {debugLogsUploading ? 'Uploading...' : '📤 Export Logs'}
+              {debugLogsUploading ? 'Uploading...' : '📤 Upload Logs to Backend'}
+            </Text>
+          </TouchableOpacity>
+          <TouchableOpacity
+            style={[styles.refreshButton, debugLogsUploading && styles.disabledButton]}
+            onPress={onPressExportDebugLogs}
+            disabled={debugLogsUploading}
+          >
+            {debugLogsUploading ? (
+              <ActivityIndicator size="small" color="#FFFFFF" />
+            ) : (
+              <Ionicons name="logo-github" size={16} color="#FFFFFF" />
+            )}
+            <Text style={styles.refreshButtonText}>
+              {debugLogsUploading ? 'Uploading...' : '📤 Export to GitHub'}
             </Text>
           </TouchableOpacity>
         </View>

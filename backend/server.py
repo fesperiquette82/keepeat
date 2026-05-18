@@ -58,6 +58,8 @@ from backend.models import (
     BillingVerifyRequest,
     AlertPreferences,
     AlertPreferencesUpdate,
+    DebugLogsUploadBody,
+    DebugLogsUploadResponse,
     ForgotPasswordBody,
     ProductBase,
     ProductLookupResponse,
@@ -4946,6 +4948,54 @@ async def admin_dedup_recipes(
         len(groups), removed_total, _admin_user.get("email", "unknown"),
     )
     return {"groups": len(groups), "removed": removed_total, "details": groups}
+
+
+# ── Endpoint utilisateur : upload logs de debug ──────────────────────────────
+
+@api_router.post("/debug/logs/upload", status_code=200, response_model=DebugLogsUploadResponse)
+async def upload_debug_logs(
+    body: DebugLogsUploadBody,
+    current_user: Dict[str, Any] = Depends(get_current_user),
+):
+    """Upload les logs de debug de l'app mobile (généré par debugSwipeLogger).
+
+    Les logs sont stockés localement dans le dossier LOGS/ du backend.
+    Utile pour déboguer les problèmes de l'utilisateur ou du frontend.
+    """
+    try:
+        user_email = current_user.get("email", "unknown")
+        filename = body.filename
+
+        # Validation du filename (éviter les chemins dangereux)
+        if "/" in filename or "\\" in filename or ".." in filename:
+            raise HTTPException(status_code=400, detail="Invalid filename")
+
+        # Crée le dossier LOGS s'il n'existe pas
+        logs_dir = os.path.join(os.getcwd(), "LOGS")
+        os.makedirs(logs_dir, exist_ok=True)
+
+        # Génère un nom de fichier unique avec email et timestamp
+        timestamp = datetime.now(timezone.utc).isoformat().replace(":", "-").split(".")[0]
+        unique_filename = f"{timestamp}_{user_email}_{filename}"
+        filepath = os.path.join(logs_dir, unique_filename)
+
+        # Écrit le fichier
+        with open(filepath, "w", encoding="utf-8") as f:
+            f.write(body.content)
+
+        logger.info(
+            "DEBUG_LOGS uploaded user=%s filename=%s size=%d bytes",
+            user_email, unique_filename, len(body.content)
+        )
+
+        return DebugLogsUploadResponse(
+            ok=True,
+            message="Debug logs uploaded successfully",
+            filename=unique_filename
+        )
+    except Exception as e:
+        logger.error(f"Failed to upload debug logs: {e}", exc_info=True)
+        raise HTTPException(status_code=500, detail=f"Failed to upload logs: {str(e)}")
 
 
 # ── Endpoint admin : enrichissement images ────────────────────────────────────
