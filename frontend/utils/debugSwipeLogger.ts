@@ -1,7 +1,60 @@
 import { DEBUG_SWIPE_ACTIONS, DEBUG_LOG_BUFFER_SIZE, DEBUG_LOG_TO_CONSOLE } from './debugConfig';
-import { Paths, File } from 'expo-file-system';
-import * as Sharing from 'expo-sharing';
-import { Platform } from 'react-native';
+
+// Conditional imports for Node.js test compatibility
+class FallbackFile implements FileInterface {
+  uri: string = '';
+  constructor(path?: string, filename?: string) {
+    this.uri = path && filename ? `${path}/${filename}` : '';
+  }
+  write(_content: string, _options?: any) {}
+  async text(): Promise<string> { return ''; }
+  delete() {}
+}
+
+interface FilesystemPaths {
+  document: string;
+}
+
+interface SharingInterface {
+  isAvailableAsync(): Promise<boolean>;
+  shareAsync(uri: string, options: any): Promise<void>;
+}
+
+interface PlatformInterface {
+  OS: string;
+}
+
+let File: typeof FallbackFile;
+let Paths: FilesystemPaths;
+let Sharing: SharingInterface;
+let Platform: PlatformInterface;
+
+try {
+  const expoFS = require('expo-file-system');
+  File = expoFS.File;
+  Paths = expoFS.Paths;
+} catch {
+  // Fallback for Node.js test environment
+  File = FallbackFile;
+  Paths = { document: '/documents' };
+}
+
+try {
+  Sharing = require('expo-sharing');
+} catch {
+  // Fallback for Node.js test environment
+  Sharing = {
+    isAvailableAsync: async () => false,
+    shareAsync: async () => {},
+  };
+}
+
+try {
+  Platform = require('react-native').Platform;
+} catch {
+  // Fallback for Node.js test environment
+  Platform = { OS: 'web' };
+}
 
 interface DebugLogEntry {
   timestamp: string;
@@ -9,6 +62,13 @@ interface DebugLogEntry {
   module: string;
   action: string;
   details?: any;
+}
+
+interface FileInterface {
+  uri: string;
+  write(content: string, options?: any): void;
+  text(): Promise<string>;
+  delete(): void;
 }
 
 function buildLogFileName(): string {
@@ -23,7 +83,7 @@ class DebugSwipeLogger {
   private enabled: boolean = DEBUG_SWIPE_ACTIONS;
   private flushIntervalId: NodeJS.Timeout | null = null;
   private fileInitialized: boolean = false;
-  private logFile: File | null = null;
+  private logFile: FileInterface | null = null;
   private fallbackUsed: boolean = false;
 
   constructor() {
@@ -41,12 +101,12 @@ class DebugSwipeLogger {
     if (Platform.OS === 'android') {
       try {
         const downloadPath = '/storage/emulated/0/Download';
-        this.logFile = new File(downloadPath, filename);
-        this.logFile.write(
+        this.logFile = new (File as any)(downloadPath, filename);
+        this.logFile!.write(
           `KeepEat Debug Logs - Session started ${new Date().toISOString()}\n${'='.repeat(80)}\n\n`,
         );
         this.fileInitialized = true;
-        console.log('[DebugSwipeLogger] Log file created in Download folder:', this.logFile.uri);
+        console.log('[DebugSwipeLogger] Log file created in Download folder:', this.logFile!.uri);
         return;
       } catch (err) {
         console.warn('[DebugSwipeLogger] Could not write to Download folder, using app documents folder as fallback:', err);
@@ -55,12 +115,12 @@ class DebugSwipeLogger {
     }
 
     try {
-      this.logFile = new File(Paths.document, filename);
-      this.logFile.write(
+      this.logFile = new (File as any)(Paths.document, filename);
+      this.logFile!.write(
         `KeepEat Debug Logs - Session started ${new Date().toISOString()}\n${'='.repeat(80)}\n\n`,
       );
       this.fileInitialized = true;
-      console.log('[DebugSwipeLogger] Log file created in app documents folder:', this.logFile.uri);
+      console.log('[DebugSwipeLogger] Log file created in app documents folder:', this.logFile!.uri);
     } catch (err) {
       console.error('[DebugSwipeLogger] Failed to initialize log file:', err);
       this.fileInitialized = false;
@@ -69,9 +129,19 @@ class DebugSwipeLogger {
 
   private startAutoFlush() {
     if (this.flushIntervalId) return;
-    this.flushIntervalId = setInterval(() => {
-      this.flushToFile();
-    }, 3000);
+    // Only start auto-flush if not in test environment
+    if (typeof window !== 'undefined' || typeof document !== 'undefined') {
+      this.flushIntervalId = setInterval(() => {
+        this.flushToFile();
+      }, 3000);
+    }
+  }
+
+  private stopAutoFlush() {
+    if (this.flushIntervalId) {
+      clearInterval(this.flushIntervalId);
+      this.flushIntervalId = null;
+    }
   }
 
   private flushToFile() {
@@ -87,7 +157,9 @@ class DebugSwipeLogger {
         )
         .join('\n');
 
-      this.logFile.write(`${content}\n`, { append: true });
+      if (this.logFile) {
+        this.logFile.write(`${content}\n`, { append: true });
+      }
     } catch (err) {
       console.warn('[DebugSwipeLogger] Failed to flush to file:', err);
     }
