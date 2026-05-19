@@ -4,8 +4,5 @@ services:
     runtime: python
     rootDir: .
     buildCommand: pip install -r backend/requirements.txt
-    env:
-      PYTHONPATH: /opt/render/project
-    startCommand: python -u src/backend/asgi.py
     healthCheckPath: /health
     autoDeploy: true
