@@ -5,7 +5,7 @@ services:
     rootDir: .
     buildCommand: pip install -r backend/requirements.txt
     env:
-      PYTHONPATH: /opt/render/project/src
-    startCommand: cd /opt/render/project/src && python asgi.py
+      PYTHONPATH: /opt/render/project
+    startCommand: python -u src/backend/asgi.py
     healthCheckPath: /health
     autoDeploy: true
