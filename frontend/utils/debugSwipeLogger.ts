@@ -133,7 +133,7 @@ class DebugSwipeLogger {
     if (typeof window !== 'undefined' || typeof document !== 'undefined') {
       this.flushIntervalId = setInterval(() => {
         this.flushToFile();
-      }, 3000);
+      }, 3000) as any;
     }
   }
 
