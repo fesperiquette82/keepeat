@@ -1,9 +1,28 @@
-# Quick test: verify that tests are added for code changes
-# This runs before every commit
-# Skip for governance-only commits (docs, rules, config)
+# Pre-commit hook — Policy enforcement
+# Runs multiple checks before allowing commit
+
+# Set strict error handling
+set -e
+
+# 1. Verify tests are added for code changes
 if command -v node &> /dev/null; then
   # Use HEAD~1 if available, otherwise skip (first commit or detached state)
   if git rev-parse HEAD~1 &>/dev/null; then
+    echo "[pre-commit] Verifying tests were added..."
     node scripts/verify-tests-added.mjs HEAD~1 || exit 1
   fi
 fi
+
+# 2. Detect console.log in production code
+if command -v node &> /dev/null; then
+  echo "[pre-commit] Checking for console.log in production code..."
+  node scripts/detect-console-log.mjs || exit 1
+fi
+
+# 3. Warn about potential business logic mocks
+if command -v node &> /dev/null; then
+  echo "[pre-commit] Scanning for potential business logic mocks..."
+  node scripts/detect-logic-mocks.mjs || true  # Warn only, don't block
+fi
+
+echo "[pre-commit] ✅ All pre-commit checks passed"

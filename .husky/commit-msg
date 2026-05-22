@@ -1,0 +1,45 @@
+#!/bin/bash
+
+# Validate commit message format: <type>(<scope>): <description>
+# Allowed types: feat, fix, refactor, test, docs, chore, style, perf
+# Example: feat(recipes): add filtering by category
+# This runs before a commit is finalized (via `git commit-msg` hook)
+
+COMMIT_MSG_FILE=$1
+
+# Read the commit message
+COMMIT_MSG=$(cat "$COMMIT_MSG_FILE")
+
+# Skip validation for merge commits and rebase operations
+if [[ $COMMIT_MSG == Merge* ]] || [[ $COMMIT_MSG == Rebase* ]]; then
+  exit 0
+fi
+
+# Pattern: <type>(<scope>): <description>
+# - type: feat|fix|refactor|test|docs|chore|style|perf
+# - scope: optional, but if present must be in parentheses
+# - description: required, non-empty
+PATTERN="^(feat|fix|refactor|test|docs|chore|style|perf)(\([a-z0-9\-]+\))?!?: .{1,}$"
+
+if ! [[ $COMMIT_MSG =~ $PATTERN ]]; then
+  echo "❌ Commit message format violation"
+  echo ""
+  echo "Expected format: <type>(<scope>): <description>"
+  echo "Example: feat(recipes): add filtering by category"
+  echo ""
+  echo "Allowed types:"
+  echo "  • feat     — new feature"
+  echo "  • fix      — bug fix"
+  echo "  • refactor — code refactoring"
+  echo "  • test     — test additions/updates"
+  echo "  • docs     — documentation"
+  echo "  • chore    — maintenance (deps, build, etc.)"
+  echo "  • style    — code style (formatting, etc.)"
+  echo "  • perf     — performance improvement"
+  echo ""
+  echo "Your message: $COMMIT_MSG"
+  echo ""
+  exit 1
+fi
+
+exit 0
