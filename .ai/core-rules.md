@@ -62,19 +62,27 @@
 
 ## Validation & Commits
 
-9. **Before every commit / PR**
-   - Run `./scripts/ai-validate.sh` locally (blocks on failure)
-   - Confirm all tests pass (backend AND frontend)
-   - Review changes against `review-checklist.md`
+9. **Single validation entrypoint (canonical command only)**
+   - **Canonical command**: `./scripts/ai-validate.sh`
+   - **Development mode**: `./scripts/ai-validate.sh --quick` (lint + typecheck, skip tests)
+   - **Final validation**: `./scripts/ai-validate.sh` (full: lint + typecheck + tests + E2E)
+   - **Rule**: Agents must NOT invent alternative validation commands (e.g., `npm run test`, `pytest`, `npm run lint` separately)
+   - **If script is broken**: Fix it; do not work around it
+   - **Why**: Single entrypoint ensures consistent validation across all developers and CI
 
-10. **Git discipline**
+10. **Before every commit / PR**
+    - Run `./scripts/ai-validate.sh` locally (blocks on failure)
+    - Confirm all tests pass (backend AND frontend)
+    - Review changes against `review-checklist.md`
+
+11. **Git discipline**
     - ❌ `git push --force`
     - ❌ `git commit --no-verify`
     - ❌ Force-pushing to main/develop
     - ✅ Create feature branch, push normally, open PR
     - ✅ Let pre-push hook validate before push
 
-11. **Commit message format**
+12. **Commit message format**
     ```
     <type>(<scope>): <description>
     
@@ -87,12 +95,12 @@
 
 ## Governance Enforcement
 
-12. **CI gates are non-negotiable**
+13. **CI gates are non-negotiable**
     - Tests must pass in CI before merge
     - Policy enforcement (verify-tests-added.mjs) blocks PRs missing tests
     - Coverage reports are informative, not gates (but regressions matter)
 
-13. **AI agent auto-review**
+14. **AI agent auto-review**
     - Before proposing commit: self-review against `review-checklist.md`
     - Report ✓ (pass), ✗ (blocker), ⚠ (requires human decision)
     - Never commit with unresolved ⚠ issues
@@ -100,7 +108,7 @@
 
 ## AUDIT_BUGS.md
 
-14. **Bug tracking**
+15. **Bug tracking**
     - All known bugs tracked in AUDIT_BUGS.md
     - Statuses: OUVERT (open), EN COURS (in progress), CORRIGÉ (fixed), IGNORÉ (ignored)
     - Severity: 🔴 CRITIQUE, 🟠 MAJEUR, 🟡 MINEUR
