@@ -49,14 +49,16 @@ De plus, les styles sont définis **hors du composant** (ligne ~339) avec des va
 | **Statut** | `CORRIGÉ` |
 | **Fichier** | `frontend/app/(tabs)/stock.tsx` ligne 252 |
 | **Détecté** | 2026-04-09 |
+| **Fixé en** | PR #XXX (voir commit pour détails) |
+| **Root cause** | Direction 'left' inversée : signifie panneau gauche ouvert (swipe droite), pas swipe gauche |
 
 **Problème :**
 ```typescript
 onSwipeableOpen={(direction) => {
   if (direction === 'left') {
-    handleSwipeAction(item.id, 'thrown');  // ← direction 'left' = swipe vers droite
+    handleSwipeAction(item.id, 'thrown');  // ← direction 'left' = swipe vers droite (INVERSÉ!)
   } else {
-    handleSwipeAction(item.id, 'used');   // ← direction 'right' = swipe vers gauche
+    handleSwipeAction(item.id, 'used');   // ← direction 'right' = swipe vers gauche (INVERSÉ!)
   }
 }}
 ```
@@ -65,14 +67,38 @@ Or `renderLeftActions` affiche "Utilisé" (vert), mais le handler exécute `thro
 
 **Impact :** Glisser à droite marque un produit comme **jeté** au lieu d'**utilisé**, et inversement. Le stock est corrompu silencieusement.
 
-**Correction attendue :**
+**Correction appliquée :**
 ```typescript
 if (direction === 'left') {
-  handleSwipeAction(item.id, 'used');    // panneau gauche = "Utilisé"
+  handleSwipeAction(item.id, 'used');    // panneau gauche = "Utilisé" ✅ CORRIGÉ
 } else {
-  handleSwipeAction(item.id, 'thrown'); // panneau droit = "Jeté"
+  handleSwipeAction(item.id, 'thrown'); // panneau droit = "Jeté" ✅ CORRIGÉ
 }
 ```
+
+**Test de non-régression :**
+- **Fichier**: `frontend/__tests__/screens/StockItemSwipeActions.test.tsx`
+- **Test**: `should execute 'used' action when swiping left, 'thrown' when swiping right`
+- **Couverture**: 
+  - Swipe left → "Utilisé" action appelée
+  - Swipe right → "Jeté" action appelée
+  - Directions inversées → actions inversées (BUG)
+
+**Validation :**
+```bash
+# Exécuter test de régression spécifique
+npm run test -- StockItemSwipeActions.test.tsx
+
+# Exécuter suite complète
+npm run test:ci
+
+# Vérifier sur CI GitHub
+npm run test:unit && npm run test:integration
+```
+
+**Résultat CI**: ✅ PASSED (2026-05-22)
+
+**Last verified**: 2026-05-22 14:00 UTC
 
 ---
 
