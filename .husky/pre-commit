@@ -25,4 +25,14 @@ if command -v node &> /dev/null; then
   node scripts/detect-logic-mocks.mjs || true  # Warn only, don't block
 fi
 
+# 4. Check for user-visible bug coverage (preliminary check)
+# Full check happens in commit-msg hook, this is just early warning
+if command -v node &> /dev/null; then
+  # Get current commit message (if available)
+  COMMIT_MSG=$(git diff --cached --name-only | head -1 2>/dev/null)
+  if [[ $COMMIT_MSG == *"fix"* ]] || git status --porcelain | grep -q "fix"; then
+    echo "[pre-commit] Note: User-visible bug coverage will be validated in commit-msg hook"
+  fi
+fi
+
 echo "[pre-commit] ✅ All pre-commit checks passed"

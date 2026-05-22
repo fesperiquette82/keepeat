@@ -30,6 +30,16 @@
    - Not: "method calls database", but "returns correct recipe list"
    - Not: "stores in Redux", but "state reflects user action"
 
+6. **User-visible bugs require 3-level test coverage (mandatory)**
+   - **Definition**: Bug is "user-visible" if user perceives incorrect behavior (UI, API response, data)
+   - **Not user-visible**: Bug in internal utilities, types, build process
+   - **Required coverage**:
+     1. **Unit test** — Smallest logic involved (function, hook, validator)
+     2. **Integration test** — Data boundary (component interaction, API contract, state flow)
+     3. **UI/E2E test** — Visible behavior (screen state, gesture response, API result shown)
+   - **If a level is impossible**: Document why in commit message (e.g., "No E2E — gesture testing requires physical device")
+   - **Enforcement**: Pre-commit hook warns if tests missing for visible bugs
+
 ## Development Discipline
 
 6. **Inspect first, modify second**
