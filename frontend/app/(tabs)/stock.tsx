@@ -160,6 +160,13 @@ export default function StockScreen() {
 
     setProcessingIds((prev) => ({ ...prev, [itemId]: true }));
     try {
+      // Close Swipeable ref before removing to prevent gesture handler lingering
+      const swipeRef = swipeableRefs.current.get(itemId);
+      if (swipeRef) {
+        swipeRef.close();
+        debugSwipeLogger.info('StockScreen.handleSwipeAction', `Swipeable closed before removal`, { itemId });
+      }
+
       debugSwipeLogger.info('StockScreen.handleSwipeAction', `Calling removeStockItems`, { itemId, action });
       const result = await removeStockItems([itemId], action);
       debugSwipeLogger.info('StockScreen.handleSwipeAction', `removeStockItems result`, {
