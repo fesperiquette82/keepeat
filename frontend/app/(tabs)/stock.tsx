@@ -145,7 +145,7 @@ export default function StockScreen() {
   }, [activeFilter, items.length, searchQuery]);
 
   const handleSwipeAction = async (itemId: string, action: 'used' | 'thrown') => {
-    debugSwipeLogger.info('StockScreen.handleSwipeAction', `Starting for item=${itemId} action=${action}`, {
+    debugSwipeLogger.info('StockScreen.handleSwipeAction', `[DELETE_FLOW] Starting for item=${itemId} action=${action}`, {
       itemId,
       action,
       isProcessing: !!processingIds[itemId],
@@ -154,22 +154,24 @@ export default function StockScreen() {
     });
 
     if (processingIds[itemId]) {
-      debugSwipeLogger.warn('StockScreen.handleSwipeAction', `Item already processing, skipping`, { itemId });
+      debugSwipeLogger.warn('StockScreen.handleSwipeAction', `[DELETE_FLOW] Item already processing, skipping`, { itemId });
       return;
     }
 
     setProcessingIds((prev) => ({ ...prev, [itemId]: true }));
     try {
-      // Close Swipeable ref before removing to prevent gesture handler lingering
+      // Close Swipeable ref BEFORE removing to prevent gesture handler lingering
       const swipeRef = swipeableRefs.current.get(itemId);
       if (swipeRef) {
         swipeRef.close();
-        debugSwipeLogger.info('StockScreen.handleSwipeAction', `Swipeable closed before removal`, { itemId });
+        debugSwipeLogger.info('StockScreen.handleSwipeAction', `[DELETE_FLOW] Swipeable closed before removal`, { itemId });
+      } else {
+        debugSwipeLogger.warn('StockScreen.handleSwipeAction', `[DELETE_FLOW] Swipeable ref not found`, { itemId, refsCount: swipeableRefs.current.size });
       }
 
-      debugSwipeLogger.info('StockScreen.handleSwipeAction', `Calling removeStockItems`, { itemId, action });
+      debugSwipeLogger.info('StockScreen.handleSwipeAction', `[DELETE_FLOW] Calling removeStockItems`, { itemId, action });
       const result = await removeStockItems([itemId], action);
-      debugSwipeLogger.info('StockScreen.handleSwipeAction', `removeStockItems result`, {
+      debugSwipeLogger.info('StockScreen.handleSwipeAction', `[DELETE_FLOW] removeStockItems result`, {
         itemId,
         action,
         removedItemsCount: result.removedItems.length,
@@ -183,11 +185,24 @@ export default function StockScreen() {
       setUndoItems(nextBanner.canUndo ? result.removedItems : []);
       setBanner(nextBanner);
 
-      debugSwipeLogger.info('StockScreen.handleSwipeAction', `Banner set`, {
+      debugSwipeLogger.info('StockScreen.handleSwipeAction', `[DELETE_FLOW] Banner set`, {
         itemId,
         message: nextBanner.message,
         canUndo: nextBanner.canUndo,
       });
+
+      // Auto-dismiss banner after 3 seconds to avoid visual interference on next deletion
+      const bannerId = `${itemId}:${Date.now()}`;
+      const timeoutId = setTimeout(() => {
+        setBanner(null);
+        debugSwipeLogger.info('StockScreen.handleSwipeAction', `[DELETE_FLOW] Banner auto-dismissed`, {
+          itemId,
+          bannerId,
+        });
+      }, 3000);
+
+      // Store timeout for cleanup if component unmounts
+      return () => clearTimeout(timeoutId);
     } catch (err) {
       debugSwipeLogger.error('StockScreen.handleSwipeAction', `Exception caught`, {
         itemId,
@@ -201,7 +216,7 @@ export default function StockScreen() {
         delete next[itemId];
         return next;
       });
-      debugSwipeLogger.info('StockScreen.handleSwipeAction', `Finished for item=${itemId}`, {
+      debugSwipeLogger.info('StockScreen.handleSwipeAction', `[DELETE_FLOW] Finished for item=${itemId}`, {
         itemId,
         refsCount: swipeableRefs.current.size,
         allRefIds: Array.from(swipeableRefs.current.keys()),
@@ -353,13 +368,11 @@ export default function StockScreen() {
                     refsCountAfterClose: swipeableRefs.current.size,
                   });
                   void swipeActionQueueRef.current.enqueue(async () => {
-                    debugSwipeLogger.info('StockScreen.onSwipeableLeftOpen.queue', `Action starting`, { itemId: item.id });
+                    debugSwipeLogger.info('StockScreen.onSwipeableLeftOpen.queue', `[DELETE_FLOW] Action starting`, { itemId: item.id });
                     await handleSwipeAction(item.id, resolveSwipeActionFromOpenSide('left'));
-                    // Close AFTER action completes to avoid gesture handler lingering
-                    debugSwipeLogger.info('StockScreen.onSwipeableLeftOpen.queue', `Action complete, closing ref`, { itemId: item.id });
-                    const refExists = swipeableRefs.current.has(item.id);
-                    swipeableRefs.current.get(item.id)?.close();
-                    debugSwipeLogger.info('StockScreen.onSwipeableLeftOpen.queue', `Ref closed`, { itemId: item.id, refExistedBeforeClose: refExists });
+                    debugSwipeLogger.info('StockScreen.onSwipeableLeftOpen.queue', `[DELETE_FLOW] Action complete`, { itemId: item.id });
+                    // NOTE: ref is already closed in handleSwipeAction before removeStockItems
+                    // so no need to close again here
                   });
                 }}
                 onSwipeableRightOpen={() => {
@@ -384,13 +397,11 @@ export default function StockScreen() {
                     refsCountAfterClose: swipeableRefs.current.size,
                   });
                   void swipeActionQueueRef.current.enqueue(async () => {
-                    debugSwipeLogger.info('StockScreen.onSwipeableRightOpen.queue', `Action starting`, { itemId: item.id });
+                    debugSwipeLogger.info('StockScreen.onSwipeableRightOpen.queue', `[DELETE_FLOW] Action starting`, { itemId: item.id });
                     await handleSwipeAction(item.id, resolveSwipeActionFromOpenSide('right'));
-                    // Close AFTER action completes to avoid gesture handler lingering
-                    debugSwipeLogger.info('StockScreen.onSwipeableRightOpen.queue', `Action complete, closing ref`, { itemId: item.id });
-                    const refExists = swipeableRefs.current.has(item.id);
-                    swipeableRefs.current.get(item.id)?.close();
-                    debugSwipeLogger.info('StockScreen.onSwipeableRightOpen.queue', `Ref closed`, { itemId: item.id, refExistedBeforeClose: refExists });
+                    debugSwipeLogger.info('StockScreen.onSwipeableRightOpen.queue', `[DELETE_FLOW] Action complete`, { itemId: item.id });
+                    // NOTE: ref is already closed in handleSwipeAction before removeStockItems
+                    // so no need to close again here
                   });
                 }}
               >
