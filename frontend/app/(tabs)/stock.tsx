@@ -71,6 +71,15 @@ export default function StockScreen() {
     fetchStock({ reason: 'stock.tab.mount' });
   }, [fetchStock]);
 
+  // Cleanup timeouts on unmount
+  useEffect(() => {
+    const timeouts = timeoutsRef.current;
+    return () => {
+      timeouts.forEach((timeoutId) => clearTimeout(timeoutId));
+      timeouts.clear();
+    };
+  }, []);
+
   const { items, isMock } = useMemo(() => resolveStockItems(storeItems, { useMockFallback: false }), [storeItems]);
 
   const mostUrgentDays = useMemo(() => {
@@ -144,6 +153,9 @@ export default function StockScreen() {
     return 'Aucun résultat pour ce filtre.';
   }, [activeFilter, items.length, searchQuery]);
 
+  // Track timeouts for cleanup on component unmount
+  const timeoutsRef = useRef<Map<string, ReturnType<typeof setTimeout>>>(new Map());
+
   const handleSwipeAction = async (itemId: string, action: 'used' | 'thrown') => {
     debugSwipeLogger.info('StockScreen.handleSwipeAction', `[DELETE_FLOW] Starting for item=${itemId} action=${action}`, {
       itemId,
@@ -199,10 +211,11 @@ export default function StockScreen() {
           itemId,
           bannerId,
         });
+        timeoutsRef.current.delete(itemId);
       }, 3000);
 
-      // Store timeout for cleanup if component unmounts
-      return () => clearTimeout(timeoutId);
+      // Store timeout for potential cleanup
+      timeoutsRef.current.set(itemId, timeoutId);
     } catch (err) {
       debugSwipeLogger.error('StockScreen.handleSwipeAction', `Exception caught`, {
         itemId,

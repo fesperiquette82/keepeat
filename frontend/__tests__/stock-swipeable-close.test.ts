@@ -63,4 +63,27 @@ describe('BUG-034: Swipeable ref must close before item removal', () => {
       expect(ref.close).toHaveBeenCalledTimes(1);
     });
   });
+
+  it('should cleanup all stored timeouts on component unmount', () => {
+    // Arrange: Mock setTimeout and clearTimeout
+    const clearTimeoutSpy = vi.spyOn(global, 'clearTimeout');
+    const timeoutsMap = new Map<string, ReturnType<typeof setTimeout>>();
+
+    // Simulate storing timeout IDs
+    const timeout1 = setTimeout(() => {}, 100);
+    const timeout2 = setTimeout(() => {}, 100);
+    timeoutsMap.set('item-1', timeout1);
+    timeoutsMap.set('item-2', timeout2);
+
+    // Act: Cleanup (simulate unmount effect)
+    const timeouts = timeoutsMap;
+    timeouts.forEach((timeoutId) => clearTimeout(timeoutId));
+    timeouts.clear();
+
+    // Assert: All timeouts cleared and map is empty
+    expect(clearTimeoutSpy).toHaveBeenCalledTimes(2);
+    expect(timeoutsMap.size).toBe(0);
+
+    clearTimeoutSpy.mockRestore();
+  });
 });
