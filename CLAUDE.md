@@ -33,10 +33,29 @@ Une tâche est considérée comme **INCOMPLÈTE** tant que :
 **Aucune exception n'est acceptée** sauf raison technique explicitement documentée dans le commit.
 
 > **RÈGLE DE COMMIT/PUSH — NON NÉGOCIABLE**
+>
+> **WORKFLOW OBLIGATOIRE:**
+> 1. **AVANT tout commit** → Valider localement avec `npm run validate` (ou `bash scripts/ai-validate.sh`)
+> 2. **APRÈS validation ✅** → Commit autorisé
+> 3. **AVANT push** → Double-vérifier que tous les tests passent
+> 4. **APRÈS push** → Vérifier le pipeline CI GitHub Actions (vert obligatoire)
+>
 > Aucun `commit` ni `push` ne doit être effectué tant que :
 > - le test de non-régression du bug corrigé ou de la fonctionnalité implémentée n'a **pas été écrit**,
 > - la suite de tests complète (backend **et** frontend selon le périmètre touché) n'a **pas été exécutée localement et passée en totalité**,
 > - le pipeline CI GitHub (Actions) n'a **pas été vérifié vert** après le push.
+>
+> **❌ NE JAMAIS:**
+> - Compter sur les hooks git pour valider à votre place (ils sont une sécurité, pas un remplacement)
+> - Commiter/pusher "pour voir si ça passe en CI" sans validation locale préalable
+> - Pousser des changements "mineurs" sans exécuter la suite complète de tests
+>
+> **✅ COMMANDE DE VALIDATION AVANT COMMIT:**
+> ```bash
+> npm run validate        # Validation complète (lint + type + tests + E2E si disponible)
+> # OU
+> bash scripts/ai-validate.sh
+> ```
 >
 > En cas d'échec CI après push, le fix doit être apporté **immédiatement** avant toute autre tâche.
 
