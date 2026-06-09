@@ -207,36 +207,56 @@ if [ $TOTAL -gt 0 ]; then
   PASS_RATE=$((PASSED * 100 / TOTAL))
 fi
 
-# Replace placeholders
-sed -i "s/TIMESTAMP_PLACEHOLDER/$(date)/g" "$OUTPUT_FILE"
+# Replace simple placeholders
 sed -i "s/PASSED_COUNT/$PASSED/g" "$OUTPUT_FILE"
 sed -i "s/FAILED_COUNT/$FAILED/g" "$OUTPUT_FILE"
 sed -i "s/TOTAL_COUNT/$TOTAL/g" "$OUTPUT_FILE"
 sed -i "s/PASS_RATE/$PASS_RATE/g" "$OUTPUT_FILE"
 
-# Add crashes section if exists
+# Replace timestamp separately to avoid issues with special chars in date output
+TIMESTAMP=$(date)
+awk -v ts="$TIMESTAMP" '{gsub(/TIMESTAMP_PLACEHOLDER/, ts); print}' "$OUTPUT_FILE" > "$OUTPUT_FILE.tmp"
+mv "$OUTPUT_FILE.tmp" "$OUTPUT_FILE"
+
+# Add crashes section if exists - write to temp files to avoid sed delimiter issues
 if [ -n "$CRASHES_CONTENT" ]; then
-  CRASHES_HTML="<div class=\"section\"><h2>🔥 React Native Crashes</h2><div class=\"log-content\">$CRASHES_CONTENT</div></div>"
+  echo '<div class="section"><h2>🔥 React Native Crashes</h2><div class="log-content">' > "$OUTPUT_FILE.crashes"
+  echo "$CRASHES_CONTENT" >> "$OUTPUT_FILE.crashes"
+  echo '</div></div>' >> "$OUTPUT_FILE.crashes"
 else
-  CRASHES_HTML="<div class=\"section\"><h2>🔥 React Native Crashes</h2><p style=\"color: #28a745;\">✓ No crashes detected</p></div>"
+  echo '<div class="section"><h2>🔥 React Native Crashes</h2><p style="color: #28a745;">✓ No crashes detected</p></div>' > "$OUTPUT_FILE.crashes"
 fi
-sed -i "s|CRASHES_SECTION|$CRASHES_HTML|g" "$OUTPUT_FILE"
+
+# Replace CRASHES_SECTION with file content
+awk '/CRASHES_SECTION/ {system("cat \"'$OUTPUT_FILE'.crashes\""); next} 1' "$OUTPUT_FILE" > "$OUTPUT_FILE.tmp"
+mv "$OUTPUT_FILE.tmp" "$OUTPUT_FILE"
+rm -f "$OUTPUT_FILE.crashes"
 
 # Add logcat section if exists
 if [ -n "$LOGCAT_CONTENT" ]; then
-  LOGCAT_HTML="<div class=\"section\"><h2>📋 Logcat (Last 500 lines)</h2><div class=\"log-content\">$LOGCAT_CONTENT</div></div>"
+  echo '<div class="section"><h2>📋 Logcat (Last 500 lines)</h2><div class="log-content">' > "$OUTPUT_FILE.logcat"
+  echo "$LOGCAT_CONTENT" >> "$OUTPUT_FILE.logcat"
+  echo '</div></div>' >> "$OUTPUT_FILE.logcat"
 else
-  LOGCAT_HTML="<div class=\"section\"><h2>📋 Logcat</h2><p style=\"color: #999;\">No logcat available</p></div>"
+  echo '<div class="section"><h2>📋 Logcat</h2><p style="color: #999;">No logcat available</p></div>' > "$OUTPUT_FILE.logcat"
 fi
-sed -i "s|LOGCAT_SECTION|$LOGCAT_HTML|g" "$OUTPUT_FILE"
+
+awk '/LOGCAT_SECTION/ {system("cat \"'$OUTPUT_FILE'.logcat\""); next} 1' "$OUTPUT_FILE" > "$OUTPUT_FILE.tmp"
+mv "$OUTPUT_FILE.tmp" "$OUTPUT_FILE"
+rm -f "$OUTPUT_FILE.logcat"
 
 # Add backend section if exists
 if [ -n "$BACKEND_LOG" ]; then
-  BACKEND_HTML="<div class=\"section\"><h2>⚙️ Backend Logs (Last 200 lines)</h2><div class=\"log-content\">$BACKEND_LOG</div></div>"
+  echo '<div class="section"><h2>⚙️ Backend Logs (Last 200 lines)</h2><div class="log-content">' > "$OUTPUT_FILE.backend"
+  echo "$BACKEND_LOG" >> "$OUTPUT_FILE.backend"
+  echo '</div></div>' >> "$OUTPUT_FILE.backend"
 else
-  BACKEND_HTML=""
+  echo '' > "$OUTPUT_FILE.backend"
 fi
-sed -i "s|BACKEND_SECTION|$BACKEND_HTML|g" "$OUTPUT_FILE"
+
+awk '/BACKEND_SECTION/ {system("cat \"'$OUTPUT_FILE'.backend\""); next} 1' "$OUTPUT_FILE" > "$OUTPUT_FILE.tmp"
+mv "$OUTPUT_FILE.tmp" "$OUTPUT_FILE"
+rm -f "$OUTPUT_FILE.backend"
 
 echo -e "${GREEN}✅ Report generated: $OUTPUT_FILE${NC}"
 echo -e "   📊 Results: ${GREEN}$PASSED passed${NC}, ${RED}$FAILED failed${NC}, ${YELLOW}$PASS_RATE% pass rate${NC}"
