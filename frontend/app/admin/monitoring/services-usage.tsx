@@ -7,7 +7,7 @@ import { useAuthStore } from '../../../store/authStore';
 import { C } from '../../../utils/theme';
 
 function ProgressBar({ ratio, tone }: { ratio: number; tone: 'normal' | 'warning' | 'critical' }) {
-  const width = `${Math.max(0, Math.min(ratio, 1)) * 100}%`;
+  const width = `${Math.max(0, Math.min(ratio, 1)) * 100}%` as `${number}%`;
   const color = tone === 'critical' ? '#DC2626' : tone === 'warning' ? '#D97706' : '#16A34A';
   return (
     <View style={styles.progressTrack}>

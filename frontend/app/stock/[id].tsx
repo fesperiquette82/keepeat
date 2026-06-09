@@ -165,7 +165,7 @@ export default function StockItemDetailScreen() {
       return;
     }
 
-    router.replace(action.href);
+    router.replace(action.href as any);
   };
 
 
