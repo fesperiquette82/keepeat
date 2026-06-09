@@ -108,6 +108,27 @@ Utiliser `npm` uniquement (pas `yarn` ni `pnpm`).
 4. Réutiliser les fonctions, hooks, wrappers existants
 5. **Ajouter le test avant de considérer la tâche terminée**
 
+## 🔴 Règle de régression — PRIORITÉ ABSOLUE
+
+**Quand une régression est détectée (test précédemment ✅ maintenant ❌):**
+
+1. **STOP** tout autre travail immédiatement
+2. **FIX** uniquement ce qui cause la régression (pas de refactoring, pas de "tant qu'on y est")
+3. **LOOP** test → fix → test jusqu'à ce que 100% des tests passent
+4. **NO REFACTORING** tant que des tests échouent
+5. Seulement APRÈS que tous les tests passent → continuer autre chose
+
+**❌ INTERDIT pendant une régression:**
+- Refactoriser du code qui fonctionne
+- Ajouter de nouvelles features
+- "Améliorer" le code environnant
+- Pousser avec des tests qui échouent
+
+**✅ AUTORISÉ:**
+- Fix minimal et ciblé du test qui échoue
+- Relancer les tests immédiatement après chaque fix
+- Demander de l'aide si bloqué
+
 ## Commandes
 
 ```bash
