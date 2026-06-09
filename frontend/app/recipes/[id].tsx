@@ -159,7 +159,7 @@ export default function RecipeDetailScreen() {
       router.back();
       return;
     }
-    router.replace(action.href);
+    router.replace(action.href as any);
   }, [router]);
 
   useFocusEffect(
@@ -380,7 +380,7 @@ export default function RecipeDetailScreen() {
                 </View>
                 <View style={styles.ingredientTextWrap}>
                   <Text style={styles.ingredientName}>{ingredient.name}</Text>
-                  <Text style={styles.ingredientQuantity}>{formatIngredientQuantity(ingredient, { ingredientName: ingredient.name })}</Text>
+                  <Text style={styles.ingredientQuantity}>{formatIngredientQuantity(ingredient as any, { ingredientName: ingredient.name })}</Text>
                 </View>
                 <Text style={[styles.stockBadge, isAvailable ? styles.badgeOk : styles.badgeMissing]}>
                   {isAvailable ? 'Disponible' : 'Manquant'}

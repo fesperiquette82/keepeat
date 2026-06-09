@@ -1,11 +1,12 @@
-import { describe, it, expect, vi } from 'vitest';
+import { describe, it, mock } from 'node:test';
+import assert from 'node:assert';
 
 describe('BUG-034: Swipeable ref must close before item removal', () => {
   it('should close Swipeable ref to prevent gesture handler lingering after deletion', async () => {
     // Arrange: Mock Swipeable ref with close() method
     const mockSwipeRef = {
-      close: vi.fn(),
-      openRight: vi.fn(),
+      close: mock.fn(),
+      openRight: mock.fn(),
     };
 
     const swipeableRefsMap = new Map<string, any>();
@@ -19,7 +20,7 @@ describe('BUG-034: Swipeable ref must close before item removal', () => {
     }
 
     // Assert: Verify close() was called exactly once
-    expect(mockSwipeRef.close).toHaveBeenCalledTimes(1);
+    assert.strictEqual(mockSwipeRef.close.mock.calls.length, 1);
   });
 
   it('should handle missing ref gracefully (no error on close)', () => {
@@ -34,9 +35,9 @@ describe('BUG-034: Swipeable ref must close before item removal', () => {
     }
 
     // Assert: No error thrown
-    expect(() => {
+    assert.doesNotThrow(() => {
       swipeableRefsMap.get(itemId); // Returns undefined, no error
-    }).not.toThrow();
+    });
   });
 
   it('should close all Swipeable refs before batch removal to prevent gesture handler lingering', () => {
@@ -46,7 +47,7 @@ describe('BUG-034: Swipeable ref must close before item removal', () => {
 
     itemIds.forEach((id) => {
       mockRefs.set(id, {
-        close: vi.fn(),
+        close: mock.fn(),
       });
     });
 
@@ -60,13 +61,19 @@ describe('BUG-034: Swipeable ref must close before item removal', () => {
 
     // Assert: All refs closed
     mockRefs.forEach((ref) => {
-      expect(ref.close).toHaveBeenCalledTimes(1);
+      assert.strictEqual(ref.close.mock.calls.length, 1);
     });
   });
 
   it('should cleanup all stored timeouts on component unmount', () => {
-    // Arrange: Mock setTimeout and clearTimeout
-    const clearTimeoutSpy = vi.spyOn(global, 'clearTimeout');
+    // Arrange: Track clearTimeout calls
+    const originalClearTimeout = global.clearTimeout;
+    let clearTimeoutCalls = 0;
+    global.clearTimeout = ((id?: any) => {
+      clearTimeoutCalls++;
+      return originalClearTimeout(id);
+    }) as any;
+
     const timeoutsMap = new Map<string, ReturnType<typeof setTimeout>>();
 
     // Simulate storing timeout IDs
@@ -81,9 +88,10 @@ describe('BUG-034: Swipeable ref must close before item removal', () => {
     timeouts.clear();
 
     // Assert: All timeouts cleared and map is empty
-    expect(clearTimeoutSpy).toHaveBeenCalledTimes(2);
-    expect(timeoutsMap.size).toBe(0);
+    assert.strictEqual(clearTimeoutCalls, 2);
+    assert.strictEqual(timeoutsMap.size, 0);
 
-    clearTimeoutSpy.mockRestore();
+    // Cleanup
+    global.clearTimeout = originalClearTimeout;
   });
 });
