@@ -1,8 +1,30 @@
 """Tests for debug logs upload endpoint."""
 
+import os
+import glob
 import pytest
 from fastapi.testclient import TestClient
 from backend.server import app
+
+
+@pytest.fixture(autouse=True)
+def cleanup_test_logs():
+    """Automatically cleanup debug logs created during tests."""
+    # Setup: record existing log files before test
+    logs_dir = os.path.join(os.getcwd(), "LOGS")
+    existing_files = set(glob.glob(os.path.join(logs_dir, "*.txt"))) if os.path.exists(logs_dir) else set()
+
+    yield  # Run the test
+
+    # Teardown: remove only files created by this test
+    if os.path.exists(logs_dir):
+        current_files = set(glob.glob(os.path.join(logs_dir, "*.txt")))
+        new_files = current_files - existing_files
+        for filepath in new_files:
+            try:
+                os.remove(filepath)
+            except OSError:
+                pass  # Ignore cleanup errors
 
 
 def test_upload_debug_logs_requires_auth():
