@@ -34,9 +34,25 @@ function getImageCandidates(item: unknown): unknown[] {
 }
 
 export function resolveStockItemImageUrl(item: unknown): string | undefined {
-  return getImageCandidates(item)
-    .map((value) => normalizeImageCandidate(value))
-    .find((value): value is string => typeof value === 'string');
+  const candidates = getImageCandidates(item);
+  const normalized = candidates.map((value) => normalizeImageCandidate(value));
+  const result = normalized.find((value): value is string => typeof value === 'string');
+
+  // Debug log for image resolution issues
+  if (typeof item === 'object' && item !== null) {
+    const itemRecord = item as Record<string, unknown>;
+    if (!result && (itemRecord.image_url || itemRecord.imageUrl)) {
+      console.warn('[stockItemImage] No valid image URL resolved despite candidates present', {
+        itemName: itemRecord.name,
+        directImageUrl: itemRecord.image_url,
+        directImageUrlType: typeof itemRecord.image_url,
+        candidates: candidates.slice(0, 3), // Only log first 3 to avoid spam
+        normalizedResults: normalized.slice(0, 3),
+      });
+    }
+  }
+
+  return result;
 }
 
 export function resolveStockItemImageUrlWithFallback(item: unknown, fallbackItem: unknown): string | undefined {
