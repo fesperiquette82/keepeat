@@ -359,62 +359,41 @@ export default function StockScreen() {
                 renderLeftActions={() => renderSwipeAction('Utilisé', '#16A34A', 'restaurant-outline')}
                 renderRightActions={() => renderSwipeAction('Jeté', '#DC2626', 'trash-outline')}
                 onSwipeableLeftOpen={() => {
-                  const refCountBefore = swipeableRefs.current.size;
-                  debugSwipeLogger.info('StockScreen.onSwipeableLeftOpen', `Swiped left`, {
+                  debugSwipeLogger.info('StockScreen.onSwipeableLeftOpen', `[DELETE_FLOW] Swiped left`, {
                     itemId: item.id,
                     itemName: item.name,
-                    refsCountBefore: refCountBefore,
+                    refsCount: swipeableRefs.current.size,
                     allRefIds: Array.from(swipeableRefs.current.keys()),
                     processingIds: Object.keys(processingIds).filter((id) => processingIds[id]),
                   });
-                  // Fermer tous les autres Swipeable d'abord (pattern std pour FlatList).
-                  const closedRefs: string[] = [];
-                  swipeableRefs.current.forEach((ref, key) => {
-                    if (key !== item.id) {
-                      ref?.close();
-                      closedRefs.push(key);
-                    }
-                  });
-                  debugSwipeLogger.info('StockScreen.onSwipeableLeftOpen', `Other swipeables closed, enqueueing action`, {
-                    itemId: item.id,
-                    closedRefIds: closedRefs,
-                    refsCountAfterClose: swipeableRefs.current.size,
-                  });
+                  // NOTE: Do NOT manually close other Swipeables here!
+                  // Closing refs of other items while they're mounted causes RNGH to enter
+                  // an inconsistent state where those items can never be swiped again.
+                  // RNGH automatically ensures only one Swipeable is open at a time when
+                  // overshootLeft={false} and overshootRight={false} are set.
                   void swipeActionQueueRef.current.enqueue(async () => {
                     debugSwipeLogger.info('StockScreen.onSwipeableLeftOpen.queue', `[DELETE_FLOW] Action starting`, { itemId: item.id });
                     await handleSwipeAction(item.id, resolveSwipeActionFromOpenSide('left'));
                     debugSwipeLogger.info('StockScreen.onSwipeableLeftOpen.queue', `[DELETE_FLOW] Action complete`, { itemId: item.id });
-                    // NOTE: ref is already closed in handleSwipeAction before removeStockItems
-                    // so no need to close again here
                   });
                 }}
                 onSwipeableRightOpen={() => {
-                  const refCountBefore = swipeableRefs.current.size;
-                  debugSwipeLogger.info('StockScreen.onSwipeableRightOpen', `Swiped right`, {
+                  debugSwipeLogger.info('StockScreen.onSwipeableRightOpen', `[DELETE_FLOW] Swiped right`, {
                     itemId: item.id,
                     itemName: item.name,
-                    refsCountBefore: refCountBefore,
+                    refsCount: swipeableRefs.current.size,
                     allRefIds: Array.from(swipeableRefs.current.keys()),
                     processingIds: Object.keys(processingIds).filter((id) => processingIds[id]),
                   });
-                  const closedRefs: string[] = [];
-                  swipeableRefs.current.forEach((ref, key) => {
-                    if (key !== item.id) {
-                      ref?.close();
-                      closedRefs.push(key);
-                    }
-                  });
-                  debugSwipeLogger.info('StockScreen.onSwipeableRightOpen', `Other swipeables closed, enqueueing action`, {
-                    itemId: item.id,
-                    closedRefIds: closedRefs,
-                    refsCountAfterClose: swipeableRefs.current.size,
-                  });
+                  // NOTE: Do NOT manually close other Swipeables here!
+                  // Closing refs of other items while they're mounted causes RNGH to enter
+                  // an inconsistent state where those items can never be swiped again.
+                  // RNGH automatically ensures only one Swipeable is open at a time when
+                  // overshootLeft={false} and overshootRight={false} are set.
                   void swipeActionQueueRef.current.enqueue(async () => {
                     debugSwipeLogger.info('StockScreen.onSwipeableRightOpen.queue', `[DELETE_FLOW] Action starting`, { itemId: item.id });
                     await handleSwipeAction(item.id, resolveSwipeActionFromOpenSide('right'));
                     debugSwipeLogger.info('StockScreen.onSwipeableRightOpen.queue', `[DELETE_FLOW] Action complete`, { itemId: item.id });
-                    // NOTE: ref is already closed in handleSwipeAction before removeStockItems
-                    // so no need to close again here
                   });
                 }}
               >
