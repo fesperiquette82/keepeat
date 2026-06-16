@@ -15,7 +15,14 @@ interface ActionBannerProps {
 
 export function ActionBanner({ message, actionLabel, onActionPress, onClose, variant = 'success', bottomOffset = 16 }: ActionBannerProps) {
   return (
-    <View style={[styles.container, { bottom: bottomOffset }, variant === 'error' && styles.containerError]}>
+    // pointerEvents="box-none": le conteneur du banner ne capture PAS les gestes —
+    // seuls ses enfants interactifs (boutons Annuler / ✕) le font. Sans cela, le banner
+    // (position absolue en bas de l'écran, visible ~3s après une suppression) interceptait
+    // le swipe de l'article suivant situé sous lui, bloquant la 2ème suppression (BUG-034).
+    <View
+      pointerEvents="box-none"
+      style={[styles.container, { bottom: bottomOffset }, variant === 'error' && styles.containerError]}
+    >
       <Text style={styles.message}>{message}</Text>
       <View style={styles.actions}>
         {actionLabel && onActionPress && (

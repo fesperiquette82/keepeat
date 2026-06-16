@@ -1,94 +1,90 @@
 import { describe, it } from 'node:test';
 import { strict as assert } from 'node:assert';
 
+import { createSwipeActionQueue, resolveStockRemovalBanner } from '../utils/stockSwipe';
+import type { StockRemovalResult } from '../utils/stockRemoval';
+
 /**
- * BUG-034 Integration Test: Swipeable ref lifecycle during batch deletions
- * Verifies that closing refs properly prevents gesture handler lingering across deletions.
+ * BUG-034 — Régression "le 2ème swipe est bloqué après la 1ère suppression".
+ *
+ * Ce test exerce le VRAI module de production `createSwipeActionQueue` (celui utilisé par
+ * stock.tsx via swipeActionQueueRef) au lieu de réimplémenter la logique dans le test.
+ * Il verrouille le séquencement des suppressions au niveau orchestration JS :
+ *   - deux suppressions consécutives s'exécutent toutes les deux, dans l'ordre ;
+ *   - la file n'est PAS "empoisonnée" si la 1ère tâche échoue — la 2ème s'exécute quand même
+ *     (c'était l'hypothèse exacte du blocage du 2ème swipe).
+ *
+ * NB : le blocage GESTUEL natif (RNGH + overlay banner) ne peut PAS être reproduit sous
+ * node:test. Il est couvert au niveau device par .maestro/14-stock-swipe-delete-consecutive.yaml.
  */
-describe('Integration: Stock swipeable ref management during deletions', () => {
-  it('should maintain clean ref state after closing and deleting item', async () => {
-    // Arrange: Simulate ref map and deletion sequence
-    const refMap = new Map<string, any>();
-    const deletedIds: string[] = [];
+describe('[REGRESSION] BUG-034 — suppression consécutive de 2 articles', () => {
+  it('exécute deux suppressions enchaînées, dans l’ordre, sans en bloquer une', async () => {
+    const queue = createSwipeActionQueue();
+    const executionOrder: string[] = [];
 
-    // Pre-populate refs
-    const items = ['item-1', 'item-2', 'item-3'];
-    items.forEach((id) => {
-      refMap.set(id, {
-        close: () => {},
-        id,
-      });
+    const first = queue.enqueue(async () => {
+      executionOrder.push('item-1:start');
+      await Promise.resolve();
+      executionOrder.push('item-1:done');
+      return 'item-1';
     });
 
-    assert.strictEqual(refMap.size, 3, 'Should start with 3 refs');
-
-    // Act: Simulate handleSwipeAction() flow for first item
-    const itemIdToDelete = 'item-1';
-    const swipeRef = refMap.get(itemIdToDelete);
-
-    if (swipeRef) {
-      swipeRef.close(); // Close BEFORE removal
-      deletedIds.push(itemIdToDelete);
-      refMap.delete(itemIdToDelete); // Then remove from map
-    }
-
-    // Assert: Ref properly cleaned up
-    assert.strictEqual(refMap.size, 2, 'Should have 2 refs after deletion');
-    assert(!refMap.has(itemIdToDelete), 'Deleted item should not exist in map');
-    assert.deepStrictEqual(deletedIds, ['item-1']);
-  });
-
-  it('should handle ref close failure gracefully (no exception)', async () => {
-    // Arrange: Ref with broken close() method
-    const brokenRef = {
-      close: () => {
-        throw new Error('Close failed');
-      },
-    };
-
-    const refMap = new Map<string, any>();
-    refMap.set('item-broken', brokenRef);
-
-    // Act & Assert: Should not crash even if close() throws
-    const itemId = 'item-broken';
-    const ref = refMap.get(itemId);
-
-    let closeThrew = false;
-    if (ref) {
-      try {
-        ref.close();
-      } catch (e) {
-        closeThrew = true;
-      }
-    }
-
-    assert.strictEqual(closeThrew, true, 'close() threw as expected');
-    // App should still remove from map and proceed
-    refMap.delete(itemId);
-    assert.strictEqual(refMap.size, 0);
-  });
-
-  it('cleanup effect should remove orphaned refs for unmounted items', async () => {
-    // Arrange: Refs for items that no longer exist in displayed list
-    const refMap = new Map<string, any>();
-    refMap.set('item-1', { close: () => {} });
-    refMap.set('item-2', { close: () => {} });
-    refMap.set('item-3', { close: () => {} });
-
-    const displayedItemIds = new Set(['item-1']); // Only item-1 is displayed
-
-    // Act: Cleanup orphaned refs (like the useEffect in stock.tsx)
-    const orphanedIds: string[] = [];
-    refMap.forEach((_, key) => {
-      if (!displayedItemIds.has(key)) {
-        orphanedIds.push(key);
-        refMap.delete(key);
-      }
+    const second = queue.enqueue(async () => {
+      executionOrder.push('item-2:start');
+      await Promise.resolve();
+      executionOrder.push('item-2:done');
+      return 'item-2';
     });
 
-    // Assert: Orphaned refs cleaned up
-    assert.deepStrictEqual(orphanedIds, ['item-2', 'item-3']);
-    assert.strictEqual(refMap.size, 1, 'Only item-1 ref remains');
-    assert(refMap.has('item-1'), 'item-1 ref should exist');
+    const [r1, r2] = await Promise.all([first, second]);
+
+    assert.strictEqual(r1, 'item-1');
+    assert.strictEqual(r2, 'item-2');
+    // La 2ème tâche ne démarre qu'après la fin de la 1ère (sérialisation stricte).
+    assert.deepStrictEqual(executionOrder, [
+      'item-1:start',
+      'item-1:done',
+      'item-2:start',
+      'item-2:done',
+    ]);
+  });
+
+  it('n’empoisonne pas la file : si la 1ère suppression échoue, la 2ème s’exécute quand même', async () => {
+    const queue = createSwipeActionQueue();
+    let secondRan = false;
+
+    const first = queue.enqueue(async () => {
+      throw new Error('1ère suppression en échec (ex: erreur API)');
+    });
+
+    const second = queue.enqueue(async () => {
+      secondRan = true;
+      return 'item-2';
+    });
+
+    // La 1ère rejette, mais ne doit pas casser la chaîne.
+    await assert.rejects(first, /1ère suppression en échec/);
+    const r2 = await second;
+
+    assert.strictEqual(r2, 'item-2', 'La 2ème suppression doit aboutir malgré l’échec de la 1ère');
+    assert.strictEqual(secondRan, true, 'La 2ème tâche doit bien avoir été exécutée');
+  });
+
+  it('produit une bannière "Annuler" valide pour chacune des deux suppressions successives', () => {
+    const ok = (): StockRemovalResult => ({
+      removedItems: [{ id: 'x' } as any],
+      notFoundCount: 0,
+      failedCount: 0,
+    });
+
+    const banner1 = resolveStockRemovalBanner('used', ok());
+    const banner2 = resolveStockRemovalBanner('thrown', ok());
+
+    for (const banner of [banner1, banner2]) {
+      assert.strictEqual(banner.variant, 'success');
+      assert.strictEqual(banner.canUndo, true, 'Chaque suppression réussie doit rester annulable');
+    }
+    assert.match(banner1.message, /utilisé/i);
+    assert.match(banner2.message, /jeté/i);
   });
 });
