@@ -19,8 +19,11 @@ from backend.scripts import warmup_ping
 
 class WarmupBackendTests(unittest.TestCase):
     def test_api_health_route_is_light_and_ok(self):
-        # Vérifie que la route existe et accepte GET
-        route = next(r for r in server.app.routes if getattr(r, "path", None) == "/api/health")
+        # Vérifie que la route existe et accepte GET.
+        # api_router a prefix="/api". Depuis Starlette 1.x, app.include_router() est
+        # paresseux (un _IncludedRouter remplace les routes aplaties dans app.routes),
+        # donc /api/health s'introspecte via api_router.routes (compatible toutes versions).
+        route = next(r for r in server.api_router.routes if getattr(r, "path", None) == "/api/health")
         self.assertIn("GET", getattr(route, "methods", set()))
         self.assertIn(getattr(route, "status_code", 200), (None, 200))
 
