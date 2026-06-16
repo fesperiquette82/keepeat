@@ -1,59 +1,33 @@
 import { describe, it } from 'node:test';
 import { strict as assert } from 'node:assert';
 
+import { createSwipeActionQueue } from '../utils/stockSwipe';
+
 /**
- * BUG-034 E2E Smoke Test: Sequential stock item deletions via swipe gestures
- * Verifies that gesture handler doesn't linger after first deletion, blocking subsequent swipes.
+ * BUG-034 — Smoke test : suppressions séquentielles par swipe.
  *
- * Real scenario: User swipes left on item 1 to delete → then swipes left on item 2.
- * Before fix: Item 2 swipe wouldn't register (gesture handler from item 1 still lingering).
- * After fix: Item 2 swipe registers normally.
+ * Exerce le VRAI module `createSwipeActionQueue` (utilisé par stock.tsx) plutôt qu'un mock
+ * inline. Vérifie que N suppressions enchaînées s'exécutent toutes, dans l'ordre, sans
+ * qu'une tâche n'en bloque une autre — l'invariant cassé par BUG-034 côté orchestration JS.
+ *
+ * La couverture du blocage GESTUEL natif est dans .maestro/14-stock-swipe-delete-consecutive.yaml.
  */
-describe('BUG-034 E2E: Sequential stock item deletions work after swipe ref close', () => {
-  it('should allow second swipe deletion to register after first item is deleted', async () => {
-    // Arrange: Simulate stock screen state with 3 items
-    const stockItems = [
-      { id: 'item-1', name: 'Lait', expiry_date: '2026-06-15' },
-      { id: 'item-2', name: 'Yaourt', expiry_date: '2026-06-10' },
-      { id: 'item-3', name: 'Fromage', expiry_date: '2026-06-20' },
-    ];
+describe('BUG-034 smoke: les suppressions séquentielles s’exécutent toutes', () => {
+  it('exécute 5 suppressions consécutives, dans l’ordre, sans en bloquer une', async () => {
+    const queue = createSwipeActionQueue();
+    const done: number[] = [];
 
-    // Track deletion order to verify no gesture handler blocking
-    const deletionOrder: string[] = [];
+    const tasks = [1, 2, 3, 4, 5].map((i) =>
+      queue.enqueue(async () => {
+        await Promise.resolve();
+        done.push(i);
+        return i;
+      }),
+    );
 
-    // Simulate deletion flow
-    const simulateSwipeDelete = (itemId: string) => {
-      // Step 1: Get swipe ref (simulating component render)
-      const swipeRef = { close: () => {} };
+    const results = await Promise.all(tasks);
 
-      // Step 2: Close ref (THE FIX)
-      swipeRef.close();
-
-      // Step 3: Remove item
-      deletionOrder.push(itemId);
-    };
-
-    // Act: Delete item 1, then item 2 sequentially (both should succeed)
-    simulateSwipeDelete('item-1');
-    simulateSwipeDelete('item-2');
-
-    // Assert: Both deletions recorded (no blocking)
-    assert.deepStrictEqual(deletionOrder, ['item-1', 'item-2']);
-    assert.strictEqual(deletionOrder.length, 2);
-  });
-
-  it('gesture handler should not block after 5 sequential deletions', async () => {
-    const deletions: number[] = [];
-
-    // Simulate 5 rapid sequential swipe-delete operations
-    for (let i = 1; i <= 5; i++) {
-      const mockSwipeRef = { close: () => {} };
-      mockSwipeRef.close(); // The fix: close before removal
-      deletions.push(i);
-    }
-
-    // Assert: All 5 deletions succeeded
-    assert.strictEqual(deletions.length, 5);
-    assert.deepStrictEqual(deletions, [1, 2, 3, 4, 5]);
+    assert.deepStrictEqual(results, [1, 2, 3, 4, 5]);
+    assert.deepStrictEqual(done, [1, 2, 3, 4, 5], 'Les 5 suppressions doivent aboutir dans l’ordre');
   });
 });

@@ -1,0 +1,51 @@
+appId: com.fesperiquette.keepeat
+# BUG-034 — Régression device : supprimer DEUX articles consécutivement par swipe.
+# Reproduit le bug utilisateur (2026-06-10) : après la 1ère suppression par swipe,
+# le 2ème swipe était bloqué. C'est le seul niveau qui exerce réellement le gesture
+# handler RNGH + l'overlay banner (impossible à reproduire sous node:test).
+---
+- launchApp
+# --- Préparer un état déterministe : 2 produits nommés ---
+- tapOn:
+    id: tab-scan
+- tapOn:
+    id: scan-add-manual-button
+- assertVisible:
+    id: add-product-name-input
+- tapOn:
+    id: add-product-name-input
+- inputText: Swipe Alpha
+- tapOn:
+    id: add-product-save-button
+- tapOn:
+    id: tab-scan
+- tapOn:
+    id: scan-add-manual-button
+- assertVisible:
+    id: add-product-name-input
+- tapOn:
+    id: add-product-name-input
+- inputText: Swipe Beta
+- tapOn:
+    id: add-product-save-button
+# --- Aller au stock : les deux articles sont visibles ---
+- tapOn:
+    id: tab-stock
+- assertVisible:
+    text: Swipe Alpha
+- assertVisible:
+    text: Swipe Beta
+# --- 1ère suppression par swipe ---
+- swipe:
+    from:
+      text: Swipe Alpha
+    direction: LEFT
+- assertNotVisible:
+    text: Swipe Alpha
+# --- 2ème suppression par swipe : DOIT fonctionner (cœur de BUG-034) ---
+- swipe:
+    from:
+      text: Swipe Beta
+    direction: LEFT
+- assertNotVisible:
+    text: Swipe Beta

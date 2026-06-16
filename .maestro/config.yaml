@@ -13,3 +13,4 @@ flows:
   - 11-product-detail-associated-recipes.yaml
   - 12-premium-paywall.yaml
   - 13-backend-error-handling.yaml
+  - 14-stock-swipe-delete-consecutive.yaml
