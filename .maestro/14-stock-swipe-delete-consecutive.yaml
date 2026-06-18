@@ -5,6 +5,7 @@ appId: com.fesperiquette.keepeat
 # handler RNGH + l'overlay banner (impossible à reproduire sous node:test).
 ---
 - launchApp
+- runFlow: helpers/ensure-authenticated.yaml
 # --- Préparer un état déterministe : 2 produits nommés ---
 - tapOn:
     id: tab-scan

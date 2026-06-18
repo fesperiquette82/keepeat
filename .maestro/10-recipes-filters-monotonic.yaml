@@ -1,6 +1,7 @@
 appId: com.fesperiquette.keepeat
 ---
 - launchApp
+- runFlow: helpers/ensure-authenticated.yaml
 - tapOn:
     id: tab-recipes
 - tapOn:

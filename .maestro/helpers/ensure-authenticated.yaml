@@ -1,0 +1,47 @@
+appId: com.fesperiquette.keepeat
+# -----------------------------------------------------------------------------
+# Sous-flow réutilisable : garantit que l'app est authentifiée et que la barre
+# d'onglets est visible AVANT que le flow appelant n'agisse.
+#
+# Pourquoi : entre deux flows, le runner e2e fait reset+seed de la DB, ce qui
+# invalide le token stocké → l'app peut retomber sur l'écran de login. Les flows
+# qui tapaient directement un onglet après launchApp échouaient alors avec
+# "Element not found: tab-recipes / tab-stock". (Voir scripts/run-maestro-e2e.sh,
+# stabilize_between_flows : "app must not retain stale tokens".)
+#
+# Usage (le flow appelant fait launchApp lui-même AVANT) :
+#   - launchApp
+#   - runFlow: helpers/ensure-authenticated.yaml
+#   - tapOn: { id: tab-... }
+# -----------------------------------------------------------------------------
+---
+- waitForAnimationToEnd
+
+# Si l'écran de login est affiché, se connecter avec le compte e2e seedé.
+- runFlow:
+    when:
+      visible:
+        id: login-email-input
+    commands:
+      - tapOn:
+          id: login-email-input
+      - inputText: e2e.free@keepeat.test
+      - tapOn:
+          id: login-password-input
+      - inputText: TestPassword123!
+      - hideKeyboard
+      - waitForAnimationToEnd
+      - tapOn:
+          id: login-submit-button
+      - extendedWaitUntil:
+          visible:
+            id: tab-home
+          timeout: 60000
+
+# Filet de sécurité : attendre la home (lenteur émulateur CI + warm-up backend).
+- extendedWaitUntil:
+    visible:
+      id: tab-home
+    timeout: 120000
+- assertVisible:
+    id: tab-home
