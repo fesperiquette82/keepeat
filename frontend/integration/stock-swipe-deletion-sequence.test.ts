@@ -1,7 +1,7 @@
 import { describe, it } from 'node:test';
 import { strict as assert } from 'node:assert';
 
-import { createSwipeActionQueue, resolveStockRemovalBanner } from '../utils/stockSwipe';
+import { createSwipeActionQueue, resolveStockRemovalBanner, resolveSwipeActionFromOpenSide } from '../utils/stockSwipe';
 import type { StockRemovalResult } from '../utils/stockRemoval';
 
 /**
@@ -86,5 +86,14 @@ describe('[REGRESSION] BUG-034 — suppression consécutive de 2 articles', () =
     }
     assert.match(banner1.message, /utilisé/i);
     assert.match(banner2.message, /jeté/i);
+  });
+
+  it('mappe le sens du swipe vers la bonne action (contrat onSwipeableOpen de ReanimatedSwipeable)', () => {
+    // Migration vers ReanimatedSwipeable : le handler unique onSwipeableOpen reçoit
+    // SwipeDirection.LEFT/RIGHT (valeurs "left"/"right") et délègue la conversion en
+    // action à resolveSwipeActionFromOpenSide. Ce test verrouille ce contrat de câblage
+    // (gauche = utilisé, droite = jeté) qui remplace les ex-callbacks Left/RightOpen.
+    assert.strictEqual(resolveSwipeActionFromOpenSide('left'), 'used');
+    assert.strictEqual(resolveSwipeActionFromOpenSide('right'), 'thrown');
   });
 });

@@ -3,7 +3,7 @@ import { SafeAreaView, useSafeAreaInsets } from 'react-native-safe-area-context'
 import { View, Text, StyleSheet, TouchableOpacity, FlatList, Image, Alert, TextInput, ImageBackground } from 'react-native';
 import { useRouter } from 'expo-router';
 import Ionicons from '@expo/vector-icons/Ionicons';
-import { Swipeable } from 'react-native-gesture-handler';
+import ReanimatedSwipeable, { type SwipeableMethods, SwipeDirection } from 'react-native-gesture-handler/ReanimatedSwipeable';
 import { useStockStore } from '../../store/stockStore';
 import { ActionBanner } from '../../component/ActionBanner';
 import { getThemeColors, getThemeText } from '../../utils/theme';
@@ -59,7 +59,18 @@ export default function StockScreen() {
   const swipeActionQueueRef = useRef(createSwipeActionQueue());
   // Refs pour fermer chaque Swipeable avant suppression — sans close() le gesture handler
   // de RNGH reste en état "ouvert" quand l'item se démonte, bloquant les swipes suivants.
-  const swipeableRefs = useRef<Map<string, Swipeable>>(new Map());
+  const swipeableRefs = useRef<Map<string, React.RefObject<SwipeableMethods | null>>>(new Map());
+
+  // ReanimatedSwipeable attend un RefObject (pas un callback ref). On garde un RefObject
+  // stable par item.id, réutilisé entre les rendus, pour pouvoir appeler .close() avant suppression.
+  const getSwipeableRef = (id: string): React.RefObject<SwipeableMethods | null> => {
+    let ref = swipeableRefs.current.get(id);
+    if (!ref) {
+      ref = { current: null };
+      swipeableRefs.current.set(id, ref);
+    }
+    return ref;
+  };
   const [undoItems, setUndoItems] = useState<typeof storeItems>([]);
   const [banner, setBanner] = useState<{ message: string; canUndo: boolean; variant: 'success' | 'error' } | null>(null);
   const themeMode = useAppSettingsStore((state) => state.themeMode);
@@ -173,7 +184,7 @@ export default function StockScreen() {
     setProcessingIds((prev) => ({ ...prev, [itemId]: true }));
     try {
       // Close Swipeable ref BEFORE removing to prevent gesture handler lingering
-      const swipeRef = swipeableRefs.current.get(itemId);
+      const swipeRef = swipeableRefs.current.get(itemId)?.current;
       if (swipeRef) {
         swipeRef.close();
         debugSwipeLogger.info('StockScreen.handleSwipeAction', `[DELETE_FLOW] Swipeable closed before removal`, { itemId });
@@ -336,64 +347,29 @@ export default function StockScreen() {
           contentContainerStyle={styles.listContent}
           renderItem={({ item }) => {
             return (
-              <Swipeable
-                ref={(ref) => {
-                  if (ref) {
-                    swipeableRefs.current.set(item.id, ref);
-                    debugSwipeLogger.info('StockScreen.Swipeable.ref', `Ref added`, {
-                      itemId: item.id,
-                      itemName: item.name,
-                      refsCount: swipeableRefs.current.size,
-                    });
-                  } else {
-                    swipeableRefs.current.delete(item.id);
-                    debugSwipeLogger.info('StockScreen.Swipeable.ref', `Ref removed`, {
-                      itemId: item.id,
-                      itemName: item.name,
-                      refsCount: swipeableRefs.current.size,
-                    });
-                  }
-                }}
+              <ReanimatedSwipeable
+                ref={getSwipeableRef(item.id)}
                 overshootLeft={false}
                 overshootRight={false}
                 renderLeftActions={() => renderSwipeAction('Utilisé', '#16A34A', 'restaurant-outline')}
                 renderRightActions={() => renderSwipeAction('Jeté', '#DC2626', 'trash-outline')}
-                onSwipeableLeftOpen={() => {
-                  debugSwipeLogger.info('StockScreen.onSwipeableLeftOpen', `[DELETE_FLOW] Swiped left`, {
+                onSwipeableOpen={(direction) => {
+                  // ReanimatedSwipeable (RNGH 2.x) remplace le Swipeable legacy déprécié, qui
+                  // laissait le gesture handler dans un état où les autres lignes ne recevaient
+                  // plus les gestes après une suppression (2e swipe sans réponse — BUG-034).
+                  const side = direction === SwipeDirection.LEFT ? 'left' : 'right';
+                  debugSwipeLogger.info('StockScreen.onSwipeableOpen', `[DELETE_FLOW] Swiped ${side}`, {
                     itemId: item.id,
                     itemName: item.name,
+                    direction: side,
                     refsCount: swipeableRefs.current.size,
                     allRefIds: Array.from(swipeableRefs.current.keys()),
                     processingIds: Object.keys(processingIds).filter((id) => processingIds[id]),
                   });
-                  // NOTE: Do NOT manually close other Swipeables here!
-                  // Closing refs of other items while they're mounted causes RNGH to enter
-                  // an inconsistent state where those items can never be swiped again.
-                  // RNGH automatically ensures only one Swipeable is open at a time when
-                  // overshootLeft={false} and overshootRight={false} are set.
                   void swipeActionQueueRef.current.enqueue(async () => {
-                    debugSwipeLogger.info('StockScreen.onSwipeableLeftOpen.queue', `[DELETE_FLOW] Action starting`, { itemId: item.id });
-                    await handleSwipeAction(item.id, resolveSwipeActionFromOpenSide('left'));
-                    debugSwipeLogger.info('StockScreen.onSwipeableLeftOpen.queue', `[DELETE_FLOW] Action complete`, { itemId: item.id });
-                  });
-                }}
-                onSwipeableRightOpen={() => {
-                  debugSwipeLogger.info('StockScreen.onSwipeableRightOpen', `[DELETE_FLOW] Swiped right`, {
-                    itemId: item.id,
-                    itemName: item.name,
-                    refsCount: swipeableRefs.current.size,
-                    allRefIds: Array.from(swipeableRefs.current.keys()),
-                    processingIds: Object.keys(processingIds).filter((id) => processingIds[id]),
-                  });
-                  // NOTE: Do NOT manually close other Swipeables here!
-                  // Closing refs of other items while they're mounted causes RNGH to enter
-                  // an inconsistent state where those items can never be swiped again.
-                  // RNGH automatically ensures only one Swipeable is open at a time when
-                  // overshootLeft={false} and overshootRight={false} are set.
-                  void swipeActionQueueRef.current.enqueue(async () => {
-                    debugSwipeLogger.info('StockScreen.onSwipeableRightOpen.queue', `[DELETE_FLOW] Action starting`, { itemId: item.id });
-                    await handleSwipeAction(item.id, resolveSwipeActionFromOpenSide('right'));
-                    debugSwipeLogger.info('StockScreen.onSwipeableRightOpen.queue', `[DELETE_FLOW] Action complete`, { itemId: item.id });
+                    debugSwipeLogger.info('StockScreen.onSwipeableOpen.queue', `[DELETE_FLOW] Action starting`, { itemId: item.id, direction: side });
+                    await handleSwipeAction(item.id, resolveSwipeActionFromOpenSide(side));
+                    debugSwipeLogger.info('StockScreen.onSwipeableOpen.queue', `[DELETE_FLOW] Action complete`, { itemId: item.id });
                   });
                 }}
               >
@@ -426,7 +402,7 @@ export default function StockScreen() {
                     <Text style={[styles.expiry, { color: expiryColor(daysUntil(item.expiry_date)) }]}>{formatExpiryLabel(item.expiry_date)}</Text>
                   </View>
                 </TouchableOpacity>
-              </Swipeable>
+              </ReanimatedSwipeable>
             );
           }}
         />
