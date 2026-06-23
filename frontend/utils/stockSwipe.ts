@@ -3,6 +3,10 @@ import type { StockRemovalResult } from './stockRemoval';
 export type SwipeDirection = 'left' | 'right';
 export type StockRemovalAction = 'used' | 'thrown';
 
+// Durée d'affichage du bandeau "article retiré" (toast furtif). Doit rester courte pour
+// ne pas gêner visuellement la suppression suivante ni rester en travers de l'écran.
+export const STOCK_BANNER_AUTO_DISMISS_MS = 1500;
+
 export interface StockRemovalBannerState {
   message: string;
   canUndo: boolean;

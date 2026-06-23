@@ -13,7 +13,7 @@ import { removeStockItems, undoRemovedStockItems } from '../../utils/stockRemova
 import { countLabelFr } from '../../utils/uiText';
 import { storageZoneLabel, UI_LABELS } from '../../utils/uiLabels';
 import { expiryColor } from '../../utils/expiryLabels';
-import { createSwipeActionQueue, resolveStockRemovalBanner, resolveSwipeActionFromOpenSide } from '../../utils/stockSwipe';
+import { createSwipeActionQueue, resolveStockRemovalBanner, resolveSwipeActionFromOpenSide, STOCK_BANNER_AUTO_DISMISS_MS } from '../../utils/stockSwipe';
 import { debugSwipeLogger } from '../../utils/debugSwipeLogger';
 
 type StockFilter = 'tous' | 'urgents' | 'frigo' | 'placard';
@@ -214,7 +214,7 @@ export default function StockScreen() {
         canUndo: nextBanner.canUndo,
       });
 
-      // Auto-dismiss banner after 3 seconds to avoid visual interference on next deletion
+      // Auto-dismiss rapide (toast furtif) pour ne pas gêner la suppression suivante.
       const bannerId = `${itemId}:${Date.now()}`;
       const timeoutId = setTimeout(() => {
         setBanner(null);
@@ -223,7 +223,7 @@ export default function StockScreen() {
           bannerId,
         });
         timeoutsRef.current.delete(itemId);
-      }, 3000);
+      }, STOCK_BANNER_AUTO_DISMISS_MS);
 
       // Store timeout for potential cleanup
       timeoutsRef.current.set(itemId, timeoutId);
@@ -414,7 +414,7 @@ export default function StockScreen() {
           actionLabel={banner.canUndo ? 'Annuler' : undefined}
           onActionPress={banner.canUndo ? handleUndo : undefined}
           onClose={() => setBanner(null)}
-          bottomOffset={insets.bottom + 136}
+          bottomOffset={insets.bottom + 74}
         />
       )}
     </SafeAreaView>
