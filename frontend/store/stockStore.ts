@@ -463,9 +463,13 @@ export const useStockStore = create<StockStore>()(
           // renvoie alors le 2ème item comme encore actif, écrase l'update optimiste, et
           // rend stillActive=true → failedCount++, pas de bouton Annuler.
           // L'update optimiste (set ci-dessus) est suffisant : l'item est déjà retiré du store.
+          // Rafraîchissements secondaires (badges priorité + stats) en fire-and-forget : ne pas
+          // les attendre, sinon la file de swipe sérialisée bloque la 2ème suppression pendant
+          // ces 2 appels réseau (plusieurs secondes de latence ressentie).
           const s = get();
-          await Promise.all([s.fetchPriorityItems(), s.fetchStats()]);
-          debugSwipeLogger.info('stockStore.markConsumed', `Secondary fetches completed`, { itemId });
+          void Promise.all([s.fetchPriorityItems(), s.fetchStats()])
+            .then(() => debugSwipeLogger.info('stockStore.markConsumed', `Secondary fetches completed`, { itemId }))
+            .catch((e) => debugSwipeLogger.warn('stockStore.markConsumed', `Secondary fetches failed`, { itemId, error: e instanceof Error ? e.message : String(e) }));
         } catch (err: any) {
           const errMsg = err?.message ?? String(err);
           const errStatus = err?.response?.status ?? null;
@@ -559,9 +563,12 @@ export const useStockStore = create<StockStore>()(
 
           // Même raison que markConsumed : ne pas appeler fetchStock() pour éviter la race
           // condition qui restaure l'update optimiste d'un autre item supprimé en parallèle.
+          // Rafraîchissements secondaires en fire-and-forget (cf. markConsumed) pour ne pas
+          // bloquer la 2ème suppression derrière la file de swipe sérialisée.
           const s = get();
-          await Promise.all([s.fetchPriorityItems(), s.fetchStats()]);
-          debugSwipeLogger.info('stockStore.markThrown', `Secondary fetches completed`, { itemId });
+          void Promise.all([s.fetchPriorityItems(), s.fetchStats()])
+            .then(() => debugSwipeLogger.info('stockStore.markThrown', `Secondary fetches completed`, { itemId }))
+            .catch((e) => debugSwipeLogger.warn('stockStore.markThrown', `Secondary fetches failed`, { itemId, error: e instanceof Error ? e.message : String(e) }));
         } catch (err: any) {
           const errMsg = err?.message ?? String(err);
           const errStatus = err?.response?.status ?? null;

@@ -1,7 +1,7 @@
 import { describe, it } from 'node:test';
 import { strict as assert } from 'node:assert';
 
-import { createSwipeActionQueue, resolveStockRemovalBanner, resolveSwipeActionFromOpenSide } from '../utils/stockSwipe';
+import { createSwipeActionQueue, resolveStockRemovalBanner, resolveSwipeActionFromOpenSide, STOCK_BANNER_AUTO_DISMISS_MS } from '../utils/stockSwipe';
 import type { StockRemovalResult } from '../utils/stockRemoval';
 
 /**
@@ -95,5 +95,12 @@ describe('[REGRESSION] BUG-034 — suppression consécutive de 2 articles', () =
     // (gauche = utilisé, droite = jeté) qui remplace les ex-callbacks Left/RightOpen.
     assert.strictEqual(resolveSwipeActionFromOpenSide('left'), 'used');
     assert.strictEqual(resolveSwipeActionFromOpenSide('right'), 'thrown');
+  });
+
+  it('garde le bandeau de confirmation furtif (auto-dismiss court)', () => {
+    // Le bandeau "article retiré" doit disparaître vite pour ne pas gêner la suppression
+    // suivante ni rester en travers de l'écran. Garde-fou contre un retour à 3s+.
+    assert.ok(STOCK_BANNER_AUTO_DISMISS_MS > 0, 'doit être positif');
+    assert.ok(STOCK_BANNER_AUTO_DISMISS_MS <= 2000, 'doit rester furtif (<= 2s)');
   });
 });
