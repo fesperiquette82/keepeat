@@ -19,6 +19,7 @@ import type { AxiosError, AxiosRequestConfig } from 'axios';
 import { shouldSkipStockFetch } from '../utils/stockFetchPolicy';
 import { buildRestoredItemsList } from '../utils/stockRestoreInsert';
 import { buildUpdateItemOfflineState } from '../utils/stockUpdateOffline';
+import { resolveOnlineSyncAction } from '../utils/onlineSyncDecision';
 import { debugSwipeLogger } from '../utils/debugSwipeLogger';
 
 const authHeaders = () => {
@@ -202,12 +203,18 @@ export const useStockStore = create<StockStore>()(
         const wasOffline = !isOnline;
         set({ isOnline: online });
 
-        if (online && wasOffline) {
-          if (pendingMutations.length > 0) {
-            flushPendingMutations();
-          } else {
-            fetchStock();
-          }
+        // C4 : flusher dès qu'on est en ligne avec des mutations en attente, y compris
+        // au démarrage (aucune transition offline→online). flushPendingMutations est
+        // déjà protégé par isSyncing, donc un éventuel double-appel est sans effet.
+        const action = resolveOnlineSyncAction({
+          online,
+          wasOffline,
+          pendingMutationCount: pendingMutations.length,
+        });
+        if (action === 'flush') {
+          flushPendingMutations();
+        } else if (action === 'fetch') {
+          fetchStock();
         }
       },
 
@@ -789,6 +796,14 @@ export const useStockStore = create<StockStore>()(
         stats: state.stats,
         pendingMutations: state.pendingMutations,
       }),
+      // C4 : si l'hydratation depuis AsyncStorage se termine APRÈS le NetInfo.fetch()
+      // initial (le store était alors vide → aucun flush), rejouer les mutations en
+      // attente dès l'hydratation lorsqu'on est en ligne. Garde isSyncing dans flush.
+      onRehydrateStorage: () => (state) => {
+        if (state && state.isOnline && state.pendingMutations.length > 0) {
+          state.flushPendingMutations();
+        }
+      },
     }
   )
 );
