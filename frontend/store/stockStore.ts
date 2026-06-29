@@ -18,6 +18,7 @@ import type { DashboardStockItem } from '../data/mockDashboardData';
 import type { AxiosError, AxiosRequestConfig } from 'axios';
 import { shouldSkipStockFetch } from '../utils/stockFetchPolicy';
 import { buildRestoredItemsList } from '../utils/stockRestoreInsert';
+import { buildMarkActionRollback } from '../utils/stockRollback';
 import { buildUpdateItemOfflineState } from '../utils/stockUpdateOffline';
 import { resolveOnlineSyncAction } from '../utils/onlineSyncDecision';
 import { debugSwipeLogger } from '../utils/debugSwipeLogger';
@@ -176,6 +177,10 @@ function handlePremiumOrQuotaError(err: any): boolean {
   return true;
 }
 
+// E6 — compteur de séquence monotone pour fetchStock. Une réponse plus lente ne doit
+// jamais écraser l'état d'une requête démarrée APRÈS elle (réponses out-of-order).
+let _stockFetchSeq = 0;
+
 export const useStockStore = create<StockStore>()(
   persist(
     (set, get) => ({
@@ -288,9 +293,16 @@ export const useStockStore = create<StockStore>()(
           force: options?.force === true,
           hasItemsInStore: state.items.length > 0,
         });
+        const fetchSeq = ++_stockFetchSeq;
         set(state => ({ loadingCount: state.loadingCount + 1, isLoading: true, error: null }));
         try {
           const res = await axios.get(buildApiUrl('/api/stock?status=active'), authRequestConfig());
+          // E6 : une requête plus récente a démarré pendant ce GET → sa réponse fait
+          // foi ; on ignore celle-ci pour ne pas écrasser un état plus à jour.
+          if (fetchSeq !== _stockFetchSeq) {
+            logger.debug('[STOCK] fetch response ignored (stale)', { fetchSeq, latest: _stockFetchSeq });
+            return;
+          }
           const items: StockItem[] = Array.isArray(res.data)
             ? res.data.map((item) => normalizeStockItemImage(item as StockItem))
             : [];
@@ -494,7 +506,9 @@ export const useStockStore = create<StockStore>()(
               ],
             }));
           } else {
-            // Rollback sur erreur API
+            // Rollback CIBLÉ sur erreur API (E4) : réinsérer uniquement l'item concerné
+            // dans l'état COURANT, sans écraser la liste entière avec le snapshot (ce qui
+            // ressusciterait un item supprimé entre-temps par une opération concurrente).
             debugSwipeLogger.error('stockStore.markConsumed', `API error, rolling back`, {
               itemId,
               errMsg,
@@ -503,12 +517,26 @@ export const useStockStore = create<StockStore>()(
               currentItemsCount: get().items.length,
             });
 
-            set({ items, priorityItems, stats, error: err.message });
+            const rolledBackItem = items.find(i => i.id === itemId);
+            const wasPriority = priorityItems.some(i => i.id === itemId);
+            set(state => ({
+              ...buildMarkActionRollback({
+                currentItems: state.items,
+                currentPriorityItems: state.priorityItems,
+                currentStats: state.stats,
+                rolledBackItem,
+                wasPriority,
+                action: 'consume',
+              }),
+              error: err.message,
+            }));
             await useRecipesStore.getState().refreshRecipeAssociationsForStockMutation({
               source: 'stock.consume',
-              stockItems: items as DashboardStockItem[],
+              stockItems: get().items as DashboardStockItem[],
             });
-            scheduleExpiryNotification(items.find(i => i.id === itemId)!);
+            if (rolledBackItem) {
+              scheduleExpiryNotification(rolledBackItem);
+            }
           }
         }
       },
@@ -593,7 +621,8 @@ export const useStockStore = create<StockStore>()(
               ],
             }));
           } else {
-            // Rollback sur erreur API
+            // Rollback CIBLÉ sur erreur API (E4) : cf. markConsumed — réinsérer seulement
+            // l'item concerné dans l'état courant, sans écraser la liste entière.
             debugSwipeLogger.error('stockStore.markThrown', `API error, rolling back`, {
               itemId,
               errMsg,
@@ -602,12 +631,26 @@ export const useStockStore = create<StockStore>()(
               currentItemsCount: get().items.length,
             });
 
-            set({ items, priorityItems, stats, error: err.message });
+            const rolledBackItem = items.find(i => i.id === itemId);
+            const wasPriority = priorityItems.some(i => i.id === itemId);
+            set(state => ({
+              ...buildMarkActionRollback({
+                currentItems: state.items,
+                currentPriorityItems: state.priorityItems,
+                currentStats: state.stats,
+                rolledBackItem,
+                wasPriority,
+                action: 'throw',
+              }),
+              error: err.message,
+            }));
             await useRecipesStore.getState().refreshRecipeAssociationsForStockMutation({
               source: 'stock.throw',
-              stockItems: items as DashboardStockItem[],
+              stockItems: get().items as DashboardStockItem[],
             });
-            scheduleExpiryNotification(items.find(i => i.id === itemId)!);
+            if (rolledBackItem) {
+              scheduleExpiryNotification(rolledBackItem);
+            }
           }
         }
       },

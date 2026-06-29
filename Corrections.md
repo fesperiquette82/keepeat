@@ -38,40 +38,49 @@ Findings vérifiés manuellement marqués ✓.
 
 ## 🟠 ÉLEVÉ
 
-### E1. Login plante en 500 (KeyError) pour comptes au schéma divergent ✓ — `OUVERT`
+### E1. Login plante en 500 (KeyError) pour comptes au schéma divergent ✓ — `CORRIGÉ` (2026-06-29)
 - **Fichiers** : `backend/server.py:1345` (`doc["hashed_password"]`, accès direct), seed de test `:1026/1031` (écrit `password_hash`) vs register/login/reset (`hashed_password`), `:4617` (admin reset).
 - **Risque** : tout compte seedé (clé `password_hash`) fait planter le login en **500 (KeyError)** au lieu de 401 ; les fixtures E2E ne reflètent pas le schéma réel produit → divergence silencieuse.
-- **Fix** : `doc.get("hashed_password") or _DUMMY_HASH` et aligner `test_seed_data` sur la clé `hashed_password`.
+- **Correctif appliqué** : login et admin-reset utilisent `doc.get("hashed_password") or _DUMMY_HASH` (un document sans la clé → 401, jamais 500) ; `test_seed_data` écrit désormais `hashed_password`.
+- **Tests** : `test_high_severity_audit.py::TestLoginHashedPasswordMissing` (401 ≠ 500) + assertion seed ; `test_test_mode_guards.py` aligné sur `hashed_password`.
 
-### E2. Clé API Gemini en query-string → fuite dans les logs — `OUVERT`
+### E2. Clé API Gemini en query-string → fuite dans les logs — `CORRIGÉ` (2026-06-29)
 - **Fichiers** : `backend/ocr_service.py:427-430`, `backend/recipes_service.py:226`.
 - **Risque** : `...:generateContent?key={gemini_key}` apparaît dans toute trace httpx/proxy/middleware loggant l'URL. Secret porteur de coûts exposé.
-- **Fix** : passer la clé via header `x-goog-api-key` plutôt qu'en query-string.
+- **Correctif appliqué** : la clé n'est plus jamais dans l'URL. `_build_gemini_generate_content_url` ne prend plus `gemini_key` ; les 5 sites d'appel Gemini (ocr_service, recipes_service, et `_fetch_gpt_recipes`/`_ai_gap_fill`/`get_ai_recipes` dans server.py) passent la clé via le header `x-goog-api-key`.
+- **Tests** : `test_high_severity_audit.py::TestGeminiKeyNotInUrl` (URL sans `key=`, header présent).
 
-### E3. Résilience inégale des appels externes — `OUVERT`
+### E3. Résilience inégale des appels externes — `CORRIGÉ` (2026-06-29)
 - **Fichiers** : `backend/recipes_service.py:223-242` (aucun retry, 429/SAFETY/réponse vide masqués en `None`), `backend/product_catalog.py:14-55` (cache « introuvable » **permanent** sur panne réseau transitoire → empoisonnement), `backend/alerts.py:54-89` (boucle `while True` sans plafond de pages), `:282-292` (appel themealdb dans la boucle par user, non gaté par test_mode).
 - **Risque** : `ocr_service` est robuste (retry/backoff/parsing défensif) mais les autres modules partagent les mêmes modes de panne sans la même protection ; faux négatifs persistants, latence non bornée.
-- **Fix** : aligner sur le pattern OCR (retry/backoff, distinction 429) ; ne pas cacher les échecs réseau/5xx (TTL court sur les négatifs) ; borner les boucles (`max_pages`).
+- **Correctif appliqué** : (1) `product_catalog` ne met en cache que les résultats **concluants** (réponse 200) — un échec réseau/non-200 ne crée plus de faux « introuvable » permanent ; (2) `fetch_recent_recalls` borne la pagination (`_MAX_PAGES=50`) avec log si plafond atteint ; (3) `_generate_ai_recipe` (helper, jusqu'ici non câblé) gagne retry+backoff sur 429/5xx et un extracteur défensif `_extract_gemini_recipe_text` (réponse vide / `blockReason` → `None`, plus de KeyError masqué).
+- **Tests** : `test_high_severity_audit.py` (cache non empoisonné sur panne réseau, mise en cache d'un not-found concluant, extraction défensive).
+- **Non traité (volontaire)** : l'appel themealdb dans la boucle par user (`alerts.py:282`) — optimisation de latence, pas un bug de correction ; à traiter séparément.
 
-### E4. Mutations frontend non atomiques / rollback global ressuscitant des items — `OUVERT`
+### E4. Mutations frontend non atomiques / rollback global ressuscitant des items — `CORRIGÉ` (2026-06-29)
 - **Fichiers** : `frontend/store/stockStore.ts:214-259` (flush sur snapshot figé), `:499-504` et `:598-603` (rollback `markConsumed/markThrown` réécrit toute la liste avec snapshot périmé + `find(...)!` non-null forcé).
 - **Risque** : mutations ajoutées pendant le flush écrasées ; rollback qui ré-affiche des items déjà supprimés par une opération concurrente (régression directe de la classe **BUG-034**, contournée par les `fetchStock` des écrans `recipes.tsx`/`stock.tsx` qui ne passent pas par la queue de swipe `stockSwipe.ts:44-57`).
-- **Fix** : rebaser sur l'état courant à chaque retrait (`set(state => ...filter(m => m.id !== mutation.id))`) ; rollback ciblé par item ; conserver l'optional chaining sur le `find`.
+- **Correctif appliqué** : nouveau helper pur `frontend/utils/stockRollback.ts` (`buildMarkActionRollback`) — le rollback réinsère **uniquement l'item concerné** dans l'état COURANT (via `buildRestoredItemsList`, sans doublon) et inverse précisément les deltas de stats, au lieu d'écraser la liste avec le snapshot. `markConsumed`/`markThrown` branchés dessus ; le `find(...)!` non-null est remplacé par un garde optionnel (`if (rolledBackItem)`).
+- **Tests** : `frontend/utils/stockRollback.test.ts` (7 cas, dont « ne ressuscite pas un item retiré en parallèle » et deltas de stats consume/throw).
+- **Note** : le flush sur snapshot figé (`flushPendingMutations`) reste à durcir — voir suivi (non bloquant ici, couvert par `isSyncing`).
 
-### E5. Opérations multi-documents sans atomicité ni idempotence — `OUVERT`
+### E5. Opérations multi-documents sans atomicité ni idempotence — `CORRIGÉ` (2026-06-29)
 - **Fichiers** : `backend/server.py:3475-3506` (`process_receipt_ticket` : N `insert_one` en boucle puis update ticket `processed`).
 - **Risque** : crash au milieu de la boucle → items partiellement insérés + ticket toujours `pending` → un retry admin **re-duplique** les produits. Aucune transaction Mongo, aucune idempotence.
-- **Fix** : `insert_many` (une opération) + filtre d'idempotence sur l'update final (ne traiter que si encore `pending`).
+- **Correctif appliqué** : (1) **revendication atomique** du ticket avant insertion (`find_one_and_update({status: {$ne: "processed"}})`) → un double-clic / appel concurrent renvoie **409** sans dupliquer ; (2) nettoyage des insertions partielles d'une tentative précédente via `delete_many({source_ticket_id})` (sûr grâce à la revendication) ; (3) `insert_many` en une seule opération ; les stock items portent `source_ticket_id` pour l'idempotence.
+- **Tests** : `test_high_severity_audit.py::TestReceiptTicketIdempotency` (1er appel → `insert_many` une fois ; déjà traité → 409 sans insertion).
 
-### E6. Réponses out-of-order : `fetchStock` concurrents écrasent un état plus récent — `OUVERT`
+### E6. Réponses out-of-order : `fetchStock` concurrents écrasent un état plus récent — `CORRIGÉ` (2026-06-29)
 - **Fichiers** : `frontend/store/stockStore.ts:261-307`, déclencheurs `app/(tabs)/index.tsx:23`, `stock.tsx:82`, `recipes.tsx:71-74` (`useFocusEffect`).
 - **Risque** : pas de garde de séquence ni `AbortController` ; le `set({ items })` du GET le plus lent écrase celui du plus rapide ; pas d'annulation au unmount.
-- **Fix** : compteur de requête monotone (ignorer la réponse si un fetch plus récent a démarré) ; idéalement `AbortController`.
+- **Correctif appliqué** : compteur de séquence monotone module-level `_stockFetchSeq` — chaque `fetchStock` capture son numéro avant le GET et, à la réception, ignore sa réponse si un fetch plus récent a démarré entre-temps (`fetchSeq !== _stockFetchSeq`). Plus de réponse périmée qui écrase un état à jour.
+- **Note** : couvert par typecheck + suite frontend ; l'`AbortController` (annulation réseau au unmount) reste une amélioration optionnelle.
 
-### E7. Rate limiting absent sur `verify-email` + basé IP seul — `OUVERT`
+### E7. Rate limiting absent sur `verify-email` + basé IP seul — `CORRIGÉ partiellement` (2026-06-29)
 - **Fichiers** : `backend/server.py:1367-1368` (pas de `@limiter.limit`, accorde directement un JWT de session `:1388`), `:898` (`Limiter(key_func=get_remote_address)`).
 - **Risque** : brute-force du token d'activation (= prise de contrôle du compte) ; rate limit global contournable derrière proxy Render / `X-Forwarded-For` spoofé.
-- **Fix** : ajouter `@limiter.limit("5/minute")` sur `verify_email` ; keyer aussi sur l'email pour le login ; config trusted-proxy Render.
+- **Correctif appliqué** : `verify_email` est désormais protégé par `@limiter.limit("5/minute")` (+ `request: Request` + `@_resolve_annotations`, pattern des autres routes auth). Le trou principal (brute-force du token) est fermé.
+- **Différé (documenté)** : le *keying du login sur l'email* (anti brute-force distribué multi-IP) nécessite un suivi des échecs par compte (lockout) — feature à part entière, hors périmètre d'un fix ciblé ; à planifier. La config trusted-proxy Render relève de l'infra.
 
 ---
 

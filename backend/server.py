@@ -721,8 +721,8 @@ async def _fetch_gpt_recipes(
     try:
         async with httpx.AsyncClient(timeout=12.0) as http:
             response = await http.post(
-                _build_gemini_generate_content_url(model=gemini_model, gemini_key=gemini_key),
-                headers={"Content-Type": "application/json"},
+                _build_gemini_generate_content_url(model=gemini_model),
+                headers={"Content-Type": "application/json", "x-goog-api-key": gemini_key},
                 json={
                     "systemInstruction": {"parts": [{"text": system_text}]},
                     "contents": [{"parts": [{"text": prompt}]}],
@@ -1024,12 +1024,12 @@ async def test_seed_data():
     premium_password_hash = hash_password(premium_fixture["password"])
     await users_col.update_one(
         {"email": free_fixture["email"]},
-        {"$set": {"email": free_fixture["email"], "password_hash": free_password_hash, "is_premium": False, "subscription_status": "inactive", "email_verified": True}},
+        {"$set": {"email": free_fixture["email"], "hashed_password": free_password_hash, "is_premium": False, "subscription_status": "inactive", "email_verified": True}},
         upsert=True,
     )
     await users_col.update_one(
         {"email": premium_fixture["email"]},
-        {"$set": {"email": premium_fixture["email"], "password_hash": premium_password_hash, "is_premium": True, "subscription_status": "active", "email_verified": True}},
+        {"$set": {"email": premium_fixture["email"], "hashed_password": premium_password_hash, "is_premium": True, "subscription_status": "active", "email_verified": True}},
         upsert=True,
     )
     free_user = await users_col.find_one({"email": free_fixture["email"]}, {"_id": 1})
@@ -1372,7 +1372,9 @@ async def login(request: Request, body: UserLogin):
     doc = await users_col.find_one({"email": body.email.lower()})
     # Toujours appeler verify_password (même avec hash factice) pour éviter
     # l'énumération d'emails par différence de temps de réponse
-    hash_to_check = doc["hashed_password"] if doc else _DUMMY_HASH
+    # .get(...) plutôt qu'accès direct : un document sans la clé exacte (ancien schéma,
+    # import/seed divergent) doit produire un 401, jamais un KeyError → 500 (cf. E1).
+    hash_to_check = (doc.get("hashed_password") if doc else None) or _DUMMY_HASH
     password_ok = verify_password(body.password, hash_to_check)
     if not doc or not password_ok:
         raise HTTPException(status_code=401, detail="Invalid email or password")
@@ -1395,7 +1397,11 @@ async def login(request: Request, body: UserLogin):
 
 
 @api_router.post("/auth/verify-email", response_model=TokenResponse)
-async def verify_email(body: VerifyEmailBody):
+@_resolve_annotations
+@limiter.limit("5/minute")
+async def verify_email(request: Request, body: VerifyEmailBody):
+    # Rate limiting (E7) : verify-email délivre un JWT de session ; sans limite, le
+    # token d'activation serait exposé au brute-force.
     doc = await users_col.find_one({"verification_token": body.token})
     if not doc:
         raise HTTPException(status_code=400, detail="TOKEN_INVALID")
@@ -3499,13 +3505,31 @@ async def process_receipt_ticket(
         raise HTTPException(status_code=404, detail="Ticket non trouvé")
 
     user_id = doc["user_id"]
-    added_items = []
     now_iso = utc_now().isoformat()
 
+    # Idempotence + anti-duplication (E5) : revendiquer le ticket atomiquement AVANT
+    # d'insérer. Si un autre appel concurrent (ou un double-clic) l'a déjà traité,
+    # find_one_and_update renvoie None et on s'arrête sans dupliquer le stock.
+    claim = await receipt_tickets_col.find_one_and_update(
+        {"_id": oid, "status": {"$ne": "processed"}},
+        {"$set": {"status": "processing", "processing_started_at": now_iso}},
+    )
+    if claim is None:
+        raise HTTPException(status_code=409, detail="Ticket déjà traité")
+
+    # Nettoyer d'éventuelles insertions partielles d'une tentative précédente ayant
+    # échoué en cours de route (ticket resté "processing"/"pending") : sûr car la
+    # revendication ci-dessus garantit que le ticket n'était pas déjà "processed".
+    await stock_col.delete_many(
+        {"user_id": user_id, "source_ticket_id": ticket_id, "status": "active"}
+    )
+
+    stock_docs = []
     for item in body.items:
         food_cat = item.category if item.category in _SHELF_BY_CATEGORY else "autres"
-        stock_doc = {
+        stock_docs.append({
             "user_id": user_id,
+            "source_ticket_id": ticket_id,
             "name": item.name,
             "category": item.category,
             "food_category": food_cat,
@@ -3520,9 +3544,16 @@ async def process_receipt_ticket(
             "status": "active",
             "consumed_date": None,
             "thrown_date": None,
-        }
-        res = await stock_col.insert_one(stock_doc)
-        added_items.append({"id": str(res.inserted_id), "name": item.name})
+        })
+
+    added_items = []
+    if stock_docs:
+        # insert_many : une seule opération (réduit la fenêtre d'insertion partielle).
+        res = await stock_col.insert_many(stock_docs)
+        added_items = [
+            {"id": str(inserted_id), "name": item.name}
+            for inserted_id, item in zip(res.inserted_ids, body.items)
+        ]
 
     await receipt_tickets_col.update_one(
         {"_id": oid},
@@ -3762,8 +3793,8 @@ async def _ai_gap_fill(stock_names: list[str], gemini_key: str) -> dict | None:
         async with httpx.AsyncClient(timeout=12) as http:
             for model in models_to_try:
                 r = await http.post(
-                    _build_gemini_generate_content_url(model=model, gemini_key=gemini_key),
-                    headers={"Content-Type": "application/json"},
+                    _build_gemini_generate_content_url(model=model),
+                    headers={"Content-Type": "application/json", "x-goog-api-key": gemini_key},
                     json={
                         "systemInstruction": {"parts": [{"text": _AI_RECIPE_SYSTEM}]},
                         "contents": [{"parts": [{"text": prompt}]}],
@@ -4009,14 +4040,18 @@ def _resolve_recipes_gemini_model(configured_model: str | None = None) -> str:
     return normalized
 
 
-def _build_gemini_generate_content_url(*, model: str, gemini_key: str) -> str:
-    """Construit l'URL generateContent Gemini en normalisant le nom de modèle."""
+def _build_gemini_generate_content_url(*, model: str) -> str:
+    """Construit l'URL generateContent Gemini en normalisant le nom de modèle.
+
+    La clé API n'est jamais incluse dans l'URL : elle est passée via le header
+    x-goog-api-key au moment de l'appel (cf. E2 — éviter la fuite en query-string).
+    """
     normalized_model = str(model).strip()
     if normalized_model.startswith("models/"):
         normalized_model = normalized_model.split("models/", 1)[1].strip()
     return (
         "https://generativelanguage.googleapis.com/v1beta/models/"
-        f"{normalized_model}:generateContent?key={gemini_key}"
+        f"{normalized_model}:generateContent"
     )
 
 
@@ -4129,8 +4164,8 @@ async def get_ai_recipes(
             text: str | None = None
             for model in models_to_try:
                 r = await http.post(
-                    _build_gemini_generate_content_url(model=model, gemini_key=gemini_key),
-                    headers={"Content-Type": "application/json"},
+                    _build_gemini_generate_content_url(model=model),
+                    headers={"Content-Type": "application/json", "x-goog-api-key": gemini_key},
                     json={
                         "systemInstruction": {"parts": [{"text": _AI_RECIPE_SYSTEM}]},
                         "contents": [{"parts": [{"text": prompt}]}],
@@ -4651,7 +4686,7 @@ async def admin_reset_api_logs(
     user_doc = await users_col.find_one(
         {"_id": ObjectId(admin_user["id"])}, {"hashed_password": 1}
     )
-    if not user_doc or not verify_password(body.confirm_password, user_doc["hashed_password"]):
+    if not user_doc or not verify_password(body.confirm_password, user_doc.get("hashed_password") or _DUMMY_HASH):
         raise HTTPException(status_code=403, detail="Mot de passe incorrect")
     result = await api_request_logs_col.delete_many({})
     logger.info("ADMIN_RESET_API_LOGS deleted=%d user=%s", result.deleted_count, admin_user.get("id"))
