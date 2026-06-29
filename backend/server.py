@@ -94,6 +94,7 @@ from backend.entitlements import (
     check_access_or_raise,
     consume_quota_or_raise,
     feature_policy,
+    refund_quota,
     resolve_plan,
 )
 from backend.ocr_service import OcrApiError, ocr_receipt
@@ -1235,6 +1236,35 @@ async def _enforce_feature_access(
         )
         return {"plan": plan, "policy": policy, "quota": quota_result}
     return {"plan": plan, "policy": policy}
+
+
+async def _refund_feature_quota(
+    *,
+    user_id: str,
+    feature: str,
+    quota_context: dict[str, Any] | None,
+) -> None:
+    """Rembourse une réservation de quota lorsque l'appel externe (OCR/IA) échoue.
+
+    No-op si le plan est illimité (limit None) ou si aucune réservation n'a eu lieu.
+    Le remboursement est best-effort : son échec ne doit jamais masquer l'erreur
+    d'origine de l'endpoint.
+    """
+    quota = (quota_context or {}).get("quota") or {}
+    if quota.get("limit") is None:
+        return
+    period = quota.get("period")
+    if not period:
+        return
+    try:
+        await refund_quota(
+            app_state_col=app_state_col,
+            user_id=user_id,
+            feature=feature,
+            period=str(period),
+        )
+    except Exception:
+        logger.warning("Quota refund failed — user=%s feature=%s", user_id, feature)
 
 
 # -----------------------------------------------------------------------------
@@ -3258,11 +3288,13 @@ async def ocr_receipt_route(
         event_category="ocr",
         metadata_json={},
     )
-    # Vérification d'accès SANS consommer le quota (évite de drainer le quota si l'appel OpenAI échoue)
-    await _enforce_feature_access(
+    # Réservation atomique du quota AVANT l'appel externe (C3 — plafond de coût réel) :
+    # une requête au-delà de la limite est rejetée en 429 sans déclencher l'appel OCR payant.
+    # En cas d'échec de l'appel OCR, la réservation est remboursée dans les blocs except.
+    quota_context = await _enforce_feature_access(
         current_user=current_user,
         feature=FEATURE_OCR,
-        consume_quota=False,
+        consume_quota=True,
     )
     if is_test_env() and mock_ocr_enabled():
         mock_payload = TEST_FIXTURES["ocr"]
@@ -3277,6 +3309,7 @@ async def ocr_receipt_route(
                 normalizations_col=ocr_normalizations_col,
             )
         except HTTPException as exc:
+            await _refund_feature_quota(user_id=current_user["id"], feature=FEATURE_OCR, quota_context=quota_context)
             logger.warning("OCR receipt validation failed for user=%s http=%s detail=%s", current_user["id"], exc.status_code, exc.detail)
             await track_business_event(
                 business_events_col=business_events_col,
@@ -3287,6 +3320,7 @@ async def ocr_receipt_route(
             )
             raise
         except OcrApiError as exc:
+            await _refund_feature_quota(user_id=current_user["id"], feature=FEATURE_OCR, quota_context=quota_context)
             logger.warning(
                 "OCR receipt failed — user=%s http=%s stage=%s upstream_http=%s mime=%s b64_len=%s cause=%s detail=%s",
                 current_user["id"],
@@ -3315,6 +3349,7 @@ async def ocr_receipt_route(
             )
             raise HTTPException(status_code=exc.http_status, detail=str(exc))
         except Exception as exc:
+            await _refund_feature_quota(user_id=current_user["id"], feature=FEATURE_OCR, quota_context=quota_context)
             logger.exception("OCR receipt unexpected failure user=%s", current_user["id"])
             await track_business_event(
                 business_events_col=business_events_col,
@@ -3326,12 +3361,7 @@ async def ocr_receipt_route(
             raise HTTPException(status_code=500, detail="Erreur interne OCR") from exc
 
     items = result.get("items", []) if isinstance(result, dict) else []
-    # Quota consommé APRÈS l'appel externe réussi
-    await _enforce_feature_access(
-        current_user=current_user,
-        feature=FEATURE_OCR,
-        consume_quota=True,
-    )
+    # Quota déjà réservé en amont (C3) ; pas de consommation supplémentaire ici.
     plan_type = resolve_plan_type_at_time(current_user)
     await track_service_usage(
         service_usage_logs_col=service_usage_logs_col,
@@ -4085,6 +4115,15 @@ async def get_ai_recipes(
     if configured_model != _DEFAULT_GEMINI_RECIPES_MODEL:
         models_to_try.append(_DEFAULT_GEMINI_RECIPES_MODEL)
 
+    # Réservation atomique du quota juste avant l'appel IA réel (C3 — plafond de coût) :
+    # ni le cache-hit ni le stock vide (sorties anticipées plus haut) ne consomment de quota.
+    # Toute défaillance après ce point rembourse la réservation.
+    quota_context = await _enforce_feature_access(
+        current_user=current_user,
+        feature=FEATURE_AI,
+        consume_quota=True,
+    )
+
     try:
         async with httpx.AsyncClient(timeout=30) as http:
             text: str | None = None
@@ -4113,8 +4152,10 @@ async def get_ai_recipes(
             if not text:
                 raise HTTPException(status_code=502, detail="Erreur IA externe")
     except HTTPException:
+        await _refund_feature_quota(user_id=uid, feature=FEATURE_AI, quota_context=quota_context)
         raise
     except Exception as exc:
+        await _refund_feature_quota(user_id=uid, feature=FEATURE_AI, quota_context=quota_context)
         logger.warning("Gemini recipes/ai request failed: %s", exc)
         raise HTTPException(status_code=502, detail="Erreur réseau IA")
 
@@ -4129,6 +4170,7 @@ async def get_ai_recipes(
     try:
         recipes = json.loads(text)
     except Exception:
+        await _refund_feature_quota(user_id=uid, feature=FEATURE_AI, quota_context=quota_context)
         logger.warning("Gemini recipes/ai invalid JSON: %s", text[:200])
         raise HTTPException(status_code=502, detail="Réponse IA invalide")
 
@@ -4174,12 +4216,7 @@ async def get_ai_recipes(
         )
         recipes = valid
 
-    # Quota consommé APRÈS l'appel OpenAI réussi
-    await _enforce_feature_access(
-        current_user=current_user,
-        feature=FEATURE_AI,
-        consume_quota=True,
-    )
+    # Quota déjà réservé en amont (C3) ; pas de consommation supplémentaire ici.
     # Éviction LRU simplifiée : supprimer l'entrée la plus ancienne si cache plein
     if len(_ai_recipe_cache) >= _AI_CACHE_MAX_SIZE:
         oldest_uid = min(_ai_recipe_cache, key=lambda k: _ai_recipe_cache[k]["created_at"])

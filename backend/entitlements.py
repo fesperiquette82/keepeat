@@ -143,6 +143,31 @@ async def consume_quota_or_raise(
     }
 
 
+async def refund_quota(
+    *,
+    app_state_col,
+    user_id: str,
+    feature: str,
+    period: str,
+) -> None:
+    """Compense (décrémente) une réservation de quota dont l'appel externe a échoué.
+
+    `consume_quota_or_raise` est appelé AVANT l'appel payant (OCR/IA) afin que la
+    limite soit un vrai plafond de coût : la N+1ᵉ requête est rejetée en 429 sans
+    déclencher l'appel externe. Quand l'appel échoue malgré une réservation
+    réussie, on rembourse l'unité réservée. Le `$inc: -1` est atomique et le
+    filtre `used > 0` garantit qu'on ne descend jamais sous zéro.
+    """
+    counter_id = f"usage:{user_id}:{feature}:{period}"
+    await app_state_col.find_one_and_update(
+        {"_id": counter_id, "used": {"$gt": 0}},
+        {
+            "$inc": {"used": -1},
+            "$set": {"updated_at": datetime.now(timezone.utc).isoformat()},
+        },
+    )
+
+
 def build_entitlements_snapshot(user_doc: dict[str, Any], *, now: datetime | None = None) -> dict[str, Any]:
     now_utc = now or datetime.now(timezone.utc)
     plan = resolve_plan(user_doc)
