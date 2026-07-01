@@ -65,10 +65,14 @@ async def fetch_recent_recalls(*, fail_on_error: bool = False) -> list[dict]:
         "limit": 100,
         "offset": 0,
     }
+    # Plafond de pages : borne dure contre une boucle quasi-infinie si l'API change de
+    # comportement (toujours 100 résultats, limit ignoré...). 50 pages × 100 = 5000 rappels,
+    # très au-delà du volume réel sur 30 jours (cf. E3).
+    _MAX_PAGES = 50
     results: list[dict] = []
     try:
         async with httpx.AsyncClient(timeout=30) as client_http:
-            while True:
+            for _page in range(_MAX_PAGES):
                 response = await client_http.get(url, params=params)
                 if response.status_code != 200:
                     logger.warning("Rappel.conso API returned %s", response.status_code)
@@ -81,6 +85,8 @@ async def fetch_recent_recalls(*, fail_on_error: bool = False) -> list[dict]:
                 if len(page_results) < 100:
                     break
                 params["offset"] += 100
+            else:
+                logger.warning("Rappel.conso : plafond de %d pages atteint, pagination tronquée", _MAX_PAGES)
     except Exception as exc:
         logger.warning("Rappel.conso fetch failed: %s", exc)
         if fail_on_error:

@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import asyncio
 import hashlib
 import json
 import os
@@ -210,9 +211,39 @@ def fr_to_en_ingredient(name: str, category: str = "autres") -> str:
     return _CATEGORY_TO_EN.get(category, "chicken")
 
 
+_RECIPE_AI_RETRY_ATTEMPTS = 3
+_RECIPE_AI_RETRYABLE_STATUSES = {429, 500, 502, 503, 504}
+
+
+def _extract_gemini_recipe_text(payload: Any) -> str | None:
+    """Extrait le texte d'une réponse Gemini de façon défensive.
+
+    Retourne None (au lieu de lever KeyError/IndexError) si la réponse est vide,
+    bloquée (promptFeedback.blockReason) ou de structure inattendue (cf. E3).
+    """
+    if not isinstance(payload, dict):
+        return None
+    block_reason = (payload.get("promptFeedback") or {}).get("blockReason")
+    if block_reason:
+        logger.warning("Gemini suggest recipe blocked: %s", block_reason)
+        return None
+    candidates = payload.get("candidates") or []
+    if not candidates:
+        return None
+    parts = ((candidates[0] or {}).get("content") or {}).get("parts") or []
+    for part in parts:
+        text = (part or {}).get("text")
+        if isinstance(text, str) and text.strip():
+            return text.strip()
+    return None
+
+
 async def _generate_ai_recipe(stock_names: list[str], gemini_key: str) -> dict | None:
     """Appelle Gemini pour générer 1 recette française depuis les ingrédients du stock.
     Retourne None en cas d'échec ou si GEMINI_RECIPES_API_KEY n'est pas configuré.
+
+    Résilience (cf. E3) : retry avec backoff sur erreurs transitoires (429/5xx) et
+    parsing défensif de la réponse (réponse vide / bloquée → None, pas de crash).
     """
     prompt = _AI_SUGGEST_PROMPT.format(ingredients="\n".join(f"- {n}" for n in stock_names))
     model = os.environ.get("GEMINI_RECIPES_MODEL", "").strip()
@@ -220,25 +251,39 @@ async def _generate_ai_recipe(stock_names: list[str], gemini_key: str) -> dict |
         model = model.split("models/", 1)[1].strip()
     if not model or model in _DEPRECATED_GEMINI_RECIPES_MODELS:
         model = _DEFAULT_GEMINI_RECIPES_MODEL
+    text: str | None = None
     try:
         async with httpx.AsyncClient(timeout=20) as http:
-            r = await http.post(
-                f"https://generativelanguage.googleapis.com/v1beta/models/{model}:generateContent?key={gemini_key}",
-                headers={"Content-Type": "application/json"},
-                json={
-                    "contents": [{"parts": [{"text": prompt}]}],
-                    "generationConfig": {
-                        "maxOutputTokens": 350,
-                        "responseMimeType": "application/json",
+            for attempt in range(1, _RECIPE_AI_RETRY_ATTEMPTS + 1):
+                r = await http.post(
+                    # Clé en header x-goog-api-key (jamais en query-string) — cf. E2.
+                    f"https://generativelanguage.googleapis.com/v1beta/models/{model}:generateContent",
+                    headers={"Content-Type": "application/json", "x-goog-api-key": gemini_key},
+                    json={
+                        "contents": [{"parts": [{"text": prompt}]}],
+                        "generationConfig": {
+                            "maxOutputTokens": 350,
+                            "responseMimeType": "application/json",
+                        },
                     },
-                },
-            )
-            if r.status_code != 200:
+                )
+                if r.status_code == 200:
+                    text = _extract_gemini_recipe_text(r.json())
+                    break
+                if r.status_code in _RECIPE_AI_RETRYABLE_STATUSES and attempt < _RECIPE_AI_RETRY_ATTEMPTS:
+                    logger.warning(
+                        "Gemini suggest recipe transient %s model=%s attempt=%d/%d, retry",
+                        r.status_code, model, attempt, _RECIPE_AI_RETRY_ATTEMPTS,
+                    )
+                    await asyncio.sleep(float(2 ** attempt))
+                    continue
                 logger.warning("Gemini suggest recipe error %s model=%s: %s", r.status_code, model, r.text[:200])
                 return None
-            text = r.json()["candidates"][0]["content"]["parts"][0]["text"].strip()
     except Exception as exc:
         logger.warning("Gemini suggest recipe failed: %s", exc)
+        return None
+
+    if not text:
         return None
 
     if "```" in text:

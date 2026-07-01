@@ -424,9 +424,11 @@ async def ocr_receipt(
         current_user["id"], mime_type, len(image_b64),
     )
 
+    # Clé passée via header x-goog-api-key (jamais en query-string) pour éviter sa
+    # fuite dans les logs/traces httpx/proxy (cf. E2).
     url = (
         f"https://generativelanguage.googleapis.com/v1beta/models/"
-        f"{gemini_model}:generateContent?key={gemini_key}"
+        f"{gemini_model}:generateContent"
     )
 
     provider_payload = {
@@ -450,7 +452,7 @@ async def ocr_receipt(
             async with httpx.AsyncClient(timeout=_OCR_TIMEOUT) as http_client:
                 response = await http_client.post(
                     url,
-                    headers={"Content-Type": "application/json"},
+                    headers={"Content-Type": "application/json", "x-goog-api-key": gemini_key},
                     json=provider_payload,
                 )
         except httpx.TimeoutException as exc:

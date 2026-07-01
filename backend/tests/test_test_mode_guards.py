@@ -57,4 +57,7 @@ def test_test_seed_route_upserts_verified_test_users():
     content = (REPO_ROOT / "backend" / "server.py").read_text(encoding="utf-8")
 
     assert 'free_fixture = TEST_FIXTURES["users"]["free"]' in content
-    assert '{"$set": {"email": free_fixture["email"], "password_hash": free_password_hash, "is_premium": False, "subscription_status": "inactive", "email_verified": True}}' in content
+    # E1 : le seed doit écrire la clé `hashed_password` (alignée sur register/login),
+    # jamais `password_hash` (sinon le login des comptes seedés plante en 500/KeyError).
+    assert '{"$set": {"email": free_fixture["email"], "hashed_password": free_password_hash, "is_premium": False, "subscription_status": "inactive", "email_verified": True}}' in content
+    assert '"password_hash"' not in content

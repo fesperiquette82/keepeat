@@ -18,6 +18,10 @@ async def lookup_product_openfoodfacts(barcode: str, products_cache_col) -> Opti
         return ProductBase(**{k: v for k, v in cached.items() if k in ProductBase.model_fields})
 
     product: Optional[ProductBase] = None
+    # conclusive=True uniquement si OFF a répondu 200 (produit présent OU définitivement
+    # absent). Une panne réseau / un non-200 transitoire NE doit PAS être mis en cache,
+    # sinon le code-barres est marqué "introuvable" de façon permanente (cf. E3).
+    conclusive = False
     try:
         url = f"https://world.openfoodfacts.net/api/v2/product/{barcode}"
         headers = {"User-Agent": OFF_USER_AGENT}
@@ -27,6 +31,7 @@ async def lookup_product_openfoodfacts(barcode: str, products_cache_col) -> Opti
         if response.status_code != 200:
             logger.info("OFF lookup failed status=%s barcode=%s", response.status_code, barcode)
         else:
+            conclusive = True
             data = response.json()
             if data.get("status") == 1 and data.get("product"):
                 p = data["product"]
@@ -41,16 +46,19 @@ async def lookup_product_openfoodfacts(barcode: str, products_cache_col) -> Opti
     except Exception as exc:
         logger.warning("OFF lookup exception barcode=%s err=%s", barcode, exc)
 
-    try:
-        doc = {"barcode": barcode, "cached_at": utc_now()}
-        if product:
-            doc.update(product.model_dump())
-            doc["found"] = True
-        else:
-            doc["found"] = False
-        await products_cache_col.update_one({"barcode": barcode}, {"$set": doc}, upsert=True)
-    except Exception as exc:
-        logger.warning("OFF cache write failed barcode=%s err=%s", barcode, exc)
+    # On ne persiste que les résultats concluants : un échec réseau/non-200 laisse le
+    # cache vide pour permettre un nouvel essai au prochain scan.
+    if conclusive:
+        try:
+            doc = {"barcode": barcode, "cached_at": utc_now()}
+            if product:
+                doc.update(product.model_dump())
+                doc["found"] = True
+            else:
+                doc["found"] = False
+            await products_cache_col.update_one({"barcode": barcode}, {"$set": doc}, upsert=True)
+        except Exception as exc:
+            logger.warning("OFF cache write failed barcode=%s err=%s", barcode, exc)
 
     return product
 
