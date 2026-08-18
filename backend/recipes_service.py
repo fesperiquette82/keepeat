@@ -624,6 +624,9 @@ def score_recipe_against_stock(recipe: Recipe, stock_items: Iterable[str | dict]
     return match
 
 
+SuggestionStyle = Literal["classique", "ouvert", "toutes_cuisines"]
+
+
 def _sort_matches(match: RecipeMatch, *, suggestion_style: SuggestionStyle = "classique") -> tuple[float, float, float, int, int, int, int, int, str]:
     difficulty_rank = {
         RecipeDifficulty.easy: 3,
@@ -880,7 +883,6 @@ def suggest_recipes_from_catalog(
 
 
 RecipeMatchGroup = Literal["ready", "almost", "inspiration"]
-SuggestionStyle = Literal["classique", "ouvert", "toutes_cuisines"]
 
 
 def _normalize_suggestion_style(

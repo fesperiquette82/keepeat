@@ -96,6 +96,7 @@ const translations: Translations = {
   scannedProductFallback: { fr: 'Produit scanné', en: 'Scanned product' },
   errorTitle: { fr: 'Erreur', en: 'Error' },
   productNameRequired: { fr: 'Le nom du produit est requis', en: 'Product name is required' },
+  invalidDuration: { fr: 'Merci de saisir un nombre de jours supérieur à 0', en: 'Please enter a number of days greater than 0' },
   addProductError: { fr: "Impossible d'ajouter le produit", en: 'Unable to add product' },
   updateProductSuccessTitle: { fr: 'Modifié !', en: 'Updated!' },
   updateProductError: { fr: 'Impossible de modifier le produit', en: 'Unable to update product' },

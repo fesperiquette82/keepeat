@@ -14,10 +14,9 @@ import { RecipesFilter, useRecipesStore } from '../../store/recipesStore';
 import { logger } from '../../utils/logger';
 import { getActiveItemsByScope, resolveStockItems } from '../../data/mockDashboardData';
 import {
+  buildScopedRecipesWithDiagnostics,
   buildTargetIngredientNames,
-  filterRecipesByTargetIngredients,
   getRecipeAvailableIngredients,
-  scopeAndDedupeRecipes,
 } from '../../utils/recipesScoping';
 import { splitRecipeDisplay } from '../../utils/recipeListSplit';
 
@@ -111,14 +110,13 @@ export default function RecipesScreen() {
       try {
         const rawRecipes = await fetchSuggestions(activeFilter);
         if (cancelled) return;
-        const scopedRecipesBeforeDedupe = filterRecipesByTargetIngredients(rawRecipes, targetIngredientNames);
-        const scopedRecipes = scopeAndDedupeRecipes(rawRecipes, targetIngredientNames);
+        const { recipes: scopedRecipes, diagnostics } = buildScopedRecipesWithDiagnostics(rawRecipes, targetIngredientNames);
         const antiWasteRecipes = scopedRecipes.slice(0, 2);
         logger.debug('[RECIPES_MATCH] suggestions payload diagnostics', {
           activeFilter,
-          rawRecipesCount: rawRecipes.length,
-          scopedRecipesCount: scopedRecipesBeforeDedupe.length,
-          dedupedRecipesCount: scopedRecipes.length,
+          rawRecipesCount: diagnostics.rawRecipesCount,
+          scopedRecipesCount: diagnostics.scopedRecipesCount,
+          dedupedRecipesCount: diagnostics.dedupedRecipesCount,
           targetItemsCount: targetItems.length,
           targetIngredientNamesCount: targetIngredientNames.size,
           antiWasteRecipesCount: antiWasteRecipes.length,

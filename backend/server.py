@@ -97,7 +97,7 @@ from backend.entitlements import (
     refund_quota,
     resolve_plan,
 )
-from backend.ocr_service import OcrApiError, ocr_receipt
+from backend.ocr_service import SHELF_BY_CATEGORY, OcrApiError, ocr_receipt
 from backend.priority_refresh import build_priority_refresh_state
 from backend.observability import (
     build_operational_overview,
@@ -1910,12 +1910,19 @@ def _resolve_stock_storage_zone(item: StockItemCreate, food_category: str) -> st
 @api_router.get("/stock", response_model=List[StockItem])
 async def get_stock(
     status: str = "active",
+    limit: int = Query(default=1000, ge=1, le=2000),
+    skip: int = Query(default=0, ge=0),
     current_user: Dict[str, Any] = Depends(_get_current_user),
 ):
     if status not in _ALLOWED_STOCK_STATUSES:
         raise HTTPException(status_code=422, detail=f"Statut invalide. Valeurs acceptées : {sorted(_ALLOWED_STOCK_STATUSES)}")
-    cursor = stock_col.find({"user_id": current_user["id"], "status": status}).sort("added_date", -1)
-    docs = await cursor.to_list(length=1000)
+    cursor = (
+        stock_col.find({"user_id": current_user["id"], "status": status})
+        .sort("added_date", -1)
+        .skip(skip)
+        .limit(limit)
+    )
+    docs = await cursor.to_list(length=limit)
     return [serialize_mongo(d) for d in docs]
 
 
@@ -1984,7 +1991,7 @@ async def update_stock(
     if res.matched_count == 0:
         raise HTTPException(status_code=404, detail="Active item not found")
 
-    updated = await stock_col.find_one({"_id": oid})
+    updated = await stock_col.find_one({"_id": oid, "user_id": current_user["id"]})
     await track_business_event(
         business_events_col=business_events_col,
         user_id=current_user["id"],
@@ -3240,31 +3247,11 @@ async def admin_resolve_recipe_gap(
 
 
 # -----------------------------------------------------------------------------
-# OCR ticket de caisse (OpenAI GPT-4o-mini vision)
+# OCR ticket de caisse (Gemini vision)
 # -----------------------------------------------------------------------------
 
-# Durées de conservation estimées par catégorie alimentaire
-_SHELF_BY_CATEGORY: dict[str, dict] = {
-    "frais":     {"fridge": 7,   "pantry": None, "freezer": None},
-    "proteines": {"fridge": 3,   "pantry": None, "freezer": 90},
-    "legumes":   {"fridge": 5,   "pantry": None, "freezer": 365},
-    "feculents": {"fridge": None, "pantry": 365,  "freezer": None},
-    "desserts":  {"fridge": 5,   "pantry": 180,  "freezer": 90},
-    "boissons":  {"fridge": 7,   "pantry": 365,  "freezer": None},
-    "epicerie":  {"fridge": None, "pantry": 365,  "freezer": None},
-    "autres":    {"fridge": None, "pantry": 365,  "freezer": None},
-}
-
-_RECEIPT_PROMPT = """Tu analyses une photo de ticket de caisse français.
-Extrait UNIQUEMENT les produits alimentaires visibles.
-
-Pour chaque produit retourne un objet JSON :
-- "name" : nom lisible et normalisé en français (ex: "Lait demi-écrémé bio 1L")
-- "category" : une valeur EXACTE parmi : frais, proteines, legumes, feculents, desserts, boissons, epicerie, autres
-
-Réponds UNIQUEMENT avec un tableau JSON valide, sans texte avant ou après.
-Si aucun produit alimentaire n'est visible, retourne [].
-Ignore les articles non alimentaires (ménager, hygiène, etc.)."""
+# Durées de conservation estimées par catégorie alimentaire.
+# Source unique : backend.ocr_service.SHELF_BY_CATEGORY (importé ci-dessus).
 
 
 class OcrReceiptRequest(BaseModel):
@@ -3526,7 +3513,7 @@ async def process_receipt_ticket(
 
     stock_docs = []
     for item in body.items:
-        food_cat = item.category if item.category in _SHELF_BY_CATEGORY else "autres"
+        food_cat = item.category if item.category in SHELF_BY_CATEGORY else "autres"
         stock_docs.append({
             "user_id": user_id,
             "source_ticket_id": ticket_id,
@@ -3946,7 +3933,7 @@ async def _save_ai_recipe_to_stores(ai_recipe: dict, *, stock_names: list[str]) 
     }
 
 
-# ── Recettes IA (OpenAI GPT-4o-mini) ─────────────────────────────────────────
+# ── Recettes IA (Gemini) ──────────────────────────────────────────────────────
 
 _AI_RECIPE_SYSTEM = """\
 Tu es un chef cuisinier expert UNIQUEMENT en cuisine FRANÇAISE (brasserie, bistrot, cuisine familiale, \
@@ -4001,9 +3988,20 @@ def _is_french_ai_recipe(recipe: dict) -> bool:
     title_lower = recipe.get("title", "").lower()
     return not any(kw in title_lower for kw in _FOREIGN_RECIPE_KEYWORDS)
 
-# Cache en mémoire (uid -> {recipes, created_at}) — borné à 500 entrées pour éviter la fuite mémoire
+# Cache en mémoire (uid -> {recipes, created_at}) — borné à 500 entrées pour éviter la fuite mémoire.
+# ATTENTION : ce cache est local au process Python et n'est PAS partagé entre les workers
+# Uvicorn/Gunicorn en multi-worker. Ce n'est pas un bug de correction (chaque worker sert
+# une réponse correcte, seul le taux de hit du cache baisse) : ne pas le confondre avec un
+# cache de vérité partagée. Si un cache partagé est nécessaire un jour, migrer vers Redis.
 _ai_recipe_cache: dict[str, dict] = {}
 _AI_CACHE_MAX_SIZE = 500
+
+
+def _evict_ai_cache_entry_if_full(cache: dict[str, dict], max_size: int) -> None:
+    """Éviction LRU simplifiée : supprime l'entrée la plus ancienne si le cache est plein."""
+    if len(cache) >= max_size:
+        oldest_uid = min(cache, key=lambda k: cache[k]["created_at"])
+        del cache[oldest_uid]
 
 _DEFAULT_GEMINI_RECIPES_MODEL = "gemini-2.0-flash-lite"
 _DEPRECATED_GEMINI_RECIPES_MODELS: frozenset[str] = frozenset({
@@ -4082,7 +4080,7 @@ async def get_ai_recipes(
     suggestion_style: str = Query("classique", alias="suggestion_style"),
     current_user: Dict[str, Any] = Depends(_get_current_user),
 ):
-    """Génère 3 recettes personnalisées via GPT-4o-mini basées sur le stock de l'utilisateur."""
+    """Génère 3 recettes personnalisées via Gemini basées sur le stock de l'utilisateur."""
     # Vérification d'accès SANS consommer le quota (consommation après appel OpenAI réussi)
     await _enforce_feature_access(
         current_user=current_user,
@@ -4252,10 +4250,7 @@ async def get_ai_recipes(
         recipes = valid
 
     # Quota déjà réservé en amont (C3) ; pas de consommation supplémentaire ici.
-    # Éviction LRU simplifiée : supprimer l'entrée la plus ancienne si cache plein
-    if len(_ai_recipe_cache) >= _AI_CACHE_MAX_SIZE:
-        oldest_uid = min(_ai_recipe_cache, key=lambda k: _ai_recipe_cache[k]["created_at"])
-        del _ai_recipe_cache[oldest_uid]
+    _evict_ai_cache_entry_if_full(_ai_recipe_cache, _AI_CACHE_MAX_SIZE)
     _ai_recipe_cache[uid] = {"recipes": recipes, "created_at": utc_now()}
     plan_type = resolve_plan_type_at_time(current_user)
     await track_service_usage(
@@ -4273,7 +4268,7 @@ async def get_ai_recipes(
         user_id=uid,
         event_name="recipe_generated",
         event_category="recipes",
-        metadata_json={"count": len(recipes), "source": "openai"},
+        metadata_json={"count": len(recipes), "source": "gemini"},
     )
     logger.info("AI recipes generated — user=%s count=%d", uid, len(recipes))
     logger.debug(
@@ -4992,15 +4987,15 @@ async def admin_dedup_recipes(
     _admin_user: Dict[str, Any] = Depends(_require_admin_user),
 ):
     """Supprime les recettes en double dans MongoDB (même titre, insensible à la casse).
-    Pour chaque groupe de doublons, garde la première recette insérée (id lexicographiquement min)
-    et supprime les autres.
+    Pour chaque groupe de doublons, garde la recette la plus ancienne (par `created_at`,
+    si disponible) et supprime les autres.
     Retourne le nombre de recettes supprimées et le nombre de groupes concernés.
     """
     pipeline = [
         {"$group": {
             "_id": {"$toLower": "$title"},
             "count": {"$sum": 1},
-            "ids": {"$push": "$_id"},
+            "entries": {"$push": {"id": "$_id", "created_at": "$created_at"}},
         }},
         {"$match": {"count": {"$gt": 1}}},
     ]
@@ -5009,7 +5004,11 @@ async def admin_dedup_recipes(
     removed_total = 0
     groups: list[dict] = []
     for group in duplicates:
-        ids = sorted(group["ids"])  # garde l'id lexicographiquement le plus petit (le plus ancien)
+        # Les `_id` de recettes sont des chaînes libres (ex: "ai-slug-xxxx", "manual-slug-xxxx")
+        # non chronologiques : on trie par `created_at` (les entrées sans date, legacy, sont
+        # considérées les plus anciennes et donc conservées).
+        entries = sorted(group["entries"], key=lambda e: e.get("created_at") or "")
+        ids = [e["id"] for e in entries]
         ids_to_remove = ids[1:]
         result = await recipes_col.delete_many({"_id": {"$in": ids_to_remove}})
         removed_total += result.deleted_count
