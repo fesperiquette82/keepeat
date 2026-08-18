@@ -63,6 +63,84 @@ async def lookup_product_openfoodfacts(barcode: str, products_cache_col) -> Opti
     return product
 
 
+async def search_openfoodfacts_by_name(
+    name: str,
+    brand: Optional[str],
+    products_cache_col,
+) -> Optional[str]:
+    """Recherche une image produit sur OpenFoodFacts par nom (pas de code-barres
+    disponible — cas des articles issus de l'OCR d'un ticket de caisse).
+
+    Retourne l'URL du premier résultat exploitable, ou None si rien de concluant.
+    Résultat mis en cache (positif ou négatif) dans products_cache_col, keyé par
+    la requête normalisée (`name_query`), pour ne pas re-interroger OFF à chaque
+    ticket contenant le même produit.
+    """
+    query = " ".join(part.strip() for part in (brand, name) if part and part.strip())
+    if not query:
+        return None
+    cache_key = query.lower()
+
+    cached = await products_cache_col.find_one({"name_query": cache_key})
+    if cached:
+        logger.info("OFF name-search cache hit query=%s", cache_key)
+        return cached.get("image_url") or None
+
+    image_url: Optional[str] = None
+    # Comme pour lookup_product_openfoodfacts (cf. E3) : on ne met en cache que les
+    # résultats concluants (réponse HTTP 200), jamais un échec réseau/transitoire.
+    conclusive = False
+    try:
+        url = "https://world.openfoodfacts.org/cgi/search.pl"
+        params = {
+            "search_terms": query,
+            "search_simple": "1",
+            "action": "process",
+            "json": "1",
+            "page_size": "5",
+            "fields": "product_name,image_front_small_url,image_url,image_small_url,image_thumb_url",
+        }
+        headers = {"User-Agent": OFF_USER_AGENT}
+        async with httpx.AsyncClient(timeout=5.0, headers=headers) as client:
+            response = await client.get(url, params=params)
+
+        if response.status_code != 200:
+            logger.info("OFF name-search failed status=%s query=%s", response.status_code, cache_key)
+        else:
+            conclusive = True
+            data = response.json()
+            for p in data.get("products") or []:
+                if not p.get("product_name"):
+                    continue
+                candidate = (
+                    p.get("image_front_small_url")
+                    or p.get("image_url")
+                    or p.get("image_small_url")
+                    or p.get("image_thumb_url")
+                )
+                if candidate:
+                    image_url = candidate
+                    break
+    except Exception as exc:
+        logger.warning("OFF name-search exception query=%s err=%s", cache_key, exc)
+
+    if conclusive:
+        try:
+            await products_cache_col.update_one(
+                {"name_query": cache_key},
+                {"$set": {
+                    "name_query": cache_key,
+                    "image_url": image_url or "",
+                    "cached_at": utc_now(),
+                }},
+                upsert=True,
+            )
+        except Exception as exc:
+            logger.warning("OFF name-search cache write failed query=%s err=%s", cache_key, exc)
+
+    return image_url
+
+
 SHELF_LIFE_BY_KEYWORD = [
     ("milk", 7, None, None, "Produits laitiers", "Conserver au réfrigérateur après ouverture."),
     ("yogurt", 10, None, None, "Produits laitiers", "Conserver au réfrigérateur."),

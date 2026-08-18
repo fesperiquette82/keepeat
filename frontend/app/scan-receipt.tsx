@@ -7,6 +7,7 @@ import {
   ScrollView,
   ActivityIndicator,
   Alert,
+  Image,
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { CameraView, useCameraPermissions } from 'expo-camera';
@@ -34,6 +35,7 @@ interface ReceiptProduct extends ReceiptExpiryProduct {
   category: string;
   food_category: string;
   brand?: string | null;
+  image_url?: string | null;
   quantity?: number | null;
   unit?: string | null;
   shelf_life_fridge: number | null;
@@ -206,6 +208,7 @@ export default function ScanReceiptScreen() {
           addItem({
             name:          p.name,
             brand:         p.brand ?? undefined,
+            image_url:     p.image_url ?? undefined,
             category:      p.category,
             food_category: p.food_category,
             quantity:      p.quantity != null ? String(p.quantity) : undefined,
@@ -456,7 +459,11 @@ export default function ScanReceiptScreen() {
               activeOpacity={0.8}
             >
               <View style={styles.productEmoji}>
-                <Text style={{ fontSize: 24 }}>{emoji}</Text>
+                {p.image_url ? (
+                  <Image source={{ uri: p.image_url }} style={styles.productImage} resizeMode="cover" />
+                ) : (
+                  <Text style={{ fontSize: 24 }}>{emoji}</Text>
+                )}
               </View>
               <View style={styles.productInfo}>
                 <Text style={styles.productName}>{p.name}</Text>
@@ -632,10 +639,16 @@ const styles = StyleSheet.create({
     borderColor: C.primaryMid,
     backgroundColor: C.primaryLight,
   },
+  productImage: {
+    width: 44,
+    height: 44,
+    borderRadius: 12,
+  },
   productEmoji: {
     width: 44,
     height: 44,
     borderRadius: 12,
+    overflow: 'hidden',
     backgroundColor: '#F7F5F2',
     alignItems: 'center',
     justifyContent: 'center',

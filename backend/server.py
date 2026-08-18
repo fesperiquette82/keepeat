@@ -112,7 +112,12 @@ from backend.observability import (
 )
 from backend.admin_service_control import build_cost_recommendations, build_services_status, build_usage_metrics
 from backend.service_limits import build_external_services_quota_snapshot
-from backend.product_catalog import infer_food_category, infer_shelf_life, lookup_product_openfoodfacts
+from backend.product_catalog import (
+    infer_food_category,
+    infer_shelf_life,
+    lookup_product_openfoodfacts,
+    search_openfoodfacts_by_name,
+)
 from backend.recipes_service import (
     _FRIGO_CATS,
     _PLACARD_CATS,
@@ -3300,6 +3305,7 @@ async def ocr_receipt_route(
                 request_payload=payload.model_dump(),
                 current_user=current_user,
                 normalizations_col=ocr_normalizations_col,
+                products_cache_col=products_cache_col,
             )
         except HTTPException as exc:
             await _refund_feature_quota(user_id=current_user["id"], feature=FEATURE_OCR, quota_context=quota_context)
@@ -3367,12 +3373,13 @@ async def ocr_receipt_route(
         metadata_json={"items_count": len(items)},
     )
     if items:
+        images_found_count = sum(1 for item in items if item.get("image_url"))
         await track_business_event(
             business_events_col=business_events_col,
             user_id=current_user["id"],
             event_name="ocr_scan_succeeded",
             event_category="ocr",
-            metadata_json={"items_count": len(items)},
+            metadata_json={"items_count": len(items), "images_found_count": images_found_count},
         )
     else:
         await track_business_event(
@@ -3514,6 +3521,13 @@ async def process_receipt_ticket(
     stock_docs = []
     for item in body.items:
         food_cat = item.category if item.category in SHELF_BY_CATEGORY else "autres"
+        # Pas de code-barres pour un article saisi manuellement depuis un ticket de
+        # caisse : recherche d'image best-effort par nom (silencieuse si échec).
+        try:
+            image_url = await search_openfoodfacts_by_name(item.name, None, products_cache_col)
+        except Exception as exc:
+            logger.warning("process_receipt_ticket image enrich failed for item=%s: %s", item.name, exc)
+            image_url = None
         stock_docs.append({
             "user_id": user_id,
             "source_ticket_id": ticket_id,
@@ -3524,7 +3538,7 @@ async def process_receipt_ticket(
             "quantity": None,
             "barcode": None,
             "brand": None,
-            "image_url": None,
+            "image_url": image_url,
             "notes": None,
             "storageZone": item.storageZone,
             "added_date": now_iso,
@@ -4498,6 +4512,23 @@ async def admin_monitoring_dashboard(
         logger.warning("admin_monitoring_dashboard source failed: external_service_quotas (%s)", exc)
         external_service_quotas = {}
 
+    try:
+        ocr_image_rows = await business_events_col.find(
+            {"event_name": "ocr_scan_succeeded", "created_at": {"$gte": start_iso, "$lte": end_iso}},
+            {"metadata_json": 1},
+        ).to_list(length=None)
+        _items_total = sum(int((r.get("metadata_json") or {}).get("items_count") or 0) for r in ocr_image_rows)
+        _images_found = sum(int((r.get("metadata_json") or {}).get("images_found_count") or 0) for r in ocr_image_rows)
+        ocr_image_enrichment = {
+            "scans_count": len(ocr_image_rows),
+            "items_total": _items_total,
+            "images_found_count": _images_found,
+            "images_found_rate": round((_images_found / _items_total), 4) if _items_total else None,
+        }
+    except Exception as exc:
+        logger.warning("admin_monitoring_dashboard source failed: ocr_image_enrichment (%s)", exc)
+        ocr_image_enrichment = {"scans_count": 0, "items_total": 0, "images_found_count": 0, "images_found_rate": None}
+
     kpis = kpis if isinstance(kpis, dict) else {}
     apis = apis if isinstance(apis, dict) else {}
     overview = overview if isinstance(overview, dict) else {}
@@ -4563,6 +4594,7 @@ async def admin_monitoring_dashboard(
             "premium_conversion_rate": round((_safe_int(users.get("premium")) / users_total), 4),
         },
         "cost_metrics": cost_metrics,
+        "ocr_image_enrichment": ocr_image_enrichment,
         "external_service_quotas": external_service_quotas_safe,
         "legacy_top_api_issues": apis.get("highest_error_rate", [])[:5] if isinstance(apis.get("highest_error_rate"), list) else [],
     }
@@ -6159,6 +6191,7 @@ async function loadAll() {
     renderCriticalFlows(dash.critical_flows || {});
     renderFunnel(dash.product_funnel || {});
     renderCostMetrics(dash.cost_metrics || {});
+    renderOcrImageEnrichment(dash.ocr_image_enrichment || {});
     renderExternalServiceQuotas(dash.external_service_quotas || null);
   } else {
     const msg = 'Erreur de chargement du dashboard : ' + dashResult.reason.message;
@@ -6401,6 +6434,19 @@ function renderFunnel(f) {
     + statCard('Users recettes', f.users_with_recipes_view || 0, 'suggestions + IA')
     + statCard('Conv. premium', (((f.premium_conversion_rate || 0) * 100).toFixed(1)) + '%', 'premium / total')
     + '</div>';
+}
+
+function renderOcrImageEnrichment(o) {
+  const container = document.getElementById('services-content');
+  if (!container) return;
+  const itemsTotal = o.items_total || 0;
+  const imagesFound = o.images_found_count || 0;
+  const rate = o.images_found_rate === null || o.images_found_rate === undefined ? '—' : ((o.images_found_rate * 100).toFixed(1) + '%');
+  let html = container.innerHTML;
+  html += '<div style="border-top:1px solid #f3f4f6;margin-top:10px;padding-top:10px;font-size:12px;color:#374151;line-height:1.7">';
+  html += '<div><strong>Images articles ticket OCR (' + selectedDays + 'j):</strong> ' + imagesFound + ' / ' + itemsTotal + ' articles (' + rate + ')</div>';
+  html += '</div>';
+  container.innerHTML = html;
 }
 
 function renderCostMetrics(c) {
