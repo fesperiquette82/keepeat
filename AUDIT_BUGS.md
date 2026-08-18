@@ -507,9 +507,10 @@ Le `catch` de `updateItem` vérifie désormais `isNetworkError(err)` et déclenc
 
 | Champ | Valeur |
 |---|---|
-| **Statut** | `OUVERT` |
+| **Statut** | `CORRIGÉ` |
 | **Fichier** | `backend/server.py` (3193) |
 | **Détecté** | 2026-04-10 |
+| **Corrigé** | 2026-08-18 (session BUG-015) |
 
 **Constat**
 - La docstring de `get_ai_recipes` mentionne "GPT-4o-mini" alors que l'implémentation appelle Gemini (`generativelanguage.googleapis.com`).
@@ -517,8 +518,8 @@ Le `catch` de `updateItem` vérifie désormais `isNetworkError(err)` et déclenc
 **Impact**
 - Dette de maintenance, confusion incident/debug.
 
-**Recommandation**
-- Mettre à jour docstring + docs associées pour refléter le provider réel.
+**Correction appliquée**
+- Toutes les mentions "GPT-4o-mini" remplacées par "Gemini" dans `server.py` (docstrings et commentaires). Vérifié par `test_no_stale_gpt4o_mini_mentions_in_server` dans `backend/tests/test_open_audit_bugs_minor.py`.
 
 ---
 
