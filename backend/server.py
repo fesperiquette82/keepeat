@@ -97,7 +97,7 @@ from backend.entitlements import (
     refund_quota,
     resolve_plan,
 )
-from backend.ocr_service import OcrApiError, ocr_receipt
+from backend.ocr_service import SHELF_BY_CATEGORY, OcrApiError, ocr_receipt
 from backend.priority_refresh import build_priority_refresh_state
 from backend.observability import (
     build_operational_overview,
@@ -112,7 +112,12 @@ from backend.observability import (
 )
 from backend.admin_service_control import build_cost_recommendations, build_services_status, build_usage_metrics
 from backend.service_limits import build_external_services_quota_snapshot
-from backend.product_catalog import infer_food_category, infer_shelf_life, lookup_product_openfoodfacts
+from backend.product_catalog import (
+    infer_food_category,
+    infer_shelf_life,
+    lookup_product_openfoodfacts,
+    search_openfoodfacts_by_name,
+)
 from backend.recipes_service import (
     _FRIGO_CATS,
     _PLACARD_CATS,
@@ -1910,12 +1915,19 @@ def _resolve_stock_storage_zone(item: StockItemCreate, food_category: str) -> st
 @api_router.get("/stock", response_model=List[StockItem])
 async def get_stock(
     status: str = "active",
+    limit: int = Query(default=1000, ge=1, le=2000),
+    skip: int = Query(default=0, ge=0),
     current_user: Dict[str, Any] = Depends(_get_current_user),
 ):
     if status not in _ALLOWED_STOCK_STATUSES:
         raise HTTPException(status_code=422, detail=f"Statut invalide. Valeurs acceptées : {sorted(_ALLOWED_STOCK_STATUSES)}")
-    cursor = stock_col.find({"user_id": current_user["id"], "status": status}).sort("added_date", -1)
-    docs = await cursor.to_list(length=1000)
+    cursor = (
+        stock_col.find({"user_id": current_user["id"], "status": status})
+        .sort("added_date", -1)
+        .skip(skip)
+        .limit(limit)
+    )
+    docs = await cursor.to_list(length=limit)
     return [serialize_mongo(d) for d in docs]
 
 
@@ -1984,7 +1996,7 @@ async def update_stock(
     if res.matched_count == 0:
         raise HTTPException(status_code=404, detail="Active item not found")
 
-    updated = await stock_col.find_one({"_id": oid})
+    updated = await stock_col.find_one({"_id": oid, "user_id": current_user["id"]})
     await track_business_event(
         business_events_col=business_events_col,
         user_id=current_user["id"],
@@ -3240,31 +3252,11 @@ async def admin_resolve_recipe_gap(
 
 
 # -----------------------------------------------------------------------------
-# OCR ticket de caisse (OpenAI GPT-4o-mini vision)
+# OCR ticket de caisse (Gemini vision)
 # -----------------------------------------------------------------------------
 
-# Durées de conservation estimées par catégorie alimentaire
-_SHELF_BY_CATEGORY: dict[str, dict] = {
-    "frais":     {"fridge": 7,   "pantry": None, "freezer": None},
-    "proteines": {"fridge": 3,   "pantry": None, "freezer": 90},
-    "legumes":   {"fridge": 5,   "pantry": None, "freezer": 365},
-    "feculents": {"fridge": None, "pantry": 365,  "freezer": None},
-    "desserts":  {"fridge": 5,   "pantry": 180,  "freezer": 90},
-    "boissons":  {"fridge": 7,   "pantry": 365,  "freezer": None},
-    "epicerie":  {"fridge": None, "pantry": 365,  "freezer": None},
-    "autres":    {"fridge": None, "pantry": 365,  "freezer": None},
-}
-
-_RECEIPT_PROMPT = """Tu analyses une photo de ticket de caisse français.
-Extrait UNIQUEMENT les produits alimentaires visibles.
-
-Pour chaque produit retourne un objet JSON :
-- "name" : nom lisible et normalisé en français (ex: "Lait demi-écrémé bio 1L")
-- "category" : une valeur EXACTE parmi : frais, proteines, legumes, feculents, desserts, boissons, epicerie, autres
-
-Réponds UNIQUEMENT avec un tableau JSON valide, sans texte avant ou après.
-Si aucun produit alimentaire n'est visible, retourne [].
-Ignore les articles non alimentaires (ménager, hygiène, etc.)."""
+# Durées de conservation estimées par catégorie alimentaire.
+# Source unique : backend.ocr_service.SHELF_BY_CATEGORY (importé ci-dessus).
 
 
 class OcrReceiptRequest(BaseModel):
@@ -3313,6 +3305,7 @@ async def ocr_receipt_route(
                 request_payload=payload.model_dump(),
                 current_user=current_user,
                 normalizations_col=ocr_normalizations_col,
+                products_cache_col=products_cache_col,
             )
         except HTTPException as exc:
             await _refund_feature_quota(user_id=current_user["id"], feature=FEATURE_OCR, quota_context=quota_context)
@@ -3380,12 +3373,13 @@ async def ocr_receipt_route(
         metadata_json={"items_count": len(items)},
     )
     if items:
+        images_found_count = sum(1 for item in items if item.get("image_url"))
         await track_business_event(
             business_events_col=business_events_col,
             user_id=current_user["id"],
             event_name="ocr_scan_succeeded",
             event_category="ocr",
-            metadata_json={"items_count": len(items)},
+            metadata_json={"items_count": len(items), "images_found_count": images_found_count},
         )
     else:
         await track_business_event(
@@ -3526,7 +3520,14 @@ async def process_receipt_ticket(
 
     stock_docs = []
     for item in body.items:
-        food_cat = item.category if item.category in _SHELF_BY_CATEGORY else "autres"
+        food_cat = item.category if item.category in SHELF_BY_CATEGORY else "autres"
+        # Pas de code-barres pour un article saisi manuellement depuis un ticket de
+        # caisse : recherche d'image best-effort par nom (silencieuse si échec).
+        try:
+            image_url = await search_openfoodfacts_by_name(item.name, None, products_cache_col)
+        except Exception as exc:
+            logger.warning("process_receipt_ticket image enrich failed for item=%s: %s", item.name, exc)
+            image_url = None
         stock_docs.append({
             "user_id": user_id,
             "source_ticket_id": ticket_id,
@@ -3537,7 +3538,7 @@ async def process_receipt_ticket(
             "quantity": None,
             "barcode": None,
             "brand": None,
-            "image_url": None,
+            "image_url": image_url,
             "notes": None,
             "storageZone": item.storageZone,
             "added_date": now_iso,
@@ -3946,7 +3947,7 @@ async def _save_ai_recipe_to_stores(ai_recipe: dict, *, stock_names: list[str]) 
     }
 
 
-# ── Recettes IA (OpenAI GPT-4o-mini) ─────────────────────────────────────────
+# ── Recettes IA (Gemini) ──────────────────────────────────────────────────────
 
 _AI_RECIPE_SYSTEM = """\
 Tu es un chef cuisinier expert UNIQUEMENT en cuisine FRANÇAISE (brasserie, bistrot, cuisine familiale, \
@@ -4001,9 +4002,20 @@ def _is_french_ai_recipe(recipe: dict) -> bool:
     title_lower = recipe.get("title", "").lower()
     return not any(kw in title_lower for kw in _FOREIGN_RECIPE_KEYWORDS)
 
-# Cache en mémoire (uid -> {recipes, created_at}) — borné à 500 entrées pour éviter la fuite mémoire
+# Cache en mémoire (uid -> {recipes, created_at}) — borné à 500 entrées pour éviter la fuite mémoire.
+# ATTENTION : ce cache est local au process Python et n'est PAS partagé entre les workers
+# Uvicorn/Gunicorn en multi-worker. Ce n'est pas un bug de correction (chaque worker sert
+# une réponse correcte, seul le taux de hit du cache baisse) : ne pas le confondre avec un
+# cache de vérité partagée. Si un cache partagé est nécessaire un jour, migrer vers Redis.
 _ai_recipe_cache: dict[str, dict] = {}
 _AI_CACHE_MAX_SIZE = 500
+
+
+def _evict_ai_cache_entry_if_full(cache: dict[str, dict], max_size: int) -> None:
+    """Éviction LRU simplifiée : supprime l'entrée la plus ancienne si le cache est plein."""
+    if len(cache) >= max_size:
+        oldest_uid = min(cache, key=lambda k: cache[k]["created_at"])
+        del cache[oldest_uid]
 
 _DEFAULT_GEMINI_RECIPES_MODEL = "gemini-2.0-flash-lite"
 _DEPRECATED_GEMINI_RECIPES_MODELS: frozenset[str] = frozenset({
@@ -4082,7 +4094,7 @@ async def get_ai_recipes(
     suggestion_style: str = Query("classique", alias="suggestion_style"),
     current_user: Dict[str, Any] = Depends(_get_current_user),
 ):
-    """Génère 3 recettes personnalisées via GPT-4o-mini basées sur le stock de l'utilisateur."""
+    """Génère 3 recettes personnalisées via Gemini basées sur le stock de l'utilisateur."""
     # Vérification d'accès SANS consommer le quota (consommation après appel OpenAI réussi)
     await _enforce_feature_access(
         current_user=current_user,
@@ -4252,10 +4264,7 @@ async def get_ai_recipes(
         recipes = valid
 
     # Quota déjà réservé en amont (C3) ; pas de consommation supplémentaire ici.
-    # Éviction LRU simplifiée : supprimer l'entrée la plus ancienne si cache plein
-    if len(_ai_recipe_cache) >= _AI_CACHE_MAX_SIZE:
-        oldest_uid = min(_ai_recipe_cache, key=lambda k: _ai_recipe_cache[k]["created_at"])
-        del _ai_recipe_cache[oldest_uid]
+    _evict_ai_cache_entry_if_full(_ai_recipe_cache, _AI_CACHE_MAX_SIZE)
     _ai_recipe_cache[uid] = {"recipes": recipes, "created_at": utc_now()}
     plan_type = resolve_plan_type_at_time(current_user)
     await track_service_usage(
@@ -4273,7 +4282,7 @@ async def get_ai_recipes(
         user_id=uid,
         event_name="recipe_generated",
         event_category="recipes",
-        metadata_json={"count": len(recipes), "source": "openai"},
+        metadata_json={"count": len(recipes), "source": "gemini"},
     )
     logger.info("AI recipes generated — user=%s count=%d", uid, len(recipes))
     logger.debug(
@@ -4503,6 +4512,23 @@ async def admin_monitoring_dashboard(
         logger.warning("admin_monitoring_dashboard source failed: external_service_quotas (%s)", exc)
         external_service_quotas = {}
 
+    try:
+        ocr_image_rows = await business_events_col.find(
+            {"event_name": "ocr_scan_succeeded", "created_at": {"$gte": start_iso, "$lte": end_iso}},
+            {"metadata_json": 1},
+        ).to_list(length=None)
+        _items_total = sum(int((r.get("metadata_json") or {}).get("items_count") or 0) for r in ocr_image_rows)
+        _images_found = sum(int((r.get("metadata_json") or {}).get("images_found_count") or 0) for r in ocr_image_rows)
+        ocr_image_enrichment = {
+            "scans_count": len(ocr_image_rows),
+            "items_total": _items_total,
+            "images_found_count": _images_found,
+            "images_found_rate": round((_images_found / _items_total), 4) if _items_total else None,
+        }
+    except Exception as exc:
+        logger.warning("admin_monitoring_dashboard source failed: ocr_image_enrichment (%s)", exc)
+        ocr_image_enrichment = {"scans_count": 0, "items_total": 0, "images_found_count": 0, "images_found_rate": None}
+
     kpis = kpis if isinstance(kpis, dict) else {}
     apis = apis if isinstance(apis, dict) else {}
     overview = overview if isinstance(overview, dict) else {}
@@ -4568,6 +4594,7 @@ async def admin_monitoring_dashboard(
             "premium_conversion_rate": round((_safe_int(users.get("premium")) / users_total), 4),
         },
         "cost_metrics": cost_metrics,
+        "ocr_image_enrichment": ocr_image_enrichment,
         "external_service_quotas": external_service_quotas_safe,
         "legacy_top_api_issues": apis.get("highest_error_rate", [])[:5] if isinstance(apis.get("highest_error_rate"), list) else [],
     }
@@ -4992,15 +5019,15 @@ async def admin_dedup_recipes(
     _admin_user: Dict[str, Any] = Depends(_require_admin_user),
 ):
     """Supprime les recettes en double dans MongoDB (même titre, insensible à la casse).
-    Pour chaque groupe de doublons, garde la première recette insérée (id lexicographiquement min)
-    et supprime les autres.
+    Pour chaque groupe de doublons, garde la recette la plus ancienne (par `created_at`,
+    si disponible) et supprime les autres.
     Retourne le nombre de recettes supprimées et le nombre de groupes concernés.
     """
     pipeline = [
         {"$group": {
             "_id": {"$toLower": "$title"},
             "count": {"$sum": 1},
-            "ids": {"$push": "$_id"},
+            "entries": {"$push": {"id": "$_id", "created_at": "$created_at"}},
         }},
         {"$match": {"count": {"$gt": 1}}},
     ]
@@ -5009,7 +5036,11 @@ async def admin_dedup_recipes(
     removed_total = 0
     groups: list[dict] = []
     for group in duplicates:
-        ids = sorted(group["ids"])  # garde l'id lexicographiquement le plus petit (le plus ancien)
+        # Les `_id` de recettes sont des chaînes libres (ex: "ai-slug-xxxx", "manual-slug-xxxx")
+        # non chronologiques : on trie par `created_at` (les entrées sans date, legacy, sont
+        # considérées les plus anciennes et donc conservées).
+        entries = sorted(group["entries"], key=lambda e: e.get("created_at") or "")
+        ids = [e["id"] for e in entries]
         ids_to_remove = ids[1:]
         result = await recipes_col.delete_many({"_id": {"$in": ids_to_remove}})
         removed_total += result.deleted_count
@@ -6160,6 +6191,7 @@ async function loadAll() {
     renderCriticalFlows(dash.critical_flows || {});
     renderFunnel(dash.product_funnel || {});
     renderCostMetrics(dash.cost_metrics || {});
+    renderOcrImageEnrichment(dash.ocr_image_enrichment || {});
     renderExternalServiceQuotas(dash.external_service_quotas || null);
   } else {
     const msg = 'Erreur de chargement du dashboard : ' + dashResult.reason.message;
@@ -6402,6 +6434,19 @@ function renderFunnel(f) {
     + statCard('Users recettes', f.users_with_recipes_view || 0, 'suggestions + IA')
     + statCard('Conv. premium', (((f.premium_conversion_rate || 0) * 100).toFixed(1)) + '%', 'premium / total')
     + '</div>';
+}
+
+function renderOcrImageEnrichment(o) {
+  const container = document.getElementById('services-content');
+  if (!container) return;
+  const itemsTotal = o.items_total || 0;
+  const imagesFound = o.images_found_count || 0;
+  const rate = o.images_found_rate === null || o.images_found_rate === undefined ? '—' : ((o.images_found_rate * 100).toFixed(1) + '%');
+  let html = container.innerHTML;
+  html += '<div style="border-top:1px solid #f3f4f6;margin-top:10px;padding-top:10px;font-size:12px;color:#374151;line-height:1.7">';
+  html += '<div><strong>Images articles ticket OCR (' + selectedDays + 'j):</strong> ' + imagesFound + ' / ' + itemsTotal + ' articles (' + rate + ')</div>';
+  html += '</div>';
+  container.innerHTML = html;
 }
 
 function renderCostMetrics(c) {

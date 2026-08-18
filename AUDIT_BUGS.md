@@ -312,20 +312,20 @@ Le `catch` de `updateItem` vérifie désormais `isNetworkError(err)` et déclenc
 |---|---|---|---|
 | BUG-034 | `CORRIGÉ` | `frontend/app/(tabs)/stock.tsx` | `Swipeable` sans `ref` → gesture handler RNGH bloqué après 1ère suppression |
 | BUG-035 | `CORRIGÉ` | `frontend/app/scan-receipt.tsx` | `computeExpiry(p, storageZone)` appelé dans le rendu confirm mais la fonction n'existe pas (seule `computeReceiptItemExpiry` est importée) → ReferenceError à l'affichage de la DLC auto |
-| BUG-006 | `OUVERT` | `backend/recipes_service.py` | `SuggestionStyle` utilisé avant sa définition (ligne 772 vs 516) |
-| BUG-008 | `OUVERT` | `backend/server.py` | Cache `_ai_recipe_cache` non partagé entre workers Uvicorn |
-| BUG-011 | `OUVERT` | `backend/server.py` | `update_stock` : `find_one` post-update sans filtre `user_id` |
-| BUG-012 | `OUVERT` | `backend/server.py` | `get_stock` : limite codée en dur à 1000 items, pas de pagination |
-| BUG-013 | `OUVERT` | `backend/server.py` | Log `"source": "openai"` alors que le provider est Gemini |
-| BUG-014 | `OUVERT` | `ocr_service.py` + `server.py` | `SHELF_BY_CATEGORY` dupliqué dans 2 fichiers |
-| BUG-015 | `OUVERT` | `backend/server.py` | Docstring mentionne "GPT-4o-mini" (vestige migration Gemini) |
-| BUG-022 | `OUVERT` | `frontend/store/stockStore.ts` | `useStockStore.getState()` au lieu de `get()` dans une action du store |
-| BUG-024 | `OUVERT` | `frontend/app/(tabs)/recipes.tsx` | `scopedRecipesBeforeDedupe` calculé deux fois inutilement |
-| BUG-026 | `OUVERT` | `frontend/app/add-product.tsx` | `handleDurationApply` : pas de feedback si valeur ≤ 0 |
-| BUG-027 | `OUVERT` | `frontend/app/add-product.tsx` | `lookupProduct` sans cleanup → setState sur composant démonté |
+| BUG-006 | `CORRIGÉ` | `backend/recipes_service.py` | `SuggestionStyle` utilisé avant sa définition (ligne 772 vs 516) |
+| BUG-008 | `CORRIGÉ` | `backend/server.py` | Cache `_ai_recipe_cache` non partagé entre workers Uvicorn |
+| BUG-011 | `CORRIGÉ` | `backend/server.py` | `update_stock` : `find_one` post-update sans filtre `user_id` |
+| BUG-012 | `CORRIGÉ` | `backend/server.py` | `get_stock` : limite codée en dur à 1000 items, pas de pagination |
+| BUG-013 | `CORRIGÉ` | `backend/server.py` | Log `"source": "openai"` alors que le provider est Gemini |
+| BUG-014 | `CORRIGÉ` | `ocr_service.py` + `server.py` | `SHELF_BY_CATEGORY` dupliqué dans 2 fichiers |
+| BUG-015 | `CORRIGÉ` | `backend/server.py` | Docstring mentionne "GPT-4o-mini" (vestige migration Gemini) |
+| BUG-022 | `CORRIGÉ` | `frontend/store/stockStore.ts` | `useStockStore.getState()` au lieu de `get()` dans une action du store |
+| BUG-024 | `CORRIGÉ` | `frontend/app/(tabs)/recipes.tsx` | `scopedRecipesBeforeDedupe` calculé deux fois inutilement |
+| BUG-026 | `CORRIGÉ` | `frontend/app/add-product.tsx` | `handleDurationApply` : pas de feedback si valeur ≤ 0 |
+| BUG-027 | `CORRIGÉ` | `frontend/app/add-product.tsx` | `lookupProduct` sans cleanup → setState sur composant démonté |
 | BUG-028 | `CORRIGÉ` | `frontend/store/stockStore.ts` + `utils/uiLabels.ts` + `app/add-product.tsx` | `storageZone` absent du type `StockItem` + label congelateur manquant + sélecteur zone absent du scan code-barre |
-| BUG-030 | `OUVERT` | `backend/server.py` | `admin_dedup_recipes` : tri lexicographique ≠ ordre de création |
-| BUG-031 | `OUVERT` | `backend/server.py` | `_RECEIPT_PROMPT` code mort (dupliqué depuis `ocr_service.py`) |
+| BUG-030 | `CORRIGÉ` | `backend/server.py` | `admin_dedup_recipes` : tri lexicographique ≠ ordre de création |
+| BUG-031 | `CORRIGÉ` | `backend/server.py` | `_RECEIPT_PROMPT` code mort (dupliqué depuis `ocr_service.py`) |
 
 ---
 
@@ -345,12 +345,34 @@ Le `catch` de `updateItem` vérifie désormais `isNetworkError(err)` et déclenc
 |---|---|---|---|
 | 🔴 CRITIQUE | 4 | 0 | 4 |
 | 🟠 MAJEUR | 13 | 0 | 13 |
-| 🟡 MINEUR | 16 | 12 | 4 |
-| **TOTAL** | **33** | **12** | **21** |
+| 🟡 MINEUR | 16 | 0 | 16 |
+| **TOTAL** | **33** | **0** | **33** |
 
 ---
 
-*Dernière mise à jour : 2026-04-23*
+*Dernière mise à jour : 2026-08-18*
+
+### Session du 2026-08-18 — traitement des 13 derniers bugs MINEURS ouverts
+
+| ID | Statut | Note |
+|---|---|---|
+| BUG-006 | `CORRIGÉ` | `SuggestionStyle` déplacé avant sa première utilisation dans `recipes_service.py`. |
+| BUG-008 | `CORRIGÉ` | Éviction LRU du cache IA extraite dans `_evict_ai_cache_entry_if_full` (testable isolément) + commentaire explicite : cache non partagé entre workers Uvicorn (best-effort, n'affecte pas la correction des réponses). |
+| BUG-011 | `CORRIGÉ` | `update_stock` : `find_one` post-update filtré par `user_id` (défense en profondeur). |
+| BUG-012 | `CORRIGÉ` | `get_stock` : paramètres `limit`/`skip` bornés (défaut 1000, max 2000) au lieu d'une limite figée. |
+| BUG-013 | `CORRIGÉ` | Business event `recipe_generated` : `source: "gemini"` (au lieu de `"openai"`). |
+| BUG-014 | `CORRIGÉ` | `server.py` importe désormais `SHELF_BY_CATEGORY` depuis `ocr_service.py` (source unique). |
+| BUG-015 / BUG-2026-04-10-05 | `CORRIGÉ` | Toutes les mentions "GPT-4o-mini" remplacées par "Gemini" dans `server.py`. |
+| BUG-022 | `CORRIGÉ` | `markConsumed`/`markThrown` utilisent `get()` au lieu de `useStockStore.getState()`. |
+| BUG-024 | `CORRIGÉ` | `recipes.tsx` utilise `buildScopedRecipesWithDiagnostics()` (une seule passe de filtrage). |
+| BUG-026 | `CORRIGÉ` | `handleDurationApply` affiche une alerte (`t('invalidDuration')`) si la durée saisie est ≤ 0 ou invalide. Logique extraite dans `utils/durationApply.ts`. |
+| BUG-027 | `CORRIGÉ` | Effet `lookupProduct` de `add-product.tsx` : garde `cancelled` + cleanup, évite un `setState` après démontage. |
+| BUG-030 | `CORRIGÉ` | `admin_dedup_recipes` trie désormais par `created_at` (les ids de recettes sont des chaînes aléatoires, pas chronologiques). |
+| BUG-031 | `CORRIGÉ` | `_RECEIPT_PROMPT` (code mort dupliqué) supprimé de `server.py`. |
+
+**Tests ajoutés :** `backend/tests/test_open_audit_bugs_minor.py` (16 tests) · `frontend/utils/durationApply.test.ts` (5 tests) · `frontend/utils/auditBugsSourceChecks.test.ts` (3 tests).
+
+**Résultats tests après corrections :** backend `pytest tests/` (dossier `backend/tests`) 100% ✅ (voir détail dans le commit) · frontend `npm run test:ci` ✅, `npm run lint` ✅, `npm run typecheck` ✅.
 
 ### Session du 2026-04-14 — corrections appliquées
 
@@ -485,9 +507,10 @@ Le `catch` de `updateItem` vérifie désormais `isNetworkError(err)` et déclenc
 
 | Champ | Valeur |
 |---|---|
-| **Statut** | `OUVERT` |
+| **Statut** | `CORRIGÉ` |
 | **Fichier** | `backend/server.py` (3193) |
 | **Détecté** | 2026-04-10 |
+| **Corrigé** | 2026-08-18 (session BUG-015) |
 
 **Constat**
 - La docstring de `get_ai_recipes` mentionne "GPT-4o-mini" alors que l'implémentation appelle Gemini (`generativelanguage.googleapis.com`).
@@ -495,8 +518,8 @@ Le `catch` de `updateItem` vérifie désormais `isNetworkError(err)` et déclenc
 **Impact**
 - Dette de maintenance, confusion incident/debug.
 
-**Recommandation**
-- Mettre à jour docstring + docs associées pour refléter le provider réel.
+**Correction appliquée**
+- Toutes les mentions "GPT-4o-mini" remplacées par "Gemini" dans `server.py` (docstrings et commentaires). Vérifié par `test_no_stale_gpt4o_mini_mentions_in_server` dans `backend/tests/test_open_audit_bugs_minor.py`.
 
 ---
 

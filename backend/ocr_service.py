@@ -206,6 +206,7 @@ def _normalize_receipt_item(item: dict[str, Any], purchase_date: str | None) -> 
         "category": category,
         "food_category": category,
         "brand": brand,
+        "image_url": None,
         "quantity": quantity,
         "unit": unit.strip(),
         "confidence": confidence,
@@ -369,11 +370,34 @@ async def _enrich_normalizations(col: Any, items: list[dict]) -> None:
         )
 
 
+async def _enrich_images(products_cache_col: Any, items: list[dict]) -> None:
+    """Attache une image produit à chaque item via recherche OpenFoodFacts par nom
+    (les articles issus d'un ticket de caisse n'ont pas de code-barres).
+
+    Best-effort : une erreur sur un item n'empêche pas les suivants, et ne fait
+    jamais échouer l'appel OCR global (cf. appel dans ocr_receipt, encapsulé).
+    """
+    from backend.product_catalog import search_openfoodfacts_by_name
+
+    for item in items:
+        name = item.get("normalized_title") or item.get("name") or ""
+        if not name:
+            continue
+        try:
+            image_url = await search_openfoodfacts_by_name(name, item.get("brand"), products_cache_col)
+        except Exception as exc:
+            logger.warning("OCR image enrich failed for item=%s: %s", name, exc)
+            continue
+        if image_url:
+            item["image_url"] = image_url
+
+
 async def ocr_receipt(
     request: Request | None,
     current_user: dict[str, Any],
     request_payload: dict[str, Any] | None = None,
     normalizations_col: Any = None,
+    products_cache_col: Any = None,
 ) -> dict[str, Any]:
     gemini_key = os.environ.get("GEMINI_OCR_API_KEY", "")
     if not gemini_key:
@@ -685,6 +709,16 @@ async def ocr_receipt(
         except Exception as exc:
             logger.warning(
                 "OCR normalization enrich failed — user=%s: %s",
+                current_user["id"], exc,
+            )
+
+    # ── Enrichissement image produit (recherche OFF par nom, silencieux) ──────
+    if products_cache_col is not None and result:
+        try:
+            await _enrich_images(products_cache_col, result)
+        except Exception as exc:
+            logger.warning(
+                "OCR image enrich failed — user=%s: %s",
                 current_user["id"], exc,
             )
 

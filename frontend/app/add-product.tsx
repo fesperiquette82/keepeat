@@ -19,6 +19,7 @@ import { fr, enUS } from 'date-fns/locale';
 import { useStockStore } from '../store/stockStore';
 import { useLanguageStore } from '../store/languageStore';
 import { useOcrDatePicker } from '../utils/useOcrDatePicker';
+import { resolveDurationApply } from '../utils/durationApply';
 import { DatePickerModal, CameraModal } from '../component/CameraDateModal';
 import { useAppSettingsStore } from '../store/appSettingsStore';
 import { getThemeColors } from '../utils/theme';
@@ -147,8 +148,10 @@ export default function AddProductScreen() {
 
   useEffect(() => {
     if (!normalizedBarcode || normalizedParamName || hasPrefilledFromLookup) return;
+    let cancelled = false;
     setLookupLoading(true);
     lookupProduct(normalizedBarcode).then((response) => {
+      if (cancelled) return;
       if (response?.found) {
         const apiProduct = response.product ?? {};
         const shelfLife = response.shelf_life ?? {};
@@ -168,7 +171,12 @@ export default function AddProductScreen() {
         setProductFound(false);
       }
       setHasPrefilledFromLookup(true);
-    }).finally(() => setLookupLoading(false));
+    }).finally(() => {
+      if (!cancelled) setLookupLoading(false);
+    });
+    return () => {
+      cancelled = true;
+    };
   }, [hasPrefilledFromLookup, lookupProduct, normalizedBarcode, normalizedParamName, t]);
 
   const ocr = useOcrDatePicker(language, !!permission?.granted, (date) => {
@@ -199,10 +207,12 @@ export default function AddProductScreen() {
     format(date, 'EEEE d MMMM yyyy', { locale: language === 'fr' ? fr : enUS });
 
   const handleDurationApply = () => {
-    const days = parseInt(durationDays, 10);
-    if (days > 0) {
-      setExpiryDate(addDays(new Date(), days));
+    const result = resolveDurationApply(durationDays);
+    if (result.valid && result.days !== null) {
+      setExpiryDate(addDays(new Date(), result.days));
       setDurationDays('');
+    } else {
+      Alert.alert(t('errorTitle'), t('invalidDuration'));
     }
   };
 
