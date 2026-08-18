@@ -34,3 +34,23 @@ test('régression BUG-026 : une saisie vide est invalide', () => {
   assert.equal(result.valid, false);
   assert.equal(result.days, null);
 });
+
+// Régression review PR #144 (chatgpt-codex-connector) : parseInt("1.5") / parseInt("7j")
+// tronquent au préfixe numérique (1, 7) au lieu de rejeter la saisie invalide.
+test('régression review PR#144 : une saisie décimale ("1.5") est invalide, pas tronquée à 1', () => {
+  const result = resolveDurationApply('1.5');
+  assert.equal(result.valid, false);
+  assert.equal(result.days, null);
+});
+
+test('régression review PR#144 : une saisie avec suffixe ("7j") est invalide, pas tronquée à 7', () => {
+  const result = resolveDurationApply('7j');
+  assert.equal(result.valid, false);
+  assert.equal(result.days, null);
+});
+
+test('une saisie avec espaces autour d\'un entier valide reste acceptée', () => {
+  const result = resolveDurationApply('  5  ');
+  assert.equal(result.valid, true);
+  assert.equal(result.days, 5);
+});
