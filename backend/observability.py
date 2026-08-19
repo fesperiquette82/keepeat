@@ -28,6 +28,7 @@ _EVENT_NAME_ALLOWED = {
     "premium_checkout_started",
     "premium_checkout_succeeded",
     "premium_restored",
+    "account_deleted",
 }
 
 _CRITICAL_ENDPOINTS: dict[str, dict[str, Any]] = {

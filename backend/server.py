@@ -52,6 +52,8 @@ from backend.alerts import (
 from backend.app_core import days_until, logger, redirect_html, serialize_mongo, utc_now
 from backend.auth_utils import create_token, get_current_user, hash_password, http_bearer, validate_password, verify_password
 from backend.models import (
+    AccountDeletionBody,
+    AccountDeletionResponse,
     BillingEntitlementsResponse,
     BillingRestoreResponse,
     BillingUsageResponse,
@@ -944,6 +946,13 @@ async def privacy_policy():
     return HTMLResponse(content=_PRIVACY_POLICY_HTML)
 
 
+@app.get("/account-deletion", response_class=HTMLResponse, include_in_schema=False)
+async def account_deletion_page():
+    """Page publique de suppression de compte — exigée par Google Play même sans
+    accès à l'application (Data safety / Account deletion requirement)."""
+    return HTMLResponse(content=_ACCOUNT_DELETION_HTML)
+
+
 _PRIVACY_POLICY_HTML = """<!DOCTYPE html>
 <html lang="fr">
 <head>
@@ -958,7 +967,7 @@ _PRIVACY_POLICY_HTML = """<!DOCTYPE html>
 </head>
 <body>
 <h1>Politique de confidentialité — KeepEat</h1>
-<p><em>Dernière mise à jour : avril 2026</em></p>
+<p><em>Dernière mise à jour : août 2026</em></p>
 
 <h2>1. Qui sommes-nous ?</h2>
 <p>
@@ -970,7 +979,7 @@ Contact : <a href="mailto:fesperiquette@hotmail.com">fesperiquette@hotmail.com</
 <ul>
   <li><strong>Compte</strong> : adresse e-mail, mot de passe sécurisé (haché).</li>
   <li><strong>Stock alimentaire</strong> : produits, codes-barres, dates de péremption, quantités.</li>
-  <li><strong>Photos (OCR)</strong> : images envoyées temporairement à un service tiers (OpenAI) pour analyse puis supprimées — aucune photo n’est stockée.</li>
+  <li><strong>Photos (OCR)</strong> : images envoyées temporairement à un service tiers (Google Gemini) pour analyse puis supprimées — aucune photo n’est stockée durablement.</li>
   <li><strong>Achats in-app</strong> : données nécessaires à la gestion des abonnements via Google Play Billing.</li>
   <li><strong>Notifications push</strong> : token technique (Expo) pour l’envoi d’alertes.</li>
   <li><strong>Logs techniques</strong> : informations techniques (ex : adresse IP, appareil) utilisées pour la sécurité et le diagnostic.</li>
@@ -988,26 +997,82 @@ Contact : <a href="mailto:fesperiquette@hotmail.com">fesperiquette@hotmail.com</
 <ul>
   <li><strong>Render</strong> : hébergement backend.</li>
   <li><strong>MongoDB Atlas</strong> : base de données.</li>
-  <li><strong>OpenAI</strong> : OCR et analyse.</li>
+  <li><strong>Google Gemini</strong> : OCR et génération de recettes.</li>
   <li><strong>Google Play Billing</strong> : gestion des abonnements.</li>
   <li><strong>Expo / EAS</strong> : notifications push.</li>
 </ul>
 <p>Certains services peuvent traiter des données hors UE avec des garanties appropriées.</p>
 
 <h2>5. Conservation</h2>
-<p>Les données sont conservées pendant la durée d’utilisation du service puis supprimées dans un délai raisonnable.</p>
+<p>Les données sont conservées pendant la durée d’utilisation du service. Vous pouvez les supprimer à tout moment (voir section 6).</p>
 
 <h2>6. Vos droits</h2>
 <p>
-Vous pouvez demander l’accès, la modification ou la suppression de vos données à tout moment :<br>
-<a href="mailto:fesperiquette@hotmail.com">fesperiquette@hotmail.com</a>
+Conformément au RGPD, vous disposez d’un droit d’accès, de rectification, d’effacement et de portabilité de vos données.
 </p>
+<ul>
+  <li><strong>Accès et portabilité</strong> : dans l’application, <em>Réglages → Exporter mes données</em> génère un fichier contenant l’intégralité de vos données personnelles (profil, stock, tickets de caisse scannés).</li>
+  <li><strong>Effacement</strong> : dans l’application, <em>Réglages → Supprimer mon compte</em> efface immédiatement et définitivement votre compte et vos données. Sans accès à l’application, une <a href="/account-deletion">page dédiée</a> explique la marche à suivre.</li>
+  <li><strong>Autre demande</strong> (rectification, question) : <a href="mailto:fesperiquette@hotmail.com">fesperiquette@hotmail.com</a>, réponse sous 30 jours.</li>
+</ul>
 
 <h2>7. Sécurité</h2>
-<p>Les données sont protégées via chiffrement (HTTPS) et accès sécurisé.</p>
+<p>Les données sont protégées via chiffrement (HTTPS), mots de passe hachés (bcrypt) et accès authentifié par jeton.</p>
 
 <h2>8. Modifications</h2>
-<p>Cette politique peut être mise à jour à tout moment.</p>
+<p>Cette politique peut être mise à jour à tout moment ; la date de dernière mise à jour figure en haut de page.</p>
+
+</body>
+</html>"""
+
+
+_ACCOUNT_DELETION_HTML = """<!DOCTYPE html>
+<html lang="fr">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Suppression de compte — KeepEat</title>
+<style>
+  body { font-family: sans-serif; max-width: 800px; margin: 40px auto; padding: 0 20px; color: #1f2937; line-height: 1.6; }
+  h1 { color: #16A34A; } h2 { color: #374151; border-bottom: 1px solid #e5e7eb; padding-bottom: 4px; }
+  a { color: #16A34A; }
+  .box { background: #F0FDF4; border: 1px solid #BBF7D0; border-radius: 10px; padding: 16px 20px; margin: 16px 0; }
+  ol { padding-left: 20px; }
+</style>
+</head>
+<body>
+<h1>Suppression de compte — KeepEat</h1>
+
+<h2>Depuis l’application (recommandé, immédiat)</h2>
+<div class="box">
+  <ol>
+    <li>Ouvrez KeepEat et connectez-vous.</li>
+    <li>Allez dans <strong>Réglages</strong> (icône en bas de l’écran principal).</li>
+    <li>Faites défiler jusqu’à <strong>Compte</strong>, puis appuyez sur <strong>Supprimer mon compte</strong>.</li>
+    <li>Saisissez votre mot de passe pour confirmer.</li>
+  </ol>
+  <p>La suppression est <strong>immédiate et définitive</strong> : votre compte, votre stock, vos tickets de caisse scannés et votre historique de notifications sont effacés. Aucune sauvegarde n’est conservée.</p>
+</div>
+
+<h2>Sans accès à l’application</h2>
+<p>
+Si vous ne pouvez pas ouvrir l’application (compte perdu, application désinstallée), envoyez une demande de
+suppression à <a href="mailto:fesperiquette@hotmail.com">fesperiquette@hotmail.com</a> depuis l’adresse e-mail
+associée à votre compte KeepEat. La suppression est effectuée sous 30 jours, conformément au RGPD.
+</p>
+
+<h2>Quelles données sont supprimées ?</h2>
+<ul>
+  <li>Votre compte (e-mail, mot de passe haché, préférences).</li>
+  <li>Votre stock alimentaire (produits, quantités, dates de péremption).</li>
+  <li>Vos tickets de caisse scannés.</li>
+  <li>Votre historique de notifications envoyées et vos tokens de notification push.</li>
+</ul>
+<p>
+Certaines statistiques d’usage agrégées et anonymisées (ne permettant plus de vous identifier) peuvent être
+conservées à des fins d’amélioration du service, conformément à notre
+<a href="/privacy-policy">politique de confidentialité</a>.
+</p>
 
 </body>
 </html>"""
@@ -1550,6 +1615,96 @@ async def me(current_user: Dict[str, Any] = Depends(_get_current_user)):
         is_premium=current_user.get("is_premium", False),
         is_verified=current_user.get("email_verified", True),
     )
+
+
+# -----------------------------------------------------------------------------
+# Compte utilisateur — export et suppression (droits RGPD)
+# -----------------------------------------------------------------------------
+
+@api_router.get("/account/export")
+async def export_account_data(current_user: Dict[str, Any] = Depends(_get_current_user)):
+    """Exporte l'ensemble des données personnelles de l'utilisateur (droit d'accès)."""
+    uid = current_user["id"]
+    user_doc = await users_col.find_one({"_id": ObjectId(uid)}) or {}
+    account = {
+        "id": uid,
+        "email": user_doc.get("email"),
+        "email_verified": user_doc.get("email_verified"),
+        "is_premium": user_doc.get("is_premium", False),
+        "subscription_status": user_doc.get("subscription_status"),
+        "subscription_expires_at": user_doc.get("subscription_expires_at"),
+        "household_size": user_doc.get("household_size"),
+        "alert_preferences": user_doc.get("alert_preferences"),
+        "push_tokens_count": len(user_doc.get("push_tokens") or []),
+        "created_at": user_doc.get("created_at"),
+        "last_login": user_doc.get("last_login"),
+    }
+
+    stock_items = [serialize_mongo(doc) async for doc in stock_col.find({"user_id": uid})]
+    receipt_tickets = [serialize_mongo(doc) async for doc in receipt_tickets_col.find({"user_id": uid})]
+
+    logger.info(
+        "ACCOUNT_EXPORT user=%s stock_items=%d receipt_tickets=%d",
+        uid, len(stock_items), len(receipt_tickets),
+    )
+    return {
+        "generated_at": utc_now().isoformat(),
+        "account": account,
+        "stock_items": stock_items,
+        "receipt_tickets": receipt_tickets,
+    }
+
+
+@api_router.delete("/account", response_model=AccountDeletionResponse)
+async def delete_account(
+    body: AccountDeletionBody,
+    current_user: Dict[str, Any] = Depends(_get_current_user),
+):
+    """Supprime définitivement le compte et les données personnelles (droit à l'effacement).
+
+    Les documents strictement personnels (stock, tickets de caisse, historique
+    d'alertes envoyées, compteurs de quota) sont supprimés. Les journaux
+    opérationnels partagés/agrégés — business_events, service_usage_logs,
+    api_request_logs, et recipe_gap_requests (dédupliqués entre utilisateurs via
+    `signature`, cf. _upsert_recipe_gap) — sont anonymisés (user_id retiré à null)
+    plutôt que supprimés : la ligne garde sa valeur agrégée pour les métriques
+    produit, sans plus être rattachable à la personne.
+    """
+    uid = current_user["id"]
+    user_doc = await users_col.find_one({"_id": ObjectId(uid)}, {"hashed_password": 1})
+    if not user_doc or not verify_password(body.confirm_password, user_doc.get("hashed_password") or _DUMMY_HASH):
+        raise HTTPException(status_code=403, detail="Mot de passe incorrect")
+
+    stock_result = await stock_col.delete_many({"user_id": uid})
+    tickets_result = await receipt_tickets_col.delete_many({"user_id": uid})
+    alerts_result = await user_alerts_col.delete_many({"user_id": uid})
+    quota_result = await app_state_col.delete_many({"_id": {"$regex": f"^usage:{re.escape(uid)}:"}})
+
+    await recipe_gap_requests_col.update_many({"user_id": uid}, {"$set": {"user_id": None}})
+    await business_events_col.update_many({"user_id": uid}, {"$set": {"user_id": None}})
+    await service_usage_logs_col.update_many({"user_id": uid}, {"$set": {"user_id": None}})
+    await api_request_logs_col.update_many({"user_id": uid}, {"$set": {"user_id": None}})
+
+    await users_col.delete_one({"_id": ObjectId(uid)})
+
+    try:
+        await track_business_event(
+            business_events_col=business_events_col,
+            user_id=None,
+            event_name="account_deleted",
+            event_category="account",
+            metadata_json={},
+        )
+    except Exception as exc:
+        logger.warning("account_deleted event tracking failed: %s", exc)
+
+    logger.info(
+        "ACCOUNT_DELETED user=%s stock=%d tickets=%d alerts=%d quota_counters=%d",
+        uid, stock_result.deleted_count, tickets_result.deleted_count,
+        alerts_result.deleted_count, quota_result.deleted_count,
+    )
+
+    return AccountDeletionResponse(deleted=True, message="Compte et données supprimés.")
 
 
 # -----------------------------------------------------------------------------

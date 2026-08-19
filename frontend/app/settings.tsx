@@ -15,6 +15,8 @@ import { resolvePremiumStatus } from '../utils/premiumStatus';
 import { buildLogoutConfirmationCopy } from '../utils/settingsLogout';
 import { shareDebugLogsToGitHub } from '../utils/debugLogsGitHubSync';
 import { uploadDebugLogsToBackend } from '../utils/debugLogsBackendUpload';
+import { exportAccountData } from '../utils/accountService';
+import { saveAndShareAccountExport } from '../utils/accountExportFile';
 
 function formatLastUpdate(value: string | null, language: 'fr' | 'en', fallbackText: string): string {
   if (!value) return fallbackText;
@@ -42,6 +44,7 @@ function formatPremiumDate(value: string, language: 'fr' | 'en'): string {
 export default function SettingsScreen() {
   const router = useRouter();
   const [debugLogsUploading, setDebugLogsUploading] = useState(false);
+  const [exportingData, setExportingData] = useState(false);
   const {
     language,
     householdSize,
@@ -151,6 +154,22 @@ export default function SettingsScreen() {
       ],
     );
   }, [logout, logoutConfirmation, t]);
+
+  const onPressExportData = useCallback(async () => {
+    if (!token) return;
+    setExportingData(true);
+    try {
+      const payload = await exportAccountData(token);
+      const shared = await saveAndShareAccountExport(payload);
+      if (!shared) {
+        Alert.alert(t('exportDataSuccess'), t('exportDataUnavailable'));
+      }
+    } catch {
+      Alert.alert(t('errorTitle'), t('exportDataError'));
+    } finally {
+      setExportingData(false);
+    }
+  }, [t, token]);
 
   return (
     <SafeAreaView style={styles.container}>
@@ -341,9 +360,33 @@ export default function SettingsScreen() {
 
         <View style={styles.card}>
           <Text style={styles.sectionTitle}>{t('accountSection')}</Text>
+
+          <Text style={styles.systemInfo}>{t('exportDataHint')}</Text>
+          <TouchableOpacity
+            style={[styles.exportButton, exportingData && styles.disabledButton]}
+            onPress={onPressExportData}
+            disabled={exportingData}
+          >
+            {exportingData ? (
+              <ActivityIndicator size="small" color="#166534" />
+            ) : (
+              <Ionicons name="download-outline" size={16} color="#166534" />
+            )}
+            <Text style={styles.exportButtonText}>{t('exportDataButton')}</Text>
+          </TouchableOpacity>
+
           <TouchableOpacity style={styles.logoutButton} onPress={onPressLogout}>
             <Ionicons name="log-out-outline" size={16} color="#FFFFFF" />
             <Text style={styles.logoutButtonText}>{t('logoutButton')}</Text>
+          </TouchableOpacity>
+
+          <TouchableOpacity
+            testID="settings-delete-account-button"
+            style={styles.deleteAccountButton}
+            onPress={() => router.push('/delete-account')}
+          >
+            <Ionicons name="trash-outline" size={16} color="#DC2626" />
+            <Text style={styles.deleteAccountButtonText}>{t('deleteAccountButton')}</Text>
           </TouchableOpacity>
         </View>
       </View>
@@ -400,6 +443,34 @@ const createStyles = (C: ReturnType<typeof getThemeColors>, T: ReturnType<typeof
     gap: 8,
   },
   logoutButtonText: { color: '#FFFFFF', fontWeight: '700', fontSize: 14 },
+  exportButton: {
+    marginTop: 4,
+    borderWidth: 1,
+    borderColor: '#16A34A',
+    borderRadius: 10,
+    minHeight: 40,
+    paddingHorizontal: 14,
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    gap: 8,
+    backgroundColor: '#F0FDF4',
+  },
+  exportButtonText: { color: '#166534', fontWeight: '700', fontSize: 14 },
+  deleteAccountButton: {
+    marginTop: 4,
+    borderWidth: 1,
+    borderColor: '#FECACA',
+    borderRadius: 10,
+    minHeight: 40,
+    paddingHorizontal: 14,
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    gap: 8,
+    backgroundColor: '#FEF2F2',
+  },
+  deleteAccountButtonText: { color: '#DC2626', fontWeight: '700', fontSize: 14 },
   restoreButtonText: { color: '#166534', fontWeight: '700', fontSize: 14 },
   successText: { color: '#166534', fontSize: 12, fontWeight: '500' },
   errorText: { color: '#B91C1C', fontSize: 12, fontWeight: '500' },
