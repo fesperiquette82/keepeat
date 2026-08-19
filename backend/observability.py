@@ -553,6 +553,96 @@ async def build_operational_overview(
     }
 
 
+async def build_activation_funnel(
+    *,
+    users_col,
+    business_events_col,
+    start_iso: str,
+    end_iso: str,
+) -> dict[str, Any]:
+    """Entonnoir d'activation des nouveaux inscrits sur la période donnée :
+    combien d'entre eux ajoutent un premier produit, scannent un ticket de
+    caisse, voient le paywall premium, et finalisent un achat.
+
+    Chaque étage compte les inscrits de la période ayant déclenché l'événement
+    correspondant à un moment quelconque (pas nécessairement après l'étage
+    précédent) — un dénombrement large de couverture, pas une trajectoire
+    stricte pas-à-pas. `business_events_col` (user_registered, product_added,
+    ocr_scan_succeeded, premium_paywall_viewed, premium_checkout_succeeded)
+    était déjà alimenté avant cet ajout — seule la lecture agrégée manquait.
+    """
+    registered_ids = await users_col.distinct("_id", {"created_at": {"$gte": start_iso, "$lte": end_iso}})
+    registered_user_ids = [str(uid) for uid in registered_ids]
+    registered = len(registered_user_ids)
+
+    if registered == 0:
+        return {
+            "registered": 0,
+            "added_product": 0,
+            "scanned_receipt": 0,
+            "viewed_paywall": 0,
+            "purchased": 0,
+            "rates": {"added_product": 0.0, "scanned_receipt": 0.0, "viewed_paywall": 0.0, "purchased": 0.0},
+        }
+
+    async def _distinct_users_with_event(event_name: str) -> int:
+        ids = await business_events_col.distinct(
+            "user_id",
+            {"event_name": event_name, "user_id": {"$in": registered_user_ids}},
+        )
+        return len(ids)
+
+    added_product = await _distinct_users_with_event("product_added")
+    scanned_receipt = await _distinct_users_with_event("ocr_scan_succeeded")
+    viewed_paywall = await _distinct_users_with_event("premium_paywall_viewed")
+    purchased = await _distinct_users_with_event("premium_checkout_succeeded")
+
+    def _rate(numerator: int) -> float:
+        return round(numerator / registered, 4)
+
+    return {
+        "registered": registered,
+        "added_product": added_product,
+        "scanned_receipt": scanned_receipt,
+        "viewed_paywall": viewed_paywall,
+        "purchased": purchased,
+        "rates": {
+            "added_product": _rate(added_product),
+            "scanned_receipt": _rate(scanned_receipt),
+            "viewed_paywall": _rate(viewed_paywall),
+            "purchased": _rate(purchased),
+        },
+    }
+
+
+async def build_crash_reports_overview(
+    *,
+    crash_reports_col,
+    start_iso: str,
+    end_iso: str,
+    limit: int = 20,
+) -> dict[str, Any]:
+    """Résumé des crashes JS frontend remontés par ErrorBoundary (POST
+    /api/crash-reports) sur la période donnée : total et derniers messages,
+    pour surfacer les régressions avant qu'un utilisateur ne le signale.
+    """
+    match = {"created_at": {"$gte": start_iso, "$lte": end_iso}}
+    total = await crash_reports_col.count_documents(match)
+
+    recent_cursor = crash_reports_col.find(match).sort("created_at", -1).limit(limit)
+    recent = []
+    async for doc in recent_cursor:
+        recent.append({
+            "message": doc.get("message"),
+            "screen": doc.get("screen"),
+            "platform": doc.get("platform"),
+            "app_version": doc.get("app_version"),
+            "created_at": doc.get("created_at"),
+        })
+
+    return {"total": total, "recent": recent}
+
+
 async def summarize_services_usage(*, service_usage_logs_col, start_iso: str, end_iso: str) -> dict[str, Any]:
     match = {"created_at": {"$gte": start_iso, "$lte": end_iso}}
     pipeline = [

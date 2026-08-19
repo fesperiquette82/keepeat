@@ -2,6 +2,7 @@ import { create } from 'zustand';
 import * as SecureStore from 'expo-secure-store';
 import { unregisterPushToken } from '../utils/notificationService';
 import { buildApiUrl } from '../utils/config';
+import { fetchWithTimeout as fetch } from '../utils/fetchWithTimeout';
 import {
   BIOMETRIC_CREDENTIALS_KEY,
   isBiometricAuthenticationCancellationError,

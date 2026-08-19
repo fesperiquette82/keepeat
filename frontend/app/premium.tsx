@@ -8,6 +8,7 @@ import { useAuthStore } from '../store/authStore';
 import { verifyPremiumPurchase } from '../utils/billingService';
 import { buildApiUrl } from '../utils/config';
 import { buildPremiumCopy } from '../utils/premiumPaywallCopy';
+import { fetchWithTimeout as fetch } from '../utils/fetchWithTimeout';
 import {
   initIAP,
   endIAP,

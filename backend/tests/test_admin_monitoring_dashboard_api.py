@@ -202,9 +202,62 @@ def test_dashboard_returns_200_with_nominal_payload(monkeypatch):
     assert isinstance(payload.get("cost_metrics"), dict)
     assert isinstance(payload.get("critical_flows"), dict)
     assert isinstance(payload.get("product_funnel"), dict)
+    assert isinstance(payload.get("activation_funnel"), dict)
     assert isinstance(payload.get("frontend_deployment"), dict)
     assert isinstance(payload.get("external_service_quotas"), dict)
     assert isinstance(payload["external_service_quotas"].get("services"), list)
+
+
+def test_dashboard_returns_activation_funnel_block(monkeypatch):
+    """BUG-039 : le dashboard doit exposer l'entonnoir d'activation (registered
+    -> added_product -> scanned_receipt -> viewed_paywall -> purchased), calculé
+    à partir des business_events déjà collectés."""
+    _patch_dashboard_sources(monkeypatch)
+    _with_admin_override()
+
+    async def _fake_activation_funnel(**kwargs):
+        _ = kwargs
+        return {
+            "registered": 4,
+            "added_product": 2,
+            "scanned_receipt": 1,
+            "viewed_paywall": 2,
+            "purchased": 1,
+            "rates": {"added_product": 0.5, "scanned_receipt": 0.25, "viewed_paywall": 0.5, "purchased": 0.25},
+        }
+
+    monkeypatch.setattr(server, "build_activation_funnel", _fake_activation_funnel)
+
+    response = asyncio.run(_request("/api/admin/monitoring/dashboard?days=7"))
+    server.app.dependency_overrides = {}
+
+    assert response.status_code == 200
+    funnel = response.json().get("activation_funnel")
+    assert isinstance(funnel, dict)
+    assert funnel["registered"] == 4
+    assert funnel["purchased"] == 1
+    assert funnel["rates"]["purchased"] == 0.25
+
+
+def test_dashboard_survives_activation_funnel_exception_with_zeroed_fallback(monkeypatch):
+    _patch_dashboard_sources(monkeypatch)
+    _with_admin_override()
+
+    async def _failing_activation_funnel(**kwargs):
+        _ = kwargs
+        raise RuntimeError("boom")
+
+    monkeypatch.setattr(server, "build_activation_funnel", _failing_activation_funnel)
+
+    response = asyncio.run(_request("/api/admin/monitoring/dashboard?days=7"))
+    server.app.dependency_overrides = {}
+
+    assert response.status_code == 200
+    assert response.json().get("activation_funnel") == {
+        "registered": 0, "added_product": 0, "scanned_receipt": 0,
+        "viewed_paywall": 0, "purchased": 0,
+        "rates": {"added_product": 0.0, "scanned_receipt": 0.0, "viewed_paywall": 0.0, "purchased": 0.0},
+    }
 
 
 def test_dashboard_supports_partial_data_without_500(monkeypatch):

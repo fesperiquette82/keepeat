@@ -24,6 +24,7 @@ from typing import Any, Dict, List, Optional
 
 import aiosmtplib
 import httpx
+import sentry_sdk
 from bson import ObjectId
 from bson.decimal128 import Decimal128
 from pymongo.errors import DuplicateKeyError
@@ -40,7 +41,6 @@ from slowapi.util import get_remote_address
 
 from backend.alerts import (
     AlertDependencies,
-    alert_loop,
     check_daily_expiry_alert,
     check_inactivity_and_notify,
     check_recalls_and_notify,
@@ -62,6 +62,8 @@ from backend.models import (
     AlertPreferencesUpdate,
     DebugLogsUploadBody,
     DebugLogsUploadResponse,
+    CrashReportBody,
+    CrashReportResponse,
     ForgotPasswordBody,
     ProductBase,
     ProductLookupResponse,
@@ -102,6 +104,8 @@ from backend.entitlements import (
 from backend.ocr_service import SHELF_BY_CATEGORY, OcrApiError, ocr_receipt
 from backend.priority_refresh import build_priority_refresh_state
 from backend.observability import (
+    build_activation_funnel,
+    build_crash_reports_overview,
     build_operational_overview,
     build_monitoring_kpis,
     extract_user_id_from_auth_header,
@@ -168,6 +172,7 @@ service_usage_logs_col = db["service_usage_logs"]
 daily_metrics_col = db["daily_metrics"]
 receipt_tickets_col = db["receipt_tickets"]
 ocr_normalizations_col = db["ocr_normalizations"]
+crash_reports_col = db["crash_reports"]
 
 _BACKEND_URL = os.getenv("BACKEND_URL", "https://keepeat-backend.onrender.com")
 _GOOGLE_ANDROID_PACKAGE = os.getenv("GOOGLE_ANDROID_PACKAGE", "com.fesperiquette.keepeat")
@@ -225,6 +230,24 @@ def _resolve_backend_version() -> str:
 
 _BACKEND_VERSION = _resolve_backend_version()
 _BACKEND_COMMIT = _resolve_backend_commit()
+
+# Crash reporting (Sentry) — désactivé tant que SENTRY_DSN n'est pas configuré
+# (aucun compte Sentry n'existe pour ce projet à ce jour). L'import est
+# inconditionnel (le paquet est une dépendance normale, cf. requirements.txt) ;
+# seul .init() est conditionnel, donc ce bloc est un no-op total sans DSN.
+# sentry_sdk détecte et instrumente automatiquement Starlette/FastAPI dès que
+# ces paquets sont installés — aucune intégration à déclarer manuellement.
+_SENTRY_DSN = os.getenv("SENTRY_DSN", "").strip()
+if _SENTRY_DSN:
+    sentry_sdk.init(
+        dsn=_SENTRY_DSN,
+        environment=os.getenv("APP_ENV", os.getenv("ENV", "unknown")),
+        release=_BACKEND_COMMIT,
+        traces_sample_rate=0.0,  # erreurs uniquement, pas de tracing de perf (quota gratuit)
+    )
+    logger.info("Sentry activé (environment=%s, release=%s)", os.getenv("APP_ENV", os.getenv("ENV", "unknown")), _BACKEND_COMMIT)
+else:
+    logger.info("Sentry désactivé (SENTRY_DSN absent)")
 
 
 def _normalize_build_meta(value: Any, default: str = "unknown") -> str:
@@ -904,7 +927,13 @@ async def lifespan(app: FastAPI):
     await receipt_tickets_col.create_index([("user_id", 1), ("created_at", -1)])
     await _sync_shared_recipes_collection_from_catalog()
 
-    deps = AlertDependencies(
+    # Les vérifications d'alertes (rappels, inactivité, péremption J-2/J-0, résumé
+    # hebdo) ne tournent plus dans une boucle interne au process — cf.
+    # /api/internal/alerts/run, déclenché par .github/workflows/alerts-cron.yml.
+    # Sur Render, la disponibilité du process n'est pas garantie sur la durée : une
+    # boucle avec sleep interne repart de zéro à chaque redémarrage, ce qui pouvait
+    # empêcher indéfiniment les alertes de péremption de partir.
+    app.state.alert_deps = AlertDependencies(
         users_col=users_col,
         stock_col=stock_col,
         user_alerts_col=user_alerts_col,
@@ -914,9 +943,7 @@ async def lifespan(app: FastAPI):
         send_push=send_expo_push,
         fr_to_en_ingredient=fr_to_en_ingredient,
     )
-    alert_task = asyncio.create_task(alert_loop(deps))
     yield
-    alert_task.cancel()
     client.close()
 
 
@@ -2030,6 +2057,46 @@ async def google_play_rtdn(request: Request):
         logger.error("RTDN processing error notificationType=%s: %s", notif_type, exc)
 
     return {"ok": True}
+
+
+@api_router.post("/internal/alerts/run", include_in_schema=False)
+async def run_alerts_cron(request: Request):
+    """Déclenche un passage des vérifications d'alertes (rappels produits,
+    inactivité, péremption J-2/J-0, résumé hebdomadaire).
+
+    Appelé par un cron externe (.github/workflows/alerts-cron.yml) plutôt que par
+    une boucle interne au process — voir le commentaire dans `lifespan()`. Chaque
+    vérification a son propre garde-fou anti-doublon (clé stockée dans
+    `user_alerts_col`), donc des appels rapprochés ou redondants sont sans danger :
+    ils se contentent de ne rien renvoyer si une alerte a déjà été envoyée.
+
+    Protégé par un jeton statique (ALERTS_CRON_TOKEN), même convention que le
+    webhook Google Play RTDN (`GOOGLE_RTDN_TOKEN`).
+    """
+    cron_token = os.getenv("ALERTS_CRON_TOKEN", "").strip()
+    if not cron_token:
+        raise HTTPException(status_code=503, detail="ALERTS_CRON_TOKEN not configured")
+    if request.headers.get("Authorization") != f"Bearer {cron_token}":
+        raise HTTPException(status_code=401, detail="Unauthorized")
+
+    deps = app.state.alert_deps
+    checks = [
+        ("recalls", check_recalls_and_notify),
+        ("inactivity", check_inactivity_and_notify),
+        ("daily_expiry", check_daily_expiry_alert),
+        ("weekly_expiry", check_weekly_expiry_summary),
+    ]
+    results: dict[str, str] = {}
+    for name, check in checks:
+        try:
+            await check(deps)
+            results[name] = "ok"
+        except Exception as exc:
+            logger.error("ALERTS_CRON check=%s failed: %s", name, exc)
+            results[name] = f"error: {exc}"
+
+    logger.info("ALERTS_CRON completed results=%s", results)
+    return {"ran_at": utc_now().isoformat(), "results": results}
 
 
 # -----------------------------------------------------------------------------
@@ -4653,6 +4720,14 @@ async def admin_monitoring_dashboard(
             return {}
         if block_name == "product_funnel":
             return {"premium_conversion_rate": 0.0}
+        if block_name == "activation_funnel":
+            return {
+                "registered": 0, "added_product": 0, "scanned_receipt": 0,
+                "viewed_paywall": 0, "purchased": 0,
+                "rates": {"added_product": 0.0, "scanned_receipt": 0.0, "viewed_paywall": 0.0, "purchased": 0.0},
+            }
+        if block_name == "crash_reports":
+            return {"total": 0, "recent": []}
         if block_name == "external_service_quotas":
             return {"generated_at": utc_now().isoformat(), "services": [], "comparison_chart": [], "notes": {}}
         return None
@@ -4700,6 +4775,27 @@ async def admin_monitoring_dashboard(
         overview = {}
 
     try:
+        activation_funnel = await build_activation_funnel(
+            users_col=users_col,
+            business_events_col=business_events_col,
+            start_iso=start_iso,
+            end_iso=end_iso,
+        )
+    except Exception as exc:
+        logger.warning("admin_monitoring_dashboard source failed: activation_funnel (%s)", exc)
+        activation_funnel = {}
+
+    try:
+        crash_reports = await build_crash_reports_overview(
+            crash_reports_col=crash_reports_col,
+            start_iso=start_iso,
+            end_iso=end_iso,
+        )
+    except Exception as exc:
+        logger.warning("admin_monitoring_dashboard source failed: crash_reports (%s)", exc)
+        crash_reports = {}
+
+    try:
         external_service_quotas = await build_external_services_quota_snapshot(
             service_usage_logs_col=service_usage_logs_col,
             api_request_logs_col=api_request_logs_col,
@@ -4734,6 +4830,8 @@ async def admin_monitoring_dashboard(
     services = kpis.get("services") if isinstance(kpis.get("services"), dict) else {}
     cost_breakdown = overview.get("cost_breakdown") if isinstance(overview.get("cost_breakdown"), dict) else {}
     product_funnel = _safe_block("product_funnel", lambda: _json_safe(overview.get("product_funnel")) if isinstance(overview.get("product_funnel"), dict) else {})
+    activation_funnel_safe = _safe_block("activation_funnel", lambda: _json_safe(activation_funnel) if isinstance(activation_funnel, dict) and activation_funnel else _block_fallback("activation_funnel"))
+    crash_reports_safe = _safe_block("crash_reports", lambda: _json_safe(crash_reports) if isinstance(crash_reports, dict) and crash_reports else _block_fallback("crash_reports"))
     critical_flows = _safe_block("critical_flows", lambda: _json_safe(overview.get("critical_flows")) if isinstance(overview.get("critical_flows"), dict) else {})
     top_incidents = _safe_block("top_api_issues", lambda: _json_safe(overview.get("top_incidents")) if isinstance(overview.get("top_incidents"), list) else [])
 
@@ -4789,6 +4887,8 @@ async def admin_monitoring_dashboard(
             **product_funnel,
             "premium_conversion_rate": round((_safe_int(users.get("premium")) / users_total), 4),
         },
+        "activation_funnel": activation_funnel_safe,
+        "crash_reports": crash_reports_safe,
         "cost_metrics": cost_metrics,
         "ocr_image_enrichment": ocr_image_enrichment,
         "external_service_quotas": external_service_quotas_safe,
@@ -5250,6 +5350,39 @@ async def upload_debug_logs(
     except Exception as e:
         logger.error(f"Failed to upload debug logs: {e}", exc_info=True)
         raise HTTPException(status_code=500, detail=f"Failed to upload logs: {str(e)}")
+
+
+# ── Endpoint public : crash reporting frontend ────────────────────────────────
+
+@api_router.post("/crash-reports", status_code=201, response_model=CrashReportResponse)
+@_resolve_annotations
+@limiter.limit("10/minute")
+async def report_crash(request: Request, body: CrashReportBody):
+    """Reçoit les erreurs JS non gérées capturées par ErrorBoundary côté app.
+
+    Endpoint public (pas de dépendance d'auth) : un crash peut survenir avant
+    connexion (écran de démarrage, écran de login). Rate-limité pour éviter
+    tout abus. Alternative légère et sans risque de build natif à
+    @sentry/react-native (non ajouté — impossible de valider un build natif
+    dans cet environnement).
+    """
+    try:
+        doc = {
+            "message": body.message,
+            "stack": body.stack,
+            "screen": body.screen,
+            "app_version": body.app_version,
+            "platform": body.platform,
+            "created_at": utc_now().isoformat(),
+        }
+        await crash_reports_col.insert_one(doc)
+        logger.error(
+            "FRONTEND_CRASH screen=%s platform=%s app_version=%s message=%s",
+            body.screen, body.platform, body.app_version, body.message,
+        )
+    except Exception as exc:
+        logger.error("Failed to store crash report: %s", exc)
+    return CrashReportResponse(ok=True)
 
 
 # ── Endpoint admin : enrichissement images ────────────────────────────────────
@@ -6151,6 +6284,18 @@ _ADMIN_DASHBOARD_HTML = """<!DOCTYPE html>
       <div id="funnel-content"><div style="color:#9ca3af;font-size:13px">Chargement...</div></div>
     </div>
 
+    <!-- Funnel d'activation -->
+    <div class="card">
+      <div class="card-title">🚀 Entonnoir d'activation (nouveaux inscrits)</div>
+      <div id="activation-funnel-content"><div style="color:#9ca3af;font-size:13px">Chargement...</div></div>
+    </div>
+
+    <!-- Crash reports frontend -->
+    <div class="card">
+      <div class="card-title">💥 Crashes frontend</div>
+      <div id="crash-reports-content"><div style="color:#9ca3af;font-size:13px">Chargement...</div></div>
+    </div>
+
     <!-- Graphiques de tendance -->
     <div class="two-col">
       <div class="chart-card">
@@ -6339,6 +6484,8 @@ async function loadAll() {
     renderServices(Array.isArray(dash.top_service_usage) ? dash.top_service_usage : []);
     renderCriticalFlows(dash.critical_flows || {});
     renderFunnel(dash.product_funnel || {});
+    renderActivationFunnel(dash.activation_funnel || {});
+    renderCrashReports(dash.crash_reports || {});
     renderCostMetrics(dash.cost_metrics || {});
     renderOcrImageEnrichment(dash.ocr_image_enrichment || {});
     renderExternalServiceQuotas(dash.external_service_quotas || null);
@@ -6352,6 +6499,8 @@ async function loadAll() {
     setBlockError('quotas-content', msg);
     setBlockError('critical-flows-content', msg);
     setBlockError('funnel-content', msg);
+    setBlockError('activation-funnel-content', msg);
+    setBlockError('crash-reports-content', msg);
   }
 
   if (trendsResult.status === 'rejected') {
@@ -6583,6 +6732,45 @@ function renderFunnel(f) {
     + statCard('Users recettes', f.users_with_recipes_view || 0, 'suggestions + IA')
     + statCard('Conv. premium', (((f.premium_conversion_rate || 0) * 100).toFixed(1)) + '%', 'premium / total')
     + '</div>';
+}
+
+function renderActivationFunnel(a) {
+  const registered = a.registered || 0;
+  const rates = a.rates || {};
+  const pct = (r) => ((r || 0) * 100).toFixed(1) + '%';
+  const container = document.getElementById('activation-funnel-content');
+  if (!registered) {
+    container.innerHTML = '<div style="color:#9ca3af;font-size:13px">Aucun nouvel inscrit sur cette période.</div>';
+    return;
+  }
+  const stages = [
+    { label: 'Inscrits', count: registered, sub: '100%' },
+    { label: 'Ont ajouté un produit', count: a.added_product || 0, sub: pct(rates.added_product) },
+    { label: 'Ont scanné un ticket', count: a.scanned_receipt || 0, sub: pct(rates.scanned_receipt) },
+    { label: 'Ont vu le paywall', count: a.viewed_paywall || 0, sub: pct(rates.viewed_paywall) },
+    { label: 'Ont acheté', count: a.purchased || 0, sub: pct(rates.purchased) },
+  ];
+  container.innerHTML = '<div class="stats-grid">'
+    + stages.map((s) => statCard(s.label, s.count, s.sub)).join('')
+    + '</div>';
+}
+
+function renderCrashReports(c) {
+  const total = c.total || 0;
+  const recent = Array.isArray(c.recent) ? c.recent : [];
+  const container = document.getElementById('crash-reports-content');
+  if (!total) {
+    container.innerHTML = '<div style="color:#16a34a;font-size:13px">Aucun crash remonté sur cette période 🎉</div>';
+    return;
+  }
+  let html = '<div class="stats-grid">' + statCard('Crashes', total, 'période sélectionnée') + '</div>';
+  html += '<table class="api-table" style="margin-top:8px"><thead><tr><th>Quand</th><th>Écran</th><th>Plateforme</th><th>Version</th><th>Message</th></tr></thead><tbody>';
+  for (const r of recent) {
+    const when = r.created_at ? String(r.created_at).replace('T', ' ').slice(0, 19) : '—';
+    html += '<tr><td>' + escHtml(when) + '</td><td>' + escHtml(r.screen || '—') + '</td><td>' + escHtml(r.platform || '—') + '</td><td>' + escHtml(r.app_version || '—') + '</td><td>' + escHtml(r.message || '—') + '</td></tr>';
+  }
+  html += '</tbody></table>';
+  container.innerHTML = html;
 }
 
 function renderOcrImageEnrichment(o) {

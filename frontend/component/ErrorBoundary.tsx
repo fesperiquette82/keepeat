@@ -1,6 +1,8 @@
 import React from "react";
-import { Text, ScrollView, StyleSheet } from "react-native";
+import { Text, ScrollView, StyleSheet, Platform } from "react-native";
+import Constants from "expo-constants";
 import { logger } from "../utils/logger";
+import { reportCrash } from "../utils/crashReporting";
 
 interface State {
   error: any;
@@ -14,11 +16,16 @@ export default class ErrorBoundary extends React.Component<any, State> {
   }
 
   componentDidCatch(error: any, errorInfo: any) {
-    logger.error("ErrorBoundary caught", {
-      message: error instanceof Error ? error.message : String(error),
-      stack: errorInfo?.componentStack ? String(errorInfo.componentStack) : undefined,
-    });
+    const message = error instanceof Error ? error.message : String(error);
+    const stack = errorInfo?.componentStack ? String(errorInfo.componentStack) : undefined;
+    logger.error("ErrorBoundary caught", { message, stack });
     this.setState({ error, errorInfo });
+    void reportCrash({
+      message,
+      stack,
+      appVersion: Constants.expoConfig?.version,
+      platform: Platform.OS,
+    });
   }
 
   render() {

@@ -6,6 +6,7 @@ import { differenceInDays, parseISO } from 'date-fns';
 import { StockItem } from '../store/stockStore';
 import { buildApiUrl } from './config';
 import { logger } from './logger';
+import { fetchWithTimeout as fetch } from './fetchWithTimeout';
 const PUSH_TOKEN_KEY = 'keepeat_push_token';
 
 const NOTIF_IDS_KEY = 'keepeat_notification_ids';

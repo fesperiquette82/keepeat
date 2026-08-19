@@ -1,6 +1,5 @@
 from __future__ import annotations
 
-import asyncio
 import os
 from dataclasses import dataclass
 from datetime import datetime, timedelta, timezone
@@ -311,19 +310,6 @@ async def check_daily_expiry_alert(deps: AlertDependencies) -> None:
         )
         await deps.user_alerts_col.insert_one({"user_id": user_id, "key": alert_key, "sent_at": utc_now()})
         logger.info("Daily expiry alert sent — user=%s items=%d recipe=%s", user_id, count, bool(recipe_hint))
-
-
-async def alert_loop(deps: AlertDependencies) -> None:
-    while True:
-        await asyncio.sleep(6 * 3600)
-        try:
-            await check_recalls_and_notify(deps)
-            await check_inactivity_and_notify(deps)
-            if utc_now().hour < 12:
-                await check_daily_expiry_alert(deps)
-                await check_weekly_expiry_summary(deps)
-        except Exception as exc:
-            logger.error("Alert loop error: %s", exc)
 
 
 async def seed_default_user(users_col) -> None:

@@ -1,4 +1,5 @@
 import { buildApiUrl } from './config';
+import { fetchWithTimeout as fetch } from './fetchWithTimeout';
 
 export interface MonitoringHealthResponse {
   status: 'ok' | 'degraded' | 'error' | string;
