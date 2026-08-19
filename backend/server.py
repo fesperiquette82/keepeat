@@ -3059,26 +3059,42 @@ async def get_recipe_suggestions(
                     uid,
                     exc.detail,
                 )
+                if isinstance(exc.detail, dict) and exc.detail.get("code") == "QUOTA_EXCEEDED":
+                    # consume_quota_or_raise incrémente AVANT de vérifier la limite (réservation
+                    # atomique) : la requête rejetée a donc bien consommé une unité. Sans ce
+                    # remboursement, /suggestions (interrogé automatiquement, jusqu'à 4 fois par
+                    # mutation de stock, sans jamais relancer Gemini une fois la limite atteinte)
+                    # ferait grimper le compteur indéfiniment au-delà de la limite réelle —
+                    # faussant /billing/usage et les compteurs admin.
+                    await _refund_feature_quota(
+                        user_id=uid,
+                        feature=FEATURE_AI,
+                        quota_context={"quota": {"period": _current_period_key(), "limit": 1}},
+                    )
             except Exception as exc:
                 # Best-effort : une panne de la vérification de quota (ex. Mongo indisponible)
                 # ne doit pas faire échouer /suggestions — elle désactive juste le repli IA.
                 logger.warning("AI gap fill: vérification de quota indisponible pour user=%s: %s", uid, exc)
             if quota_context is not None:
-                ai_raw = None
+                # Gemini ET la persistance restent dans le même bloc protégé : une recette
+                # IA mal formée (ex. prep_time_min non numérique) qui ferait échouer
+                # _save_ai_recipe_to_stores ne doit pas non plus faire échouer /suggestions
+                # ni laisser le quota réservé sans remboursement.
+                ai_scored = None
                 try:
                     ai_raw = await asyncio.wait_for(
                         _ai_gap_fill(stock_names, gemini_key),
                         timeout=10.0,
                     )
+                    if ai_raw:
+                        ai_scored = await _save_ai_recipe_to_stores(ai_raw, stock_names=stock_names)
+                        relevant = [ai_scored]
+                        logger.info("AI gap fill: recette proposée pour user=%s", uid)
                 except asyncio.TimeoutError:
                     logger.warning("AI gap fill: timeout 10s dépassé pour user=%s", uid)
                 except Exception as exc:
                     logger.warning("AI gap fill: erreur pour user=%s: %s", uid, exc)
-                if ai_raw:
-                    ai_scored = await _save_ai_recipe_to_stores(ai_raw, stock_names=stock_names)
-                    relevant = [ai_scored]
-                    logger.info("AI gap fill: recette proposée pour user=%s", uid)
-                else:
+                if ai_scored is None:
                     await _refund_feature_quota(user_id=uid, feature=FEATURE_AI, quota_context=quota_context)
 
         if not relevant:

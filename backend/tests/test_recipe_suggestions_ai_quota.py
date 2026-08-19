@@ -172,3 +172,49 @@ class TestAiGapFillQuotaEnforcement:
         assert app_state.docs[counter_id]["used"] == 0  # réservé (1) puis remboursé (0)
         gap_col.update_one.assert_awaited()  # repli sur le gap une fois l'IA infructueuse
         server.app.dependency_overrides.clear()
+
+    def test_quota_exhausted_refunds_the_over_limit_reservation(self, monkeypatch):
+        """Revue Codex (PR #147) : consume_quota_or_raise incrémente `used` AVANT de
+        vérifier la limite et de lever 429 — la requête rejetée a donc quand même
+        réservé une unité. Comme /suggestions absorbe ce 429 sans jamais relancer
+        Gemini, ne pas rembourser ferait grimper `used` indéfiniment (6, 7, 8...) à
+        chaque appel automatique, sans aucun appel IA réel derrière."""
+        server = _load_server(monkeypatch)
+        app_state, counter_id, _ = _setup_common(monkeypatch, server, app_state_used=5)
+
+        ai_mock = AsyncMock()
+        monkeypatch.setattr(server, "_ai_gap_fill", ai_mock)
+
+        from fastapi.testclient import TestClient
+        client = TestClient(server.app)
+        resp = client.get("/api/recipes/suggestions?filter=stock")
+
+        assert resp.status_code == 200
+        ai_mock.assert_not_awaited()
+        assert app_state.docs[counter_id]["used"] == 5  # réservé (6) puis remboursé (5)
+        server.app.dependency_overrides.clear()
+
+    def test_ai_save_failure_returns_200_and_refunds_quota(self, monkeypatch):
+        """Revue Codex (PR #147) : après refactor, seul l'appel Gemini était protégé —
+        une exception dans _save_ai_recipe_to_stores (ex. recette IA mal formée)
+        remontait en 500 sans rembourser le quota réservé. La persistance doit rester
+        dans le même bloc protégé que l'appel IA, avec dégradation vers le mécanisme
+        de gap plutôt qu'une erreur remontée à l'app."""
+        server = _load_server(monkeypatch)
+        app_state, counter_id, gap_col = _setup_common(monkeypatch, server, app_state_used=0)
+
+        ai_recipe = {"title": "Poulet rôti", "ingredients_used": ["poulet"], "instructions_summary": "Cuire."}
+        monkeypatch.setattr(server, "_ai_gap_fill", AsyncMock(return_value=ai_recipe))
+        monkeypatch.setattr(
+            server, "_save_ai_recipe_to_stores",
+            AsyncMock(side_effect=ValueError("invalid literal for int() with base 10: '20 min'")),
+        )
+
+        from fastapi.testclient import TestClient
+        client = TestClient(server.app)
+        resp = client.get("/api/recipes/suggestions?filter=stock")
+
+        assert resp.status_code == 200
+        assert app_state.docs[counter_id]["used"] == 0  # réservé (1) puis remboursé (0)
+        gap_col.update_one.assert_awaited()
+        server.app.dependency_overrides.clear()
