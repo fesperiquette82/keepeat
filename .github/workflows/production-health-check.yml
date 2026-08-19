@@ -52,10 +52,18 @@ jobs:
             echo "::warning::Impossible de déterminer le commit déployé sur Render (build-info.commit manquant ou endpoint injoignable)."
             exit 0
           fi
-          case "$expected_sha" in
-            "$deployed_commit"*) echo "✅ Backend à jour avec le dernier commit backend-relevant." ;;
-            *)
-              echo "::error::Le backend Render (commit $deployed_commit) est en retard sur le dernier commit backend-relevant de main ($expected_sha). Vérifier le hook de déploiement Render (secret RENDER_DEPLOY_HOOK_URL) et le workflow 'Deploy Render Backend'."
-              exit 1
-              ;;
-          esac
+          # Le backend est à jour si le commit déployé CONTIENT le dernier commit
+          # backend-relevant (ancêtre), pas seulement s'il lui est strictement égal —
+          # Render peut très bien avoir déployé un commit plus récent de main (ex: un
+          # commit frontend/docs-only qui suit ce dernier commit backend-relevant),
+          # ce qui reste un déploiement à jour et ne doit pas être signalé en erreur.
+          if ! git cat-file -e "${deployed_commit}^{commit}" 2>/dev/null; then
+            echo "::warning::Commit déployé ($deployed_commit) introuvable dans l'historique local récupéré — vérification de fraîcheur ignorée."
+            exit 0
+          fi
+          if git merge-base --is-ancestor "$expected_sha" "$deployed_commit"; then
+            echo "✅ Backend à jour : le commit déployé ($deployed_commit) contient le dernier commit backend-relevant ($expected_sha)."
+          else
+            echo "::error::Le backend Render (commit $deployed_commit) est en retard sur le dernier commit backend-relevant de main ($expected_sha). Vérifier le hook de déploiement Render (secret RENDER_DEPLOY_HOOK_URL) et le workflow 'Deploy Render Backend'."
+            exit 1
+          fi

@@ -1649,3 +1649,95 @@ def test_app_index_auth_guard_prevents_maestro_race_condition():
         "app/index.tsx must not use immediate <Redirect> without auth check"
 
 
+def test_production_health_check_freshness_uses_ancestry_not_exact_match():
+    """
+    Regression : le check de fraîcheur du déploiement Render comparait le commit
+    déployé au dernier commit "backend-relevant" par égalité stricte (case
+    "$expected_sha" in "$deployed_commit"*). Si Render déployait un commit PLUS
+    RÉCENT que ce dernier commit backend-relevant (ex: le merge d'une PR qui ne
+    touche que .github/workflows/**, comme #145), le check échouait à tort en
+    signalant un déploiement "en retard" alors que le code backend déployé était
+    bien à jour (295ba120 déployé alors que le dernier commit backend/** était
+    3d9ad24e, un ancêtre de 295ba120 -> faux positif observé en prod le 2026-08-19).
+
+    Le fix compare par ascendance git (le commit backend-relevant doit être un
+    ancêtre du commit déployé) plutôt que par égalité/préfixe exact.
+    """
+    workflow = Path(".github/workflows/production-health-check.yml").read_text(encoding="utf-8")
+
+    assert "git merge-base --is-ancestor" in workflow, \
+        "La vérification de fraîcheur doit utiliser une comparaison par ascendance git, pas une égalité stricte"
+    assert 'case "$expected_sha" in' not in workflow, \
+        "L'ancienne comparaison par égalité/préfixe stricte (source du faux positif) ne doit pas revenir"
+
+
+def test_production_health_check_freshness_ancestry_logic_end_to_end():
+    """
+    Rejoue la logique exacte du step "Vérifier que le backend déployé est à jour"
+    dans un vrai dépôt git temporaire, pour verrouiller son comportement :
+    - déployé == dernier commit backend-relevant -> OK
+    - déployé = descendant du dernier commit backend-relevant (ex: merge d'une PR
+      qui ne touche pas backend/**) -> OK, pas de faux positif
+    - déployé = un ancien commit qui ne contient PAS le dernier commit
+      backend-relevant -> échoue bien (vrai retard de déploiement détecté)
+    """
+    import subprocess
+    import tempfile
+
+    def run(cwd, *args):
+        subprocess.run(["git", *args], cwd=cwd, check=True, capture_output=True, text=True)
+
+    def freshness_check(repo_dir, expected_sha, deployed_commit):
+        script = (
+            f'set -e\n'
+            f'expected_sha="{expected_sha}"\n'
+            f'deployed_commit="{deployed_commit}"\n'
+            'if ! git cat-file -e "${deployed_commit}^{commit}" 2>/dev/null; then\n'
+            '  exit 0\n'
+            'fi\n'
+            'if git merge-base --is-ancestor "$expected_sha" "$deployed_commit"; then\n'
+            '  echo "OK"\n'
+            'else\n'
+            '  echo "STALE"\n'
+            '  exit 1\n'
+            'fi\n'
+        )
+        return subprocess.run(
+            ["bash", "-c", script], cwd=repo_dir, capture_output=True, text=True
+        )
+
+    with tempfile.TemporaryDirectory() as tmp:
+        run(tmp, "init", "-q")
+        run(tmp, "config", "user.email", "ci@example.com")
+        run(tmp, "config", "user.name", "CI")
+
+        Path(tmp, "backend").mkdir()
+        Path(tmp, "backend", "server.py").write_text("v1", encoding="utf-8")
+        run(tmp, "add", "-A")
+        run(tmp, "commit", "-q", "-m", "backend change")
+        backend_commit = subprocess.run(
+            ["git", "rev-parse", "HEAD"], cwd=tmp, capture_output=True, text=True, check=True
+        ).stdout.strip()
+
+        Path(tmp, "README.md").write_text("docs only", encoding="utf-8")
+        run(tmp, "add", "-A")
+        run(tmp, "commit", "-q", "-m", "docs-only follow-up")
+        docs_only_commit = subprocess.run(
+            ["git", "rev-parse", "HEAD"], cwd=tmp, capture_output=True, text=True, check=True
+        ).stdout.strip()
+
+        # Déployé == dernier commit backend-relevant -> OK
+        result = freshness_check(tmp, backend_commit, backend_commit)
+        assert result.returncode == 0 and "OK" in result.stdout
+
+        # Déployé = commit plus récent (docs-only) qui contient le commit backend-relevant -> OK
+        result = freshness_check(tmp, backend_commit, docs_only_commit)
+        assert result.returncode == 0 and "OK" in result.stdout, \
+            "Un déploiement d'un commit plus récent que le dernier commit backend-relevant ne doit pas être signalé comme périmé"
+
+        # Déployé = un commit qui ne contient PAS le dernier commit backend-relevant -> échec réel
+        result = freshness_check(tmp, docs_only_commit, backend_commit)
+        assert result.returncode != 0 and "STALE" in result.stdout, \
+            "Un déploiement réellement en retard doit toujours être détecté"
+
+
