@@ -14,6 +14,8 @@ jobs:
     steps:
       - name: Checkout
         uses: actions/checkout@v5
+        with:
+          fetch-depth: 0
 
       - name: Vérifier /health (app + connexion MongoDB)
         run: |
@@ -33,21 +35,27 @@ jobs:
             exit 1
           fi
 
-      - name: Vérifier que le backend déployé est à jour avec main
+      - name: Vérifier que le backend déployé est à jour
         run: |
-          latest_main_sha=$(git rev-parse HEAD)
-          build_info=$(curl -sS --max-time 20 https://keepeat-backend.onrender.com/build-info)
+          set -e
+          # Le workflow "Deploy Render Backend" ne se déclenche que sur les push à main
+          # qui touchent backend/** ou son propre fichier — un commit frontend/docs-only
+          # ne redéploie pas le backend, ce n'est donc PAS un retard. On compare au
+          # dernier commit qui, lui, aurait dû déclencher un déploiement.
+          expected_sha=$(git log -1 --format=%H -- backend/ .github/workflows/deploy-render-backend.yml)
+          build_info=$(curl -sS --max-time 20 https://keepeat-backend.onrender.com/api/build-info)
           echo "build-info: $build_info"
           deployed_commit=$(echo "$build_info" | python3 -c "import json,sys; print(json.load(sys.stdin).get('commit','unknown'))" 2>/dev/null || echo "unknown")
-          echo "Commit déployé   : $deployed_commit"
-          echo "Commit main (CI) : $latest_main_sha"
+          echo "Commit déployé                        : $deployed_commit"
+          echo "Attendu (dernier commit backend/**)    : $expected_sha"
           if [ "$deployed_commit" = "unknown" ] || [ -z "$deployed_commit" ]; then
-            echo "::warning::Impossible de déterminer le commit déployé sur Render (build-info.commit manquant)."
+            echo "::warning::Impossible de déterminer le commit déployé sur Render (build-info.commit manquant ou endpoint injoignable)."
             exit 0
           fi
-          case "$latest_main_sha" in
-            "$deployed_commit"*) echo "✅ Backend à jour avec main." ;;
+          case "$expected_sha" in
+            "$deployed_commit"*) echo "✅ Backend à jour avec le dernier commit backend-relevant." ;;
             *)
-              echo "::warning::Le backend Render (commit $deployed_commit) est en retard sur main ($latest_main_sha). Vérifier le hook de déploiement Render (secret RENDER_DEPLOY_HOOK_URL) et le workflow 'Deploy Render Backend'."
+              echo "::error::Le backend Render (commit $deployed_commit) est en retard sur le dernier commit backend-relevant de main ($expected_sha). Vérifier le hook de déploiement Render (secret RENDER_DEPLOY_HOOK_URL) et le workflow 'Deploy Render Backend'."
+              exit 1
               ;;
           esac
