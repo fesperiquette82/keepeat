@@ -178,6 +178,18 @@ const translations: Translations = {
   logoutConfirmTitle: { fr: 'Déconnexion', en: 'Log out' },
   logoutConfirmMessage: { fr: 'Voulez-vous vraiment vous déconnecter ?', en: 'Do you really want to log out?' },
   logoutErrorMessage: { fr: 'Impossible de vous déconnecter pour le moment.', en: 'Unable to log you out right now.' },
+  exportDataButton: { fr: 'Exporter mes données', en: 'Export my data' },
+  exportDataHint: {
+    fr: 'Téléchargez une copie de vos données personnelles (profil, stock, tickets de caisse).',
+    en: 'Download a copy of your personal data (profile, stock, receipt tickets).',
+  },
+  exportDataSuccess: { fr: 'Export généré', en: 'Export generated' },
+  exportDataError: { fr: "Impossible d'exporter vos données pour le moment.", en: 'Unable to export your data right now.' },
+  exportDataUnavailable: {
+    fr: 'Le partage de fichiers n’est pas disponible sur cet appareil.',
+    en: 'File sharing is not available on this device.',
+  },
+  deleteAccountButton: { fr: 'Supprimer mon compte', en: 'Delete my account' },
   adminSection: { fr: 'Administration', en: 'Administration' },
   adminMonitoringAccess: { fr: 'Accès monitoring backend (admin only).', en: 'Backend monitoring access (admin only).' },
   openMonitoringBackoffice: { fr: 'Ouvrir le back-office monitoring', en: 'Open monitoring back-office' },

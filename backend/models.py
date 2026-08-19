@@ -89,6 +89,15 @@ class ResetPasswordBody(BaseModel):
     new_password: str
 
 
+class AccountDeletionBody(BaseModel):
+    confirm_password: str
+
+
+class AccountDeletionResponse(BaseModel):
+    deleted: bool
+    message: str
+
+
 class ProductBase(BaseModel):
     barcode: Optional[str] = None
     name: str = ""

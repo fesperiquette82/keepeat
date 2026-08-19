@@ -583,3 +583,20 @@ sans aucun moyen d'interagir ou de revenir en arrière pendant ce temps.
 **Fichiers modifiés :** `frontend/app/recipes/[id].tsx`
 **Tests ajoutés :** `frontend/utils/auditBugsSourceChecks.test.ts` (régression BUG-035, verrouille la présence du bouton retour dans la branche de chargement)
 **Piste non retenue dans cette session :** ajouter un timeout côté client à l'appel `fetchRecipeById` (aucun appel `axios` du repo n'a de timeout explicite ; changement plus large, hors du périmètre demandé — navigation, pas performance réseau).
+
+---
+
+### Session du 2026-08-19 (suite) — conformité RGPD (export + suppression de compte)
+
+Suite à l'audit commercial livré à l'utilisateur, qui identifiait l'absence de conformité
+RGPD comme bloquant pour toute publication sur les stores (Google Play l'exige depuis 2024,
+Apple depuis 2022).
+
+| ID | Sévérité | Statut | Résumé |
+|---|---|---|---|
+| BUG-036 | 🔴 CRITIQUE (conformité/publication) | `CORRIGÉ` | Aucun moyen en libre-service d'exporter ou de supprimer ses données personnelles n'existait. Une politique de confidentialité publique existait déjà (`/privacy-policy`, non détectée par la première passe de l'audit) mais mentionnait à tort « OpenAI » comme prestataire OCR alors que le code utilise Google Gemini depuis plusieurs sessions — un contenu légal publié inexact est un risque de conformité en soi. **Correction :** `GET /api/account/export` (droit d'accès/portabilité — profil, stock, tickets de caisse) et `DELETE /api/account` (droit à l'effacement, protégé par re-saisie du mot de passe, même convention que `admin_reset_api_logs`) ; écran `frontend/app/delete-account.tsx` + bouton d'export dans Réglages ; page publique `/account-deletion` joignable sans connexion (exigence Google Play) ; politique de confidentialité corrigée (Gemini, section droits détaillée). Les journaux partagés/agrégés (business_events, service_usage_logs, api_request_logs, recipe_gap_requests — dédupliqués entre utilisateurs via `signature`) sont anonymisés (`user_id` → `null`), pas supprimés en masse : ils gardent leur valeur agrégée pour les métriques produit sans rester rattachables à la personne. |
+
+**Fichiers modifiés :** `backend/server.py`, `backend/models.py`, `backend/observability.py`, `frontend/app/settings.tsx`, `frontend/store/languageStore.ts`
+**Fichiers ajoutés :** `frontend/app/delete-account.tsx`, `frontend/utils/accountService.ts`, `frontend/utils/accountExportFile.ts`
+**Tests ajoutés :** `backend/tests/test_account_gdpr.py` (9 cas : scoping de l'export, mot de passe requis, suppression des collections personnelles, anonymisation des journaux partagés, pages publiques joignables), `frontend/utils/accountGdpr.test.ts` (6 cas source-scan)
+**Piste non retenue dans cette session :** page CGU/mentions légales — contenu juridique propre à l'activité (facturation, responsabilité), pas un simple correctif de code ; à rédiger avec l'utilisateur.
