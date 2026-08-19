@@ -567,3 +567,19 @@ suppression de stock, existence d'une base évitant les appels IA systématiques
 **Fichiers modifiés :** `backend/server.py`, `backend/tests/test_recipe_gap_upsert.py`, `backend/tests/test_critical_bug_regressions.py`, `tests/test_gap_email_notification.py`
 **Tests ajoutés :** `backend/tests/test_recipe_catalog_mongo_source_of_truth.py` (10 cas), `backend/tests/test_recipe_suggestions_ai_quota.py` (3 cas)
 **Note :** l'audit complet (incluant des constats 🟡 MINEUR non corrigés dans cette session — plafond silencieux à 500 recettes, deux moteurs de scoring parallèles, absence d'indicateur admin dédié) a été livré séparément à l'utilisateur.
+
+---
+
+### Session du 2026-08-19 (suite) — écran détail recette : cul-de-sac pendant le chargement
+
+Signalé par l'utilisateur : depuis le détail d'un article de stock, ouvrir une des recettes
+listées affiche « Chargement de la recette… » de façon parfois longue, sans jamais aboutir,
+sans aucun moyen d'interagir ou de revenir en arrière pendant ce temps.
+
+| ID | Sévérité | Statut | Résumé |
+|---|---|---|---|
+| BUG-035 | 🟠 MAJEUR | `CORRIGÉ` | `frontend/app/recipes/[id].tsx` : la branche `isScreenLoading` du rendu n'affichait qu'un texte statique « Chargement de la recette… », sans header ni bouton retour — contrairement aux branches erreur/succès qui en ont un. Le layout racine (`app/_layout.tsx`) utilise `<Slot/>` (pas de `<Stack/>`), donc aucun geste de navigation natif n'est disponible en secours : si `fetchRecipeById` (appel `axios` sans timeout, cf. `store/recipesStore.ts`) restait bloqué — backend lent/dégradé — l'utilisateur n'avait **aucun** moyen de quitter l'écran sur iOS (sur Android, le bouton matériel/geste retour fonctionnait via `BackHandler`, déjà branché). **Correction :** le bouton retour (`handleBack`, identique aux autres branches) est désormais affiché dès le début du chargement. |
+
+**Fichiers modifiés :** `frontend/app/recipes/[id].tsx`
+**Tests ajoutés :** `frontend/utils/auditBugsSourceChecks.test.ts` (régression BUG-035, verrouille la présence du bouton retour dans la branche de chargement)
+**Piste non retenue dans cette session :** ajouter un timeout côté client à l'appel `fetchRecipeById` (aucun appel `axios` du repo n'a de timeout explicite ; changement plus large, hors du périmètre demandé — navigation, pas performance réseau).

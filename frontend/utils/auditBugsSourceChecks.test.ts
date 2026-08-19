@@ -61,3 +61,28 @@ test('régression BUG-027 : l\'effet lookupProduct a un guard "cancelled" avec c
   assert.match(effectBody, /if \(cancelled\) return;/);
   assert.match(effectBody, /return \(\) => \{\s*cancelled = true;\s*\};/);
 });
+
+// ---------------------------------------------------------------------------
+// BUG-035 — recipes/[id].tsx : l'écran de détail recette était un cul-de-sac
+// pendant le chargement (aucun bouton retour, aucun header) : si fetchRecipeById
+// restait bloqué (backend lent/indisponible), l'utilisateur ne pouvait plus du
+// tout naviguer en arrière (pas de header custom = pas de swipe natif, layout
+// racine en <Slot/> sans Stack).
+// ---------------------------------------------------------------------------
+
+test('régression BUG-035 : recipes/[id].tsx affiche un bouton retour pendant le chargement', () => {
+  const src = readSource('app/recipes/[id].tsx');
+
+  const loadingBranchStart = src.indexOf('if (isScreenLoading) {');
+  assert.ok(loadingBranchStart !== -1, 'la branche de chargement isScreenLoading doit exister');
+
+  const nextBranchStart = src.indexOf('if (screenError || !baseRecipe) {');
+  assert.ok(nextBranchStart !== -1 && nextBranchStart > loadingBranchStart);
+
+  const loadingBranchBody = src.slice(loadingBranchStart, nextBranchStart);
+
+  // Le bloc de chargement doit contenir un bouton actionnable qui appelle
+  // handleBack (comme les écrans d'erreur et de succès), pas juste un texte statique.
+  assert.match(loadingBranchBody, /onPress=\{handleBack\}/);
+  assert.match(loadingBranchBody, /TouchableOpacity/);
+});
