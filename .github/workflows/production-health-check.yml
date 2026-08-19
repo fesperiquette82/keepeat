@@ -1,0 +1,61 @@
+name: Production Health Check
+
+on:
+  schedule:
+    # Toutes les 15 minutes.
+    - cron: '*/15 * * * *'
+  workflow_dispatch: {}
+
+jobs:
+  backend-health:
+    name: Backend Render — santé + fraîcheur du déploiement
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v5
+        with:
+          fetch-depth: 0
+
+      - name: Vérifier /health (app + connexion MongoDB)
+        run: |
+          set -e
+          response=$(curl -sS -w "\n%{http_code}" --max-time 20 https://keepeat-backend.onrender.com/health)
+          http_code=$(echo "$response" | tail -n1)
+          body=$(echo "$response" | sed '$d')
+          echo "HTTP $http_code"
+          echo "$body"
+          if [ "$http_code" != "200" ]; then
+            echo "::error::Backend /health a répondu HTTP $http_code (attendu 200) — le service est probablement injoignable ou en train de redémarrer."
+            exit 1
+          fi
+          mongo_ok=$(echo "$body" | python3 -c "import json,sys; print(json.load(sys.stdin).get('mongo'))" 2>/dev/null || echo "unknown")
+          if [ "$mongo_ok" != "True" ]; then
+            echo "::error::Backend /health répond mais signale MongoDB dégradé : $body"
+            exit 1
+          fi
+
+      - name: Vérifier que le backend déployé est à jour
+        run: |
+          set -e
+          # Le workflow "Deploy Render Backend" ne se déclenche que sur les push à main
+          # qui touchent backend/** ou son propre fichier — un commit frontend/docs-only
+          # ne redéploie pas le backend, ce n'est donc PAS un retard. On compare au
+          # dernier commit qui, lui, aurait dû déclencher un déploiement.
+          expected_sha=$(git log -1 --format=%H -- backend/ .github/workflows/deploy-render-backend.yml)
+          build_info=$(curl -sS --max-time 20 https://keepeat-backend.onrender.com/api/build-info)
+          echo "build-info: $build_info"
+          deployed_commit=$(echo "$build_info" | python3 -c "import json,sys; print(json.load(sys.stdin).get('commit','unknown'))" 2>/dev/null || echo "unknown")
+          echo "Commit déployé                        : $deployed_commit"
+          echo "Attendu (dernier commit backend/**)    : $expected_sha"
+          if [ "$deployed_commit" = "unknown" ] || [ -z "$deployed_commit" ]; then
+            echo "::warning::Impossible de déterminer le commit déployé sur Render (build-info.commit manquant ou endpoint injoignable)."
+            exit 0
+          fi
+          case "$expected_sha" in
+            "$deployed_commit"*) echo "✅ Backend à jour avec le dernier commit backend-relevant." ;;
+            *)
+              echo "::error::Le backend Render (commit $deployed_commit) est en retard sur le dernier commit backend-relevant de main ($expected_sha). Vérifier le hook de déploiement Render (secret RENDER_DEPLOY_HOOK_URL) et le workflow 'Deploy Render Backend'."
+              exit 1
+              ;;
+          esac
