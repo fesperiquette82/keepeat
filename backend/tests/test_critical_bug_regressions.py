@@ -234,11 +234,18 @@ def test_recipes_suggestions_returns_200_when_gap_fill_provider_fails(monkeypatc
     async def fake_upsert_recipe_gap(**_kwargs):
         return False
 
+    # Le repli IA réserve désormais le quota (C3) avant d'appeler Gemini — app_state_col
+    # doit être mocké pour que la réservation aboutisse et que _ai_gap_fill soit bien
+    # atteint (sinon le vrai client Mongo timeout avant même d'appeler le provider).
+    app_state_col = MagicMock()
+    app_state_col.find_one_and_update = AsyncMock(return_value={"used": 1})
+
     monkeypatch.setattr(server, "_fetch_stock_candidates", fake_fetch_stock_candidates)
     monkeypatch.setattr(server, "_ai_gap_fill", failing_ai_gap_fill)
     monkeypatch.setattr(server, "_upsert_recipe_gap", fake_upsert_recipe_gap)
     monkeypatch.setattr(server, "_get_recipes_ai_api_key", lambda: "recipes-key")
     monkeypatch.setattr(server, "recipes_col", _FakeRecipesCollection([]))
+    monkeypatch.setattr(server, "app_state_col", app_state_col)
     server.app.dependency_overrides[server._get_current_user] = lambda: {"id": "user-1"}
 
     client = TestClient(server.app)

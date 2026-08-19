@@ -549,3 +549,21 @@ Le `catch` de `updateItem` vérifie désormais `isNetworkError(err)` et déclenc
 3. **BUG-2026-04-10-01** (500 possible sur `_upsert_recipe_gap`) : encapsuler la persistance gap dans un bloc résilient.
 
 *Note: cette reprise met à jour le suivi d'audit, sans patch applicatif dans ce commit.*
+
+---
+
+### Session du 2026-08-19 — audit fonctionnel du moteur de recettes
+
+Suite à une demande d'audit (création des recettes, temps de mise à jour, impact d'une
+suppression de stock, existence d'une base évitant les appels IA systématiques), 3 bugs
+🟠 MAJEUR ont été identifiés et corrigés dans `backend/recipes_service.py` / `backend/server.py`.
+
+| ID | Sévérité | Statut | Résumé |
+|---|---|---|---|
+| BUG-032 | 🟠 MAJEUR | `CORRIGÉ` | Les recettes ajoutées à l'exécution (IA via `_save_ai_recipe_to_stores`, admin via `admin_add_recipe`/`admin_import_recipes`) écrivaient aussi dans `backend/data/recipes.catalog.json` — un fichier versionné en git, sur le disque **éphémère** de Render (`render.yaml` ne déclare aucun volume persistant). Chaque redéploiement écrasait le fichier par le contenu du dépôt : toute recette ajoutée là était silencieusement perdue au déploiement suivant. **Correction :** les 3 sites d'écriture ne touchent plus le catalogue JSON à l'exécution — MongoDB (`recipes_col`) en devient l'unique source de vérité. |
+| BUG-033 (recettes) | 🟠 MAJEUR | `CORRIGÉ` | `_seed_shared_recipes_collection_if_needed` ne s'exécutait qu'une seule fois : dès que la collection `recipes` contenait un document, le seed se désactivait pour toujours. Une correction apportée au catalogue git n'atteignait donc plus jamais la production après le tout premier déploiement. **Correction :** remplacé par `_sync_shared_recipes_collection_from_catalog`, qui upsert chaque recette du catalogue par `id` à *chaque* démarrage (contenu resynchronisé via `$set`, compteurs d'usage et `created_at` préservés via `$setOnInsert`). |
+| BUG-034 (recettes) | 🟠 MAJEUR | `CORRIGÉ` | `GET /api/recipes/suggestions` — le seul endpoint de suggestions réellement utilisé par l'app — appelait Gemini (repli IA sur stock non couvert) **sans aucun contrôle de quota/plan**, contrairement à `/api/recipes/ai` (non utilisé par l'app) qui réserve le quota avant l'appel. Ce repli est déclenché automatiquement, jusqu'à 4 fois en parallèle par mutation de stock (un par filtre). **Correction :** même garde-fou que `/api/recipes/ai` (`_enforce_feature_access(consume_quota=True)` + `_refund_feature_quota` sur échec), avec dégradation silencieuse (pas de 500/429 remonté à l'appelant) si le plan/quota ne permet pas l'appel IA. |
+
+**Fichiers modifiés :** `backend/server.py`, `backend/tests/test_recipe_gap_upsert.py`, `backend/tests/test_critical_bug_regressions.py`, `tests/test_gap_email_notification.py`
+**Tests ajoutés :** `backend/tests/test_recipe_catalog_mongo_source_of_truth.py` (10 cas), `backend/tests/test_recipe_suggestions_ai_quota.py` (3 cas)
+**Note :** l'audit complet (incluant des constats 🟡 MINEUR non corrigés dans cette session — plafond silencieux à 500 recettes, deux moteurs de scoring parallèles, absence d'indicateur admin dédié) a été livré séparément à l'utilisateur.

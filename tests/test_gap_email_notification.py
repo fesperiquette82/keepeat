@@ -19,7 +19,7 @@ import os
 import sys
 import unittest
 from pathlib import Path
-from unittest.mock import AsyncMock, patch
+from unittest.mock import AsyncMock, MagicMock, patch
 
 os.environ.setdefault("MONGO_URL", "mongodb://localhost:27017")
 os.environ.setdefault("JWT_SECRET_KEY", "test-secret")
@@ -158,6 +158,18 @@ class SendRecipeGapEmailTests(unittest.TestCase):
 class SuggestLaterFlagTests(unittest.TestCase):
     """Vérifie le flag suggest_later dans la réponse de l'endpoint."""
 
+    def setUp(self):
+        # Le repli IA réserve désormais le quota (C3) avant d'appeler Gemini —
+        # app_state_col doit être mocké pour que la réservation aboutisse et que
+        # _ai_gap_fill soit réellement atteint (sinon le vrai client Mongo timeout
+        # 30 s avant même d'appeler le provider, faussant l'intention des tests
+        # ci-dessous qui patchent _ai_gap_fill / asyncio.wait_for).
+        app_state_col = MagicMock()
+        app_state_col.find_one_and_update = AsyncMock(return_value={"used": 1})
+        patcher = patch("server.app_state_col", app_state_col)
+        patcher.start()
+        self.addCleanup(patcher.stop)
+
     def test_suggest_later_true_quand_pas_de_cle_openai(self):
         """suggest_later=True si GEMINI_RECIPES_API_KEY absent et catalogue vide."""
         async def _run():
@@ -232,16 +244,20 @@ class SuggestLaterFlagTests(unittest.TestCase):
             with patch("server.recipes_col", _EmptyRecipesCollection()):
                 with patch("server._fetch_stock_candidates", AsyncMock(return_value=[{"name": "tomate"}])):
                     with patch("server._upsert_recipe_gap", AsyncMock(return_value=True)):
-                        # Simule un TimeoutError levé par asyncio.wait_for
-                        with patch("server.asyncio.wait_for", new_callable=AsyncMock,
-                                   side_effect=asyncio.TimeoutError()):
-                            with patch.dict(os.environ, {"GEMINI_RECIPES_API_KEY": "sk-test"}):
-                                return await get_recipe_suggestions(
-                                    response=Response(),
-                                    recipe_filter="all",
-                                    include_meta=True,
-                                    current_user={"id": "u1"},
-                                )
+                        # _ai_gap_fill mocké pour éviter une coroutine réelle jamais awaited
+                        # (asyncio.wait_for ci-dessous est remplacé, donc son argument
+                        # coroutine ne serait sinon jamais consommé).
+                        with patch("server._ai_gap_fill", AsyncMock(return_value=None)):
+                            # Simule un TimeoutError levé par asyncio.wait_for
+                            with patch("server.asyncio.wait_for", new_callable=AsyncMock,
+                                       side_effect=asyncio.TimeoutError()):
+                                with patch.dict(os.environ, {"GEMINI_RECIPES_API_KEY": "sk-test"}):
+                                    return await get_recipe_suggestions(
+                                        response=Response(),
+                                        recipe_filter="all",
+                                        include_meta=True,
+                                        current_user={"id": "u1"},
+                                    )
 
         payload = asyncio.run(_run())
         self.assertEqual(payload["recipes"], [])

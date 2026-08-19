@@ -121,7 +121,6 @@ from backend.product_catalog import (
 from backend.recipes_service import (
     _FRIGO_CATS,
     _PLACARD_CATS,
-    append_recipe_to_catalog,
     load_local_recipes,
     get_recipes_catalog,
     get_recipe_catalog_debug_info,
@@ -813,15 +812,27 @@ async def run_backend_warmup() -> dict[str, Any]:
     return summary
 
 
-async def _seed_shared_recipes_collection_if_needed() -> None:
+async def _sync_shared_recipes_collection_from_catalog() -> None:
+    """Synchronise la collection MongoDB `recipes` avec le catalogue JSON versionné
+    en git (backend/data/recipes.catalog.json), recette par recette (upsert sur `id`).
+
+    Contrairement à l'ancien seed « tout ou rien » (qui ne s'exécutait qu'au tout
+    premier démarrage, puis se désactivait dès que la collection contenait un seul
+    document), cette synchronisation tourne à CHAQUE démarrage : une correction
+    apportée au catalogue git atteint donc réellement la production au prochain
+    déploiement, au lieu de rester bloquée dans le fichier sans jamais rejoindre
+    MongoDB (source de vérité à l'exécution — cf. _save_ai_recipe_to_stores).
+
+    Seuls les ids présents dans le catalogue local sont touchés : les recettes
+    ajoutées hors catalogue (génération IA, admin) ne sont pas concernées. Les
+    compteurs d'usage (usage_count, view_count) et created_at sont préservés d'un
+    déploiement à l'autre via $setOnInsert — seul le contenu éditorial est resynchronisé.
+    """
     try:
-        existing = await recipes_col.count_documents({}, limit=1)
-        if existing > 0:
-            return
-        seeded_docs: list[dict[str, Any]] = []
+        now_iso = utc_now().isoformat()
+        synced = 0
         for recipe in load_local_recipes():
-            doc = {
-                "_id": recipe.id,
+            content = {
                 "id": recipe.id,
                 "title": recipe.title,
                 "description": recipe.summary,
@@ -833,18 +844,25 @@ async def _seed_shared_recipes_collection_if_needed() -> None:
                 "steps": recipe.steps,
                 "tags": recipe.tags,
                 "is_active": True,
-                "created_by": "seed_local_catalog",
-                "created_at": utc_now().isoformat(),
-                "updated_at": utc_now().isoformat(),
-                "usage_count": 0,
-                "view_count": 0,
+                "updated_at": now_iso,
             }
-            seeded_docs.append(doc)
-        if seeded_docs:
-            await recipes_col.insert_many(seeded_docs, ordered=False)
-            logger.info("Seed recipes collection completed with %d recipes", len(seeded_docs))
+            await recipes_col.update_one(
+                {"_id": recipe.id},
+                {
+                    "$set": content,
+                    "$setOnInsert": {
+                        "created_by": "seed_local_catalog",
+                        "created_at": now_iso,
+                        "usage_count": 0,
+                        "view_count": 0,
+                    },
+                },
+                upsert=True,
+            )
+            synced += 1
+        logger.info("Sync recipes collection from catalog completed: %d recipes", synced)
     except Exception as exc:
-        logger.warning("Seed recipes collection skipped/failed: %s", exc)
+        logger.warning("Sync recipes collection from catalog skipped/failed: %s", exc)
 
 
 @asynccontextmanager
@@ -882,7 +900,7 @@ async def lifespan(app: FastAPI):
     await users_col.create_index("reset_token", sparse=True)
     await receipt_tickets_col.create_index([("status", 1), ("created_at", -1)])
     await receipt_tickets_col.create_index([("user_id", 1), ("created_at", -1)])
-    await _seed_shared_recipes_collection_if_needed()
+    await _sync_shared_recipes_collection_from_catalog()
 
     deps = AlertDependencies(
         users_col=users_col,
@@ -3022,19 +3040,62 @@ async def get_recipe_suggestions(
             relevant = [ai_scored]
             logger.info("TEST_MODE AI recipe fixture used user=%s", uid)
         elif gemini_key and stock_names:
+            # C3 — même garde-fou de quota que /api/recipes/ai : réservation atomique
+            # AVANT l'appel Gemini, remboursée si aucune recette utilisable n'en ressort.
+            # Sans ce contrôle, ce repli (déclenché ici automatiquement, jusqu'à 4 fois en
+            # parallèle par mutation de stock — un par filtre) pouvait appeler l'IA sans
+            # aucune limite. Un plan/quota insuffisant ne doit pas faire échouer les
+            # suggestions : on désactive alors simplement le repli IA pour cet appel.
+            quota_context: dict[str, Any] | None = None
             try:
-                ai_raw = await asyncio.wait_for(
-                    _ai_gap_fill(stock_names, gemini_key),
-                    timeout=10.0,
+                quota_context = await _enforce_feature_access(
+                    current_user=current_user,
+                    feature=FEATURE_AI,
+                    consume_quota=True,
                 )
-                if ai_raw:
-                    ai_scored = await _save_ai_recipe_to_stores(ai_raw, stock_names=stock_names)
-                    relevant = [ai_scored]
-                    logger.info("AI gap fill: recette proposée pour user=%s", uid)
-            except asyncio.TimeoutError:
-                logger.warning("AI gap fill: timeout 10s dépassé pour user=%s", uid)
+            except HTTPException as exc:
+                logger.info(
+                    "AI gap fill: repli IA non déclenché (plan/quota) — user=%s detail=%s",
+                    uid,
+                    exc.detail,
+                )
+                if isinstance(exc.detail, dict) and exc.detail.get("code") == "QUOTA_EXCEEDED":
+                    # consume_quota_or_raise incrémente AVANT de vérifier la limite (réservation
+                    # atomique) : la requête rejetée a donc bien consommé une unité. Sans ce
+                    # remboursement, /suggestions (interrogé automatiquement, jusqu'à 4 fois par
+                    # mutation de stock, sans jamais relancer Gemini une fois la limite atteinte)
+                    # ferait grimper le compteur indéfiniment au-delà de la limite réelle —
+                    # faussant /billing/usage et les compteurs admin.
+                    await _refund_feature_quota(
+                        user_id=uid,
+                        feature=FEATURE_AI,
+                        quota_context={"quota": {"period": _current_period_key(), "limit": 1}},
+                    )
             except Exception as exc:
-                logger.warning("AI gap fill: erreur pour user=%s: %s", uid, exc)
+                # Best-effort : une panne de la vérification de quota (ex. Mongo indisponible)
+                # ne doit pas faire échouer /suggestions — elle désactive juste le repli IA.
+                logger.warning("AI gap fill: vérification de quota indisponible pour user=%s: %s", uid, exc)
+            if quota_context is not None:
+                # Gemini ET la persistance restent dans le même bloc protégé : une recette
+                # IA mal formée (ex. prep_time_min non numérique) qui ferait échouer
+                # _save_ai_recipe_to_stores ne doit pas non plus faire échouer /suggestions
+                # ni laisser le quota réservé sans remboursement.
+                ai_scored = None
+                try:
+                    ai_raw = await asyncio.wait_for(
+                        _ai_gap_fill(stock_names, gemini_key),
+                        timeout=10.0,
+                    )
+                    if ai_raw:
+                        ai_scored = await _save_ai_recipe_to_stores(ai_raw, stock_names=stock_names)
+                        relevant = [ai_scored]
+                        logger.info("AI gap fill: recette proposée pour user=%s", uid)
+                except asyncio.TimeoutError:
+                    logger.warning("AI gap fill: timeout 10s dépassé pour user=%s", uid)
+                except Exception as exc:
+                    logger.warning("AI gap fill: erreur pour user=%s: %s", uid, exc)
+                if ai_scored is None:
+                    await _refund_feature_quota(user_id=uid, feature=FEATURE_AI, quota_context=quota_context)
 
         if not relevant:
             # Ne signaler un gap que si l'utilisateur a bien des ingrédients en stock
@@ -3842,8 +3903,14 @@ async def _ai_gap_fill(stock_names: list[str], gemini_key: str) -> dict | None:
 
 
 async def _save_ai_recipe_to_stores(ai_recipe: dict, *, stock_names: list[str]) -> dict:
-    """Sauvegarde une recette générée par l'IA dans MongoDB recipes_col ET le catalogue JSON.
+    """Sauvegarde une recette générée par l'IA dans MongoDB (recipes_col).
     Retourne un dict scoré compatible avec le format de réponse /api/recipes/suggestions.
+
+    MongoDB est l'unique source de vérité à l'exécution — le catalogue JSON
+    (backend/data/recipes.catalog.json) n'est plus écrit ici : c'est un fichier
+    versionné en git sur un disque Render éphémère, écrasé par le contenu du dépôt
+    à chaque déploiement, donc toute écriture à l'exécution y était silencieusement
+    perdue au prochain déploiement.
     """
     title = str(ai_recipe.get("title", "Recette IA")).strip()
     slug = re.sub(r"[^a-z0-9]+", "-", unicodedata.normalize("NFD", title.lower()))[:40].strip("-")
@@ -3879,32 +3946,6 @@ async def _save_ai_recipe_to_stores(ai_recipe: dict, *, stock_names: list[str]) 
         logger.info("AI gap fill: recette sauvée en MongoDB id=%s title=%s", recipe_id, title)
     except Exception as exc:
         logger.warning("AI gap fill: MongoDB insert échoué: %s", exc)
-
-    # Sauvegarde catalogue JSON
-    catalog_entry = {
-        "id": recipe_id,
-        "title": title,
-        "summary": summary,
-        "ingredients_required": ingredients_used,
-        "ingredients_optional": [],
-        "steps": steps,
-        "prep_time_min": prep_time,
-        "cook_time_min": 0,
-        "difficulty": "easy",
-        "tags": ["anti-gaspi", "ia"],
-        "meal_type": ["dinner"],
-        "cuisine": "française",
-        "servings": 2,
-        "search_terms": ingredients_used,
-        "compat": {"storage_focus": []},
-        "source": {"type": "ai_generated", "name": "KeepEat AI"},
-        "version": 1,
-    }
-    try:
-        append_recipe_to_catalog(catalog_entry)
-        logger.info("AI gap fill: recette ajoutée au catalogue JSON id=%s", recipe_id)
-    except Exception as exc:
-        logger.warning("AI gap fill: ajout catalogue JSON échoué: %s", exc)
 
     # Mise à jour des gaps couverts
     try:
@@ -4862,7 +4903,8 @@ async def admin_add_recipe(
     payload: AdminRecipePayload,
     _admin_user: Dict[str, Any] = Depends(_require_admin_user),
 ):
-    """Ajoute manuellement une recette dans MongoDB recipes_col ET le catalogue JSON.
+    """Ajoute manuellement une recette dans MongoDB (recipes_col), source de vérité
+    à l'exécution — voir _save_ai_recipe_to_stores pour le détail.
     Requiert un compte admin (is_admin=True).
     """
     slug = re.sub(r"[^a-z0-9]+", "-", unicodedata.normalize("NFD", payload.title.lower()))[:40].strip("-")
@@ -4894,31 +4936,6 @@ async def admin_add_recipe(
     except DuplicateKeyError:
         raise HTTPException(status_code=409, detail="Une recette avec cet identifiant existe déjà.")
 
-    # Sauvegarde catalogue JSON
-    catalog_entry = {
-        "id": recipe_id,
-        "title": payload.title,
-        "summary": payload.summary,
-        "ingredients_required": payload.ingredients_required,
-        "ingredients_optional": payload.ingredients_optional,
-        "steps": payload.steps,
-        "prep_time_min": payload.prep_time_min,
-        "cook_time_min": payload.cook_time_min,
-        "difficulty": payload.difficulty,
-        "tags": payload.tags,
-        "meal_type": payload.meal_type or ["dinner"],
-        "cuisine": "française",
-        "servings": payload.servings,
-        "search_terms": payload.ingredients_required,
-        "compat": {"storage_focus": []},
-        "source": {"type": "manual_admin", "name": "KeepEat Admin"},
-        "version": 1,
-    }
-    try:
-        append_recipe_to_catalog(catalog_entry)
-    except Exception as exc:
-        logger.warning("admin_add_recipe: ajout catalogue JSON échoué: %s", exc)
-
     await _mark_coverable_gaps_after_recipe_insert(mongo_doc)
     logger.info(
         "ADMIN_ACTION action=add_recipe id=%s title=%s actor=%s",
@@ -4938,7 +4955,8 @@ async def admin_import_recipes(
     payload: AdminRecipeImportPayload,
     _admin_user: Dict[str, Any] = Depends(_require_admin_user),
 ):
-    """Importe un tableau de recettes dans MongoDB ET le catalogue JSON en une seule requête.
+    """Importe un tableau de recettes dans MongoDB (recipes_col), source de vérité à
+    l'exécution — voir _save_ai_recipe_to_stores pour le détail.
     Requiert un compte admin (is_admin=True).
     Retourne le détail de chaque recette : ajoutée, ignorée (doublon) ou en erreur.
     """
@@ -4977,30 +4995,6 @@ async def admin_import_recipes(
         except Exception as exc:
             results.append({"title": recipe.title, "status": "error", "reason": str(exc)})
             continue
-
-        catalog_entry = {
-            "id": recipe_id,
-            "title": recipe.title,
-            "summary": recipe.summary,
-            "ingredients_required": recipe.ingredients_required,
-            "ingredients_optional": recipe.ingredients_optional,
-            "steps": recipe.steps,
-            "prep_time_min": recipe.prep_time_min,
-            "cook_time_min": recipe.cook_time_min,
-            "difficulty": recipe.difficulty,
-            "tags": recipe.tags,
-            "meal_type": recipe.meal_type or ["dinner"],
-            "cuisine": "française",
-            "servings": recipe.servings,
-            "search_terms": recipe.ingredients_required,
-            "compat": {"storage_focus": []},
-            "source": {"type": "manual_admin", "name": "KeepEat Admin"},
-            "version": 1,
-        }
-        try:
-            append_recipe_to_catalog(catalog_entry)
-        except Exception as exc:
-            logger.warning("admin_import_recipes: ajout catalogue JSON échoué id=%s: %s", recipe_id, exc)
 
         await _mark_coverable_gaps_after_recipe_insert(mongo_doc)
         results.append({"title": recipe.title, "id": recipe_id, "status": "added"})

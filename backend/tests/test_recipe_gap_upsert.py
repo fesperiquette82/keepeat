@@ -194,6 +194,14 @@ class TestGapNotLoggedWhenAiSucceeds:
         monkeypatch.setattr(server, "_ai_gap_fill", AsyncMock(return_value=None))
         monkeypatch.setattr(server, "_get_recipes_ai_api_key", lambda: "fake-key")
 
+        # Le repli IA vérifie désormais le quota (C3) avant d'appeler Gemini —
+        # app_state_col doit être mocké comme les autres tests de quota
+        # (backend/tests/test_quota_cost_ceiling.py), sinon le vrai client Mongo
+        # tenterait de se connecter et timeout.
+        app_state_col = MagicMock()
+        app_state_col.find_one_and_update = AsyncMock(return_value={"used": 1})
+        monkeypatch.setattr(server, "app_state_col", app_state_col)
+
         upsert_result = MagicMock()
         upsert_result.upserted_id = "new-gap"
         gap_col = MagicMock()
