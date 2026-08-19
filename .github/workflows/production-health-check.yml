@@ -1,0 +1,53 @@
+name: Production Health Check
+
+on:
+  schedule:
+    # Toutes les 15 minutes.
+    - cron: '*/15 * * * *'
+  workflow_dispatch: {}
+
+jobs:
+  backend-health:
+    name: Backend Render — santé + fraîcheur du déploiement
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v5
+
+      - name: Vérifier /health (app + connexion MongoDB)
+        run: |
+          set -e
+          response=$(curl -sS -w "\n%{http_code}" --max-time 20 https://keepeat-backend.onrender.com/health)
+          http_code=$(echo "$response" | tail -n1)
+          body=$(echo "$response" | sed '$d')
+          echo "HTTP $http_code"
+          echo "$body"
+          if [ "$http_code" != "200" ]; then
+            echo "::error::Backend /health a répondu HTTP $http_code (attendu 200) — le service est probablement injoignable ou en train de redémarrer."
+            exit 1
+          fi
+          mongo_ok=$(echo "$body" | python3 -c "import json,sys; print(json.load(sys.stdin).get('mongo'))" 2>/dev/null || echo "unknown")
+          if [ "$mongo_ok" != "True" ]; then
+            echo "::error::Backend /health répond mais signale MongoDB dégradé : $body"
+            exit 1
+          fi
+
+      - name: Vérifier que le backend déployé est à jour avec main
+        run: |
+          latest_main_sha=$(git rev-parse HEAD)
+          build_info=$(curl -sS --max-time 20 https://keepeat-backend.onrender.com/build-info)
+          echo "build-info: $build_info"
+          deployed_commit=$(echo "$build_info" | python3 -c "import json,sys; print(json.load(sys.stdin).get('commit','unknown'))" 2>/dev/null || echo "unknown")
+          echo "Commit déployé   : $deployed_commit"
+          echo "Commit main (CI) : $latest_main_sha"
+          if [ "$deployed_commit" = "unknown" ] || [ -z "$deployed_commit" ]; then
+            echo "::warning::Impossible de déterminer le commit déployé sur Render (build-info.commit manquant)."
+            exit 0
+          fi
+          case "$latest_main_sha" in
+            "$deployed_commit"*) echo "✅ Backend à jour avec main." ;;
+            *)
+              echo "::warning::Le backend Render (commit $deployed_commit) est en retard sur main ($latest_main_sha). Vérifier le hook de déploiement Render (secret RENDER_DEPLOY_HOOK_URL) et le workflow 'Deploy Render Backend'."
+              ;;
+          esac
