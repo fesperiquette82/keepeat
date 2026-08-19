@@ -45,6 +45,16 @@ export default function VerifyEmailScreen() {
     runVerification();
   }, [runVerification]);
 
+  // BUG-043 : le compte est activé (token + user posés dans authStore par
+  // verifyEmail), mais rien ne quittait jamais cet écran malgré le message
+  // "Redirection en cours..." — l'utilisateur restait bloqué ici indéfiniment.
+  // "/" laisse app/index.tsx décider de la destination (onboarding vs tabs).
+  useEffect(() => {
+    if (status !== 'success') return;
+    const timer = setTimeout(() => router.replace('/'), 1200);
+    return () => clearTimeout(timer);
+  }, [status, router]);
+
   if (status === 'loading') {
     return (
       <SafeAreaView style={styles.container}>

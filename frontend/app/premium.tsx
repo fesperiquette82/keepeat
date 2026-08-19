@@ -2,7 +2,7 @@ import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { View, Text, StyleSheet, TouchableOpacity, Alert, ActivityIndicator } from 'react-native';
 import { useRouter } from 'expo-router';
-import type { PurchaseError, Subscription } from 'react-native-iap';
+import type { PurchaseError, ProductSubscription } from 'react-native-iap';
 import { usePremiumUiStore } from '../store/premiumUiStore';
 import { useAuthStore } from '../store/authStore';
 import { verifyPremiumPurchase } from '../utils/billingService';
@@ -47,7 +47,7 @@ export default function PremiumScreen() {
   const context = usePremiumUiStore(state => state.context);
   const closePaywall = usePremiumUiStore(state => state.closePaywall);
 
-  const [product, setProduct] = useState<Subscription | null>(null);
+  const [product, setProduct] = useState<ProductSubscription | null>(null);
   const [isStoreLoading, setIsStoreLoading] = useState(true);
   const [isPurchasing, setIsPurchasing] = useState(false);
   const [personalizedStats, setPersonalizedStats] = useState<PersonalizedStats>({

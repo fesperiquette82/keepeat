@@ -1,11 +1,12 @@
 import {
   initConnection,
   endConnection,
+  fetchProducts,
   getAvailablePurchases,
   finishTransaction,
   purchaseUpdatedListener,
   purchaseErrorListener,
-  type Subscription,
+  type ProductSubscription,
   type PurchaseError,
 } from 'react-native-iap';
 
@@ -36,11 +37,13 @@ export async function endIAP(): Promise<void> {
   }
 }
 
-export async function loadSubscription(): Promise<Subscription | null> {
+export async function loadSubscription(): Promise<ProductSubscription | null> {
   try {
-    // react-native-iap v14 uses different API
-    const subs = (await (getAvailablePurchases as any)()) as Subscription[];
-    return subs[0] ?? null;
+    // fetchProducts({ type: 'subs' }) renvoie le catalogue proposé par le store
+    // (prix, offres) — getAvailablePurchases() renvoie l'historique d'achats de
+    // l'utilisateur, vide pour quiconque n'a jamais acheté (BUG-002).
+    const subs = (await fetchProducts({ skus: SKUS, type: 'subs' })) as ProductSubscription[] | null;
+    return subs?.[0] ?? null;
   } catch {
     return null;
   }
@@ -105,19 +108,9 @@ export async function restoreSubscriptions(): Promise<PurchaseResult[]> {
 }
 
 /**
- * Extrait le prix formaté depuis un objet Subscription Play Store.
- * Supporte l'API Google Play Billing v5+ (subscriptionOfferDetails) et l'ancienne API.
+ * Extrait le prix formaté d'un ProductSubscription (react-native-iap v14+,
+ * API OpenIAP/Nitro) : le prix est directement exposé sur `displayPrice`.
  */
-export function getFormattedPrice(sub: Subscription | null): string {
-  if (!sub) return '...';
-  // Nouvelle API Play Billing v5+ (react-native-iap v14+)
-  const offerDetails = (sub as any).subscriptionOfferDetails;
-  if (offerDetails?.length) {
-    const phases = offerDetails[0]?.pricingPhases?.pricingPhaseList;
-    if (phases?.length) {
-      return phases[0].formattedPrice ?? (sub as any).localizedPrice ?? '...';
-    }
-  }
-  // Ancienne API de compatibilité
-  return (sub as any).localizedPrice ?? '...';
+export function getFormattedPrice(sub: ProductSubscription | null): string {
+  return sub?.displayPrice ?? '...';
 }
