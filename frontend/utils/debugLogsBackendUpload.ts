@@ -2,6 +2,7 @@ import { debugLogsExport } from './debugLogsExport';
 import { logger } from './logger';
 import { buildApiUrl } from './config';
 import { useAuthStore } from '../store/authStore';
+import { fetchWithTimeout as fetch } from './fetchWithTimeout';
 
 /**
  * Sends debug logs to the backend API endpoint

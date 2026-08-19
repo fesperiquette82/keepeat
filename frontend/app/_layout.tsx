@@ -1,3 +1,4 @@
+import '../utils/httpDefaults';
 import { Slot, useRouter, useSegments } from 'expo-router';
 import { StatusBar } from 'expo-status-bar';
 import React, { useEffect, useMemo, useRef, useState } from 'react';
@@ -19,6 +20,7 @@ import { logger } from '../utils/logger';
 import { APP_CONFIG } from '../utils/appConfig';
 import { usePremiumUiStore } from '../store/premiumUiStore';
 import { resolveAuthRedirect } from '../utils/authNavigationGuard';
+import { fetchWithTimeout as fetch } from '../utils/fetchWithTimeout';
 
 
 // Garde le splash natif visible tant que le root n'est pas prêt.

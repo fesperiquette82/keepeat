@@ -1,5 +1,6 @@
 import { debugLogsExport } from './debugLogsExport';
 import { logger } from './logger';
+import { fetchWithTimeout as fetch } from './fetchWithTimeout';
 
 /**
  * Sends debug logs to GitHub by creating a private GitHub Discussion

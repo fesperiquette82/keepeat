@@ -1,4 +1,5 @@
 import { buildApiUrl } from './config';
+import { fetchWithTimeout as fetch } from './fetchWithTimeout';
 
 export interface AccountExportPayload {
   generated_at: string;

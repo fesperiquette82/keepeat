@@ -328,3 +328,15 @@ class DebugLogsUploadResponse(BaseModel):
     ok: bool
     message: str
     filename: str
+
+
+class CrashReportBody(BaseModel):
+    message: str = Field(..., max_length=2000)
+    stack: Optional[str] = Field(default=None, max_length=8000)
+    screen: Optional[str] = Field(default=None, max_length=200)
+    app_version: Optional[str] = Field(default=None, max_length=50)
+    platform: Optional[str] = Field(default=None, max_length=30)
+
+
+class CrashReportResponse(BaseModel):
+    ok: bool

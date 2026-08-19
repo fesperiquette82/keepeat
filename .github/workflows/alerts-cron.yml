@@ -1,0 +1,58 @@
+name: Alerts Cron
+
+# Déclenche les vérifications d'alertes (rappels produits, inactivité, péremption
+# J-2/J-0, résumé hebdomadaire) via /api/internal/alerts/run, plutôt que par une
+# boucle interne au process backend. Sur Render, la disponibilité du process
+# n'est pas garantie en continu : une boucle avec sleep interne repart de zéro à
+# chaque redémarrage, ce qui pouvait empêcher indéfiniment les alertes de
+# péremption de partir (cf. AUDIT_BUGS.md — constat sur backend/alerts.py).
+#
+# Chaque vérification appelée a son propre garde-fou anti-doublon côté backend,
+# donc un déclenchement toutes les 30 min est sûr (pas de notifications en
+# double) : le backend décide lui-même s'il y a réellement quelque chose à
+# envoyer.
+#
+# Nécessite le secret ALERTS_CRON_TOKEN (GitHub) — même valeur que la variable
+# d'environnement ALERTS_CRON_TOKEN sur Render.
+
+on:
+  schedule:
+    - cron: '*/30 * * * *'
+  workflow_dispatch: {}
+
+jobs:
+  run-alerts:
+    name: Déclencher les vérifications d'alertes
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Appeler /api/internal/alerts/run
+        env:
+          ALERTS_CRON_TOKEN: ${{ secrets.ALERTS_CRON_TOKEN }}
+        run: |
+          set -e
+          if [ -z "$ALERTS_CRON_TOKEN" ]; then
+            echo "::error::Secret ALERTS_CRON_TOKEN absent — configurer Settings > Secrets and variables > Actions, avec la même valeur que la variable d'environnement Render ALERTS_CRON_TOKEN."
+            exit 1
+          fi
+
+          response=$(curl -sS -w "\n%{http_code}" --max-time 60 \
+            -X POST \
+            -H "Authorization: Bearer ${ALERTS_CRON_TOKEN}" \
+            https://keepeat-backend.onrender.com/api/internal/alerts/run)
+          http_code=$(echo "$response" | tail -n1)
+          body=$(echo "$response" | sed '$d')
+          echo "HTTP $http_code"
+          echo "$body"
+
+          if [ "$http_code" != "200" ]; then
+            echo "::error::/api/internal/alerts/run a répondu HTTP $http_code (attendu 200)."
+            exit 1
+          fi
+
+          has_error=$(echo "$body" | python3 -c "import json,sys; data=json.load(sys.stdin); results=data.get('results', {}); print('yes' if any(v != 'ok' for v in results.values()) else 'no')" 2>/dev/null || echo "unknown")
+
+          if [ "$has_error" != "no" ]; then
+            echo "::error::Une ou plusieurs vérifications d'alertes ont échoué : $body"
+            exit 1
+          fi
