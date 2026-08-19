@@ -308,6 +308,12 @@ export default function RecipeDetailScreen() {
   if (isScreenLoading) {
     return (
       <SafeAreaView style={styles.container}>
+        <View style={styles.headerRow}>
+          <TouchableOpacity style={styles.backIcon} onPress={handleBack}>
+            <Ionicons name="chevron-back" size={20} color={C.text} />
+          </TouchableOpacity>
+          <Text style={styles.headerTitle}>Détail recette</Text>
+        </View>
         <View style={styles.errorWrap}>
           <Text style={styles.errorTitle}>Chargement de la recette…</Text>
         </View>
