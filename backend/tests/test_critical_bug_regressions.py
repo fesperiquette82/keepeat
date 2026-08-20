@@ -84,7 +84,7 @@ class _FakeGeminiClient:
 def test_recipe_suggestions_survives_gap_upsert_failure(monkeypatch):
     server = _load_server(monkeypatch)
 
-    async def fake_fetch_stock_candidates(*, uid, filter_value):
+    async def fake_fetch_stock_candidates(*, scope_ids, filter_value):
         return [{"name": "Tomate"}]
 
     async def fake_upsert_recipe_gap(**_kwargs):
@@ -225,7 +225,7 @@ def test_gap_fill_runtime_404_retries_with_default_model(monkeypatch, caplog):
 def test_recipes_suggestions_returns_200_when_gap_fill_provider_fails(monkeypatch, caplog):
     server = _load_server(monkeypatch)
 
-    async def fake_fetch_stock_candidates(*, uid, filter_value):
+    async def fake_fetch_stock_candidates(*, scope_ids, filter_value):
         return [{"name": "Tomate"}]
 
     async def failing_ai_gap_fill(stock_names, gemini_key):

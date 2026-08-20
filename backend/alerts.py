@@ -6,6 +6,7 @@ from datetime import datetime, timedelta, timezone
 from typing import Any, Callable
 
 import httpx
+from bson import ObjectId
 from fastapi import HTTPException
 
 from backend.app_core import logger, utc_now
@@ -32,6 +33,27 @@ class AlertDependencies:
     community_recipes_col: Any
     send_push: Callable[[list[str], str, str, dict | None], Any]
     fr_to_en_ingredient: Callable[[str, str], str]
+    households_col: Any = None
+
+
+async def _resolve_alert_stock_match(user_doc: dict[str, Any], households_col: Any) -> dict[str, Any]:
+    """Filtre Mongo `user_id` pour les alertes (BUG-049 phase 3) : le stock partagé
+    d'un foyer déclenche une alerte pour CHAQUE membre (préférences et dédoublonnage
+    individuels via user_alerts_col, déjà gérés par la boucle par utilisateur
+    existante) — seule la source des articles change, pas la structure de la boucle.
+    Best-effort : un foyer cassé retombe sur l'utilisateur seul."""
+    user_id = str(user_doc["_id"])
+    household_id = user_doc.get("household_id")
+    if not household_id or households_col is None:
+        return {"user_id": user_id}
+    try:
+        household = await households_col.find_one({"_id": ObjectId(household_id)}, {"member_ids": 1})
+    except Exception:
+        return {"user_id": user_id}
+    member_ids = household.get("member_ids") if household else None
+    if not member_ids:
+        return {"user_id": user_id}
+    return {"user_id": {"$in": member_ids}} if len(member_ids) > 1 else {"user_id": member_ids[0]}
 
 
 async def send_expo_push(tokens: list[str], title: str, body: str, data: dict | None = None) -> None:
@@ -127,8 +149,9 @@ async def check_recalls_and_notify(deps: AlertDependencies) -> None:
         }
 
         # Ne requêter que les items dont le barcode est dans les rappels (filtre côté DB)
+        stock_match = await _resolve_alert_stock_match(user_doc, deps.households_col)
         cursor = deps.stock_col.find({
-            "user_id": user_id,
+            **stock_match,
             "status": "active",
             "barcode": {"$in": recall_barcodes},
         }).limit(200)
@@ -159,7 +182,8 @@ async def check_inactivity_and_notify(deps: AlertDependencies) -> None:
 
     async for user_doc in deps.users_col.find({"push_tokens": {"$exists": True, "$ne": []}}):
         user_id = str(user_doc["_id"])
-        count = await deps.stock_col.count_documents({"user_id": user_id, "status": "active"})
+        stock_match = await _resolve_alert_stock_match(user_doc, deps.households_col)
+        count = await deps.stock_col.count_documents({**stock_match, "status": "active"})
         if count == 0:
             continue
 
@@ -211,8 +235,9 @@ async def check_weekly_expiry_summary(deps: AlertDependencies) -> None:
         if already_sent:
             continue
 
+        stock_match = await _resolve_alert_stock_match(user_doc, deps.households_col)
         cursor = deps.stock_col.find({
-            "user_id": user_id,
+            **stock_match,
             "status": "active",
             "expiry_date": {"$nin": [None, ""], "$gte": today_str, "$lte": in_7_days},
         }).sort("expiry_date", 1).limit(5)
@@ -251,8 +276,9 @@ async def check_daily_expiry_alert(deps: AlertDependencies) -> None:
         if already_sent:
             continue
 
+        stock_match = await _resolve_alert_stock_match(user_doc, deps.households_col)
         cursor = deps.stock_col.find({
-            "user_id": user_id,
+            **stock_match,
             "status": "active",
             "expiry_date": {"$nin": [None, ""], "$gte": today_str, "$lte": in_2_days},
         }).sort("expiry_date", 1).limit(5)
