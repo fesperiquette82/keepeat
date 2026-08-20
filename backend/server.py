@@ -958,6 +958,7 @@ async def lifespan(app: FastAPI):
         community_recipes_col=community_recipes_col,
         send_push=send_expo_push,
         fr_to_en_ingredient=fr_to_en_ingredient,
+        households_col=households_col,
     )
     yield
     client.close()
@@ -2034,6 +2035,30 @@ async def _get_household_members(household_doc: Dict[str, Any]) -> list[Dict[str
     return await users_col.find({"_id": {"$in": member_ids}}).to_list(length=MAX_HOUSEHOLD_MEMBERS)
 
 
+async def _resolve_stock_scope_ids(current_user: Dict[str, Any]) -> list[str]:
+    """Retourne les user_id dont le stock est visible pour cet utilisateur (BUG-049
+    phase 2) : lui seul en solo, ou tous les membres de son foyer s'il en a un —
+    le stock n'est jamais déplacé/réassigné à l'adhésion, seule sa visibilité
+    s'élargit via ce filtre (chaque item reste attribué à qui l'a ajouté).
+    Best-effort : un foyer cassé (introuvable, Mongo indisponible) retombe sur
+    l'utilisateur seul plutôt que de faire échouer la requête."""
+    household_id = current_user.get("household_id")
+    if not household_id:
+        return [current_user["id"]]
+    try:
+        household = await households_col.find_one({"_id": ObjectId(household_id)}, {"member_ids": 1})
+    except Exception:
+        return [current_user["id"]]
+    member_ids = household.get("member_ids") if household else None
+    if not member_ids:
+        return [current_user["id"]]
+    return member_ids
+
+
+def _stock_scope_match(scope_ids: list[str]) -> dict[str, Any]:
+    return {"user_id": scope_ids[0]} if len(scope_ids) == 1 else {"user_id": {"$in": scope_ids}}
+
+
 @api_router.post("/household", response_model=HouseholdResponse, status_code=201)
 async def create_household(
     body: HouseholdCreate,
@@ -2415,8 +2440,9 @@ async def get_stock(
 ):
     if status not in _ALLOWED_STOCK_STATUSES:
         raise HTTPException(status_code=422, detail=f"Statut invalide. Valeurs acceptées : {sorted(_ALLOWED_STOCK_STATUSES)}")
+    scope_ids = await _resolve_stock_scope_ids(current_user)
     cursor = (
-        stock_col.find({"user_id": current_user["id"], "status": status})
+        stock_col.find({**_stock_scope_match(scope_ids), "status": status})
         .sort("added_date", -1)
         .skip(skip)
         .limit(limit)
@@ -2476,21 +2502,22 @@ async def update_stock(
     except Exception:
         raise HTTPException(status_code=400, detail="Invalid item id")
 
+    scope_ids = await _resolve_stock_scope_ids(current_user)
     update_data = item.model_dump(exclude_unset=True)
     if not update_data:
-        existing = await stock_col.find_one({"_id": oid, "user_id": current_user["id"]})
+        existing = await stock_col.find_one({"_id": oid, **_stock_scope_match(scope_ids)})
         if not existing:
             raise HTTPException(status_code=404, detail="Item not found")
         return serialize_mongo(existing)
 
     res = await stock_col.update_one(
-        {"_id": oid, "user_id": current_user["id"], "status": "active"},
+        {"_id": oid, "status": "active", **_stock_scope_match(scope_ids)},
         {"$set": update_data},
     )
     if res.matched_count == 0:
         raise HTTPException(status_code=404, detail="Active item not found")
 
-    updated = await stock_col.find_one({"_id": oid, "user_id": current_user["id"]})
+    updated = await stock_col.find_one({"_id": oid, **_stock_scope_match(scope_ids)})
     await track_business_event(
         business_events_col=business_events_col,
         user_id=current_user["id"],
@@ -2511,8 +2538,9 @@ async def consume_item(
     except Exception:
         raise HTTPException(status_code=400, detail="Invalid item id")
 
+    scope_ids = await _resolve_stock_scope_ids(current_user)
     res = await stock_col.update_one(
-        {"_id": oid, "user_id": current_user["id"]},
+        {"_id": oid, **_stock_scope_match(scope_ids)},
         {"$set": {"status": "consumed", "consumed_date": utc_now().isoformat()}},
     )
     if res.matched_count == 0:
@@ -2541,8 +2569,9 @@ async def throw_item(
     except Exception:
         raise HTTPException(status_code=400, detail="Invalid item id")
 
+    scope_ids = await _resolve_stock_scope_ids(current_user)
     res = await stock_col.update_one(
-        {"_id": oid, "user_id": current_user["id"]},
+        {"_id": oid, **_stock_scope_match(scope_ids)},
         {"$set": {"status": "thrown", "thrown_date": utc_now().isoformat()}},
     )
     if res.matched_count == 0:
@@ -2564,8 +2593,9 @@ async def restore_item(
     except Exception:
         raise HTTPException(status_code=400, detail="Invalid item id")
 
+    scope_ids = await _resolve_stock_scope_ids(current_user)
     res = await stock_col.update_one(
-        {"_id": oid, "user_id": current_user["id"]},
+        {"_id": oid, **_stock_scope_match(scope_ids)},
         {"$set": {"status": "active", "consumed_date": None, "thrown_date": None}},
     )
     if res.matched_count == 0:
@@ -2580,8 +2610,9 @@ async def restore_item(
 
 @api_router.get("/stock/priority", response_model=List[StockItem])
 async def get_priority_items(current_user: Dict[str, Any] = Depends(_get_current_user)):
+    scope_ids = await _resolve_stock_scope_ids(current_user)
     docs = await _compute_priority_items(
-        user_id=current_user["id"],
+        scope_ids=scope_ids,
         lead_days=3,
         reminders_enabled=True,
     )
@@ -2592,13 +2623,13 @@ def _priority_refresh_state_id(user_id: str) -> str:
     return f"priority_refresh_state:{user_id}"
 
 
-async def _compute_priority_items(*, user_id: str, lead_days: int, reminders_enabled: bool) -> list[dict[str, Any]]:
+async def _compute_priority_items(*, scope_ids: list[str], lead_days: int, reminders_enabled: bool) -> list[dict[str, Any]]:
     if not reminders_enabled:
         return []
 
     threshold = (utc_now().date() + timedelta(days=lead_days)).strftime("%Y-%m-%d")
     cursor = stock_col.find({
-        "user_id": user_id,
+        **_stock_scope_match(scope_ids),
         "status": "active",
         "expiry_date": {"$nin": [None, ""], "$lte": threshold},
     }).sort("expiry_date", 1)
@@ -2621,8 +2652,9 @@ async def refresh_priority_items(
         body.model_dump(),
     )
     try:
+        scope_ids = await _resolve_stock_scope_ids(current_user)
         docs = await _compute_priority_items(
-            user_id=current_user["id"],
+            scope_ids=scope_ids,
             lead_days=body.lead_days,
             reminders_enabled=body.reminders_enabled,
         )
@@ -2695,10 +2727,10 @@ async def get_stock_history(
     current_user: Dict[str, Any] = Depends(_get_current_user),
 ):
     """Produits récemment consommés/jetés (60j), dédupliqués par nom — pour le réajout rapide."""
-    user_id = current_user["id"]
+    scope_ids = await _resolve_stock_scope_ids(current_user)
     since = (utc_now() - timedelta(days=60)).isoformat()
     cursor = stock_col.find({
-        "user_id": user_id,
+        **_stock_scope_match(scope_ids),
         "status": {"$in": ["consumed", "thrown"]},
         "added_date": {"$gte": since},
     }).sort("added_date", -1).limit(200)
@@ -2731,14 +2763,14 @@ async def get_stock_history(
 
 @api_router.get("/stats", response_model=StatsResponse)
 async def get_stats(current_user: Dict[str, Any] = Depends(_get_current_user)):
-    uid = current_user["id"]
+    scope_ids = await _resolve_stock_scope_ids(current_user)
     today_str = utc_now().strftime("%Y-%m-%d")
     in_3_days_str = (utc_now() + timedelta(days=3)).strftime("%Y-%m-%d")
     week_ago = (utc_now() - timedelta(days=7)).isoformat()
 
     # Agrégation unique côté MongoDB — aucun document rapatrié en RAM
     pipeline = [
-        {"$match": {"user_id": uid, "status": "active"}},
+        {"$match": {**_stock_scope_match(scope_ids), "status": "active"}},
         {
             "$group": {
                 "_id": None,
@@ -2773,10 +2805,10 @@ async def get_stats(current_user: Dict[str, Any] = Depends(_get_current_user)):
     counts = agg[0] if agg else {"total": 0, "expired": 0, "expiring_soon": 0}
 
     consumed_this_week = await stock_col.count_documents(
-        {"user_id": uid, "status": "consumed", "consumed_date": {"$gte": week_ago}}
+        {**_stock_scope_match(scope_ids), "status": "consumed", "consumed_date": {"$gte": week_ago}}
     )
     thrown_this_week = await stock_col.count_documents(
-        {"user_id": uid, "status": "thrown", "thrown_date": {"$gte": week_ago}}
+        {**_stock_scope_match(scope_ids), "status": "thrown", "thrown_date": {"$gte": week_ago}}
     )
 
     return StatsResponse(
@@ -3113,7 +3145,7 @@ async def _mark_coverable_gaps_after_recipe_insert(recipe_doc: dict[str, Any]) -
         )
 
 
-async def _fetch_stock_candidates(*, uid: str, filter_value: str) -> list[dict[str, Any]]:
+async def _fetch_stock_candidates(*, scope_ids: list[str], filter_value: str) -> list[dict[str, Any]]:
     now = utc_now()
     today = now.date()
     max_day = today
@@ -3122,7 +3154,7 @@ async def _fetch_stock_candidates(*, uid: str, filter_value: str) -> list[dict[s
     elif filter_value == "month":
         max_day = today + timedelta(days=31)
 
-    query: dict[str, Any] = {"user_id": uid, "status": "active"}
+    query: dict[str, Any] = {**_stock_scope_match(scope_ids), "status": "active"}
     items = await stock_col.find(query).to_list(length=1500)
     filtered: list[dict[str, Any]] = []
     for item in items:
@@ -3473,7 +3505,8 @@ async def get_recipe_suggestions(
         resolved_suggestion_style,
     )
 
-    items = await _fetch_stock_candidates(uid=uid, filter_value=effective_filter)
+    scope_ids = await _resolve_stock_scope_ids(current_user)
+    items = await _fetch_stock_candidates(scope_ids=scope_ids, filter_value=effective_filter)
     logger.debug(
         "RECIPES_DEBUG suggestions stock_items_raw — user=%s filter=%s count=%d sample=%s",
         uid,
@@ -3665,7 +3698,8 @@ async def get_recipe_suggestions_grouped(
     )
     today_str = utc_now().strftime("%Y-%m-%d")
 
-    match: dict = {"user_id": uid, "status": "active"}
+    scope_ids = await _resolve_stock_scope_ids(current_user)
+    match: dict = {**_stock_scope_match(scope_ids), "status": "active"}
     if recipe_filter == "urgent":
         in_7_days = (utc_now().date() + timedelta(days=7)).strftime("%Y-%m-%d")
         match["expiry_date"] = {"$nin": [None, ""], "$gte": today_str, "$lte": in_7_days}
@@ -4183,10 +4217,10 @@ async def get_monthly_stats(
     current_user: Dict[str, Any] = Depends(_get_current_user),
 ):
     """Retourne les stats mensuelles (consommé/jeté/score/saved_euros) sur les N derniers mois."""
-    uid = current_user["id"]
     billing_doc = await resolve_billing_user_doc(current_user, users_col=users_col, households_col=households_col)
     plan = resolve_plan(billing_doc)
     effective_months = min(months, 24 if plan == PREMIUM_PLAN else 6)
+    scope_ids = await _resolve_stock_scope_ids(current_user)
 
     # Générer la liste des N derniers mois (YYYY-MM)
     # Arithmétique exacte sur les mois (évite les dérives de timedelta(days=30*i))
@@ -4198,14 +4232,14 @@ async def get_monthly_stats(
 
     # Agrégation consommés par mois (+ catégorie pour estimer les économies)
     consumed_pipeline = [
-        {"$match": {"user_id": uid, "status": "consumed", "consumed_date": {"$nin": [None, ""]}}},
+        {"$match": {**_stock_scope_match(scope_ids), "status": "consumed", "consumed_date": {"$nin": [None, ""]}}},
         {"$group": {
             "_id": {"month": {"$substr": ["$consumed_date", 0, 7]}, "cat": "$food_category"},
             "count": {"$sum": 1},
         }},
     ]
     thrown_pipeline = [
-        {"$match": {"user_id": uid, "status": "thrown", "thrown_date": {"$nin": [None, ""]}}},
+        {"$match": {**_stock_scope_match(scope_ids), "status": "thrown", "thrown_date": {"$nin": [None, ""]}}},
         {"$group": {"_id": {"$substr": ["$thrown_date", 0, 7]}, "count": {"$sum": 1}}},
     ]
 
@@ -4253,13 +4287,13 @@ _LEVELS = [
 ]
 
 
-async def _compute_streak(uid: str) -> int:
+async def _compute_streak(scope_ids: list[str]) -> int:
     """Nombre de jours consécutifs depuis aujourd'hui sans aucun item jeté (1 seule requête DB)."""
     today = utc_now().date()
     since = (today - timedelta(days=59)).strftime("%Y-%m-%d")
     # Une seule agrégation pour récupérer toutes les dates de jets des 60 derniers jours
     pipeline = [
-        {"$match": {"user_id": uid, "status": "thrown", "thrown_date": {"$gte": since}}},
+        {"$match": {**_stock_scope_match(scope_ids), "status": "thrown", "thrown_date": {"$gte": since}}},
         {"$project": {"day": {"$substr": ["$thrown_date", 0, 10]}}},
         {"$group": {"_id": "$day"}},
     ]
@@ -4280,18 +4314,18 @@ async def get_gamification(
     current_user: Dict[str, Any] = Depends(_get_current_user),
 ):
     """Retourne les données de gamification : niveau, streak, économies totales."""
-    uid = current_user["id"]
+    scope_ids = await _resolve_stock_scope_ids(current_user)
 
     total_consumed, total_thrown = await asyncio.gather(
-        stock_col.count_documents({"user_id": uid, "status": "consumed"}),
-        stock_col.count_documents({"user_id": uid, "status": "thrown"}),
+        stock_col.count_documents({**_stock_scope_match(scope_ids), "status": "consumed"}),
+        stock_col.count_documents({**_stock_scope_match(scope_ids), "status": "thrown"}),
     )
-    streak = await _compute_streak(uid)
+    streak = await _compute_streak(scope_ids)
 
     # Agrégation pour le calcul des économies : évite de charger N×10000 docs en mémoire
     total_saved = 0.0
     async for cat_doc in stock_col.aggregate([
-        {"$match": {"user_id": uid, "status": "consumed"}},
+        {"$match": {**_stock_scope_match(scope_ids), "status": "consumed"}},
         {"$group": {"_id": "$food_category", "count": {"$sum": 1}}},
     ]):
         cat = (cat_doc["_id"] or "").lower()
@@ -4653,8 +4687,9 @@ async def get_ai_recipes(
             return {"recipes": cached["recipes"], "meta": meta}
         return cached["recipes"]
 
+    scope_ids = await _resolve_stock_scope_ids(current_user)
     items = await stock_col.find(
-        {"user_id": uid, "status": "active"},
+        {**_stock_scope_match(scope_ids), "status": "active"},
     ).sort("expiry_date", 1).limit(8).to_list(length=8)
 
     if not items:
@@ -4839,9 +4874,10 @@ async def get_predictions(
         consume_quota=False,
     )
     uid = current_user["id"]
+    scope_ids = await _resolve_stock_scope_ids(current_user)
 
     pipeline = [
-        {"$match": {"user_id": uid, "status": {"$in": ["consumed", "thrown"]}}},
+        {"$match": {**_stock_scope_match(scope_ids), "status": {"$in": ["consumed", "thrown"]}}},
         {"$group": {
             "_id": "$food_category",
             "consumed": {"$sum": {"$cond": [{"$eq": ["$status", "consumed"]}, 1, 0]}},
@@ -4877,7 +4913,7 @@ async def get_predictions(
 
     items = await stock_col.find(
         {
-            "user_id": uid,
+            **_stock_scope_match(scope_ids),
             "status": "active",
             "food_category": {"$in": list(risky_cats)},
             "expiry_date": {"$nin": [None, ""], "$gte": today_str, "$lte": in_7_days},

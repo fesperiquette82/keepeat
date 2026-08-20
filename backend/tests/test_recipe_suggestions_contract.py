@@ -94,7 +94,7 @@ def test_score_recipe_match_returns_structured_ingredients_and_legacy_fields(mon
 def test_recipes_suggestions_endpoint_includes_structured_ingredients(monkeypatch):
     server = _load_server(monkeypatch)
 
-    async def fake_fetch_stock_candidates(*, uid, filter_value):
+    async def fake_fetch_stock_candidates(*, scope_ids, filter_value):
         return [{"_id": "stock-egg", "name": "oeufs"}]
 
     recipe_docs = [
