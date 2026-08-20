@@ -97,9 +97,64 @@ Règles métier :
 - Si aucun produit alimentaire : "items": [].
 """
 
+# Variante texte du prompt v3 (BUG-051 — import par email) : même schéma JSON de
+# sortie que RECEIPT_PROMPT, réutilise donc telle quelle toute la normalisation en
+# aval (_normalize_receipt_item, _enrich_normalizations, _enrich_images) — seule la
+# nature de l'entrée change (texte d'email plutôt que photo).
+EMAIL_RECEIPT_PROMPT = """Tu analyses LE TEXTE D'UN EMAIL DE TICKET DE CAISSE ÉLECTRONIQUE
+(reçu dématérialisé envoyé par une enseigne à un client fidélité).
+Tu dois extraire les lignes produits visibles SANS inventer.
+Si ce texte ne ressemble pas à un ticket de caisse (email publicitaire, newsletter,
+confirmation de commande sans détail produit, etc.), réponds avec "items": [] et
+"ignored_items": [].
+
+Réponds avec UN OBJET JSON STRICT, valide, sans markdown et sans texte hors JSON.
+
+Schéma obligatoire :
+{
+  "purchase_date": "YYYY-MM-DD ou null",
+  "merchant": "string ou null",
+  "currency": "string ou null",
+  "items": [
+    {
+      "raw_title": "libellé exact du ticket",
+      "normalized_title": "nom normalisé lisible en français",
+      "brand": "marque si lisible sinon null",
+      "is_food": true,
+      "quantity": 1,
+      "unit": "unit|kg|g|l|ml|pack|piece",
+      "category": "frais|proteines|legumes|feculents|desserts|boissons|epicerie|autres",
+      "estimated_shelf_life_days": 7,
+      "estimated_expiration_date": "YYYY-MM-DD ou null",
+      "confidence": 0.0
+    }
+  ],
+  "ignored_items": [
+    {
+      "raw_title": "libellé exact du ticket",
+      "reason": "non_food|uncertain|invalid_item"
+    }
+  ]
+}
+
+Règles métier :
+- Inclure UNIQUEMENT les produits alimentaires dans "items".
+- Tout article non alimentaire va dans "ignored_items".
+- purchase_date = date d'achat visible sinon null.
+- estimated_expiration_date = ESTIMATION (pas une DLC lue), basée sur purchase_date + durée estimée.
+- En cas d'incertitude : conserver raw_title, normaliser prudemment, confidence plus basse.
+- confidence doit être entre 0 et 1.
+- Si aucun produit alimentaire ou si ce n'est pas un ticket de caisse : "items": [].
+
+Texte de l'email à analyser :
+---
+"""
+
 # Modèle configurable sans redéploiement. gemini-2.0-flash-lite est le successeur
 # léger de gemini-1.5-flash (déprécié fin 2025).
 _DEFAULT_GEMINI_MODEL = "gemini-2.0-flash-lite"
+
+_MAX_EMAIL_TEXT_LEN = 20_000  # ~ quelques pages, largement suffisant pour un ticket
 
 # Timeout réseau explicite : connect court, read long (inférence Gemini potentiellement lente)
 _OCR_TIMEOUT = httpx.Timeout(connect=10.0, read=60.0, write=10.0, pool=5.0)
@@ -448,6 +503,78 @@ async def ocr_receipt(
         current_user["id"], mime_type, len(image_b64),
     )
 
+    return await _call_gemini_receipt_parser(
+        gemini_key=gemini_key,
+        gemini_model=gemini_model,
+        parts=[
+            {"text": RECEIPT_PROMPT},
+            {"inlineData": {"mimeType": mime_type, "data": image_b64}},
+        ],
+        current_user=current_user,
+        normalizations_col=normalizations_col,
+        products_cache_col=products_cache_col,
+        mime_type=mime_type,
+        image_b64_len=len(image_b64),
+    )
+
+
+async def parse_email_receipt_text(
+    *,
+    current_user: dict[str, Any],
+    email_text: str,
+    normalizations_col: Any = None,
+    products_cache_col: Any = None,
+) -> dict[str, Any]:
+    """Variante texte de ocr_receipt() (BUG-051 — import automatique par email) :
+    même pipeline Gemini + normalisation/enrichissement, mais l'entrée est le texte
+    d'un email de ticket dématérialisé plutôt qu'une photo. Réutilise EMAIL_RECEIPT_PROMPT
+    (même schéma JSON de sortie que RECEIPT_PROMPT)."""
+    gemini_key = os.environ.get("GEMINI_OCR_API_KEY", "")
+    if not gemini_key:
+        logger.warning("GEMINI_OCR_API_KEY non configuré — import email désactivé")
+        raise OcrApiError("Service OCR non configuré sur ce serveur")
+
+    gemini_model = os.environ.get("GEMINI_OCR_MODEL", _DEFAULT_GEMINI_MODEL)
+
+    text = (email_text or "").strip()
+    if not text:
+        return {"purchase_date": None, "merchant": None, "currency": "EUR", "items": [], "ignored_items": []}
+    if len(text) > _MAX_EMAIL_TEXT_LEN:
+        text = text[:_MAX_EMAIL_TEXT_LEN]
+
+    logger.info(
+        "Email receipt parse start — user=%s model=%s text_len=%d",
+        current_user["id"], gemini_model, len(text),
+    )
+
+    return await _call_gemini_receipt_parser(
+        gemini_key=gemini_key,
+        gemini_model=gemini_model,
+        parts=[{"text": EMAIL_RECEIPT_PROMPT + text}],
+        current_user=current_user,
+        normalizations_col=normalizations_col,
+        products_cache_col=products_cache_col,
+        mime_type=None,
+        image_b64_len=None,
+    )
+
+
+async def _call_gemini_receipt_parser(
+    *,
+    gemini_key: str,
+    gemini_model: str,
+    parts: list[dict[str, Any]],
+    current_user: dict[str, Any],
+    normalizations_col: Any,
+    products_cache_col: Any,
+    mime_type: str | None,
+    image_b64_len: int | None,
+) -> dict[str, Any]:
+    """Logique partagée entre ocr_receipt() (photo) et parse_email_receipt_text()
+    (texte d'email) : appel Gemini avec retry, parsing du JSON ticket, normalisation
+    et enrichissement des articles. `mime_type`/`image_b64_len` restent None pour
+    l'entrée texte — ce sont des champs de diagnostic optionnels de OcrApiError,
+    déjà utilisés uniquement pour le cas image avant cette extraction."""
     # Clé passée via header x-goog-api-key (jamais en query-string) pour éviter sa
     # fuite dans les logs/traces httpx/proxy (cf. E2).
     url = (
@@ -456,12 +583,7 @@ async def ocr_receipt(
     )
 
     provider_payload = {
-        "contents": [{
-            "parts": [
-                {"text": RECEIPT_PROMPT},
-                {"inlineData": {"mimeType": mime_type, "data": image_b64}},
-            ],
-        }],
+        "contents": [{"parts": parts}],
         "generationConfig": {
             "responseMimeType": "application/json",
             "temperature": 0.1,
@@ -481,8 +603,8 @@ async def ocr_receipt(
                 )
         except httpx.TimeoutException as exc:
             logger.warning(
-                "OCR receipt timeout — user=%s model=%s mime=%s b64_len=%d attempt=%d/%d err=%s",
-                current_user["id"], gemini_model, mime_type, len(image_b64), attempt, _DEFAULT_RETRY_ATTEMPTS, exc,
+                "OCR receipt timeout — user=%s model=%s mime=%s b64_len=%s attempt=%d/%d err=%s",
+                current_user["id"], gemini_model, mime_type, image_b64_len, attempt, _DEFAULT_RETRY_ATTEMPTS, exc,
             )
             if attempt >= _DEFAULT_RETRY_ATTEMPTS:
                 raise OcrApiError(
@@ -490,7 +612,7 @@ async def ocr_receipt(
                     http_status=504,
                     stage="provider_call",
                     mime_type=mime_type,
-                    image_b64_len=len(image_b64),
+                    image_b64_len=image_b64_len,
                     cause=type(exc).__name__,
                 ) from exc
             backoff_seconds = float(2 ** attempt)
@@ -502,8 +624,8 @@ async def ocr_receipt(
             continue
         except httpx.RequestError as exc:
             logger.warning(
-                "OCR receipt network error — user=%s model=%s mime=%s b64_len=%d attempt=%d/%d err=%s",
-                current_user["id"], gemini_model, mime_type, len(image_b64), attempt, _DEFAULT_RETRY_ATTEMPTS, exc,
+                "OCR receipt network error — user=%s model=%s mime=%s b64_len=%s attempt=%d/%d err=%s",
+                current_user["id"], gemini_model, mime_type, image_b64_len, attempt, _DEFAULT_RETRY_ATTEMPTS, exc,
             )
             if attempt >= _DEFAULT_RETRY_ATTEMPTS:
                 raise OcrApiError(
@@ -511,7 +633,7 @@ async def ocr_receipt(
                     http_status=502,
                     stage="provider_call",
                     mime_type=mime_type,
-                    image_b64_len=len(image_b64),
+                    image_b64_len=image_b64_len,
                     cause=type(exc).__name__,
                 ) from exc
             backoff_seconds = float(2 ** attempt)
@@ -538,15 +660,15 @@ async def ocr_receipt(
             http_status=502,
             stage="provider_call",
             mime_type=mime_type,
-            image_b64_len=len(image_b64),
+            image_b64_len=image_b64_len,
         )
 
     # ── Gestion des erreurs HTTP Gemini ───────────────────────────────────────
     if response.status_code != 200:
         body_preview = response.text[:400]
         logger.warning(
-            "Gemini OCR HTTP %s — user=%s model=%s mime=%s b64_len=%d body=%s",
-            response.status_code, current_user["id"], gemini_model, mime_type, len(image_b64), body_preview,
+            "Gemini OCR HTTP %s — user=%s model=%s mime=%s b64_len=%s body=%s",
+            response.status_code, current_user["id"], gemini_model, mime_type, image_b64_len, body_preview,
         )
         if response.status_code == 429:
             raise OcrApiError(
@@ -555,7 +677,7 @@ async def ocr_receipt(
                 stage="provider_http_error",
                 upstream_status=response.status_code,
                 mime_type=mime_type,
-                image_b64_len=len(image_b64),
+                image_b64_len=image_b64_len,
                 cause="provider_rate_limit",
             )
         if response.status_code in (401, 403):
@@ -565,7 +687,7 @@ async def ocr_receipt(
                 stage="provider_http_error",
                 upstream_status=response.status_code,
                 mime_type=mime_type,
-                image_b64_len=len(image_b64),
+                image_b64_len=image_b64_len,
                 cause="provider_auth",
             )
         if response.status_code in (400, 422):
@@ -578,7 +700,7 @@ async def ocr_receipt(
                 stage="provider_http_error",
                 upstream_status=response.status_code,
                 mime_type=mime_type,
-                image_b64_len=len(image_b64),
+                image_b64_len=image_b64_len,
                 cause="provider_invalid_request",
             )
         if response.status_code == 404:
@@ -589,7 +711,7 @@ async def ocr_receipt(
                 stage="provider_http_error",
                 upstream_status=response.status_code,
                 mime_type=mime_type,
-                image_b64_len=len(image_b64),
+                image_b64_len=image_b64_len,
                 cause="provider_model_not_found",
             )
         raise OcrApiError(
@@ -598,7 +720,7 @@ async def ocr_receipt(
             stage="provider_http_error",
             upstream_status=response.status_code,
             mime_type=mime_type,
-            image_b64_len=len(image_b64),
+            image_b64_len=image_b64_len,
             cause="provider_http_error",
         )
 
@@ -615,7 +737,7 @@ async def ocr_receipt(
             http_status=502,
             stage="provider_response_parse",
             mime_type=mime_type,
-            image_b64_len=len(image_b64),
+            image_b64_len=image_b64_len,
             cause=type(exc).__name__,
         ) from exc
 
@@ -633,7 +755,7 @@ async def ocr_receipt(
             http_status=502,
             stage="provider_response_parse",
             mime_type=mime_type,
-            image_b64_len=len(image_b64),
+            image_b64_len=image_b64_len,
             cause=type(exc).__name__,
         ) from exc
 
@@ -663,7 +785,7 @@ async def ocr_receipt(
             http_status=502,
             stage="provider_response_parse",
             mime_type=mime_type,
-            image_b64_len=len(image_b64),
+            image_b64_len=image_b64_len,
             cause="invalid_model_json",
         )
 

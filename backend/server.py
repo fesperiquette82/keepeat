@@ -71,6 +71,7 @@ from backend.models import (
     GmailAuthUrlResponse,
     GmailConnectRequest,
     GmailConnectionStatusResponse,
+    EmailImportAddressResponse,
     ForgotPasswordBody,
     ProductBase,
     ProductLookupResponse,
@@ -116,7 +117,8 @@ from backend.household_service import (
     resolve_billing_user_doc,
 )
 from backend import gmail_oauth_service
-from backend.ocr_service import SHELF_BY_CATEGORY, OcrApiError, ocr_receipt
+from backend import email_import_service
+from backend.ocr_service import SHELF_BY_CATEGORY, OcrApiError, ocr_receipt, parse_email_receipt_text
 from backend.priority_refresh import build_priority_refresh_state
 from backend.observability import (
     build_activation_funnel,
@@ -939,6 +941,7 @@ async def lifespan(app: FastAPI):
     await users_col.create_index("email", unique=True)
     await users_col.create_index("verification_token", sparse=True)
     await users_col.create_index("reset_token", sparse=True)
+    await users_col.create_index("email_import_code", unique=True, sparse=True)
     await receipt_tickets_col.create_index([("status", 1), ("created_at", -1)])
     await receipt_tickets_col.create_index([("user_id", 1), ("created_at", -1)])
     await _sync_shared_recipes_collection_from_catalog()
@@ -2278,6 +2281,183 @@ async def disconnect_gmail(
     )
     logger.info("GMAIL_OAUTH déconnecté user=%s", current_user["id"])
     return GmailConnectionStatusResponse(connected=False, connected_at=None, status="disconnected")
+
+
+# ── Import automatique des tickets — boîte mail dédiée (BUG-051) ─────────────
+# Alternative retenue à la connexion Gmail (BUG-050, phase 1 livrée mais phase 2
+# mise en pause après revue RGPD — cf. AUDIT_BUGS.md) : l'utilisateur transfère
+# lui-même ses tickets reçus par email vers une adresse dédiée à son compte
+# (tickets+<code>@EMAIL_IMPORT_DOMAIN). Geste actif et volontaire par email
+# transféré (pas de lecture automatisée d'une boîte mail) — pas d'OAuth, pas de
+# scope Google sensible, pas de DPIA nécessaire. Fonctionnalité premium, comme
+# l'OCR manuel dont elle réutilise le même quota (FEATURE_OCR).
+
+@api_router.get("/integrations/email-import/address", response_model=EmailImportAddressResponse)
+async def get_email_import_address(
+    current_user: Dict[str, Any] = Depends(_get_current_user),
+):
+    billing_doc = await resolve_billing_user_doc(current_user, users_col=users_col, households_col=households_col)
+    plan = resolve_plan(billing_doc)
+    if plan != PREMIUM_PLAN:
+        raise HTTPException(status_code=403, detail={"code": "PREMIUM_REQUIRED", "feature": "email_import"})
+    if not email_import_service.is_configured():
+        return EmailImportAddressResponse(configured=False, address=None)
+
+    user_doc = await users_col.find_one({"_id": ObjectId(current_user["id"])}, {"email_import_code": 1}) or {}
+    code = user_doc.get("email_import_code")
+    if not code:
+        code = email_import_service.generate_import_code(current_user["id"])
+        await users_col.update_one(
+            {"_id": ObjectId(current_user["id"])},
+            {"$set": {"email_import_code": code}},
+        )
+    return EmailImportAddressResponse(configured=True, address=email_import_service.build_import_address(code))
+
+
+async def _process_inbound_email_item(item: Dict[str, Any]) -> None:
+    """Traite UN email du lot reçu par le webhook Brevo — résout l'utilisateur
+    depuis l'adresse dédiée, vérifie le plan et le quota, parse via Gemini, ajoute
+    au stock. Best-effort à chaque étape : un email non exploitable est ignoré et
+    journalisé, jamais une exception qui remonterait jusqu'au webhook (cf. appelant)."""
+    to_addresses = email_import_service.extract_to_addresses(item)
+    code = None
+    for address in to_addresses:
+        code = email_import_service.extract_code_from_address(address)
+        if code:
+            break
+    if not code:
+        logger.info("EMAIL_IMPORT aucune adresse dédiée reconnue dans To=%s", to_addresses)
+        return
+
+    user_doc = await users_col.find_one({"email_import_code": code})
+    if not user_doc:
+        logger.info("EMAIL_IMPORT code inconnu — aucun utilisateur associé")
+        return
+    uid = str(user_doc["_id"])
+    current_user = {"id": uid, "is_premium": user_doc.get("is_premium", False)}
+
+    billing_doc = await resolve_billing_user_doc(user_doc, users_col=users_col, households_col=households_col)
+    if resolve_plan(billing_doc) != PREMIUM_PLAN:
+        logger.info("EMAIL_IMPORT user=%s non premium — email ignoré", uid)
+        return
+
+    email_text = email_import_service.extract_email_text(item)
+    if not email_text:
+        logger.info("EMAIL_IMPORT user=%s aucun corps de texte exploitable", uid)
+        return
+
+    try:
+        quota_context = await _enforce_feature_access(current_user=current_user, feature=FEATURE_OCR, consume_quota=True)
+    except HTTPException as exc:
+        logger.info("EMAIL_IMPORT user=%s quota OCR épuisé — email ignoré (%s)", uid, exc.detail)
+        return
+
+    try:
+        result = await parse_email_receipt_text(
+            current_user=current_user,
+            email_text=email_text,
+            normalizations_col=ocr_normalizations_col,
+            products_cache_col=products_cache_col,
+        )
+    except Exception as exc:
+        await _refund_feature_quota(user_id=uid, feature=FEATURE_OCR, quota_context=quota_context)
+        logger.warning("EMAIL_IMPORT user=%s échec parsing Gemini: %s", uid, exc)
+        return
+
+    items = result.get("items") or []
+    if not items:
+        await _refund_feature_quota(user_id=uid, feature=FEATURE_OCR, quota_context=quota_context)
+        logger.info(
+            "EMAIL_IMPORT user=%s aucun article alimentaire détecté (sujet=%s)",
+            uid, email_import_service.extract_subject(item),
+        )
+        return
+
+    now_iso = utc_now().isoformat()
+    inserted = 0
+    for parsed_item in items:
+        name = str(parsed_item.get("normalized_title") or parsed_item.get("name") or "").strip()
+        if not name:
+            continue
+        stock_create = StockItemCreate(
+            name=name,
+            brand=parsed_item.get("brand") or "",
+            image_url=parsed_item.get("image_url") or "",
+            category=parsed_item.get("category"),
+            quantity=str(parsed_item.get("quantity") or 1),
+            food_category=parsed_item.get("food_category"),
+            expiry_date=parsed_item.get("estimated_expiration_date"),
+        )
+        resolved_food_category = _resolve_stock_food_category(stock_create)
+        resolved_storage_zone = _resolve_stock_storage_zone(stock_create, resolved_food_category)
+        doc = stock_create.model_dump()
+        doc["user_id"] = uid
+        doc["added_date"] = now_iso
+        doc["status"] = "active"
+        doc["consumed_date"] = None
+        doc["thrown_date"] = None
+        doc["food_category"] = resolved_food_category
+        doc["storageZone"] = resolved_storage_zone
+        doc["source"] = "email_import"
+        await stock_col.insert_one(doc)
+        inserted += 1
+
+    await track_service_usage(
+        service_usage_logs_col=service_usage_logs_col,
+        user_id=uid,
+        service_name="ocr",
+        action_name="email_import",
+        units_consumed=1,
+        estimated_cost=float(os.getenv("OCR_ESTIMATED_COST_EUR", "0.01")),
+        plan_type_at_time=resolve_plan_type_at_time(billing_doc),
+        metadata_json={"items_count": inserted},
+    )
+    await track_business_event(
+        business_events_col=business_events_col,
+        user_id=uid,
+        event_name="email_import_succeeded" if inserted else "email_import_empty",
+        event_category="premium",
+        metadata_json={"items_count": inserted, "merchant": result.get("merchant")},
+    )
+    logger.info("EMAIL_IMPORT user=%s ticket importé — %d article(s) ajoutés", uid, inserted)
+
+    if inserted:
+        push_tokens = user_doc.get("push_tokens") or []
+        if push_tokens:
+            try:
+                await send_expo_push(
+                    push_tokens,
+                    "Ticket importé automatiquement",
+                    f"{inserted} article(s) ajouté(s) à votre stock depuis votre email.",
+                )
+            except Exception as exc:
+                logger.warning("EMAIL_IMPORT push notification échouée user=%s: %s", uid, exc)
+
+
+@api_router.post("/webhooks/email-import")
+async def email_import_webhook(request: Request, token: str = Query(default="")):
+    """Webhook Brevo Inbound Parsing (URL configurée avec ?token=<EMAIL_IMPORT_WEBHOOK_SECRET>
+    dans le tableau de bord Brevo). Retourne toujours 200 (best-effort — évite les
+    re-livraisons en boucle côté provider) sauf pour un token invalide.
+
+    ⚠️ Format de payload basé sur la documentation publique Brevo, non vérifié
+    contre un paiement réel (aucun compte Brevo Inbound Parsing disponible dans cet
+    environnement) — cf. AUDIT_BUGS.md, à valider avant mise en production."""
+    expected_token = os.getenv("EMAIL_IMPORT_WEBHOOK_SECRET", "").strip()
+    if expected_token and token != expected_token:
+        raise HTTPException(status_code=401, detail="Unauthorized")
+
+    try:
+        payload = await request.json()
+    except Exception:
+        return {"ok": True}
+
+    for item in email_import_service.extract_inbound_items(payload):
+        try:
+            await _process_inbound_email_item(item)
+        except Exception:
+            logger.exception("EMAIL_IMPORT échec traitement d'un item du webhook")
+    return {"ok": True}
 
 
 @api_router.post("/billing/google/rtdn")
