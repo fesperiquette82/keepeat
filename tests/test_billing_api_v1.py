@@ -68,7 +68,7 @@ class BillingApiV1Tests(unittest.TestCase):
         payload = asyncio.run(_run())
         self.assertEqual(payload.period, "2026-03")
         self.assertEqual(payload.usage["ocr_receipt"].used, 3)
-        self.assertEqual(payload.usage["ocr_receipt"].remaining, 7)
+        self.assertEqual(payload.usage["ocr_receipt"].remaining, 5)
 
     def test_verify_sets_premium(self):
         fake_users = _FakeUsersCol({"_id": self.user_id, "is_premium": False, "subscription_status": "inactive"})

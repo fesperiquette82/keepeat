@@ -3203,6 +3203,7 @@ async def get_recipe_suggestions(
     suggestion_style: str = Query("classique", alias="suggestion_style"),
     locale: str | None = Query(None),
     accept_language: str | None = Header(None, alias="Accept-Language"),
+    count_usage: bool = Query(True, alias="count_usage"),
     current_user: Dict[str, Any] = Depends(_get_current_user),
 ):
     """Suggère des recettes depuis la collection backend partagée `recipes`."""
@@ -3248,6 +3249,16 @@ async def get_recipe_suggestions(
         reverse=True,
     )
     relevant = [candidate for candidate in scored if candidate.get("available_count", 0) >= 1 and candidate.get("missing_count", 0) <= 3][:5]
+
+    # Quota "recettes suggérées" (FEATURE_AI, partagé avec le repli IA plus bas) :
+    # pour l'utilisateur, une recette du catalogue et une recette générée sont
+    # indiscernables, donc les deux tirent sur le même quota mensuel. Seul l'appel
+    # direct depuis l'écran Recettes (count_usage=True, défaut) consomme — le
+    # rafraîchissement en arrière-plan des associations recette/stock par mutation
+    # (jusqu'à 4 appels parallèles, un par filtre) passe count_usage=False pour ne
+    # pas vider le quota d'un utilisateur qui n'a rien demandé activement.
+    if relevant and count_usage:
+        await _enforce_feature_access(current_user=current_user, feature=FEATURE_AI, consume_quota=True)
 
     gap_logged = False
     suggest_later = False

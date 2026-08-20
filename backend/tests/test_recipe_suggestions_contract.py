@@ -2,6 +2,7 @@ import asyncio
 import importlib
 import sys
 from pathlib import Path
+from unittest.mock import AsyncMock
 
 from starlette.responses import Response
 
@@ -114,6 +115,14 @@ def test_recipes_suggestions_endpoint_includes_structured_ingredients(monkeypatc
     monkeypatch.setattr(server, "_fetch_stock_candidates", fake_fetch_stock_candidates)
     monkeypatch.setattr(server, "recipes_col", _FakeRecipesCollection(recipe_docs))
     monkeypatch.setattr(server, "_get_recipes_ai_api_key", lambda: None)
+    # Le quota "recettes suggérées" (partagé catalogue + IA) est désormais consommé
+    # dès qu'une recette du catalogue est effectivement retournée — hors périmètre
+    # de ce test de contrat sur la structure de la réponse.
+    monkeypatch.setattr(
+        server,
+        "_enforce_feature_access",
+        AsyncMock(return_value={"plan": "free", "policy": {"allowed": True, "monthly_limit": 8}, "quota": None}),
+    )
 
     payload = asyncio.run(
         server.get_recipe_suggestions(

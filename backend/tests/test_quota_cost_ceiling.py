@@ -141,10 +141,10 @@ class TestOcrCostCeiling:
         return col, counter_id
 
     def test_over_limit_blocks_before_external_call(self, monkeypatch):
-        """Free OCR limit = 10. À 10/10, la requête est rejetée en 429 AVANT d'appeler
+        """Free OCR limit = 8. À 8/8, la requête est rejetée en 429 AVANT d'appeler
         ocr_receipt (l'appel payant n'a jamais lieu)."""
         server = _load_server(monkeypatch)
-        col, _ = self._setup(monkeypatch, server, used=10)
+        col, _ = self._setup(monkeypatch, server, used=8)
         ocr_mock = AsyncMock()
         monkeypatch.setattr(server, "ocr_receipt", ocr_mock)
 
