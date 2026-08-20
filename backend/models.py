@@ -383,3 +383,8 @@ class GmailConnectionStatusResponse(BaseModel):
     connected: bool
     connected_at: Optional[str] = None
     status: Literal["connected", "disconnected", "error"] = "disconnected"
+
+
+class EmailImportAddressResponse(BaseModel):
+    configured: bool
+    address: Optional[str] = None

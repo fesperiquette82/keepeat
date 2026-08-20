@@ -325,10 +325,10 @@ export default function SettingsScreen() {
 
         <View style={styles.card}>
           <Text style={styles.sectionTitle}>Import automatique des tickets</Text>
-          <Text style={styles.systemInfo}>Connectez Gmail pour importer vos tickets de caisse sans les scanner (premium).</Text>
-          <TouchableOpacity style={styles.refreshButton} onPress={() => router.push('/gmail-connect')}>
+          <Text style={styles.systemInfo}>Transférez vos tickets de caisse reçus par email pour les ajouter à votre stock sans les scanner (premium).</Text>
+          <TouchableOpacity style={styles.refreshButton} onPress={() => router.push('/email-import')}>
             <Ionicons name="mail-outline" size={16} color="#FFFFFF" />
-            <Text style={styles.refreshButtonText}>Connecter Gmail</Text>
+            <Text style={styles.refreshButtonText}>Configurer l&apos;import par email</Text>
           </TouchableOpacity>
         </View>
 

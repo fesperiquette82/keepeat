@@ -38,11 +38,15 @@ test('household.tsx réserve le bouton d’invitation au propriétaire du foyer'
   assert.match(src, /isOwner\s*&&\s*\(/);
 });
 
-test('settings.tsx propose un accès au foyer et à la connexion Gmail', () => {
+test('settings.tsx propose un accès au foyer', () => {
   const src = readSource('app/settings.tsx');
   assert.match(src, /router\.push\('\/household'\)/);
-  assert.match(src, /router\.push\('\/gmail-connect'\)/);
 });
+
+// settings.tsx pointe désormais vers /email-import (BUG-051, boîte mail dédiée)
+// plutôt que /gmail-connect — cf. emailImportScreen.test.ts. L'écran et les
+// endpoints Gmail (ci-dessous) restent dans le dépôt, non branchés depuis les
+// réglages : cf. AUDIT_BUGS.md, phase 2 Gmail mise en pause après revue RGPD.
 
 test('gmailApi.ts appelle les bons endpoints /api/integrations/gmail', () => {
   const src = readSource('utils/gmailApi.ts');
