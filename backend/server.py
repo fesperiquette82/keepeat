@@ -64,6 +64,13 @@ from backend.models import (
     DebugLogsUploadResponse,
     CrashReportBody,
     CrashReportResponse,
+    HouseholdCreate,
+    HouseholdInviteResponse,
+    HouseholdJoinRequest,
+    HouseholdResponse,
+    GmailAuthUrlResponse,
+    GmailConnectRequest,
+    GmailConnectionStatusResponse,
     ForgotPasswordBody,
     ProductBase,
     ProductLookupResponse,
@@ -101,6 +108,14 @@ from backend.entitlements import (
     refund_quota,
     resolve_plan,
 )
+from backend.household_service import (
+    MAX_HOUSEHOLD_MEMBERS,
+    decode_invite_token,
+    generate_invite_token,
+    household_response,
+    resolve_billing_user_doc,
+)
+from backend import gmail_oauth_service
 from backend.ocr_service import SHELF_BY_CATEGORY, OcrApiError, ocr_receipt
 from backend.priority_refresh import build_priority_refresh_state
 from backend.observability import (
@@ -173,6 +188,7 @@ daily_metrics_col = db["daily_metrics"]
 receipt_tickets_col = db["receipt_tickets"]
 ocr_normalizations_col = db["ocr_normalizations"]
 crash_reports_col = db["crash_reports"]
+households_col = db["households"]
 
 _BACKEND_URL = os.getenv("BACKEND_URL", "https://keepeat-backend.onrender.com")
 _GOOGLE_ANDROID_PACKAGE = os.getenv("GOOGLE_ANDROID_PACKAGE", "com.fesperiquette.keepeat")
@@ -1336,7 +1352,8 @@ async def _enforce_feature_access(
     feature: str,
     consume_quota: bool = False,
 ) -> dict[str, Any]:
-    plan = resolve_plan(current_user)
+    billing_doc = await resolve_billing_user_doc(current_user, users_col=users_col, households_col=households_col)
+    plan = resolve_plan(billing_doc)
     policy = check_access_or_raise(plan=plan, feature=feature)
     if consume_quota:
         period = _current_period_key()
@@ -1767,7 +1784,8 @@ async def get_billing_entitlements(
             event_category="premium",
             metadata_json={"source": "billing_entitlements"},
         )
-    snapshot = build_entitlements_snapshot(user_doc)
+    billing_doc = await resolve_billing_user_doc(user_doc, users_col=users_col, households_col=households_col)
+    snapshot = build_entitlements_snapshot(billing_doc)
     return BillingEntitlementsResponse(**snapshot)
 
 
@@ -1784,7 +1802,8 @@ async def get_billing_usage(
             },
         )
     user_doc = await users_col.find_one({"_id": ObjectId(current_user["id"])}) or current_user
-    plan = resolve_plan(user_doc)
+    billing_doc = await resolve_billing_user_doc(user_doc, users_col=users_col, households_col=households_col)
+    plan = resolve_plan(billing_doc)
     period = _current_period_key()
     usage = await _get_usage_snapshot(user_id=current_user["id"], plan=plan, period=period)
     return BillingUsageResponse(period=period, usage=usage)
@@ -1977,8 +1996,9 @@ async def restore_subscription(
     current_user: Dict[str, Any] = Depends(_get_current_user),
 ):
     user_doc = await users_col.find_one({"_id": ObjectId(current_user["id"])}) or current_user
-    plan = resolve_plan(user_doc)
-    status = user_doc.get("subscription_status") or ("active" if plan == PREMIUM_PLAN else "inactive")
+    billing_doc = await resolve_billing_user_doc(user_doc, users_col=users_col, households_col=households_col)
+    plan = resolve_plan(billing_doc)
+    status = billing_doc.get("subscription_status") or ("active" if plan == PREMIUM_PLAN else "inactive")
     if plan == PREMIUM_PLAN:
         await track_business_event(
             business_events_col=business_events_col,
@@ -1991,7 +2011,7 @@ async def restore_subscription(
             ok=True,
             plan=PREMIUM_PLAN,
             subscription_status=status,
-            subscription_expires_at=user_doc.get("subscription_expires_at"),
+            subscription_expires_at=billing_doc.get("subscription_expires_at"),
         )
 
     await users_col.update_one(
@@ -1999,6 +2019,240 @@ async def restore_subscription(
         {"$set": {"is_premium": False, "subscription_status": "inactive"}},
     )
     return BillingRestoreResponse(ok=True, plan="free", subscription_status="inactive", subscription_expires_at=None)
+
+
+# ── Partage foyer (BUG-049, phase 1) ──────────────────────────────────────────
+# Un foyer partage un unique abonnement premium (résolu via `owner_id` par
+# resolve_billing_user_doc, cf. _enforce_feature_access et endpoints billing/stats
+# ci-dessus). Phase 1 : création/invitation/adhésion/départ uniquement — aucune
+# donnée de stock n'est encore partagée entre membres (phase 2, hors périmètre).
+
+async def _get_household_members(household_doc: Dict[str, Any]) -> list[Dict[str, Any]]:
+    member_ids = [ObjectId(mid) for mid in household_doc.get("member_ids", [])]
+    if not member_ids:
+        return []
+    return await users_col.find({"_id": {"$in": member_ids}}).to_list(length=MAX_HOUSEHOLD_MEMBERS)
+
+
+@api_router.post("/household", response_model=HouseholdResponse, status_code=201)
+async def create_household(
+    body: HouseholdCreate,
+    current_user: Dict[str, Any] = Depends(_get_current_user),
+):
+    if current_user.get("household_id"):
+        raise HTTPException(status_code=409, detail={"code": "ALREADY_IN_HOUSEHOLD"})
+    now = utc_now().isoformat()
+    doc = {
+        "name": body.name.strip(),
+        "owner_id": current_user["id"],
+        "member_ids": [current_user["id"]],
+        "created_at": now,
+    }
+    result = await households_col.insert_one(doc)
+    doc["_id"] = result.inserted_id
+    await users_col.update_one(
+        {"_id": ObjectId(current_user["id"])},
+        {"$set": {"household_id": str(result.inserted_id)}},
+    )
+    members = await _get_household_members(doc)
+    return HouseholdResponse(**household_response(doc, members_docs=members))
+
+
+@api_router.get("/household", response_model=HouseholdResponse)
+async def get_household(
+    current_user: Dict[str, Any] = Depends(_get_current_user),
+):
+    household_id = current_user.get("household_id")
+    if not household_id:
+        raise HTTPException(status_code=404, detail={"code": "NO_HOUSEHOLD"})
+    doc = await households_col.find_one({"_id": ObjectId(household_id)})
+    if not doc:
+        raise HTTPException(status_code=404, detail={"code": "NO_HOUSEHOLD"})
+    members = await _get_household_members(doc)
+    return HouseholdResponse(**household_response(doc, members_docs=members))
+
+
+@api_router.post("/household/invite", response_model=HouseholdInviteResponse)
+async def invite_to_household(
+    current_user: Dict[str, Any] = Depends(_get_current_user),
+):
+    household_id = current_user.get("household_id")
+    if not household_id:
+        raise HTTPException(status_code=404, detail={"code": "NO_HOUSEHOLD"})
+    doc = await households_col.find_one({"_id": ObjectId(household_id)})
+    if not doc:
+        raise HTTPException(status_code=404, detail={"code": "NO_HOUSEHOLD"})
+    if doc.get("owner_id") != current_user["id"]:
+        raise HTTPException(status_code=403, detail={"code": "NOT_HOUSEHOLD_OWNER"})
+    if len(doc.get("member_ids", [])) >= MAX_HOUSEHOLD_MEMBERS:
+        raise HTTPException(status_code=409, detail={"code": "HOUSEHOLD_FULL", "max_members": MAX_HOUSEHOLD_MEMBERS})
+    invite = generate_invite_token(household_id)
+    return HouseholdInviteResponse(**invite)
+
+
+@api_router.post("/household/join", response_model=HouseholdResponse)
+async def join_household(
+    body: HouseholdJoinRequest,
+    current_user: Dict[str, Any] = Depends(_get_current_user),
+):
+    if current_user.get("household_id"):
+        raise HTTPException(status_code=409, detail={"code": "ALREADY_IN_HOUSEHOLD"})
+    household_id = decode_invite_token(body.token)
+    doc = await households_col.find_one({"_id": ObjectId(household_id)})
+    if not doc:
+        raise HTTPException(status_code=404, detail={"code": "HOUSEHOLD_NOT_FOUND"})
+    if len(doc.get("member_ids", [])) >= MAX_HOUSEHOLD_MEMBERS:
+        raise HTTPException(status_code=409, detail={"code": "HOUSEHOLD_FULL", "max_members": MAX_HOUSEHOLD_MEMBERS})
+    await households_col.update_one(
+        {"_id": ObjectId(household_id)},
+        {"$addToSet": {"member_ids": current_user["id"]}},
+    )
+    await users_col.update_one(
+        {"_id": ObjectId(current_user["id"])},
+        {"$set": {"household_id": household_id}},
+    )
+    doc = await households_col.find_one({"_id": ObjectId(household_id)})
+    members = await _get_household_members(doc)
+    logger.info("HOUSEHOLD_JOIN user=%s household=%s", current_user["id"], household_id)
+    return HouseholdResponse(**household_response(doc, members_docs=members))
+
+
+@api_router.post("/household/leave", status_code=204)
+async def leave_household(
+    current_user: Dict[str, Any] = Depends(_get_current_user),
+):
+    household_id = current_user.get("household_id")
+    if not household_id:
+        raise HTTPException(status_code=404, detail={"code": "NO_HOUSEHOLD"})
+    doc = await households_col.find_one({"_id": ObjectId(household_id)})
+    if not doc:
+        await users_col.update_one({"_id": ObjectId(current_user["id"])}, {"$unset": {"household_id": ""}})
+        return Response(status_code=204)
+
+    is_owner = doc.get("owner_id") == current_user["id"]
+    other_members = [mid for mid in doc.get("member_ids", []) if mid != current_user["id"]]
+    if is_owner and other_members:
+        raise HTTPException(status_code=409, detail={"code": "OWNER_CANNOT_LEAVE_WITH_MEMBERS"})
+
+    await users_col.update_one({"_id": ObjectId(current_user["id"])}, {"$unset": {"household_id": ""}})
+    if is_owner:
+        await households_col.delete_one({"_id": ObjectId(household_id)})
+    else:
+        await households_col.update_one(
+            {"_id": ObjectId(household_id)},
+            {"$pull": {"member_ids": current_user["id"]}},
+        )
+    logger.info("HOUSEHOLD_LEAVE user=%s household=%s owner=%s", current_user["id"], household_id, is_owner)
+    return Response(status_code=204)
+
+
+# ── Import automatique des tickets par email (BUG-050, phase 1) ──────────────
+# Phase 1 : connexion/déconnexion OAuth Gmail uniquement (consentement,
+# stockage chiffré du refresh_token). Aucune recherche ni parsing d'email —
+# phase 2, hors périmètre. Nécessite GOOGLE_OAUTH_CLIENT_ID/SECRET et
+# GMAIL_TOKEN_ENCRYPTION_KEY en variables d'environnement (non configurés par
+# défaut : voir gmail_oauth_service.is_configured()).
+
+@api_router.get("/integrations/gmail/auth-url", response_model=GmailAuthUrlResponse)
+async def get_gmail_auth_url(
+    current_user: Dict[str, Any] = Depends(_get_current_user),
+):
+    if not gmail_oauth_service.is_configured():
+        raise HTTPException(status_code=503, detail={"code": "GMAIL_OAUTH_NOT_CONFIGURED"})
+    result = gmail_oauth_service.build_authorization_url(user_id=current_user["id"])
+    return GmailAuthUrlResponse(**result)
+
+
+@api_router.post("/integrations/gmail/connect", response_model=GmailConnectionStatusResponse)
+async def connect_gmail(
+    body: GmailConnectRequest,
+    current_user: Dict[str, Any] = Depends(_get_current_user),
+):
+    if not gmail_oauth_service.is_configured():
+        raise HTTPException(status_code=503, detail={"code": "GMAIL_OAUTH_NOT_CONFIGURED"})
+    try:
+        state_user_id = gmail_oauth_service.decode_state_token(body.state)
+    except ValueError:
+        raise HTTPException(status_code=400, detail={"code": "INVALID_OAUTH_STATE"})
+    if state_user_id != current_user["id"]:
+        raise HTTPException(status_code=400, detail={"code": "INVALID_OAUTH_STATE"})
+
+    try:
+        tokens = await gmail_oauth_service.exchange_code_for_tokens(code=body.code)
+    except httpx.HTTPStatusError as exc:
+        logger.warning("GMAIL_OAUTH échange de code échoué user=%s status=%s", current_user["id"], exc.response.status_code)
+        raise HTTPException(status_code=400, detail={"code": "OAUTH_EXCHANGE_FAILED"})
+    except gmail_oauth_service.GmailOAuthNotConfigured:
+        raise HTTPException(status_code=503, detail={"code": "GMAIL_OAUTH_NOT_CONFIGURED"})
+
+    refresh_token = tokens.get("refresh_token")
+    if not refresh_token:
+        # Google n'envoie un refresh_token qu'à la première autorisation
+        # (access_type=offline + prompt=consent) — sans lui, aucune synchronisation
+        # future n'est possible : traiter comme un échec explicite plutôt qu'une
+        # connexion silencieusement inopérante.
+        raise HTTPException(status_code=400, detail={"code": "NO_REFRESH_TOKEN", "hint": "reconnect_required"})
+
+    connected_at = utc_now().isoformat()
+    await users_col.update_one(
+        {"_id": ObjectId(current_user["id"])},
+        {"$set": {
+            "gmail_connection": {
+                "connected": True,
+                "refresh_token_encrypted": gmail_oauth_service.encrypt_refresh_token(refresh_token),
+                "connected_at": connected_at,
+                "status": "connected",
+            },
+        }},
+    )
+    await track_business_event(
+        business_events_col=business_events_col,
+        user_id=current_user["id"],
+        event_name="gmail_connected",
+        event_category="premium",
+        metadata_json={},
+    )
+    logger.info("GMAIL_OAUTH connecté user=%s", current_user["id"])
+    return GmailConnectionStatusResponse(connected=True, connected_at=connected_at, status="connected")
+
+
+@api_router.get("/integrations/gmail/status", response_model=GmailConnectionStatusResponse)
+async def get_gmail_status(
+    current_user: Dict[str, Any] = Depends(_get_current_user),
+):
+    user_doc = await users_col.find_one({"_id": ObjectId(current_user["id"])}) or current_user
+    connection = user_doc.get("gmail_connection") or {}
+    return GmailConnectionStatusResponse(
+        connected=bool(connection.get("connected")),
+        connected_at=connection.get("connected_at"),
+        status=connection.get("status", "disconnected"),
+    )
+
+
+@api_router.post("/integrations/gmail/disconnect", response_model=GmailConnectionStatusResponse)
+async def disconnect_gmail(
+    current_user: Dict[str, Any] = Depends(_get_current_user),
+):
+    user_doc = await users_col.find_one({"_id": ObjectId(current_user["id"])}) or current_user
+    connection = user_doc.get("gmail_connection") or {}
+    encrypted = connection.get("refresh_token_encrypted")
+    if encrypted:
+        refresh_token = gmail_oauth_service.decrypt_refresh_token(encrypted)
+        if refresh_token:
+            await gmail_oauth_service.revoke_token(token=refresh_token)
+    await users_col.update_one(
+        {"_id": ObjectId(current_user["id"])},
+        {"$unset": {"gmail_connection": ""}},
+    )
+    await track_business_event(
+        business_events_col=business_events_col,
+        user_id=current_user["id"],
+        event_name="gmail_disconnected",
+        event_category="premium",
+        metadata_json={},
+    )
+    logger.info("GMAIL_OAUTH déconnecté user=%s", current_user["id"])
+    return GmailConnectionStatusResponse(connected=False, connected_at=None, status="disconnected")
 
 
 @api_router.post("/billing/google/rtdn")
@@ -3930,7 +4184,8 @@ async def get_monthly_stats(
 ):
     """Retourne les stats mensuelles (consommé/jeté/score/saved_euros) sur les N derniers mois."""
     uid = current_user["id"]
-    plan = resolve_plan(current_user)
+    billing_doc = await resolve_billing_user_doc(current_user, users_col=users_col, households_col=households_col)
+    plan = resolve_plan(billing_doc)
     effective_months = min(months, 24 if plan == PREMIUM_PLAN else 6)
 
     # Générer la liste des N derniers mois (YYYY-MM)
