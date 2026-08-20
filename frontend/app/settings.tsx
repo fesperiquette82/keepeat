@@ -314,6 +314,24 @@ export default function SettingsScreen() {
           )}
         </View>
 
+        <View style={styles.card}>
+          <Text style={styles.sectionTitle}>Foyer</Text>
+          <Text style={styles.systemInfo}>Partagez votre stock et votre abonnement premium avec votre foyer.</Text>
+          <TouchableOpacity style={styles.refreshButton} onPress={() => router.push('/household')}>
+            <Ionicons name="people-outline" size={16} color="#FFFFFF" />
+            <Text style={styles.refreshButtonText}>Gérer mon foyer</Text>
+          </TouchableOpacity>
+        </View>
+
+        <View style={styles.card}>
+          <Text style={styles.sectionTitle}>Import automatique des tickets</Text>
+          <Text style={styles.systemInfo}>Connectez Gmail pour importer vos tickets de caisse sans les scanner (premium).</Text>
+          <TouchableOpacity style={styles.refreshButton} onPress={() => router.push('/gmail-connect')}>
+            <Ionicons name="mail-outline" size={16} color="#FFFFFF" />
+            <Text style={styles.refreshButtonText}>Connecter Gmail</Text>
+          </TouchableOpacity>
+        </View>
+
         {canAccessAdmin && (
           <View style={styles.card}>
             <Text style={styles.sectionTitle}>{t('adminSection')}</Text>

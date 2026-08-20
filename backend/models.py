@@ -340,3 +340,46 @@ class CrashReportBody(BaseModel):
 
 class CrashReportResponse(BaseModel):
     ok: bool
+
+
+class HouseholdCreate(BaseModel):
+    name: str = Field(..., min_length=1, max_length=80)
+
+
+class HouseholdMemberOut(BaseModel):
+    user_id: str
+    email: str
+    role: Literal["owner", "member"]
+
+
+class HouseholdResponse(BaseModel):
+    id: str
+    name: str
+    owner_id: str
+    members: list[HouseholdMemberOut]
+    created_at: str
+
+
+class HouseholdInviteResponse(BaseModel):
+    token: str
+    expires_at: str
+
+
+class HouseholdJoinRequest(BaseModel):
+    token: str = Field(..., min_length=1)
+
+
+class GmailAuthUrlResponse(BaseModel):
+    authorization_url: str
+    state: str
+
+
+class GmailConnectRequest(BaseModel):
+    code: str = Field(..., min_length=1)
+    state: str = Field(..., min_length=1)
+
+
+class GmailConnectionStatusResponse(BaseModel):
+    connected: bool
+    connected_at: Optional[str] = None
+    status: Literal["connected", "disconnected", "error"] = "disconnected"
