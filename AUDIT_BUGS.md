@@ -662,3 +662,37 @@ au runtime — coût, latence, consommation de quota.
 **Commandes exécutées :** `PYTHONPATH=backend pytest tests backend/tests`
 **Résultat :** PASS (463 passed, 0 échec)
 **Risques restants :** voir les deux constats notables ci-dessus (modèle Gemini par défaut probablement cassé en prod ; diversité qui se dégrade sur de très gros lots en une requête).
+
+| ID | Sévérité | Statut | Résumé |
+|---|---|---|---|
+| BUG-046 | 🟠 MAJEUR (marge/latence) | `CORRIGÉ` | Suite de BUG-045 : la cible initiale de ~300 recettes n'était pas atteinte (221/300). **Correction :** trois lots supplémentaires rédigés directement (sans appel API, même contrainte de quota Gemini gratuit) — 55 + 37 + 12 recettes brutes proposées, 82 effectivement retenues après le même filtre anti-doublon de « famille de plat » (17 rejetées comme redondantes avec le catalogue déjà présent : ex. hachis parmentier, soupe à l'oignon, riz pilaf, quiche aux poireaux, tomates farcies, croque-monsieur — déjà couverts). Catalogue final : **303 recettes**. Thèmes ajoutés pour combler les trous restants : sandwichs/wraps, entrées froides/charcuterie, spécialités montagne, desserts de pâtisserie (Paris-Brest, forêt noire, bûche, galette des rois), petit-déjeuner/brunch, poissons, volaille, viandes, légumes/accompagnements, végétarien, plats mijotés régionaux (cassoulet, bouillabaisse, poulet basquaise), apéritif, soupes/veloutés, pâtes/gratins, riz/céréales, salades composées, tartes salées, confitures/conserves maison, boissons, cuisine de fêtes, recettes anti-gaspi de valorisation des restes (pain perdu, riz cantonais, croquettes de purée, frittata). Au passage, un bug de `recipe_utils.normalize_recipe()` (script de fusion, non commité, hors production) a été corrigé : le filtre `meal_type` omettait `dessert` et `aperitif` du tuple de valeurs autorisées, ce qui aurait silencieusement fait retomber ces recettes sur `["lunch","dinner"]` par défaut — vérifié sans impact sur le lot précédent (BUG-045) qui ne comportait aucune recette taguée dessert/apéritif. |
+
+**Fichiers modifiés :** `backend/data/recipes.catalog.json`, `backend/tests/test_recipe_catalog_expansion.py` (seuil relevé de ≥200 à ≥300)
+**Tests ajoutés/mis à jour :** `test_catalog_has_at_least_200_recipes` renommé `test_catalog_has_at_least_300_recipes`, seuil `>= 300`
+**Commandes exécutées :** `PYTHONPATH=backend pytest tests backend/tests`
+**Résultat :** PASS (voir résultat détaillé ci-dessous)
+**Risques restants :** aucun nouveau ; mêmes deux constats notables que BUG-045 (modèle Gemini par défaut probablement cassé en prod ; diversité qui se dégrade sur de très gros lots générés en une seule requête — non applicable ici puisque ce lot est entièrement rédigé directement, sans appel API).
+
+---
+
+## Point 01 — Achat premium (`startPurchase()` câblé)
+
+Contexte : `startPurchase()` (`frontend/utils/iapService.ts`) était un stub qui levait
+systématiquement `Error('Not implemented - react-native-iap v14 API needs update')`.
+Tout le reste du flux premium était déjà en place et fonctionnel (backend
+`/api/billing/google/verify` avec vérification Google Play Developer API + RTDN,
+webhook d'annulation, `entitlements.py` pour le calibrage gratuit/premium, écran
+`premium.tsx` avec listeners d'achat, restauration, tracking `business_events`
+et entonnoir d'activation déjà câblé au dashboard admin depuis le point 08) —
+mais aucun utilisateur ne pouvait déclencher un achat réel.
+
+| ID | Sévérité | Statut | Résumé |
+|---|---|---|---|
+| BUG-047 | 🔴 CRITIQUE (revenu) | `CORRIGÉ` | `startPurchase()` levait toujours une exception "Not implemented" : le bouton d'abonnement du paywall (`premium.tsx`) ne pouvait jamais aboutir à un achat, quel que soit le calibrage des quotas gratuit/premium (`entitlements.py`). **Correction :** implémentation avec l'API OpenIAP/Nitro de `react-native-iap` v14 — `requestPurchase({ type: 'subs', request: { google: { skus: [product.id], subscriptionOffers: [{ sku: product.id, offerToken }] } } })`, où le `offerToken` est lu sur `product.subscriptionOfferDetailsAndroid[0]` (obligatoire côté Google Play Billing pour les abonnements, absent de l'ancienne signature qui ne prenait qu'un SKU). `startPurchase()` prend désormais le `ProductSubscription` déjà chargé par `loadSubscription()` plutôt qu'un simple SKU — `premium.tsx` le lui transmet et désactive le bouton tant que ce produit n'est pas chargé (évite un appel avec un produit `null`/sans offre). Le résultat de l'achat continue d'arriver de façon asynchrone via le `purchaseUpdatedListener` déjà enregistré (`subscribeToPurchaseUpdates`), qui appelait déjà correctement `verifyPremiumPurchase()` côté backend — cette partie n'a pas eu besoin d'être modifiée. |
+
+**Fichiers modifiés :** `frontend/utils/iapService.ts`, `frontend/app/premium.tsx`
+**Fichiers ajoutés :** `frontend/utils/iapPurchaseFlow.test.ts`
+**Tests ajoutés :** `iapPurchaseFlow.test.ts` (5 cas, même convention de verrouillage par lecture de source que `iapPriceDisplay.test.ts` car `react-native-iap` est un module natif non importable dans `node --test` : stub bien supprimé, `requestPurchase()` appelé avec `type: 'subs'` + `offerToken` Android, import de `requestPurchase`, `premium.tsx` transmet le produit chargé au lieu du SKU brut, bouton désactivé sans produit chargé)
+**Commandes exécutées :** `npx tsc --noEmit` (frontend) ; `npm run test:ci` (frontend, unit+integration+smoke)
+**Résultat :** PASS (`tsc` sans erreur ; suite complète frontend verte, 0 échec)
+**Risques restants :** non testable en conditions réelles dans cet environnement (pas de build natif Android/iOS ni de compte Google Play de test disponible ici) — à valider par un achat de test réel (licence de test Google Play) avant mise en production. iOS reste hors périmètre (point 03, toujours non traité) : `SKUS` ne liste que `PREMIUM_SKU` pour `android`, `default: []` pour les autres plateformes — `startPurchase()` lève explicitement si `product.platform !== 'android'`.

@@ -17,7 +17,6 @@ import {
   startPurchase,
   restoreSubscriptions,
   getFormattedPrice,
-  PREMIUM_SKU,
   type PurchaseResult,
 } from '../utils/iapService';
 
@@ -165,12 +164,13 @@ export default function PremiumScreen() {
   }, [refreshEntitlements, refreshUsage, token]);
 
   const handleSubscribe = async () => {
-    if (isPurchasing) return;
+    if (isPurchasing || !product) return;
     setIsPurchasing(true);
     try {
-      await startPurchase(PREMIUM_SKU);
+      await startPurchase(product);
       // Le résultat arrive via purchaseUpdatedListener — setIsPurchasing(false) géré là-bas
     } catch {
+      Alert.alert('Erreur', "Impossible de lancer l'achat. Réessayez dans un instant.");
       setIsPurchasing(false);
     }
   };
@@ -269,14 +269,14 @@ export default function PremiumScreen() {
           <ActivityIndicator style={styles.loader} color="#16A34A" />
         ) : (
           <TouchableOpacity
-            style={[styles.primaryButton, isPurchasing && styles.disabled]}
+            style={[styles.primaryButton, (isPurchasing || !product) && styles.disabled]}
             onPress={handleSubscribe}
-            disabled={isPurchasing}
+            disabled={isPurchasing || !product}
           >
             {isPurchasing ? (
               <ActivityIndicator color="#fff" />
             ) : (
-              <Text style={styles.primaryLabel}>{primaryButtonText}</Text>
+              <Text style={styles.primaryLabel}>{product ? primaryButtonText : "Abonnement indisponible pour l'instant"}</Text>
             )}
           </TouchableOpacity>
         )}
