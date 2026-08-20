@@ -30,6 +30,17 @@ class _FakeCollection:
         return _FakeCursor(self._items)
 
 
+def _noop_feature_access():
+    """Neutralise le quota FEATURE_AI (recettes suggérées) consommé désormais dès
+    qu'une recette du catalogue est effectivement retournée — ces tests portent sur
+    le matching/tri des recettes, pas sur la logique de quota (couverte séparément
+    dans backend/tests/test_recipe_suggestions_shared_quota.py)."""
+    return patch(
+        "server._enforce_feature_access",
+        AsyncMock(return_value={"plan": "free", "policy": {"allowed": True, "monthly_limit": 8}, "quota": None}),
+    )
+
+
 class RecipeSuggestionsEndpointTests(unittest.TestCase):
     def test_returns_ranked_recipes_and_meta_payload(self):
         fake_recipes = _FakeCollection(
@@ -54,14 +65,15 @@ class RecipeSuggestionsEndpointTests(unittest.TestCase):
         async def _run():
             with patch("server.recipes_col", fake_recipes):
                 with patch("server._fetch_stock_candidates", AsyncMock(return_value=fake_stock)):
-                    response = Response()
-                    payload = await get_recipe_suggestions(
-                        response=response,
-                        recipe_filter="day",
-                        include_meta=True,
-                        current_user={"id": "u1"},
-                    )
-                    return payload, response
+                    with _noop_feature_access():
+                        response = Response()
+                        payload = await get_recipe_suggestions(
+                            response=response,
+                            recipe_filter="day",
+                            include_meta=True,
+                            current_user={"id": "u1"},
+                        )
+                        return payload, response
 
         payload, response = asyncio.run(_run())
         self.assertEqual(payload["meta"]["returned"], 1)
@@ -207,12 +219,13 @@ class RecipeSuggestionsEndpointTests(unittest.TestCase):
         async def _run():
             with patch("server.recipes_col", fake_recipes):
                 with patch("server._fetch_stock_candidates", AsyncMock(return_value=fake_stock)):
-                    return await get_recipe_suggestions(
-                        response=Response(),
-                        recipe_filter="all",
-                        include_meta=True,
-                        current_user={"id": "u1"},
-                    )
+                    with _noop_feature_access():
+                        return await get_recipe_suggestions(
+                            response=Response(),
+                            recipe_filter="all",
+                            include_meta=True,
+                            current_user={"id": "u1"},
+                        )
 
         payload = asyncio.run(_run())
         ids = [r["id"] for r in payload["recipes"]]
@@ -236,12 +249,13 @@ class RecipeSuggestionsEndpointTests(unittest.TestCase):
         async def _run():
             with patch("server.recipes_col", fake_recipes):
                 with patch("server._fetch_stock_candidates", AsyncMock(return_value=[{"name": "salade"}])):
-                    return await get_recipe_suggestions(
-                        response=Response(),
-                        recipe_filter="all",
-                        include_meta=False,
-                        current_user={"id": "u1"},
-                    )
+                    with _noop_feature_access():
+                        return await get_recipe_suggestions(
+                            response=Response(),
+                            recipe_filter="all",
+                            include_meta=False,
+                            current_user={"id": "u1"},
+                        )
 
         payload = asyncio.run(_run())
         self.assertIsInstance(payload, list)

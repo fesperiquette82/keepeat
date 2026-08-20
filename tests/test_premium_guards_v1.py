@@ -110,7 +110,7 @@ class PremiumGuardsV1Tests(unittest.TestCase):
 
             with patch("backend.server.app_state_col", fake_state), patch.dict("os.environ", {"GEMINI_RECIPES_API_KEY": "x"}, clear=False), patch("backend.server.stock_col") as stock_mock, patch("backend.server.httpx.AsyncClient", return_value=_FakeAsyncClient(_FakeOpenAiResponse())), patch("backend.server.track_service_usage"), patch("backend.server.track_business_event"):
                 stock_mock.find.return_value.sort.return_value.limit.return_value.to_list = _stock_to_list
-                for _ in range(5):
+                for _ in range(8):
                     server._ai_recipe_cache.clear()
                     await get_ai_recipes(current_user={"id": "u1", "is_premium": False})
                 server._ai_recipe_cache.clear()

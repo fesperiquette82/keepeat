@@ -2,6 +2,8 @@ import { create } from 'zustand';
 import axios from 'axios';
 import { buildApiUrl } from '../utils/config';
 import { useAuthStore } from './authStore';
+import { usePremiumUiStore } from './premiumUiStore';
+import { extractPremiumErrorDetail } from '../utils/premiumErrors';
 import { logger } from '../utils/logger';
 import { formatFrenchRecipeText } from '../utils/recipeFrenchTypography';
 import {
@@ -49,7 +51,7 @@ interface RecipesStoreState {
   recipesById: Record<string, BackendRecipeSuggestion>;
   isLoading: boolean;
   error: string | null;
-  fetchSuggestions: (filter: RecipesFilter) => Promise<BackendRecipeSuggestion[]>;
+  fetchSuggestions: (filter: RecipesFilter, countUsage?: boolean) => Promise<BackendRecipeSuggestion[]>;
   refreshRecipeAssociationsForStockMutation: (input: {
     source: StockMutationRefreshSource;
     stockItems: DashboardStockItem[];
@@ -153,11 +155,12 @@ export const useRecipesStore = create<RecipesStoreState>((set, get) => ({
   recipesById: {},
   isLoading: false,
   error: null,
-  fetchSuggestions: async (filter) => {
+  fetchSuggestions: async (filter, countUsage = true) => {
     set({ isLoading: true, error: null });
     try {
       const apiFilter = FILTER_TO_API[filter];
-      const response = await axios.get(buildApiUrl(`/api/recipes/suggestions?include_meta=true&filter=${encodeURIComponent(apiFilter)}`), {
+      const countUsageParam = countUsage ? '' : '&count_usage=false';
+      const response = await axios.get(buildApiUrl(`/api/recipes/suggestions?include_meta=true&filter=${encodeURIComponent(apiFilter)}${countUsageParam}`), {
         headers: authHeaders(),
       });
       const payload = Array.isArray(response.data)
@@ -178,6 +181,10 @@ export const useRecipesStore = create<RecipesStoreState>((set, get) => ({
       }));
       return sanitized;
     } catch (error: any) {
+      const premiumError = extractPremiumErrorDetail(error);
+      if (premiumError) {
+        usePremiumUiStore.getState().openPaywall(premiumError);
+      }
       const message = error?.message ?? 'Impossible de récupérer les recettes.';
       logger.warn('[RECIPES] backend suggestions failed, fallback local only', { filter, message });
       set({ error: message });
@@ -188,7 +195,7 @@ export const useRecipesStore = create<RecipesStoreState>((set, get) => ({
   },
   refreshRecipeAssociationsForStockMutation: async ({ source, stockItems }) => {
     const filters: RecipesFilter[] = ['stock', 'expiryDay', 'expiryWeek', 'expiryMonth'];
-    const recipeBatches = await Promise.all(filters.map((filter) => get().fetchSuggestions(filter)));
+    const recipeBatches = await Promise.all(filters.map((filter) => get().fetchSuggestions(filter, false)));
     const snapshot = buildRecipeAssociationsSnapshot(
       stockItems,
       recipeBatches.flat() as BackendRecipeSuggestion[],
@@ -206,7 +213,7 @@ export const useRecipesStore = create<RecipesStoreState>((set, get) => ({
     const suggestionsByFilter = get().suggestionsByFilter;
     if (shouldBootstrapRecipeAssociationsCache(suggestionsByFilter)) {
       logger.debug('[RECIPES_MATCH] associations cache empty on cold start, bootstrapping stock suggestions');
-      await get().fetchSuggestions('stock');
+      await get().fetchSuggestions('stock', false);
     }
     return get().recomputeRecipeAssociationsFromCache(stockItems);
   },

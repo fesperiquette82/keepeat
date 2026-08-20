@@ -11,13 +11,17 @@ PREMIUM_PLAN = "premium"
 PREMIUM_PRODUCT_ID = "premium_monthly"
 
 FEATURE_OCR = "ocr_receipt"
+# FEATURE_AI ("ai_recipes") couvre désormais TOUTES les suggestions de recettes
+# affichées à l'utilisateur (catalogue local + repli IA confondus), pas
+# uniquement celles générées par IA — pour l'utilisateur les deux sont
+# indiscernables ("une recette"), donc un seul quota commun.
 FEATURE_AI = "ai_recipes"
 FEATURE_PREDICTIONS = "predictions"
 FEATURE_STATS_ADVANCED = "stats_advanced"
 
 FREE_MONTHLY_LIMITS: dict[str, int] = {
-    FEATURE_OCR: 10,
-    FEATURE_AI: 5,
+    FEATURE_OCR: 8,
+    FEATURE_AI: 8,
 }
 
 PREMIUM_MONTHLY_LIMITS: dict[str, int] = {

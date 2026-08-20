@@ -120,11 +120,11 @@ def _setup_common(monkeypatch, server, *, app_state_used):
 
 class TestAiGapFillQuotaEnforcement:
     def test_quota_exhausted_skips_ai_and_still_returns_200(self, monkeypatch):
-        """Free plan, limite ai_recipes = 5. À 5/5, le repli IA ne doit PAS appeler
+        """Free plan, limite ai_recipes = 8. À 8/8, le repli IA ne doit PAS appeler
         Gemini (pas d'appel payant au-delà du quota), et /suggestions doit rester
         200 — la réponse dégrade sur le mécanisme de gap plutôt que d'échouer."""
         server = _load_server(monkeypatch)
-        app_state, counter_id, gap_col = _setup_common(monkeypatch, server, app_state_used=5)
+        app_state, counter_id, gap_col = _setup_common(monkeypatch, server, app_state_used=8)
 
         ai_mock = AsyncMock()
         monkeypatch.setattr(server, "_ai_gap_fill", ai_mock)
@@ -180,7 +180,7 @@ class TestAiGapFillQuotaEnforcement:
         Gemini, ne pas rembourser ferait grimper `used` indéfiniment (6, 7, 8...) à
         chaque appel automatique, sans aucun appel IA réel derrière."""
         server = _load_server(monkeypatch)
-        app_state, counter_id, _ = _setup_common(monkeypatch, server, app_state_used=5)
+        app_state, counter_id, _ = _setup_common(monkeypatch, server, app_state_used=8)
 
         ai_mock = AsyncMock()
         monkeypatch.setattr(server, "_ai_gap_fill", ai_mock)
@@ -191,7 +191,7 @@ class TestAiGapFillQuotaEnforcement:
 
         assert resp.status_code == 200
         ai_mock.assert_not_awaited()
-        assert app_state.docs[counter_id]["used"] == 5  # réservé (6) puis remboursé (5)
+        assert app_state.docs[counter_id]["used"] == 8  # réservé (9) puis remboursé (8)
         server.app.dependency_overrides.clear()
 
     def test_ai_save_failure_returns_200_and_refunds_quota(self, monkeypatch):
