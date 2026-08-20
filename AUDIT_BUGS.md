@@ -639,3 +639,26 @@ non affichable) et point 10 (« Convertir et retenir », phase 5, angle mort act
 **Commandes exécutées :** `npx tsc --noEmit -p tsconfig.json` ; `npm run lint` ; `npm run test:ci`
 **Résultat :** PASS (280 tests unitaires + 6 intégration + 2 smoke, tous verts ; lint et typecheck propres)
 **Piste non retenue dans cette session :** point 01 (`startPurchase()` toujours un stub qui lève une exception — l'achat lui-même reste à implémenter, hors périmètre de cette tâche) ; le catalogue de recettes (point 07) et l'ouverture iOS (point 03) restent également non traités.
+
+---
+
+### Session du 2026-08-19 (suite) — point 07 : extension du catalogue de recettes
+
+Suite à l'audit commercial, phase 5 (« Convertir et retenir »), point 07 : le catalogue
+local ne comptait que 53 recettes, ce qui déclenchait trop souvent le repli IA (Gemini)
+au runtime — coût, latence, consommation de quota.
+
+| ID | Sévérité | Statut | Résumé |
+|---|---|---|---|
+| BUG-045 | 🟠 MAJEUR (marge/latence) | `CORRIGÉ` | Catalogue local à 53 recettes seulement : dès qu'aucune ne couvrait le stock d'un utilisateur, l'app basculait sur une génération Gemini à la volée — plusieurs secondes d'attente, un appel facturé, une unité de quota consommée. **Correction :** catalogue étendu à 221 recettes (53 existantes + 72 générées par lot Gemini hors-ligne, relues et corrigées, + 96 rédigées directement, sans appel API, pour compléter la diversité sans consommer davantage le quota gratuit de l'utilisateur). Toutes validées contre le schéma Pydantic `Recipe` de production (`RecipeCuisine`, `RecipeMealType`), ids et titres uniques, aucun doublon de « famille de plat » (filtre dédié), aucune collision avec le catalogue pré-existant. |
+
+**Constats notables au cours de ce travail (hors périmètre de correction ici) :**
+- Le modèle Gemini par défaut configuré dans le code (`_DEFAULT_GEMINI_RECIPES_MODEL = "gemini-2.0-flash-lite"`, `backend/server.py`) renvoie désormais une erreur 404 `NOT_FOUND` de l'API Google (« this model is no longer available »). Si la variable d'environnement `GEMINI_RECIPES_MODEL` n'est pas positionnée sur Render, **le repli IA recettes est probablement cassé en production** — à vérifier et corriger séparément (remplacer par `gemini-3.5-flash-lite` ou équivalent supporté).
+- Générer un très grand lot de recettes en une seule requête Gemini (300 demandées en une fois) fait fortement chuter la diversité au-delà d'un certain volume : sur 199 recettes brutes reçues, 122 ont dû être rejetées comme quasi-doublons du même plat (le modèle épuise ses idées distinctes et décline des micro-variantes). Plusieurs requêtes de taille modérée donnent un bien meilleur rendement net, mais consomment plus de quota API — compromis à arbitrer selon le plan Gemini utilisé.
+
+**Fichiers modifiés :** `backend/data/recipes.catalog.json`
+**Fichiers ajoutés :** `backend/tests/test_recipe_catalog_expansion.py`
+**Tests ajoutés :** `test_recipe_catalog_expansion.py` (4 cas : effectif ≥ 200, ids uniques, titres uniques, chaque recette valide contre le schéma Pydantic de production)
+**Commandes exécutées :** `PYTHONPATH=backend pytest tests backend/tests`
+**Résultat :** PASS (463 passed, 0 échec)
+**Risques restants :** voir les deux constats notables ci-dessus (modèle Gemini par défaut probablement cassé en prod ; diversité qui se dégrade sur de très gros lots en une requête).
