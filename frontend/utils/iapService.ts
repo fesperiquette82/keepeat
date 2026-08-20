@@ -6,6 +6,7 @@ import {
   finishTransaction,
   purchaseUpdatedListener,
   purchaseErrorListener,
+  requestPurchase,
   type ProductSubscription,
   type PurchaseError,
 } from 'react-native-iap';
@@ -86,10 +87,31 @@ export function subscribeToPurchaseUpdates(
   };
 }
 
-export async function startPurchase(sku: string): Promise<void> {
-  // react-native-iap v14 uses different API - stub implementation
-  // TODO: Update to use correct v14 API when implementing premium feature
-  throw new Error('Not implemented - react-native-iap v14 API needs update');
+/**
+ * Déclenche le flux d'achat Google Play pour l'abonnement premium.
+ * react-native-iap v14 (API OpenIAP/Nitro) exige le offerToken de l'offre
+ * Play Store choisie (`subscriptionOfferDetailsAndroid[0]`) en plus du SKU —
+ * il ne suffit pas de passer le SKU seul comme dans les versions antérieures.
+ * Le résultat de l'achat arrive de façon asynchrone via le listener enregistré
+ * par `subscribeToPurchaseUpdates`, pas via la valeur de retour de cet appel.
+ */
+export async function startPurchase(product: ProductSubscription): Promise<void> {
+  if (product.platform !== 'android') {
+    throw new Error('Achat premium disponible uniquement sur Android pour le moment');
+  }
+  const offer = product.subscriptionOfferDetailsAndroid?.[0];
+  if (!offer) {
+    throw new Error('Aucune offre disponible pour cet abonnement');
+  }
+  await requestPurchase({
+    type: 'subs',
+    request: {
+      google: {
+        skus: [product.id],
+        subscriptionOffers: [{ sku: product.id, offerToken: offer.offerToken }],
+      },
+    },
+  });
 }
 
 export async function restoreSubscriptions(): Promise<PurchaseResult[]> {

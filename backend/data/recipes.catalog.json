@@ -11257,5 +11257,4084 @@
       "name": "keepeat_claude_batch"
     },
     "version": 1
+  },
+  {
+    "id": "fr_pan_bagnat_nicois",
+    "title": "Pan bagnat niçois",
+    "summary": "Un sandwich niçois généreux, garni comme une salade niçoise entre deux tranches de pain.",
+    "ingredients_required": [
+      "pain",
+      "thon",
+      "tomate",
+      "oeuf",
+      "olives",
+      "huile d'olive"
+    ],
+    "ingredients_optional": [
+      "anchois",
+      "poivron"
+    ],
+    "steps": [
+      "Couper le pain en deux et le frotter d'ail.",
+      "Arroser généreusement d'huile d'olive.",
+      "Garnir de thon émietté, tomates, œufs durs et olives.",
+      "Presser légèrement et laisser reposer avant de déguster."
+    ],
+    "prep_time_min": 15,
+    "cook_time_min": 15,
+    "difficulty": "easy",
+    "tags": [
+      "nice",
+      "pique-nique"
+    ],
+    "meal_type": [
+      "lunch"
+    ],
+    "cuisine": "française",
+    "servings": 2,
+    "search_terms": [
+      "pan bagnat",
+      "nice",
+      "thon"
+    ],
+    "compat": {
+      "storage_focus": [
+        "frigo",
+        "placard"
+      ]
+    },
+    "source": {
+      "type": "local_catalog",
+      "name": "keepeat_claude_batch_2"
+    },
+    "version": 1
+  },
+  {
+    "id": "fr_jambon_beurre_a_l_ancienne",
+    "title": "Jambon-beurre à l'ancienne",
+    "summary": "Le sandwich français par excellence, pain croustillant, beurre et jambon de qualité.",
+    "ingredients_required": [
+      "pain",
+      "beurre",
+      "jambon"
+    ],
+    "ingredients_optional": [
+      "cornichons"
+    ],
+    "steps": [
+      "Fendre la baguette en deux dans la longueur.",
+      "Beurrer généreusement les deux faces.",
+      "Garnir de tranches de jambon.",
+      "Servir avec des cornichons à part."
+    ],
+    "prep_time_min": 5,
+    "cook_time_min": 15,
+    "difficulty": "easy",
+    "tags": [
+      "rapide",
+      "classique"
+    ],
+    "meal_type": [
+      "lunch",
+      "snack"
+    ],
+    "cuisine": "française",
+    "servings": 1,
+    "search_terms": [
+      "jambon-beurre",
+      "sandwich",
+      "classique"
+    ],
+    "compat": {
+      "storage_focus": [
+        "frigo",
+        "placard"
+      ]
+    },
+    "source": {
+      "type": "local_catalog",
+      "name": "keepeat_claude_batch_2"
+    },
+    "version": 1
+  },
+  {
+    "id": "fr_wrap_au_poulet_et_crudites",
+    "title": "Wrap au poulet et crudités",
+    "summary": "Une galette de blé roulée, garnie de poulet grillé et de légumes croquants.",
+    "ingredients_required": [
+      "galette de ble",
+      "poulet",
+      "salade",
+      "tomate",
+      "mayonnaise"
+    ],
+    "ingredients_optional": [
+      "mais"
+    ],
+    "steps": [
+      "Griller les émincés de poulet.",
+      "Tartiner la galette de mayonnaise.",
+      "Garnir de salade, tomate et poulet.",
+      "Rouler serré et couper en deux."
+    ],
+    "prep_time_min": 15,
+    "cook_time_min": 10,
+    "difficulty": "easy",
+    "tags": [
+      "rapide",
+      "complet"
+    ],
+    "meal_type": [
+      "lunch"
+    ],
+    "cuisine": "française",
+    "servings": 2,
+    "search_terms": [
+      "wrap",
+      "poulet",
+      "crudites"
+    ],
+    "compat": {
+      "storage_focus": [
+        "frigo",
+        "placard"
+      ]
+    },
+    "source": {
+      "type": "local_catalog",
+      "name": "keepeat_claude_batch_2"
+    },
+    "version": 1
+  },
+  {
+    "id": "fr_bagel_au_saumon_fume_et_fromage_frais",
+    "title": "Bagel au saumon fumé et fromage frais",
+    "summary": "Un bagel garni de saumon fumé, fromage frais et aneth.",
+    "ingredients_required": [
+      "bagel",
+      "saumon fume",
+      "fromage frais"
+    ],
+    "ingredients_optional": [
+      "aneth",
+      "citron"
+    ],
+    "steps": [
+      "Couper le bagel en deux et le toaster légèrement.",
+      "Tartiner de fromage frais.",
+      "Garnir de tranches de saumon fumé.",
+      "Parsemer d'aneth et d'un filet de citron."
+    ],
+    "prep_time_min": 10,
+    "cook_time_min": 3,
+    "difficulty": "easy",
+    "tags": [
+      "rapide",
+      "brunch"
+    ],
+    "meal_type": [
+      "breakfast",
+      "lunch"
+    ],
+    "cuisine": "française",
+    "servings": 2,
+    "search_terms": [
+      "bagel",
+      "saumon fume",
+      "brunch"
+    ],
+    "compat": {
+      "storage_focus": [
+        "frigo",
+        "placard"
+      ]
+    },
+    "source": {
+      "type": "local_catalog",
+      "name": "keepeat_claude_batch_2"
+    },
+    "version": 1
+  },
+  {
+    "id": "fr_panini_jambon_fromage_grille",
+    "title": "Panini jambon fromage grillé",
+    "summary": "Un panini croustillant, fondant à l'intérieur, jambon et fromage.",
+    "ingredients_required": [
+      "pain",
+      "jambon",
+      "fromage rape",
+      "beurre"
+    ],
+    "ingredients_optional": [
+      "tomate"
+    ],
+    "steps": [
+      "Garnir le pain de jambon et de fromage.",
+      "Beurrer légèrement l'extérieur.",
+      "Griller à la poêle ou au grille-panini des deux côtés.",
+      "Servir chaud dès que le fromage a fondu."
+    ],
+    "prep_time_min": 5,
+    "cook_time_min": 8,
+    "difficulty": "easy",
+    "tags": [
+      "rapide",
+      "economique"
+    ],
+    "meal_type": [
+      "lunch",
+      "snack"
+    ],
+    "cuisine": "française",
+    "servings": 1,
+    "search_terms": [
+      "panini",
+      "jambon",
+      "fromage"
+    ],
+    "compat": {
+      "storage_focus": [
+        "frigo",
+        "placard"
+      ]
+    },
+    "source": {
+      "type": "local_catalog",
+      "name": "keepeat_claude_batch_2"
+    },
+    "version": 1
+  },
+  {
+    "id": "fr_pate_en_croute_maison",
+    "title": "Pâté en croûte maison",
+    "summary": "Une terrine de viande enrobée d'une pâte dorée, servie froide en tranches.",
+    "ingredients_required": [
+      "chair a saucisse",
+      "foie de volaille",
+      "pate brisee",
+      "oeuf"
+    ],
+    "ingredients_optional": [
+      "pistaches",
+      "gelee"
+    ],
+    "steps": [
+      "Foncer un moule à cake avec la pâte brisée.",
+      "Mélanger la chair à saucisse et les foies de volaille hachés.",
+      "Garnir le moule et refermer avec le reste de pâte.",
+      "Enfourner une heure puis laisser refroidir avant de trancher."
+    ],
+    "prep_time_min": 40,
+    "cook_time_min": 60,
+    "difficulty": "hard",
+    "tags": [
+      "entree",
+      "traditionnel"
+    ],
+    "meal_type": [
+      "lunch"
+    ],
+    "cuisine": "française",
+    "servings": 8,
+    "search_terms": [
+      "pate en croute",
+      "entree",
+      "charcuterie"
+    ],
+    "compat": {
+      "storage_focus": [
+        "frigo",
+        "placard"
+      ]
+    },
+    "source": {
+      "type": "local_catalog",
+      "name": "keepeat_claude_batch_2"
+    },
+    "version": 1
+  },
+  {
+    "id": "fr_oeufs_en_gelee_aux_herbes",
+    "title": "Œufs en gelée aux herbes",
+    "summary": "Des œufs pochés enrobés d'une gelée légère parfumée aux herbes fraîches.",
+    "ingredients_required": [
+      "oeuf",
+      "gelatine",
+      "bouillon",
+      "persil"
+    ],
+    "ingredients_optional": [
+      "jambon",
+      "estragon"
+    ],
+    "steps": [
+      "Pocher délicatement les œufs.",
+      "Préparer une gelée avec le bouillon et la gélatine.",
+      "Verser un peu de gelée dans des ramequins avec des herbes.",
+      "Déposer l'œuf poché et recouvrir de gelée, réfrigérer plusieurs heures."
+    ],
+    "prep_time_min": 25,
+    "cook_time_min": 10,
+    "difficulty": "medium",
+    "tags": [
+      "entree",
+      "frais"
+    ],
+    "meal_type": [
+      "lunch"
+    ],
+    "cuisine": "française",
+    "servings": 4,
+    "search_terms": [
+      "oeufs en gelee",
+      "entree",
+      "frais"
+    ],
+    "compat": {
+      "storage_focus": [
+        "frigo",
+        "placard"
+      ]
+    },
+    "source": {
+      "type": "local_catalog",
+      "name": "keepeat_claude_batch_2"
+    },
+    "version": 1
+  },
+  {
+    "id": "fr_artichauts_vinaigrette",
+    "title": "Artichauts vinaigrette",
+    "summary": "Des artichauts entiers cuits à l'eau, servis avec une vinaigrette simple.",
+    "ingredients_required": [
+      "artichaut",
+      "vinaigrette"
+    ],
+    "ingredients_optional": [
+      "ail"
+    ],
+    "steps": [
+      "Cuire les artichauts entiers dans un grand volume d'eau salée.",
+      "Vérifier la cuisson en tirant une feuille.",
+      "Égoutter et laisser tiédir.",
+      "Servir avec la vinaigrette pour tremper les feuilles."
+    ],
+    "prep_time_min": 10,
+    "cook_time_min": 40,
+    "difficulty": "easy",
+    "tags": [
+      "entree",
+      "leger"
+    ],
+    "meal_type": [
+      "lunch"
+    ],
+    "cuisine": "française",
+    "servings": 4,
+    "search_terms": [
+      "artichauts",
+      "vinaigrette",
+      "entree"
+    ],
+    "compat": {
+      "storage_focus": [
+        "frigo",
+        "placard"
+      ]
+    },
+    "source": {
+      "type": "local_catalog",
+      "name": "keepeat_claude_batch_2"
+    },
+    "version": 1
+  },
+  {
+    "id": "fr_asperges_sauce_mousseline",
+    "title": "Asperges sauce mousseline",
+    "summary": "Des asperges vertes ou blanches, nappées d'une sauce hollandaise légère à la crème fouettée.",
+    "ingredients_required": [
+      "asperges",
+      "beurre",
+      "jaune d'oeuf",
+      "creme fraiche"
+    ],
+    "ingredients_optional": [
+      "citron"
+    ],
+    "steps": [
+      "Éplucher et cuire les asperges à l'eau bouillante.",
+      "Préparer une hollandaise avec les jaunes d'œufs et le beurre fondu.",
+      "Incorporer la crème fouettée pour alléger la sauce.",
+      "Servir les asperges tièdes nappées de sauce mousseline."
+    ],
+    "prep_time_min": 20,
+    "cook_time_min": 15,
+    "difficulty": "medium",
+    "tags": [
+      "printemps",
+      "entree"
+    ],
+    "meal_type": [
+      "lunch"
+    ],
+    "cuisine": "française",
+    "servings": 4,
+    "search_terms": [
+      "asperges",
+      "mousseline",
+      "printemps"
+    ],
+    "compat": {
+      "storage_focus": [
+        "frigo",
+        "placard"
+      ]
+    },
+    "source": {
+      "type": "local_catalog",
+      "name": "keepeat_claude_batch_2"
+    },
+    "version": 1
+  },
+  {
+    "id": "fr_petits_farcis_nicois",
+    "title": "Petits farcis niçois",
+    "summary": "Des légumes provençaux évidés et farcis d'une préparation à la viande et au riz.",
+    "ingredients_required": [
+      "courgette",
+      "tomate",
+      "chair a saucisse",
+      "riz",
+      "oignon"
+    ],
+    "ingredients_optional": [
+      "persil"
+    ],
+    "steps": [
+      "Évider courgettes et tomates, réserver la chair.",
+      "Préparer une farce avec la chair à saucisse, le riz cuit et la chair récupérée.",
+      "Garnir les légumes évidés.",
+      "Enfourner quarante minutes à four moyen."
+    ],
+    "prep_time_min": 30,
+    "cook_time_min": 40,
+    "difficulty": "medium",
+    "tags": [
+      "nice",
+      "traditionnel"
+    ],
+    "meal_type": [
+      "lunch",
+      "dinner"
+    ],
+    "cuisine": "française",
+    "servings": 4,
+    "search_terms": [
+      "farcis nicois",
+      "legumes",
+      "provence"
+    ],
+    "compat": {
+      "storage_focus": [
+        "frigo",
+        "placard"
+      ]
+    },
+    "source": {
+      "type": "local_catalog",
+      "name": "keepeat_claude_batch_2"
+    },
+    "version": 1
+  },
+  {
+    "id": "fr_croziflette_savoyarde_au_reblochon",
+    "title": "Croziflette savoyarde au reblochon",
+    "summary": "Des crozets (petites pâtes savoyardes) gratinés avec lardons et reblochon.",
+    "ingredients_required": [
+      "crozets",
+      "reblochon",
+      "lardons",
+      "oignon",
+      "creme fraiche"
+    ],
+    "ingredients_optional": [],
+    "steps": [
+      "Cuire les crozets à l'eau bouillante.",
+      "Faire revenir les lardons et l'oignon.",
+      "Mélanger les crozets, les lardons et la crème dans un plat.",
+      "Couvrir de reblochon coupé en tranches et gratiner au four."
+    ],
+    "prep_time_min": 15,
+    "cook_time_min": 25,
+    "difficulty": "easy",
+    "tags": [
+      "savoie",
+      "montagne"
+    ],
+    "meal_type": [
+      "dinner"
+    ],
+    "cuisine": "française",
+    "servings": 4,
+    "search_terms": [
+      "croziflette",
+      "reblochon",
+      "savoie"
+    ],
+    "compat": {
+      "storage_focus": [
+        "frigo",
+        "placard"
+      ]
+    },
+    "source": {
+      "type": "local_catalog",
+      "name": "keepeat_claude_batch_2"
+    },
+    "version": 1
+  },
+  {
+    "id": "fr_aligot_auvergnat_filant",
+    "title": "Aligot auvergnat filant",
+    "summary": "Une purée de pommes de terre auvergnate travaillée avec de la tomme fraîche jusqu'à devenir filante.",
+    "ingredients_required": [
+      "pomme de terre",
+      "tomme fraiche",
+      "beurre",
+      "ail"
+    ],
+    "ingredients_optional": [
+      "creme fraiche"
+    ],
+    "steps": [
+      "Cuire et écraser les pommes de terre en purée.",
+      "Incorporer le beurre et l'ail écrasé.",
+      "Ajouter la tomme fraîche coupée en morceaux hors du feu.",
+      "Travailler énergiquement à la spatule jusqu'à obtenir une texture filante."
+    ],
+    "prep_time_min": 20,
+    "cook_time_min": 25,
+    "difficulty": "medium",
+    "tags": [
+      "auvergne",
+      "traditionnel"
+    ],
+    "meal_type": [
+      "dinner"
+    ],
+    "cuisine": "française",
+    "servings": 4,
+    "search_terms": [
+      "aligot",
+      "auvergne",
+      "tomme"
+    ],
+    "compat": {
+      "storage_focus": [
+        "frigo",
+        "placard"
+      ]
+    },
+    "source": {
+      "type": "local_catalog",
+      "name": "keepeat_claude_batch_2"
+    },
+    "version": 1
+  },
+  {
+    "id": "fr_welsh_au_cheddar_et_biere",
+    "title": "Welsh au cheddar et bière",
+    "summary": "Une tartine généreuse nappée d'une sauce au cheddar fondu et à la bière.",
+    "ingredients_required": [
+      "pain",
+      "cheddar",
+      "biere",
+      "jambon"
+    ],
+    "ingredients_optional": [
+      "moutarde"
+    ],
+    "steps": [
+      "Faire fondre le cheddar avec un peu de bière.",
+      "Griller les tranches de pain.",
+      "Déposer une tranche de jambon sur le pain.",
+      "Napper de sauce au cheddar et gratiner au four."
+    ],
+    "prep_time_min": 10,
+    "cook_time_min": 15,
+    "difficulty": "easy",
+    "tags": [
+      "nord",
+      "gourmand"
+    ],
+    "meal_type": [
+      "dinner"
+    ],
+    "cuisine": "française",
+    "servings": 2,
+    "search_terms": [
+      "welsh",
+      "cheddar",
+      "nord"
+    ],
+    "compat": {
+      "storage_focus": [
+        "frigo",
+        "placard"
+      ]
+    },
+    "source": {
+      "type": "local_catalog",
+      "name": "keepeat_claude_batch_2"
+    },
+    "version": 1
+  },
+  {
+    "id": "fr_paris_brest_a_la_creme_pralinee",
+    "title": "Paris-Brest à la crème pralinée",
+    "summary": "Une couronne de pâte à choux garnie d'une crème mousseline au praliné.",
+    "ingredients_required": [
+      "pate a choux",
+      "praline",
+      "beurre",
+      "oeuf",
+      "sucre"
+    ],
+    "ingredients_optional": [
+      "amandes effilees"
+    ],
+    "steps": [
+      "Façonner la pâte à choux en couronne et parsemer d'amandes.",
+      "Cuire jusqu'à ce que la couronne soit bien dorée et gonflée.",
+      "Préparer une crème mousseline au praliné.",
+      "Couper la couronne en deux et garnir généreusement de crème."
+    ],
+    "prep_time_min": 40,
+    "cook_time_min": 35,
+    "difficulty": "hard",
+    "tags": [
+      "fetes",
+      "gourmand"
+    ],
+    "meal_type": [
+      "snack"
+    ],
+    "cuisine": "française",
+    "servings": 8,
+    "search_terms": [
+      "paris-brest",
+      "praline",
+      "choux"
+    ],
+    "compat": {
+      "storage_focus": [
+        "frigo",
+        "placard"
+      ]
+    },
+    "source": {
+      "type": "local_catalog",
+      "name": "keepeat_claude_batch_2"
+    },
+    "version": 1
+  },
+  {
+    "id": "fr_eclairs_au_cafe_glaces",
+    "title": "Éclairs au café glacés",
+    "summary": "De longs choux garnis de crème pâtissière au café et glacés au fondant.",
+    "ingredients_required": [
+      "pate a choux",
+      "lait",
+      "oeuf",
+      "sucre",
+      "cafe"
+    ],
+    "ingredients_optional": [
+      "fondant"
+    ],
+    "steps": [
+      "Façonner et cuire les éclairs en forme allongée.",
+      "Préparer une crème pâtissière parfumée au café.",
+      "Garnir les éclairs refroidis à la poche à douille.",
+      "Glacer le dessus au fondant café."
+    ],
+    "prep_time_min": 40,
+    "cook_time_min": 30,
+    "difficulty": "hard",
+    "tags": [
+      "gourmand",
+      "classique"
+    ],
+    "meal_type": [
+      "snack"
+    ],
+    "cuisine": "française",
+    "servings": 8,
+    "search_terms": [
+      "eclairs",
+      "cafe",
+      "patisserie"
+    ],
+    "compat": {
+      "storage_focus": [
+        "frigo",
+        "placard"
+      ]
+    },
+    "source": {
+      "type": "local_catalog",
+      "name": "keepeat_claude_batch_2"
+    },
+    "version": 1
+  },
+  {
+    "id": "fr_religieuse_au_chocolat",
+    "title": "Religieuse au chocolat",
+    "summary": "Deux choux superposés garnis de crème pâtissière au chocolat, glacés et décorés.",
+    "ingredients_required": [
+      "pate a choux",
+      "lait",
+      "oeuf",
+      "sucre",
+      "chocolat"
+    ],
+    "ingredients_optional": [
+      "creme fouettee"
+    ],
+    "steps": [
+      "Cuire des choux de deux tailles différentes.",
+      "Préparer une crème pâtissière au chocolat.",
+      "Garnir les choux et les superposer.",
+      "Glacer au chocolat et décorer d'un col de crème fouettée."
+    ],
+    "prep_time_min": 45,
+    "cook_time_min": 30,
+    "difficulty": "hard",
+    "tags": [
+      "gourmand",
+      "classique"
+    ],
+    "meal_type": [
+      "snack"
+    ],
+    "cuisine": "française",
+    "servings": 6,
+    "search_terms": [
+      "religieuse",
+      "chocolat",
+      "patisserie"
+    ],
+    "compat": {
+      "storage_focus": [
+        "frigo",
+        "placard"
+      ]
+    },
+    "source": {
+      "type": "local_catalog",
+      "name": "keepeat_claude_batch_2"
+    },
+    "version": 1
+  },
+  {
+    "id": "fr_baba_au_rhum_et_chantilly",
+    "title": "Baba au rhum et chantilly",
+    "summary": "Un petit gâteau moelleux imbibé de sirop au rhum, servi avec de la chantilly.",
+    "ingredients_required": [
+      "farine",
+      "beurre",
+      "oeuf",
+      "levure",
+      "rhum"
+    ],
+    "ingredients_optional": [
+      "creme fouettee"
+    ],
+    "steps": [
+      "Préparer une pâte levée légère et la cuire en petits moules.",
+      "Préparer un sirop sucré parfumé au rhum.",
+      "Imbiber généreusement les babas refroidis.",
+      "Servir avec de la chantilly."
+    ],
+    "prep_time_min": 30,
+    "cook_time_min": 20,
+    "difficulty": "medium",
+    "tags": [
+      "fetes",
+      "gourmand"
+    ],
+    "meal_type": [
+      "snack"
+    ],
+    "cuisine": "française",
+    "servings": 6,
+    "search_terms": [
+      "baba au rhum",
+      "chantilly",
+      "dessert"
+    ],
+    "compat": {
+      "storage_focus": [
+        "frigo",
+        "placard"
+      ]
+    },
+    "source": {
+      "type": "local_catalog",
+      "name": "keepeat_claude_batch_2"
+    },
+    "version": 1
+  },
+  {
+    "id": "fr_tarte_bourdaloue_aux_poires",
+    "title": "Tarte bourdaloue aux poires",
+    "summary": "Une tarte garnie de crème d'amande et de poires pochées, spécialité parisienne.",
+    "ingredients_required": [
+      "pate sablee",
+      "poire",
+      "amande en poudre",
+      "beurre",
+      "oeuf",
+      "sucre"
+    ],
+    "ingredients_optional": [
+      "amandes effilees"
+    ],
+    "steps": [
+      "Foncer un moule avec la pâte sablée.",
+      "Préparer une crème d'amande avec le beurre, le sucre et les œufs.",
+      "Garnir le fond de tarte de crème et disposer les poires.",
+      "Enfourner trente-cinq minutes jusqu'à coloration dorée."
+    ],
+    "prep_time_min": 25,
+    "cook_time_min": 35,
+    "difficulty": "medium",
+    "tags": [
+      "classique",
+      "fruits"
+    ],
+    "meal_type": [
+      "snack"
+    ],
+    "cuisine": "française",
+    "servings": 6,
+    "search_terms": [
+      "tarte bourdaloue",
+      "poires",
+      "amande"
+    ],
+    "compat": {
+      "storage_focus": [
+        "frigo",
+        "placard"
+      ]
+    },
+    "source": {
+      "type": "local_catalog",
+      "name": "keepeat_claude_batch_2"
+    },
+    "version": 1
+  },
+  {
+    "id": "fr_foret_noire_au_chocolat_et_cerises",
+    "title": "Forêt noire au chocolat et cerises",
+    "summary": "Un gâteau généreux, génoise au chocolat, chantilly et cerises confites.",
+    "ingredients_required": [
+      "chocolat",
+      "farine",
+      "oeuf",
+      "sucre",
+      "cerises",
+      "creme fouettee"
+    ],
+    "ingredients_optional": [
+      "kirsch"
+    ],
+    "steps": [
+      "Préparer et cuire une génoise au chocolat.",
+      "Imbiber les couches de sirop et de kirsch.",
+      "Garnir de chantilly et de cerises entre chaque couche.",
+      "Décorer le dessus de copeaux de chocolat et de cerises."
+    ],
+    "prep_time_min": 45,
+    "cook_time_min": 30,
+    "difficulty": "hard",
+    "tags": [
+      "fetes",
+      "gourmand"
+    ],
+    "meal_type": [
+      "snack"
+    ],
+    "cuisine": "française",
+    "servings": 8,
+    "search_terms": [
+      "foret noire",
+      "chocolat",
+      "cerises"
+    ],
+    "compat": {
+      "storage_focus": [
+        "frigo",
+        "placard"
+      ]
+    },
+    "source": {
+      "type": "local_catalog",
+      "name": "keepeat_claude_batch_2"
+    },
+    "version": 1
+  },
+  {
+    "id": "fr_tarte_normande_aux_pommes_et_calvados",
+    "title": "Tarte normande aux pommes et calvados",
+    "summary": "Une tarte fondante aux pommes, appareil à flan parfumé au calvados.",
+    "ingredients_required": [
+      "pate brisee",
+      "pomme",
+      "oeuf",
+      "creme fraiche",
+      "sucre"
+    ],
+    "ingredients_optional": [
+      "calvados"
+    ],
+    "steps": [
+      "Foncer un moule avec la pâte brisée.",
+      "Disposer les pommes coupées en lamelles.",
+      "Battre les œufs avec la crème, le sucre et le calvados.",
+      "Verser sur les pommes et enfourner trente-cinq minutes."
+    ],
+    "prep_time_min": 20,
+    "cook_time_min": 40,
+    "difficulty": "easy",
+    "tags": [
+      "normandie",
+      "traditionnel"
+    ],
+    "meal_type": [
+      "snack"
+    ],
+    "cuisine": "française",
+    "servings": 6,
+    "search_terms": [
+      "tarte normande",
+      "pommes",
+      "calvados"
+    ],
+    "compat": {
+      "storage_focus": [
+        "frigo",
+        "placard"
+      ]
+    },
+    "source": {
+      "type": "local_catalog",
+      "name": "keepeat_claude_batch_2"
+    },
+    "version": 1
+  },
+  {
+    "id": "fr_riz_conde_aux_fruits_rouges",
+    "title": "Riz condé aux fruits rouges",
+    "summary": "Un riz au lait vanillé, moulé et servi avec un coulis de fruits rouges.",
+    "ingredients_required": [
+      "riz",
+      "lait",
+      "sucre",
+      "vanille",
+      "fruits rouges"
+    ],
+    "ingredients_optional": [
+      "gelatine"
+    ],
+    "steps": [
+      "Cuire le riz doucement dans le lait vanillé et sucré.",
+      "Verser dans des moules individuels et laisser refroidir.",
+      "Préparer un coulis en mixant les fruits rouges avec un peu de sucre.",
+      "Démouler et napper de coulis avant de servir."
+    ],
+    "prep_time_min": 15,
+    "cook_time_min": 30,
+    "difficulty": "easy",
+    "tags": [
+      "classique",
+      "fruits"
+    ],
+    "meal_type": [
+      "snack"
+    ],
+    "cuisine": "française",
+    "servings": 4,
+    "search_terms": [
+      "riz conde",
+      "fruits rouges",
+      "dessert"
+    ],
+    "compat": {
+      "storage_focus": [
+        "frigo",
+        "placard"
+      ]
+    },
+    "source": {
+      "type": "local_catalog",
+      "name": "keepeat_claude_batch_2"
+    },
+    "version": 1
+  },
+  {
+    "id": "fr_clafoutis_aux_poires_et_amandes",
+    "title": "Clafoutis aux poires et amandes",
+    "summary": "Une variante du clafoutis classique, aux poires fondantes et amandes effilochées.",
+    "ingredients_required": [
+      "poire",
+      "oeuf",
+      "farine",
+      "lait",
+      "sucre"
+    ],
+    "ingredients_optional": [
+      "amandes effilees"
+    ],
+    "steps": [
+      "Disposer les poires coupées en quartiers dans un plat beurré.",
+      "Préparer une pâte à clafoutis avec œufs, farine, lait et sucre.",
+      "Verser sur les poires et parsemer d'amandes.",
+      "Enfourner trente-cinq minutes jusqu'à ce que le clafoutis soit doré."
+    ],
+    "prep_time_min": 15,
+    "cook_time_min": 40,
+    "difficulty": "easy",
+    "tags": [
+      "fruits",
+      "familial"
+    ],
+    "meal_type": [
+      "snack"
+    ],
+    "cuisine": "française",
+    "servings": 6,
+    "search_terms": [
+      "clafoutis",
+      "poires",
+      "amandes"
+    ],
+    "compat": {
+      "storage_focus": [
+        "frigo",
+        "placard"
+      ]
+    },
+    "source": {
+      "type": "local_catalog",
+      "name": "keepeat_claude_batch_2"
+    },
+    "version": 1
+  },
+  {
+    "id": "fr_gateau_basque_a_la_creme",
+    "title": "Gâteau basque à la crème",
+    "summary": "Un gâteau breton-basque fondant, garni d'une crème pâtissière vanillée.",
+    "ingredients_required": [
+      "farine",
+      "beurre",
+      "oeuf",
+      "sucre",
+      "lait"
+    ],
+    "ingredients_optional": [
+      "vanille",
+      "confiture de cerises"
+    ],
+    "steps": [
+      "Préparer une pâte sablée épaisse pour le fond et le dessus.",
+      "Préparer une crème pâtissière vanillée.",
+      "Foncer un moule, garnir de crème et recouvrir de pâte.",
+      "Enfourner quarante minutes jusqu'à coloration dorée."
+    ],
+    "prep_time_min": 30,
+    "cook_time_min": 45,
+    "difficulty": "medium",
+    "tags": [
+      "pays basque",
+      "traditionnel"
+    ],
+    "meal_type": [
+      "snack"
+    ],
+    "cuisine": "française",
+    "servings": 8,
+    "search_terms": [
+      "gateau basque",
+      "creme",
+      "pays basque"
+    ],
+    "compat": {
+      "storage_focus": [
+        "frigo",
+        "placard"
+      ]
+    },
+    "source": {
+      "type": "local_catalog",
+      "name": "keepeat_claude_batch_2"
+    },
+    "version": 1
+  },
+  {
+    "id": "fr_granola_maison_au_miel_et_noix",
+    "title": "Granola maison au miel et noix",
+    "summary": "Des flocons d'avoine croustillants, miel et noix, à préparer au four.",
+    "ingredients_required": [
+      "flocons d'avoine",
+      "miel",
+      "noix",
+      "huile"
+    ],
+    "ingredients_optional": [
+      "graines de tournesol"
+    ],
+    "steps": [
+      "Mélanger les flocons d'avoine avec le miel et l'huile.",
+      "Ajouter les noix concassées.",
+      "Étaler sur une plaque et enfourner à basse température.",
+      "Remuer régulièrement jusqu'à coloration dorée et croustillante."
+    ],
+    "prep_time_min": 10,
+    "cook_time_min": 30,
+    "difficulty": "easy",
+    "tags": [
+      "petit-dejeuner",
+      "conservation"
+    ],
+    "meal_type": [
+      "breakfast"
+    ],
+    "cuisine": "française",
+    "servings": 8,
+    "search_terms": [
+      "granola",
+      "miel",
+      "noix"
+    ],
+    "compat": {
+      "storage_focus": [
+        "frigo",
+        "placard"
+      ]
+    },
+    "source": {
+      "type": "local_catalog",
+      "name": "keepeat_claude_batch_2"
+    },
+    "version": 1
+  },
+  {
+    "id": "fr_yaourt_maison_a_la_vanille",
+    "title": "Yaourt maison à la vanille",
+    "summary": "Des yaourts crémeux préparés simplement avec du lait et un ferment.",
+    "ingredients_required": [
+      "lait",
+      "yaourt",
+      "vanille"
+    ],
+    "ingredients_optional": [
+      "sucre"
+    ],
+    "steps": [
+      "Tiédir le lait sans le faire bouillir.",
+      "Mélanger avec le yaourt et la vanille.",
+      "Répartir dans des pots et laisser fermenter plusieurs heures au chaud.",
+      "Réfrigérer avant de déguster."
+    ],
+    "prep_time_min": 10,
+    "cook_time_min": 15,
+    "difficulty": "easy",
+    "tags": [
+      "petit-dejeuner",
+      "maison"
+    ],
+    "meal_type": [
+      "breakfast"
+    ],
+    "cuisine": "française",
+    "servings": 6,
+    "search_terms": [
+      "yaourt maison",
+      "vanille",
+      "petit-dejeuner"
+    ],
+    "compat": {
+      "storage_focus": [
+        "frigo",
+        "placard"
+      ]
+    },
+    "source": {
+      "type": "local_catalog",
+      "name": "keepeat_claude_batch_2"
+    },
+    "version": 1
+  },
+  {
+    "id": "fr_tartine_d_avocat_et_oeuf_poche",
+    "title": "Tartine d'avocat et œuf poché",
+    "summary": "Une tartine healthy, avocat écrasé et œuf poché sur pain grillé.",
+    "ingredients_required": [
+      "pain",
+      "avocat",
+      "oeuf",
+      "citron"
+    ],
+    "ingredients_optional": [
+      "piment d'espelette"
+    ],
+    "steps": [
+      "Griller les tranches de pain.",
+      "Écraser l'avocat avec un filet de citron.",
+      "Pocher l'œuf dans de l'eau frémissante vinaigrée.",
+      "Tartiner le pain d'avocat et déposer l'œuf poché dessus."
+    ],
+    "prep_time_min": 10,
+    "cook_time_min": 5,
+    "difficulty": "easy",
+    "tags": [
+      "healthy",
+      "rapide"
+    ],
+    "meal_type": [
+      "breakfast",
+      "lunch"
+    ],
+    "cuisine": "française",
+    "servings": 2,
+    "search_terms": [
+      "tartine avocat",
+      "oeuf poche",
+      "healthy"
+    ],
+    "compat": {
+      "storage_focus": [
+        "frigo",
+        "placard"
+      ]
+    },
+    "source": {
+      "type": "local_catalog",
+      "name": "keepeat_claude_batch_2"
+    },
+    "version": 1
+  },
+  {
+    "id": "fr_pain_d_epices_maison_au_miel",
+    "title": "Pain d'épices maison au miel",
+    "summary": "Un pain d'épices moelleux et parfumé, à préparer la veille pour de meilleurs arômes.",
+    "ingredients_required": [
+      "farine",
+      "miel",
+      "lait",
+      "oeuf",
+      "epices"
+    ],
+    "ingredients_optional": [
+      "orange confite"
+    ],
+    "steps": [
+      "Chauffer le miel avec le lait.",
+      "Mélanger avec la farine, les épices et les œufs.",
+      "Verser dans un moule à cake beurré.",
+      "Enfourner quarante-cinq minutes à four doux."
+    ],
+    "prep_time_min": 15,
+    "cook_time_min": 45,
+    "difficulty": "easy",
+    "tags": [
+      "petit-dejeuner",
+      "hiver"
+    ],
+    "meal_type": [
+      "breakfast",
+      "snack"
+    ],
+    "cuisine": "française",
+    "servings": 8,
+    "search_terms": [
+      "pain d'epices",
+      "miel",
+      "hiver"
+    ],
+    "compat": {
+      "storage_focus": [
+        "frigo",
+        "placard"
+      ]
+    },
+    "source": {
+      "type": "local_catalog",
+      "name": "keepeat_claude_batch_2"
+    },
+    "version": 1
+  },
+  {
+    "id": "fr_crepes_bretonnes_au_sarrasin_nature",
+    "title": "Crêpes bretonnes au sarrasin nature",
+    "summary": "De fines crêpes salées bretonnes, à garnir selon les envies.",
+    "ingredients_required": [
+      "farine de sarrasin",
+      "eau",
+      "sel",
+      "beurre"
+    ],
+    "ingredients_optional": [
+      "oeuf"
+    ],
+    "steps": [
+      "Mélanger la farine de sarrasin avec l'eau et le sel.",
+      "Laisser reposer la pâte au moins une heure.",
+      "Cuire les crêpes fines dans une poêle beurrée bien chaude.",
+      "Servir nature ou garnies au choix."
+    ],
+    "prep_time_min": 10,
+    "cook_time_min": 20,
+    "difficulty": "easy",
+    "tags": [
+      "bretagne",
+      "traditionnel"
+    ],
+    "meal_type": [
+      "lunch",
+      "dinner"
+    ],
+    "cuisine": "française",
+    "servings": 4,
+    "search_terms": [
+      "crepes sarrasin",
+      "bretagne",
+      "galette"
+    ],
+    "compat": {
+      "storage_focus": [
+        "frigo",
+        "placard"
+      ]
+    },
+    "source": {
+      "type": "local_catalog",
+      "name": "keepeat_claude_batch_2"
+    },
+    "version": 1
+  },
+  {
+    "id": "fr_cabillaud_a_la_basquaise",
+    "title": "Cabillaud à la basquaise",
+    "summary": "Un filet de cabillaud mijoté avec poivrons, tomates et piment d'Espelette.",
+    "ingredients_required": [
+      "cabillaud",
+      "poivron",
+      "tomate",
+      "oignon"
+    ],
+    "ingredients_optional": [
+      "piment d'espelette"
+    ],
+    "steps": [
+      "Faire suer les poivrons et l'oignon émincés.",
+      "Ajouter les tomates concassées et laisser mijoter quinze minutes.",
+      "Déposer les filets de cabillaud sur la sauce.",
+      "Couvrir et cuire dix minutes à feu doux."
+    ],
+    "prep_time_min": 15,
+    "cook_time_min": 30,
+    "difficulty": "easy",
+    "tags": [
+      "pays basque",
+      "leger"
+    ],
+    "meal_type": [
+      "lunch",
+      "dinner"
+    ],
+    "cuisine": "française",
+    "servings": 4,
+    "search_terms": [
+      "cabillaud basquaise",
+      "poivrons",
+      "pays basque"
+    ],
+    "compat": {
+      "storage_focus": [
+        "frigo",
+        "placard"
+      ]
+    },
+    "source": {
+      "type": "local_catalog",
+      "name": "keepeat_claude_batch_2"
+    },
+    "version": 1
+  },
+  {
+    "id": "fr_raie_au_beurre_noisette_et_capres",
+    "title": "Raie au beurre noisette et câpres",
+    "summary": "Une aile de raie pochée, servie avec un beurre noisette relevé de câpres.",
+    "ingredients_required": [
+      "raie",
+      "beurre",
+      "cāpres",
+      "vinaigre"
+    ],
+    "ingredients_optional": [
+      "persil"
+    ],
+    "steps": [
+      "Pocher la raie dans un court-bouillon vingt minutes.",
+      "Faire chauffer le beurre jusqu'à coloration noisette.",
+      "Ajouter les câpres et un filet de vinaigre.",
+      "Napper la raie du beurre noisette chaud."
+    ],
+    "prep_time_min": 10,
+    "cook_time_min": 20,
+    "difficulty": "easy",
+    "tags": [
+      "classique",
+      "poisson"
+    ],
+    "meal_type": [
+      "lunch",
+      "dinner"
+    ],
+    "cuisine": "française",
+    "servings": 4,
+    "search_terms": [
+      "raie",
+      "beurre noisette",
+      "capres"
+    ],
+    "compat": {
+      "storage_focus": [
+        "frigo",
+        "placard"
+      ]
+    },
+    "source": {
+      "type": "local_catalog",
+      "name": "keepeat_claude_batch_2"
+    },
+    "version": 1
+  },
+  {
+    "id": "fr_thon_grille_sauce_vierge",
+    "title": "Thon grillé sauce vierge",
+    "summary": "Un pavé de thon grillé, servi avec une sauce vierge aux tomates et herbes fraîches.",
+    "ingredients_required": [
+      "thon",
+      "tomate",
+      "huile d'olive",
+      "basilic"
+    ],
+    "ingredients_optional": [
+      "citron"
+    ],
+    "steps": [
+      "Couper la tomate en petits dés.",
+      "Mélanger avec l'huile d'olive, le basilic ciselé et un filet de citron.",
+      "Griller le pavé de thon quelques minutes de chaque côté.",
+      "Napper de sauce vierge à température ambiante."
+    ],
+    "prep_time_min": 15,
+    "cook_time_min": 10,
+    "difficulty": "easy",
+    "tags": [
+      "ete",
+      "leger"
+    ],
+    "meal_type": [
+      "lunch",
+      "dinner"
+    ],
+    "cuisine": "française",
+    "servings": 4,
+    "search_terms": [
+      "thon grille",
+      "sauce vierge",
+      "ete"
+    ],
+    "compat": {
+      "storage_focus": [
+        "frigo",
+        "placard"
+      ]
+    },
+    "source": {
+      "type": "local_catalog",
+      "name": "keepeat_claude_batch_2"
+    },
+    "version": 1
+  },
+  {
+    "id": "fr_sardines_grillees_a_l_escabeche",
+    "title": "Sardines grillées à l'escabèche",
+    "summary": "Des sardines fraîches grillées puis marinées dans une sauce vinaigrée aux légumes.",
+    "ingredients_required": [
+      "sardines",
+      "carotte",
+      "oignon",
+      "vinaigre",
+      "huile d'olive"
+    ],
+    "ingredients_optional": [
+      "laurier"
+    ],
+    "steps": [
+      "Griller les sardines quelques minutes de chaque côté.",
+      "Faire revenir carotte et oignon émincés.",
+      "Ajouter le vinaigre et laisser réduire légèrement.",
+      "Verser la marinade chaude sur les sardines et laisser reposer."
+    ],
+    "prep_time_min": 15,
+    "cook_time_min": 15,
+    "difficulty": "easy",
+    "tags": [
+      "ete",
+      "sud"
+    ],
+    "meal_type": [
+      "lunch"
+    ],
+    "cuisine": "française",
+    "servings": 4,
+    "search_terms": [
+      "sardines",
+      "escabeche",
+      "grillees"
+    ],
+    "compat": {
+      "storage_focus": [
+        "frigo",
+        "placard"
+      ]
+    },
+    "source": {
+      "type": "local_catalog",
+      "name": "keepeat_claude_batch_2"
+    },
+    "version": 1
+  },
+  {
+    "id": "fr_rougets_a_la_nicoise",
+    "title": "Rougets à la niçoise",
+    "summary": "Des filets de rouget poêlés, servis sur une compotée de tomates et olives.",
+    "ingredients_required": [
+      "rouget",
+      "tomate",
+      "olives noires",
+      "ail",
+      "huile d'olive"
+    ],
+    "ingredients_optional": [
+      "basilic"
+    ],
+    "steps": [
+      "Préparer une compotée de tomates avec l'ail et l'huile d'olive.",
+      "Ajouter les olives noires en fin de cuisson.",
+      "Poêler les filets de rouget quelques minutes côté peau.",
+      "Servir les filets sur la compotée de tomates."
+    ],
+    "prep_time_min": 15,
+    "cook_time_min": 20,
+    "difficulty": "medium",
+    "tags": [
+      "nice",
+      "poisson"
+    ],
+    "meal_type": [
+      "lunch",
+      "dinner"
+    ],
+    "cuisine": "française",
+    "servings": 4,
+    "search_terms": [
+      "rougets",
+      "nicoise",
+      "tomates"
+    ],
+    "compat": {
+      "storage_focus": [
+        "frigo",
+        "placard"
+      ]
+    },
+    "source": {
+      "type": "local_catalog",
+      "name": "keepeat_claude_batch_2"
+    },
+    "version": 1
+  },
+  {
+    "id": "fr_cailles_aux_raisins_et_vin_blanc",
+    "title": "Cailles aux raisins et vin blanc",
+    "summary": "Des cailles rôties et déglacées au vin blanc, accompagnées de raisins frais.",
+    "ingredients_required": [
+      "caille",
+      "raisins",
+      "vin blanc",
+      "beurre"
+    ],
+    "ingredients_optional": [
+      "echalote"
+    ],
+    "steps": [
+      "Faire dorer les cailles dans le beurre.",
+      "Ajouter les échalotes émincées.",
+      "Déglacer au vin blanc et laisser réduire.",
+      "Ajouter les raisins en fin de cuisson."
+    ],
+    "prep_time_min": 15,
+    "cook_time_min": 25,
+    "difficulty": "medium",
+    "tags": [
+      "fetes",
+      "gastronomique"
+    ],
+    "meal_type": [
+      "dinner"
+    ],
+    "cuisine": "française",
+    "servings": 4,
+    "search_terms": [
+      "cailles",
+      "raisins",
+      "vin blanc"
+    ],
+    "compat": {
+      "storage_focus": [
+        "frigo",
+        "placard"
+      ]
+    },
+    "source": {
+      "type": "local_catalog",
+      "name": "keepeat_claude_batch_2"
+    },
+    "version": 1
+  },
+  {
+    "id": "fr_poule_au_pot_facon_henri_iv",
+    "title": "Poule au pot façon Henri IV",
+    "summary": "Une poule mijotée longuement avec des légumes, servie en bouillon puis en plat.",
+    "ingredients_required": [
+      "poule",
+      "carotte",
+      "poireau",
+      "navet",
+      "bouillon"
+    ],
+    "ingredients_optional": [
+      "celeri"
+    ],
+    "steps": [
+      "Placer la poule et les légumes dans une grande marmite.",
+      "Couvrir d'eau et porter à ébullition.",
+      "Écumer puis laisser mijoter deux heures à feu doux.",
+      "Servir le bouillon puis la poule et les légumes."
+    ],
+    "prep_time_min": 20,
+    "cook_time_min": 150,
+    "difficulty": "medium",
+    "tags": [
+      "traditionnel",
+      "dimanche"
+    ],
+    "meal_type": [
+      "lunch",
+      "dinner"
+    ],
+    "cuisine": "française",
+    "servings": 6,
+    "search_terms": [
+      "poule au pot",
+      "bouillon",
+      "traditionnel"
+    ],
+    "compat": {
+      "storage_focus": [
+        "frigo",
+        "placard"
+      ]
+    },
+    "source": {
+      "type": "local_catalog",
+      "name": "keepeat_claude_batch_2"
+    },
+    "version": 1
+  },
+  {
+    "id": "fr_blanc_de_poulet_sauce_moutarde_a_l_ancienne",
+    "title": "Blanc de poulet sauce moutarde à l'ancienne",
+    "summary": "Des filets de poulet poêlés, nappés d'une sauce crémeuse à la moutarde à l'ancienne.",
+    "ingredients_required": [
+      "poulet",
+      "moutarde",
+      "creme fraiche",
+      "echalote"
+    ],
+    "ingredients_optional": [
+      "persil"
+    ],
+    "steps": [
+      "Poêler les filets de poulet jusqu'à cuisson complète.",
+      "Réserver et faire suer l'échalote dans la même poêle.",
+      "Ajouter la crème et la moutarde, laisser réduire.",
+      "Remettre le poulet dans la sauce et réchauffer."
+    ],
+    "prep_time_min": 10,
+    "cook_time_min": 20,
+    "difficulty": "easy",
+    "tags": [
+      "rapide",
+      "familial"
+    ],
+    "meal_type": [
+      "lunch",
+      "dinner"
+    ],
+    "cuisine": "française",
+    "servings": 4,
+    "search_terms": [
+      "poulet moutarde",
+      "creme",
+      "rapide"
+    ],
+    "compat": {
+      "storage_focus": [
+        "frigo",
+        "placard"
+      ]
+    },
+    "source": {
+      "type": "local_catalog",
+      "name": "keepeat_claude_batch_2"
+    },
+    "version": 1
+  },
+  {
+    "id": "fr_roti_de_porc_aux_pruneaux",
+    "title": "Rôti de porc aux pruneaux",
+    "summary": "Un rôti de porc mijoté avec des pruneaux, sucré-salé et fondant.",
+    "ingredients_required": [
+      "roti de porc",
+      "pruneaux",
+      "oignon",
+      "bouillon"
+    ],
+    "ingredients_optional": [
+      "vin blanc"
+    ],
+    "steps": [
+      "Faire dorer le rôti de porc sur toutes les faces.",
+      "Ajouter l'oignon émincé et mouiller avec le bouillon.",
+      "Ajouter les pruneaux et laisser mijoter une heure trente.",
+      "Trancher et napper de sauce aux pruneaux."
+    ],
+    "prep_time_min": 15,
+    "cook_time_min": 100,
+    "difficulty": "easy",
+    "tags": [
+      "traditionnel",
+      "familial"
+    ],
+    "meal_type": [
+      "lunch",
+      "dinner"
+    ],
+    "cuisine": "française",
+    "servings": 6,
+    "search_terms": [
+      "roti de porc",
+      "pruneaux",
+      "traditionnel"
+    ],
+    "compat": {
+      "storage_focus": [
+        "frigo",
+        "placard"
+      ]
+    },
+    "source": {
+      "type": "local_catalog",
+      "name": "keepeat_claude_batch_2"
+    },
+    "version": 1
+  },
+  {
+    "id": "fr_tournedos_sauce_bearnaise",
+    "title": "Tournedos sauce béarnaise",
+    "summary": "Un morceau de bœuf tendre grillé, accompagné d'une sauce béarnaise onctueuse.",
+    "ingredients_required": [
+      "tournedos de boeuf",
+      "beurre",
+      "jaune d'oeuf",
+      "vinaigre",
+      "estragon"
+    ],
+    "ingredients_optional": [
+      "echalote"
+    ],
+    "steps": [
+      "Préparer une réduction de vinaigre, échalote et estragon.",
+      "Monter une béarnaise avec les jaunes d'œufs et le beurre fondu.",
+      "Griller le tournedos selon la cuisson désirée.",
+      "Servir avec la sauce béarnaise."
+    ],
+    "prep_time_min": 20,
+    "cook_time_min": 15,
+    "difficulty": "medium",
+    "tags": [
+      "gastronomique",
+      "fetes"
+    ],
+    "meal_type": [
+      "dinner"
+    ],
+    "cuisine": "française",
+    "servings": 2,
+    "search_terms": [
+      "tournedos",
+      "bearnaise",
+      "boeuf"
+    ],
+    "compat": {
+      "storage_focus": [
+        "frigo",
+        "placard"
+      ]
+    },
+    "source": {
+      "type": "local_catalog",
+      "name": "keepeat_claude_batch_2"
+    },
+    "version": 1
+  },
+  {
+    "id": "fr_boudin_noir_aux_pommes_caramelisees",
+    "title": "Boudin noir aux pommes caramélisées",
+    "summary": "Un boudin noir poêlé, accompagné de pommes fondantes et caramélisées.",
+    "ingredients_required": [
+      "boudin noir",
+      "pomme",
+      "beurre",
+      "sucre"
+    ],
+    "ingredients_optional": [
+      "oignon"
+    ],
+    "steps": [
+      "Poêler le boudin noir doucement de chaque côté.",
+      "Faire revenir les pommes coupées en quartiers dans le beurre.",
+      "Saupoudrer de sucre pour caraméliser légèrement.",
+      "Servir le boudin accompagné des pommes."
+    ],
+    "prep_time_min": 10,
+    "cook_time_min": 20,
+    "difficulty": "easy",
+    "tags": [
+      "traditionnel",
+      "automne"
+    ],
+    "meal_type": [
+      "lunch",
+      "dinner"
+    ],
+    "cuisine": "française",
+    "servings": 4,
+    "search_terms": [
+      "boudin noir",
+      "pommes",
+      "traditionnel"
+    ],
+    "compat": {
+      "storage_focus": [
+        "frigo",
+        "placard"
+      ]
+    },
+    "source": {
+      "type": "local_catalog",
+      "name": "keepeat_claude_batch_2"
+    },
+    "version": 1
+  },
+  {
+    "id": "fr_cote_de_boeuf_grillee_au_feu_de_bois",
+    "title": "Côte de bœuf grillée au feu de bois",
+    "summary": "Une belle côte de bœuf grillée, saisie puis reposée pour une cuisson parfaite.",
+    "ingredients_required": [
+      "cote de boeuf",
+      "beurre",
+      "gros sel"
+    ],
+    "ingredients_optional": [
+      "thym"
+    ],
+    "steps": [
+      "Sortir la viande du réfrigérateur une heure avant cuisson.",
+      "Griller la côte quelques minutes de chaque côté selon la cuisson désirée.",
+      "Laisser reposer sous papier aluminium dix minutes.",
+      "Trancher et assaisonner de gros sel."
+    ],
+    "prep_time_min": 10,
+    "cook_time_min": 20,
+    "difficulty": "medium",
+    "tags": [
+      "fetes",
+      "grillade"
+    ],
+    "meal_type": [
+      "dinner"
+    ],
+    "cuisine": "française",
+    "servings": 4,
+    "search_terms": [
+      "cote de boeuf",
+      "grillade",
+      "fetes"
+    ],
+    "compat": {
+      "storage_focus": [
+        "frigo",
+        "placard"
+      ]
+    },
+    "source": {
+      "type": "local_catalog",
+      "name": "keepeat_claude_batch_2"
+    },
+    "version": 1
+  },
+  {
+    "id": "fr_gratin_de_courge_butternut_au_parmesan",
+    "title": "Gratin de courge butternut au parmesan",
+    "summary": "Un gratin doux et automnal de courge butternut, parmesan et crème.",
+    "ingredients_required": [
+      "courge butternut",
+      "creme fraiche",
+      "parmesan rape",
+      "beurre"
+    ],
+    "ingredients_optional": [
+      "noix de muscade"
+    ],
+    "steps": [
+      "Éplucher et trancher finement la courge.",
+      "Disposer dans un plat à gratin.",
+      "Napper de crème et parsemer de parmesan.",
+      "Enfourner trente-cinq minutes jusqu'à coloration."
+    ],
+    "prep_time_min": 20,
+    "cook_time_min": 35,
+    "difficulty": "easy",
+    "tags": [
+      "automne",
+      "vegetarien"
+    ],
+    "meal_type": [
+      "lunch",
+      "dinner"
+    ],
+    "cuisine": "française",
+    "servings": 4,
+    "search_terms": [
+      "gratin butternut",
+      "parmesan",
+      "automne"
+    ],
+    "compat": {
+      "storage_focus": [
+        "frigo",
+        "placard"
+      ]
+    },
+    "source": {
+      "type": "local_catalog",
+      "name": "keepeat_claude_batch_2"
+    },
+    "version": 1
+  },
+  {
+    "id": "fr_poelee_de_haricots_beurre_a_l_echalote",
+    "title": "Poêlée de haricots beurre à l'échalote",
+    "summary": "Des haricots beurre sautés simplement à l'échalote et au beurre.",
+    "ingredients_required": [
+      "haricots beurre",
+      "echalote",
+      "beurre"
+    ],
+    "ingredients_optional": [
+      "persil"
+    ],
+    "steps": [
+      "Cuire les haricots à l'eau bouillante puis les égoutter.",
+      "Faire fondre le beurre et suer l'échalote.",
+      "Ajouter les haricots et les faire sauter quelques minutes.",
+      "Parsemer de persil avant de servir."
+    ],
+    "prep_time_min": 10,
+    "cook_time_min": 15,
+    "difficulty": "easy",
+    "tags": [
+      "rapide",
+      "accompagnement"
+    ],
+    "meal_type": [
+      "lunch",
+      "dinner"
+    ],
+    "cuisine": "française",
+    "servings": 4,
+    "search_terms": [
+      "haricots beurre",
+      "echalote",
+      "accompagnement"
+    ],
+    "compat": {
+      "storage_focus": [
+        "frigo",
+        "placard"
+      ]
+    },
+    "source": {
+      "type": "local_catalog",
+      "name": "keepeat_claude_batch_2"
+    },
+    "version": 1
+  },
+  {
+    "id": "fr_puree_de_celeri_rave_a_la_muscade",
+    "title": "Purée de céleri-rave à la muscade",
+    "summary": "Une purée fine et parfumée de céleri-rave, alternative légère à la purée classique.",
+    "ingredients_required": [
+      "celeri-rave",
+      "creme fraiche",
+      "beurre"
+    ],
+    "ingredients_optional": [
+      "noix de muscade"
+    ],
+    "steps": [
+      "Éplucher et couper le céleri-rave en morceaux.",
+      "Cuire à l'eau bouillante vingt-cinq minutes.",
+      "Égoutter et mixer avec le beurre et la crème.",
+      "Assaisonner d'une pointe de muscade."
+    ],
+    "prep_time_min": 10,
+    "cook_time_min": 25,
+    "difficulty": "easy",
+    "tags": [
+      "rapide",
+      "vegetarien"
+    ],
+    "meal_type": [
+      "lunch",
+      "dinner"
+    ],
+    "cuisine": "française",
+    "servings": 4,
+    "search_terms": [
+      "puree celeri-rave",
+      "muscade",
+      "leger"
+    ],
+    "compat": {
+      "storage_focus": [
+        "frigo",
+        "placard"
+      ]
+    },
+    "source": {
+      "type": "local_catalog",
+      "name": "keepeat_claude_batch_2"
+    },
+    "version": 1
+  },
+  {
+    "id": "fr_endives_braisees_au_jambon_sans_bechamel",
+    "title": "Endives braisées au jambon sans béchamel",
+    "summary": "Une version allégée des endives au jambon, simplement braisées au beurre.",
+    "ingredients_required": [
+      "endives",
+      "jambon",
+      "beurre"
+    ],
+    "ingredients_optional": [
+      "fromage rape"
+    ],
+    "steps": [
+      "Braiser les endives entières dans le beurre à couvert.",
+      "Envelopper chaque endive d'une tranche de jambon.",
+      "Disposer dans un plat et parsemer de fromage si désiré.",
+      "Enfourner quinze minutes pour gratiner légèrement."
+    ],
+    "prep_time_min": 10,
+    "cook_time_min": 35,
+    "difficulty": "easy",
+    "tags": [
+      "hiver",
+      "leger"
+    ],
+    "meal_type": [
+      "lunch",
+      "dinner"
+    ],
+    "cuisine": "française",
+    "servings": 4,
+    "search_terms": [
+      "endives",
+      "jambon",
+      "leger"
+    ],
+    "compat": {
+      "storage_focus": [
+        "frigo",
+        "placard"
+      ]
+    },
+    "source": {
+      "type": "local_catalog",
+      "name": "keepeat_claude_batch_2"
+    },
+    "version": 1
+  },
+  {
+    "id": "fr_veloute_de_fenouil_a_l_orange",
+    "title": "Velouté de fenouil à l'orange",
+    "summary": "Une soupe douce et parfumée au fenouil, relevée d'une pointe d'agrume.",
+    "ingredients_required": [
+      "fenouil",
+      "oignon",
+      "bouillon de legumes",
+      "creme fraiche"
+    ],
+    "ingredients_optional": [
+      "orange"
+    ],
+    "steps": [
+      "Émincer le fenouil et l'oignon.",
+      "Faire suer puis mouiller avec le bouillon.",
+      "Cuire vingt-cinq minutes puis mixer.",
+      "Lier avec la crème et un zeste d'orange."
+    ],
+    "prep_time_min": 15,
+    "cook_time_min": 30,
+    "difficulty": "easy",
+    "tags": [
+      "vegetarien",
+      "original"
+    ],
+    "meal_type": [
+      "lunch",
+      "dinner"
+    ],
+    "cuisine": "française",
+    "servings": 4,
+    "search_terms": [
+      "veloute fenouil",
+      "orange",
+      "vegetarien"
+    ],
+    "compat": {
+      "storage_focus": [
+        "frigo",
+        "placard"
+      ]
+    },
+    "source": {
+      "type": "local_catalog",
+      "name": "keepeat_claude_batch_2"
+    },
+    "version": 1
+  },
+  {
+    "id": "fr_poelee_de_champignons_sauvages_a_l_ail",
+    "title": "Poêlée de champignons sauvages à l'ail",
+    "summary": "Un mélange de champignons de saison sautés à l'ail et au persil.",
+    "ingredients_required": [
+      "champignons",
+      "ail",
+      "beurre",
+      "persil"
+    ],
+    "ingredients_optional": [
+      "echalote"
+    ],
+    "steps": [
+      "Nettoyer et couper les champignons.",
+      "Les faire sauter à feu vif dans le beurre.",
+      "Ajouter l'ail émincé en fin de cuisson.",
+      "Parsemer de persil avant de servir."
+    ],
+    "prep_time_min": 15,
+    "cook_time_min": 15,
+    "difficulty": "easy",
+    "tags": [
+      "automne",
+      "vegetarien"
+    ],
+    "meal_type": [
+      "lunch",
+      "dinner"
+    ],
+    "cuisine": "française",
+    "servings": 4,
+    "search_terms": [
+      "champignons sauvages",
+      "ail",
+      "automne"
+    ],
+    "compat": {
+      "storage_focus": [
+        "frigo",
+        "placard"
+      ]
+    },
+    "source": {
+      "type": "local_catalog",
+      "name": "keepeat_claude_batch_2"
+    },
+    "version": 1
+  },
+  {
+    "id": "fr_galette_de_quinoa_aux_legumes",
+    "title": "Galette de quinoa aux légumes",
+    "summary": "Des galettes croustillantes à base de quinoa et légumes râpés.",
+    "ingredients_required": [
+      "quinoa",
+      "carotte",
+      "oeuf",
+      "farine"
+    ],
+    "ingredients_optional": [
+      "persil"
+    ],
+    "steps": [
+      "Cuire le quinoa puis le laisser refroidir.",
+      "Mélanger avec la carotte râpée, l'œuf et la farine.",
+      "Former des petites galettes.",
+      "Cuire à la poêle quelques minutes de chaque côté."
+    ],
+    "prep_time_min": 15,
+    "cook_time_min": 20,
+    "difficulty": "easy",
+    "tags": [
+      "vegetarien",
+      "rapide"
+    ],
+    "meal_type": [
+      "lunch",
+      "dinner"
+    ],
+    "cuisine": "française",
+    "servings": 4,
+    "search_terms": [
+      "galette quinoa",
+      "legumes",
+      "vegetarien"
+    ],
+    "compat": {
+      "storage_focus": [
+        "frigo",
+        "placard"
+      ]
+    },
+    "source": {
+      "type": "local_catalog",
+      "name": "keepeat_claude_batch_2"
+    },
+    "version": 1
+  },
+  {
+    "id": "fr_tarte_fine_aux_legumes_d_ete",
+    "title": "Tarte fine aux légumes d'été",
+    "summary": "Une tarte fine et légère, garnie de fines tranches de légumes d'été.",
+    "ingredients_required": [
+      "pate feuilletee",
+      "courgette",
+      "tomate",
+      "aubergine",
+      "huile d'olive"
+    ],
+    "ingredients_optional": [
+      "fromage de chevre"
+    ],
+    "steps": [
+      "Étaler la pâte feuilletée sur une plaque.",
+      "Disposer les fines tranches de légumes en rosace.",
+      "Arroser d'huile d'olive et assaisonner.",
+      "Enfourner trente minutes à four chaud."
+    ],
+    "prep_time_min": 20,
+    "cook_time_min": 30,
+    "difficulty": "easy",
+    "tags": [
+      "ete",
+      "vegetarien"
+    ],
+    "meal_type": [
+      "lunch",
+      "dinner"
+    ],
+    "cuisine": "française",
+    "servings": 4,
+    "search_terms": [
+      "tarte fine",
+      "legumes",
+      "ete"
+    ],
+    "compat": {
+      "storage_focus": [
+        "frigo",
+        "placard"
+      ]
+    },
+    "source": {
+      "type": "local_catalog",
+      "name": "keepeat_claude_batch_2"
+    },
+    "version": 1
+  },
+  {
+    "id": "fr_petit_sale_aux_lentilles_vertes",
+    "title": "Petit salé aux lentilles vertes",
+    "summary": "Un plat mijoté traditionnel de porc salé et lentilles vertes du Puy.",
+    "ingredients_required": [
+      "petit sale",
+      "lentilles",
+      "carotte",
+      "oignon",
+      "laurier"
+    ],
+    "ingredients_optional": [
+      "saucisse"
+    ],
+    "steps": [
+      "Faire dessaler le petit salé si nécessaire.",
+      "Cuire la viande avec carotte, oignon et laurier une heure.",
+      "Ajouter les lentilles et poursuivre la cuisson trente minutes.",
+      "Servir la viande tranchée avec les lentilles."
+    ],
+    "prep_time_min": 15,
+    "cook_time_min": 100,
+    "difficulty": "easy",
+    "tags": [
+      "traditionnel",
+      "hiver"
+    ],
+    "meal_type": [
+      "lunch",
+      "dinner"
+    ],
+    "cuisine": "française",
+    "servings": 6,
+    "search_terms": [
+      "petit sale",
+      "lentilles",
+      "traditionnel"
+    ],
+    "compat": {
+      "storage_focus": [
+        "frigo",
+        "placard"
+      ]
+    },
+    "source": {
+      "type": "local_catalog",
+      "name": "keepeat_claude_batch_2"
+    },
+    "version": 1
+  },
+  {
+    "id": "fr_potee_auvergnate_au_chou",
+    "title": "Potée auvergnate au chou",
+    "summary": "Un plat mijoté copieux de viandes variées et de chou, typique d'Auvergne.",
+    "ingredients_required": [
+      "chou vert",
+      "saucisse",
+      "lard",
+      "pomme de terre",
+      "carotte"
+    ],
+    "ingredients_optional": [
+      "navet"
+    ],
+    "steps": [
+      "Placer les viandes et légumes dans une grande marmite.",
+      "Couvrir d'eau et porter à ébullition.",
+      "Écumer puis laisser mijoter deux heures.",
+      "Servir bien chaud dans de grandes assiettes creuses."
+    ],
+    "prep_time_min": 20,
+    "cook_time_min": 130,
+    "difficulty": "medium",
+    "tags": [
+      "auvergne",
+      "hiver"
+    ],
+    "meal_type": [
+      "lunch",
+      "dinner"
+    ],
+    "cuisine": "française",
+    "servings": 6,
+    "search_terms": [
+      "potee auvergnate",
+      "chou",
+      "hiver"
+    ],
+    "compat": {
+      "storage_focus": [
+        "frigo",
+        "placard"
+      ]
+    },
+    "source": {
+      "type": "local_catalog",
+      "name": "keepeat_claude_batch_2"
+    },
+    "version": 1
+  },
+  {
+    "id": "fr_chou_rouge_braise_aux_pommes",
+    "title": "Chou rouge braisé aux pommes",
+    "summary": "Un accompagnement mijoté sucré-salé, chou rouge et pommes fondantes.",
+    "ingredients_required": [
+      "chou rouge",
+      "pomme",
+      "vinaigre",
+      "sucre"
+    ],
+    "ingredients_optional": [
+      "clou de girofle"
+    ],
+    "steps": [
+      "Émincer finement le chou rouge.",
+      "Faire revenir avec les pommes coupées en dés.",
+      "Ajouter le vinaigre et le sucre.",
+      "Laisser mijoter quarante-cinq minutes à couvert."
+    ],
+    "prep_time_min": 15,
+    "cook_time_min": 45,
+    "difficulty": "easy",
+    "tags": [
+      "hiver",
+      "accompagnement"
+    ],
+    "meal_type": [
+      "lunch",
+      "dinner"
+    ],
+    "cuisine": "française",
+    "servings": 4,
+    "search_terms": [
+      "chou rouge",
+      "pommes",
+      "hiver"
+    ],
+    "compat": {
+      "storage_focus": [
+        "frigo",
+        "placard"
+      ]
+    },
+    "source": {
+      "type": "local_catalog",
+      "name": "keepeat_claude_batch_2"
+    },
+    "version": 1
+  },
+  {
+    "id": "fr_mini_quiches_lorraines_pour_l_aperitif",
+    "title": "Mini-quiches lorraines pour l'apéritif",
+    "summary": "De petites quiches individuelles, parfaites pour un apéritif dînatoire.",
+    "ingredients_required": [
+      "pate brisee",
+      "lardons",
+      "oeuf",
+      "creme fraiche"
+    ],
+    "ingredients_optional": [
+      "gruyere rape"
+    ],
+    "steps": [
+      "Foncer des petits moules avec la pâte brisée.",
+      "Répartir les lardons dans chaque moule.",
+      "Battre les œufs avec la crème et verser sur les lardons.",
+      "Enfourner vingt minutes à four chaud."
+    ],
+    "prep_time_min": 20,
+    "cook_time_min": 20,
+    "difficulty": "easy",
+    "tags": [
+      "apero",
+      "rapide"
+    ],
+    "meal_type": [
+      "snack"
+    ],
+    "cuisine": "française",
+    "servings": 8,
+    "search_terms": [
+      "mini quiches",
+      "apero",
+      "lorraine"
+    ],
+    "compat": {
+      "storage_focus": [
+        "frigo",
+        "placard"
+      ]
+    },
+    "source": {
+      "type": "local_catalog",
+      "name": "keepeat_claude_batch_2"
+    },
+    "version": 1
+  },
+  {
+    "id": "fr_verrines_de_saumon_fume_et_fromage_frais",
+    "title": "Verrines de saumon fumé et fromage frais",
+    "summary": "De petites verrines fraîches, saumon fumé et fromage frais aux herbes.",
+    "ingredients_required": [
+      "saumon fume",
+      "fromage frais",
+      "aneth"
+    ],
+    "ingredients_optional": [
+      "citron"
+    ],
+    "steps": [
+      "Couper le saumon fumé en petits morceaux.",
+      "Mélanger le fromage frais avec l'aneth ciselé.",
+      "Alterner les couches dans de petites verrines.",
+      "Réfrigérer avant de servir."
+    ],
+    "prep_time_min": 15,
+    "cook_time_min": 15,
+    "difficulty": "easy",
+    "tags": [
+      "apero",
+      "frais"
+    ],
+    "meal_type": [
+      "snack"
+    ],
+    "cuisine": "française",
+    "servings": 6,
+    "search_terms": [
+      "verrines",
+      "saumon fume",
+      "apero"
+    ],
+    "compat": {
+      "storage_focus": [
+        "frigo",
+        "placard"
+      ]
+    },
+    "source": {
+      "type": "local_catalog",
+      "name": "keepeat_claude_batch_2"
+    },
+    "version": 1
+  },
+  {
+    "id": "fr_chips_de_legumes_maison_au_four",
+    "title": "Chips de légumes maison au four",
+    "summary": "Des chips croustillantes de betterave, carotte et panais, cuites au four.",
+    "ingredients_required": [
+      "betterave",
+      "carotte",
+      "panais",
+      "huile d'olive"
+    ],
+    "ingredients_optional": [
+      "sel"
+    ],
+    "steps": [
+      "Trancher très finement les légumes à la mandoline.",
+      "Disposer sur une plaque et arroser d'huile d'olive.",
+      "Enfourner à basse température jusqu'à ce qu'elles soient croustillantes.",
+      "Saler légèrement avant de servir."
+    ],
+    "prep_time_min": 15,
+    "cook_time_min": 40,
+    "difficulty": "easy",
+    "tags": [
+      "apero",
+      "healthy"
+    ],
+    "meal_type": [
+      "snack"
+    ],
+    "cuisine": "française",
+    "servings": 6,
+    "search_terms": [
+      "chips legumes",
+      "apero",
+      "healthy"
+    ],
+    "compat": {
+      "storage_focus": [
+        "frigo",
+        "placard"
+      ]
+    },
+    "source": {
+      "type": "local_catalog",
+      "name": "keepeat_claude_batch_2"
+    },
+    "version": 1
+  },
+  {
+    "id": "fr_soupe_au_pistou_provencale",
+    "title": "Soupe au pistou provençale",
+    "summary": "Soupe de légumes d'été liée au pistou basilic-ail-parmesan.",
+    "ingredients_required": [
+      "haricots verts",
+      "haricots blancs",
+      "courgette",
+      "tomate",
+      "pommes de terre",
+      "basilic",
+      "ail",
+      "parmesan",
+      "huile d'olive"
+    ],
+    "ingredients_optional": [
+      "vermicelle",
+      "pistou du commerce"
+    ],
+    "steps": [
+      "Couper tous les légumes en petits dés.",
+      "Cuire les légumes 30 minutes dans l'eau salée.",
+      "Piler basilic, ail, parmesan et huile d'olive au mortier pour le pistou.",
+      "Servir la soupe chaude avec une cuillère de pistou par assiette."
+    ],
+    "prep_time_min": 20,
+    "cook_time_min": 30,
+    "difficulty": "easy",
+    "tags": [
+      "soupe",
+      "été",
+      "légumes",
+      "provence"
+    ],
+    "meal_type": [
+      "lunch",
+      "dinner"
+    ],
+    "cuisine": "française",
+    "servings": 6,
+    "search_terms": [
+      "soupe au pistou",
+      "pistou provençal",
+      "soupe légumes été"
+    ],
+    "compat": {
+      "storage_focus": [
+        "frigo",
+        "placard"
+      ]
+    },
+    "source": {
+      "type": "local_catalog",
+      "name": "keepeat_claude_batch_2"
+    },
+    "version": 1
+  },
+  {
+    "id": "fr_veloute_de_potimarron_aux_chataignes",
+    "title": "Velouté de potimarron aux châtaignes",
+    "summary": "Velouté d'automne onctueux relevé de châtaignes grillées.",
+    "ingredients_required": [
+      "potimarron",
+      "oignon",
+      "bouillon de légumes",
+      "crème fraîche",
+      "châtaignes cuites"
+    ],
+    "ingredients_optional": [
+      "muscade",
+      "huile de noisette"
+    ],
+    "steps": [
+      "Faire suer l'oignon émincé.",
+      "Ajouter le potimarron en cubes et le bouillon, cuire 25 minutes.",
+      "Mixer avec la crème et la moitié des châtaignes.",
+      "Servir parsemé du reste de châtaignes concassées."
+    ],
+    "prep_time_min": 15,
+    "cook_time_min": 25,
+    "difficulty": "easy",
+    "tags": [
+      "velouté",
+      "automne",
+      "potimarron",
+      "châtaigne"
+    ],
+    "meal_type": [
+      "lunch",
+      "dinner"
+    ],
+    "cuisine": "française",
+    "servings": 4,
+    "search_terms": [
+      "velouté potimarron",
+      "soupe châtaigne",
+      "velouté automne"
+    ],
+    "compat": {
+      "storage_focus": [
+        "frigo",
+        "placard"
+      ]
+    },
+    "source": {
+      "type": "local_catalog",
+      "name": "keepeat_claude_batch_2"
+    },
+    "version": 1
+  },
+  {
+    "id": "fr_veloute_de_topinambours_aux_noisettes",
+    "title": "Velouté de topinambours aux noisettes",
+    "summary": "Velouté délicat de topinambour à la texture soyeuse, éclats de noisette torréfiée.",
+    "ingredients_required": [
+      "topinambour",
+      "pomme de terre",
+      "bouillon de légumes",
+      "crème liquide",
+      "noisettes"
+    ],
+    "ingredients_optional": [
+      "persil"
+    ],
+    "steps": [
+      "Éplucher et couper topinambours et pomme de terre.",
+      "Cuire 25 minutes dans le bouillon.",
+      "Mixer finement avec la crème.",
+      "Servir avec les noisettes torréfiées concassées."
+    ],
+    "prep_time_min": 15,
+    "cook_time_min": 25,
+    "difficulty": "easy",
+    "tags": [
+      "velouté",
+      "topinambour",
+      "automne"
+    ],
+    "meal_type": [
+      "lunch",
+      "dinner"
+    ],
+    "cuisine": "française",
+    "servings": 4,
+    "search_terms": [
+      "velouté topinambour",
+      "soupe topinambour noisette"
+    ],
+    "compat": {
+      "storage_focus": [
+        "frigo",
+        "placard"
+      ]
+    },
+    "source": {
+      "type": "local_catalog",
+      "name": "keepeat_claude_batch_2"
+    },
+    "version": 1
+  },
+  {
+    "id": "fr_gratin_de_macaronis_au_jambon",
+    "title": "Gratin de macaronis au jambon",
+    "summary": "Gratin réconfortant de macaronis, sauce béchamel, jambon et gruyère.",
+    "ingredients_required": [
+      "macaronis",
+      "jambon",
+      "lait",
+      "beurre",
+      "farine",
+      "gruyère"
+    ],
+    "ingredients_optional": [
+      "muscade",
+      "chapelure"
+    ],
+    "steps": [
+      "Cuire les macaronis al dente.",
+      "Préparer une béchamel avec beurre, farine et lait.",
+      "Mélanger pâtes, béchamel et jambon en dés dans un plat.",
+      "Couvrir de gruyère et gratiner 20 minutes au four."
+    ],
+    "prep_time_min": 15,
+    "cook_time_min": 25,
+    "difficulty": "easy",
+    "tags": [
+      "gratin",
+      "pâtes",
+      "jambon",
+      "famille"
+    ],
+    "meal_type": [
+      "lunch",
+      "dinner"
+    ],
+    "cuisine": "française",
+    "servings": 4,
+    "search_terms": [
+      "gratin macaronis jambon",
+      "macaronis au four"
+    ],
+    "compat": {
+      "storage_focus": [
+        "frigo",
+        "placard"
+      ]
+    },
+    "source": {
+      "type": "local_catalog",
+      "name": "keepeat_claude_batch_2"
+    },
+    "version": 1
+  },
+  {
+    "id": "fr_coquillettes_au_beurre_et_jambon",
+    "title": "Coquillettes au beurre et jambon",
+    "summary": "Le plat d'enfance rapide : coquillettes fondantes au beurre et jambon.",
+    "ingredients_required": [
+      "coquillettes",
+      "beurre",
+      "jambon"
+    ],
+    "ingredients_optional": [
+      "parmesan",
+      "persil"
+    ],
+    "steps": [
+      "Cuire les coquillettes selon le paquet.",
+      "Égoutter, mélanger avec le beurre et le jambon en dés.",
+      "Servir chaud, parmesan à part."
+    ],
+    "prep_time_min": 5,
+    "cook_time_min": 10,
+    "difficulty": "easy",
+    "tags": [
+      "pâtes",
+      "rapide",
+      "enfant",
+      "économique"
+    ],
+    "meal_type": [
+      "lunch",
+      "dinner"
+    ],
+    "cuisine": "française",
+    "servings": 4,
+    "search_terms": [
+      "coquillettes jambon",
+      "coquillettes beurre"
+    ],
+    "compat": {
+      "storage_focus": [
+        "frigo",
+        "placard"
+      ]
+    },
+    "source": {
+      "type": "local_catalog",
+      "name": "keepeat_claude_batch_2"
+    },
+    "version": 1
+  },
+  {
+    "id": "fr_tarte_flambee_alsacienne",
+    "title": "Tarte flambée alsacienne",
+    "summary": "Pâte fine garnie de crème fraîche, oignons et lardons, cuite au four très chaud.",
+    "ingredients_required": [
+      "pâte à pain fine",
+      "crème fraîche épaisse",
+      "oignon",
+      "lardons"
+    ],
+    "ingredients_optional": [
+      "muscade",
+      "fromage blanc"
+    ],
+    "steps": [
+      "Étaler la pâte très finement.",
+      "Tartiner de crème fraîche mélangée à un peu de fromage blanc.",
+      "Répartir oignons émincés et lardons.",
+      "Cuire 10 minutes à four très chaud jusqu'à bords croustillants."
+    ],
+    "prep_time_min": 15,
+    "cook_time_min": 10,
+    "difficulty": "medium",
+    "tags": [
+      "alsace",
+      "tarte flambée",
+      "lardons"
+    ],
+    "meal_type": [
+      "dinner"
+    ],
+    "cuisine": "française",
+    "servings": 4,
+    "search_terms": [
+      "tarte flambée",
+      "flammekueche",
+      "tarte alsacienne lardons"
+    ],
+    "compat": {
+      "storage_focus": [
+        "frigo",
+        "placard"
+      ]
+    },
+    "source": {
+      "type": "local_catalog",
+      "name": "keepeat_claude_batch_2"
+    },
+    "version": 1
+  },
+  {
+    "id": "fr_taboule_a_la_menthe_et_citron",
+    "title": "Taboulé à la menthe et citron",
+    "summary": "Semoule fine gonflée à froid, herbes fraîches, tomate et citron.",
+    "ingredients_required": [
+      "semoule fine",
+      "tomate",
+      "concombre",
+      "menthe",
+      "persil",
+      "citron",
+      "huile d'olive"
+    ],
+    "ingredients_optional": [
+      "oignon rouge",
+      "raisins secs"
+    ],
+    "steps": [
+      "Verser la semoule dans un saladier, couvrir d'eau bouillante citronnée, laisser gonfler 10 minutes.",
+      "Égrainer à la fourchette.",
+      "Ajouter tomate, concombre et herbes ciselées finement.",
+      "Assaisonner d'huile d'olive et citron, réserver au frais."
+    ],
+    "prep_time_min": 20,
+    "cook_time_min": 15,
+    "difficulty": "easy",
+    "tags": [
+      "taboulé",
+      "été",
+      "frais",
+      "sans cuisson"
+    ],
+    "meal_type": [
+      "lunch"
+    ],
+    "cuisine": "française",
+    "servings": 4,
+    "search_terms": [
+      "taboulé",
+      "taboulé menthe citron",
+      "semoule froide"
+    ],
+    "compat": {
+      "storage_focus": [
+        "frigo",
+        "placard"
+      ]
+    },
+    "source": {
+      "type": "local_catalog",
+      "name": "keepeat_claude_batch_2"
+    },
+    "version": 1
+  },
+  {
+    "id": "fr_risotto_aux_champignons_de_paris",
+    "title": "Risotto aux champignons de Paris",
+    "summary": "Riz arborio crémeux aux champignons de Paris et parmesan.",
+    "ingredients_required": [
+      "riz arborio",
+      "champignons de Paris",
+      "bouillon de légumes",
+      "oignon",
+      "vin blanc",
+      "parmesan",
+      "beurre"
+    ],
+    "ingredients_optional": [
+      "persil",
+      "ail"
+    ],
+    "steps": [
+      "Faire revenir oignon et champignons émincés.",
+      "Ajouter le riz, nacrer, déglacer au vin blanc.",
+      "Mouiller progressivement de bouillon chaud en remuant jusqu'à absorption complète, 18 minutes.",
+      "Terminer avec beurre et parmesan hors du feu."
+    ],
+    "prep_time_min": 15,
+    "cook_time_min": 25,
+    "difficulty": "medium",
+    "tags": [
+      "risotto",
+      "champignons",
+      "crémeux"
+    ],
+    "meal_type": [
+      "dinner"
+    ],
+    "cuisine": "française",
+    "servings": 4,
+    "search_terms": [
+      "risotto champignons",
+      "risotto champignons de paris"
+    ],
+    "compat": {
+      "storage_focus": [
+        "frigo",
+        "placard"
+      ]
+    },
+    "source": {
+      "type": "local_catalog",
+      "name": "keepeat_claude_batch_2"
+    },
+    "version": 1
+  },
+  {
+    "id": "fr_salade_landaise",
+    "title": "Salade landaise",
+    "summary": "Salade du Sud-Ouest : gésiers confits, magret fumé et tomates.",
+    "ingredients_required": [
+      "salade verte",
+      "gésiers confits",
+      "magret fumé",
+      "tomate",
+      "noix"
+    ],
+    "ingredients_optional": [
+      "croûtons",
+      "vinaigrette à l'échalote"
+    ],
+    "steps": [
+      "Disposer la salade lavée dans les assiettes.",
+      "Réchauffer légèrement les gésiers confits à la poêle.",
+      "Ajouter tranches de magret fumé, tomates et noix.",
+      "Napper de vinaigrette et servir aussitôt."
+    ],
+    "prep_time_min": 15,
+    "cook_time_min": 5,
+    "difficulty": "easy",
+    "tags": [
+      "salade",
+      "sud-ouest",
+      "canard"
+    ],
+    "meal_type": [
+      "lunch"
+    ],
+    "cuisine": "française",
+    "servings": 4,
+    "search_terms": [
+      "salade landaise",
+      "salade gésiers magret"
+    ],
+    "compat": {
+      "storage_focus": [
+        "frigo",
+        "placard"
+      ]
+    },
+    "source": {
+      "type": "local_catalog",
+      "name": "keepeat_claude_batch_2"
+    },
+    "version": 1
+  },
+  {
+    "id": "fr_salade_de_pommes_de_terre_a_l_ancienne",
+    "title": "Salade de pommes de terre à l'ancienne",
+    "summary": "Salade tiède de pommes de terre, vinaigrette échalote et fines herbes.",
+    "ingredients_required": [
+      "pommes de terre",
+      "échalote",
+      "vinaigre",
+      "huile",
+      "persil",
+      "ciboulette"
+    ],
+    "ingredients_optional": [
+      "vin blanc",
+      "cornichons"
+    ],
+    "steps": [
+      "Cuire les pommes de terre en robe des champs.",
+      "Éplucher tièdes et couper en rondelles.",
+      "Arroser de vinaigrette à l'échalote pendant qu'elles sont chaudes pour bien absorber.",
+      "Parsemer d'herbes fraîches avant de servir."
+    ],
+    "prep_time_min": 10,
+    "cook_time_min": 20,
+    "difficulty": "easy",
+    "tags": [
+      "salade",
+      "pommes de terre",
+      "pique-nique"
+    ],
+    "meal_type": [
+      "lunch"
+    ],
+    "cuisine": "française",
+    "servings": 4,
+    "search_terms": [
+      "salade pommes de terre",
+      "salade de patates vinaigrette"
+    ],
+    "compat": {
+      "storage_focus": [
+        "frigo",
+        "placard"
+      ]
+    },
+    "source": {
+      "type": "local_catalog",
+      "name": "keepeat_claude_batch_2"
+    },
+    "version": 1
+  },
+  {
+    "id": "fr_tarte_au_thon_et_tomates",
+    "title": "Tarte au thon et tomates",
+    "summary": "Tarte salée facile au thon en boîte, tomates et fromage.",
+    "ingredients_required": [
+      "pâte brisée",
+      "thon en boîte",
+      "tomate",
+      "œufs",
+      "crème fraîche",
+      "gruyère"
+    ],
+    "ingredients_optional": [
+      "moutarde",
+      "origan"
+    ],
+    "steps": [
+      "Foncer un moule avec la pâte, piquer le fond.",
+      "Répartir le thon émietté et les rondelles de tomate.",
+      "Battre œufs et crème, verser dessus, couvrir de gruyère.",
+      "Cuire 30 minutes à four chaud."
+    ],
+    "prep_time_min": 15,
+    "cook_time_min": 30,
+    "difficulty": "easy",
+    "tags": [
+      "tarte",
+      "thon",
+      "économique",
+      "rapide"
+    ],
+    "meal_type": [
+      "lunch",
+      "dinner"
+    ],
+    "cuisine": "française",
+    "servings": 6,
+    "search_terms": [
+      "tarte au thon",
+      "tarte thon tomates"
+    ],
+    "compat": {
+      "storage_focus": [
+        "frigo",
+        "placard"
+      ]
+    },
+    "source": {
+      "type": "local_catalog",
+      "name": "keepeat_claude_batch_2"
+    },
+    "version": 1
+  },
+  {
+    "id": "fr_compote_de_pommes_maison",
+    "title": "Compote de pommes maison",
+    "summary": "Compote simple et anti-gaspi pour valoriser des pommes trop mûres.",
+    "ingredients_required": [
+      "pommes",
+      "sucre",
+      "eau"
+    ],
+    "ingredients_optional": [
+      "cannelle",
+      "vanille"
+    ],
+    "steps": [
+      "Éplucher et couper les pommes en morceaux.",
+      "Cuire à couvert avec un fond d'eau et le sucre 20 minutes.",
+      "Écraser plus ou moins finement selon la texture souhaitée.",
+      "Laisser refroidir avant de conserver au frais."
+    ],
+    "prep_time_min": 10,
+    "cook_time_min": 20,
+    "difficulty": "easy",
+    "tags": [
+      "compote",
+      "pomme",
+      "anti-gaspi",
+      "enfant"
+    ],
+    "meal_type": [
+      "snack",
+      "dessert"
+    ],
+    "cuisine": "française",
+    "servings": 4,
+    "search_terms": [
+      "compote de pommes",
+      "compote maison anti-gaspillage"
+    ],
+    "compat": {
+      "storage_focus": [
+        "frigo",
+        "placard"
+      ]
+    },
+    "source": {
+      "type": "local_catalog",
+      "name": "keepeat_claude_batch_2"
+    },
+    "version": 1
+  },
+  {
+    "id": "fr_cornichons_maison_au_vinaigre",
+    "title": "Cornichons maison au vinaigre",
+    "summary": "Conserve maison de cornichons croquants au vinaigre et aromates.",
+    "ingredients_required": [
+      "cornichons",
+      "vinaigre blanc",
+      "sel",
+      "grains de poivre"
+    ],
+    "ingredients_optional": [
+      "estragon",
+      "clou de girofle"
+    ],
+    "steps": [
+      "Frotter et sécher les cornichons, les mettre à dégorger au sel une nuit.",
+      "Rincer et sécher soigneusement.",
+      "Ranger dans des bocaux avec poivre et aromates.",
+      "Couvrir de vinaigre bouillant, fermer et laisser macérer 3 semaines."
+    ],
+    "prep_time_min": 20,
+    "cook_time_min": 5,
+    "difficulty": "easy",
+    "tags": [
+      "conserve",
+      "cornichon",
+      "anti-gaspi"
+    ],
+    "meal_type": [
+      "snack"
+    ],
+    "cuisine": "française",
+    "servings": 10,
+    "search_terms": [
+      "cornichons maison",
+      "cornichons au vinaigre"
+    ],
+    "compat": {
+      "storage_focus": [
+        "frigo",
+        "placard"
+      ]
+    },
+    "source": {
+      "type": "local_catalog",
+      "name": "keepeat_claude_batch_2"
+    },
+    "version": 1
+  },
+  {
+    "id": "fr_citronnade_maison",
+    "title": "Citronnade maison",
+    "summary": "Limonade rafraîchissante au citron frais et sucre.",
+    "ingredients_required": [
+      "citron",
+      "sucre",
+      "eau"
+    ],
+    "ingredients_optional": [
+      "menthe",
+      "eau gazeuse"
+    ],
+    "steps": [
+      "Presser les citrons.",
+      "Préparer un sirop en dissolvant le sucre dans un peu d'eau chaude.",
+      "Mélanger jus de citron, sirop et eau froide selon le goût.",
+      "Servir bien frais avec glaçons et menthe."
+    ],
+    "prep_time_min": 10,
+    "cook_time_min": 15,
+    "difficulty": "easy",
+    "tags": [
+      "boisson",
+      "été",
+      "citron",
+      "sans cuisson"
+    ],
+    "meal_type": [
+      "snack"
+    ],
+    "cuisine": "française",
+    "servings": 4,
+    "search_terms": [
+      "citronnade",
+      "limonade maison citron"
+    ],
+    "compat": {
+      "storage_focus": [
+        "frigo",
+        "placard"
+      ]
+    },
+    "source": {
+      "type": "local_catalog",
+      "name": "keepeat_claude_batch_2"
+    },
+    "version": 1
+  },
+  {
+    "id": "fr_buche_de_noel_au_chocolat",
+    "title": "Bûche de Noël au chocolat",
+    "summary": "Biscuit roulé fourré et enrobé de ganache au chocolat, dessert de Noël.",
+    "ingredients_required": [
+      "œufs",
+      "sucre",
+      "farine",
+      "chocolat noir",
+      "crème liquide",
+      "beurre"
+    ],
+    "ingredients_optional": [
+      "rhum",
+      "décor de Noël"
+    ],
+    "steps": [
+      "Préparer une pâte à biscuit roulé, cuire sur plaque 10 minutes.",
+      "Rouler le biscuit chaud dans un torchon humide, laisser refroidir.",
+      "Dérouler, garnir de ganache, rouler à nouveau.",
+      "Napper l'extérieur de ganache et strier à la fourchette pour l'effet écorce."
+    ],
+    "prep_time_min": 40,
+    "cook_time_min": 10,
+    "difficulty": "hard",
+    "tags": [
+      "bûche",
+      "noël",
+      "chocolat",
+      "fête"
+    ],
+    "meal_type": [
+      "dessert"
+    ],
+    "cuisine": "française",
+    "servings": 8,
+    "search_terms": [
+      "bûche de noël",
+      "bûche chocolat",
+      "dessert de noël"
+    ],
+    "compat": {
+      "storage_focus": [
+        "frigo",
+        "placard"
+      ]
+    },
+    "source": {
+      "type": "local_catalog",
+      "name": "keepeat_claude_batch_2"
+    },
+    "version": 1
+  },
+  {
+    "id": "fr_chapon_roti_aux_marrons",
+    "title": "Chapon rôti aux marrons",
+    "summary": "Volaille de fête rôtie farcie aux marrons, plat de réveillon.",
+    "ingredients_required": [
+      "chapon",
+      "marrons cuits",
+      "beurre",
+      "oignon",
+      "pain de mie"
+    ],
+    "ingredients_optional": [
+      "chair à saucisse",
+      "cognac"
+    ],
+    "steps": [
+      "Préparer la farce en mélangeant marrons émiettés, pain de mie et oignon.",
+      "Farcir le chapon, brider et beurrer généreusement.",
+      "Rôtir au four en arrosant régulièrement, environ 2h30 selon le poids.",
+      "Laisser reposer 15 minutes avant de découper."
+    ],
+    "prep_time_min": 30,
+    "cook_time_min": 150,
+    "difficulty": "hard",
+    "tags": [
+      "fête",
+      "noël",
+      "volaille",
+      "réveillon"
+    ],
+    "meal_type": [
+      "dinner"
+    ],
+    "cuisine": "française",
+    "servings": 8,
+    "search_terms": [
+      "chapon rôti",
+      "chapon aux marrons",
+      "volaille de noël"
+    ],
+    "compat": {
+      "storage_focus": [
+        "frigo",
+        "placard"
+      ]
+    },
+    "source": {
+      "type": "local_catalog",
+      "name": "keepeat_claude_batch_2"
+    },
+    "version": 1
+  },
+  {
+    "id": "fr_riz_cantonais_aux_restes",
+    "title": "Riz cantonais aux restes",
+    "summary": "Riz sauté anti-gaspi pour valoriser riz cuit, jambon et légumes restants.",
+    "ingredients_required": [
+      "riz cuit",
+      "œufs",
+      "jambon",
+      "petits pois",
+      "carotte"
+    ],
+    "ingredients_optional": [
+      "sauce soja",
+      "oignon nouveau"
+    ],
+    "steps": [
+      "Faire brouiller les œufs légèrement à la poêle, réserver.",
+      "Faire sauter jambon en dés, petits pois et carotte.",
+      "Ajouter le riz cuit refroidi, bien mélanger à feu vif.",
+      "Incorporer les œufs brouillés et un trait de sauce soja."
+    ],
+    "prep_time_min": 10,
+    "cook_time_min": 10,
+    "difficulty": "easy",
+    "tags": [
+      "anti-gaspi",
+      "riz",
+      "restes",
+      "rapide"
+    ],
+    "meal_type": [
+      "lunch",
+      "dinner"
+    ],
+    "cuisine": "française",
+    "servings": 4,
+    "search_terms": [
+      "riz cantonais",
+      "riz sauté restes",
+      "riz cantonais maison"
+    ],
+    "compat": {
+      "storage_focus": [
+        "frigo",
+        "placard"
+      ]
+    },
+    "source": {
+      "type": "local_catalog",
+      "name": "keepeat_claude_batch_2"
+    },
+    "version": 1
+  },
+  {
+    "id": "fr_croquettes_de_puree_aux_restes",
+    "title": "Croquettes de purée aux restes",
+    "summary": "Croquettes dorées façon anti-gaspi pour utiliser un reste de purée de pommes de terre.",
+    "ingredients_required": [
+      "purée de pommes de terre",
+      "œufs",
+      "chapelure",
+      "farine"
+    ],
+    "ingredients_optional": [
+      "fromage râpé",
+      "jambon"
+    ],
+    "steps": [
+      "Façonner la purée froide en petites boulettes ou palets.",
+      "Paner en passant farine, œuf battu puis chapelure.",
+      "Faire dorer à la poêle dans un peu d'huile chaude.",
+      "Égoutter sur papier absorbant et servir chaud."
+    ],
+    "prep_time_min": 15,
+    "cook_time_min": 10,
+    "difficulty": "easy",
+    "tags": [
+      "anti-gaspi",
+      "restes",
+      "purée",
+      "économique"
+    ],
+    "meal_type": [
+      "lunch",
+      "dinner",
+      "snack"
+    ],
+    "cuisine": "française",
+    "servings": 4,
+    "search_terms": [
+      "croquettes de purée",
+      "restes purée pommes de terre",
+      "croquettes pomme de terre"
+    ],
+    "compat": {
+      "storage_focus": [
+        "frigo",
+        "placard"
+      ]
+    },
+    "source": {
+      "type": "local_catalog",
+      "name": "keepeat_claude_batch_2"
+    },
+    "version": 1
+  },
+  {
+    "id": "fr_soupe_de_legumes_du_frigo",
+    "title": "Soupe de légumes du frigo",
+    "summary": "Soupe anti-gaspi conçue pour absorber les fonds de légumes du réfrigérateur.",
+    "ingredients_required": [
+      "légumes variés",
+      "oignon",
+      "bouillon de légumes",
+      "beurre"
+    ],
+    "ingredients_optional": [
+      "crème fraîche",
+      "fromage râpé"
+    ],
+    "steps": [
+      "Éplucher et couper tous les légumes disponibles en morceaux.",
+      "Faire revenir l'oignon dans le beurre.",
+      "Ajouter les légumes et le bouillon, cuire 25 minutes.",
+      "Mixer ou servir en morceaux selon la préférence."
+    ],
+    "prep_time_min": 15,
+    "cook_time_min": 25,
+    "difficulty": "easy",
+    "tags": [
+      "anti-gaspi",
+      "soupe",
+      "légumes",
+      "économique"
+    ],
+    "meal_type": [
+      "lunch",
+      "dinner"
+    ],
+    "cuisine": "française",
+    "servings": 4,
+    "search_terms": [
+      "soupe anti-gaspi",
+      "soupe légumes du frigo",
+      "soupe restes légumes"
+    ],
+    "compat": {
+      "storage_focus": [
+        "frigo",
+        "placard"
+      ]
+    },
+    "source": {
+      "type": "local_catalog",
+      "name": "keepeat_claude_batch_2"
+    },
+    "version": 1
+  },
+  {
+    "id": "fr_cassoulet_toulousain",
+    "title": "Cassoulet toulousain",
+    "summary": "Mijoté de haricots blancs, saucisse de Toulouse, confit de canard et couenne.",
+    "ingredients_required": [
+      "haricots blancs",
+      "saucisse de Toulouse",
+      "confit de canard",
+      "couenne de porc",
+      "oignon",
+      "tomate"
+    ],
+    "ingredients_optional": [
+      "ail",
+      "chapelure"
+    ],
+    "steps": [
+      "Faire tremper les haricots blancs une nuit si secs, puis cuire 1 heure.",
+      "Faire dorer saucisse et confit de canard.",
+      "Mélanger haricots, viandes, oignon et tomate dans une cocotte en terre.",
+      "Cuire au four à couvert 1h30, décroûter plusieurs fois en fin de cuisson."
+    ],
+    "prep_time_min": 30,
+    "cook_time_min": 120,
+    "difficulty": "hard",
+    "tags": [
+      "cassoulet",
+      "sud-ouest",
+      "mijoté",
+      "haricots"
+    ],
+    "meal_type": [
+      "dinner"
+    ],
+    "cuisine": "française",
+    "servings": 6,
+    "search_terms": [
+      "cassoulet toulousain",
+      "cassoulet maison",
+      "cassoulet confit de canard"
+    ],
+    "compat": {
+      "storage_focus": [
+        "frigo",
+        "placard"
+      ]
+    },
+    "source": {
+      "type": "local_catalog",
+      "name": "keepeat_claude_batch_2"
+    },
+    "version": 1
+  },
+  {
+    "id": "fr_rillettes_de_thon_maison",
+    "title": "Rillettes de thon maison",
+    "summary": "Tartinade rapide de thon, fromage frais et citron pour l'apéritif.",
+    "ingredients_required": [
+      "thon en boîte",
+      "fromage frais",
+      "citron"
+    ],
+    "ingredients_optional": [
+      "ciboulette",
+      "câpres"
+    ],
+    "steps": [
+      "Égoutter le thon, l'émietter à la fourchette.",
+      "Mélanger avec le fromage frais et un filet de citron.",
+      "Ajouter la ciboulette ciselée.",
+      "Réserver au frais avant de servir avec du pain grillé."
+    ],
+    "prep_time_min": 10,
+    "cook_time_min": 15,
+    "difficulty": "easy",
+    "tags": [
+      "apéritif",
+      "rillettes",
+      "thon",
+      "rapide"
+    ],
+    "meal_type": [
+      "aperitif",
+      "snack"
+    ],
+    "cuisine": "française",
+    "servings": 4,
+    "search_terms": [
+      "rillettes de thon",
+      "tartinade thon",
+      "rillettes thon maison"
+    ],
+    "compat": {
+      "storage_focus": [
+        "frigo",
+        "placard"
+      ]
+    },
+    "source": {
+      "type": "local_catalog",
+      "name": "keepeat_claude_batch_2"
+    },
+    "version": 1
+  },
+  {
+    "id": "fr_moules_mariniere_au_vin_blanc",
+    "title": "Moules marinière au vin blanc",
+    "summary": "Moules cuites vapeur au vin blanc, échalote et persil, classique de bord de mer.",
+    "ingredients_required": [
+      "moules",
+      "vin blanc",
+      "échalote",
+      "beurre",
+      "persil"
+    ],
+    "ingredients_optional": [
+      "crème fraîche",
+      "ail"
+    ],
+    "steps": [
+      "Nettoyer et gratter les moules.",
+      "Faire suer l'échalote émincée dans le beurre.",
+      "Ajouter les moules et le vin blanc, couvrir et cuire 5 minutes en secouant la cocotte.",
+      "Parsemer de persil ciselé et servir aussitôt avec le jus de cuisson."
+    ],
+    "prep_time_min": 15,
+    "cook_time_min": 8,
+    "difficulty": "easy",
+    "tags": [
+      "moules",
+      "mer",
+      "vin blanc",
+      "rapide"
+    ],
+    "meal_type": [
+      "dinner"
+    ],
+    "cuisine": "française",
+    "servings": 4,
+    "search_terms": [
+      "moules marinière",
+      "moules au vin blanc",
+      "moules marinières maison"
+    ],
+    "compat": {
+      "storage_focus": [
+        "frigo",
+        "placard"
+      ]
+    },
+    "source": {
+      "type": "local_catalog",
+      "name": "keepeat_claude_batch_2"
+    },
+    "version": 1
+  },
+  {
+    "id": "fr_huitres_au_mignonette",
+    "title": "Huîtres au mignonette",
+    "summary": "Huîtres fraîches ouvertes servies avec une mignonette vinaigre-échalote.",
+    "ingredients_required": [
+      "huîtres",
+      "échalote",
+      "vinaigre de vin rouge"
+    ],
+    "ingredients_optional": [
+      "poivre du moulin",
+      "citron"
+    ],
+    "steps": [
+      "Ouvrir les huîtres avec précaution en préservant leur eau.",
+      "Ciseler finement l'échalote.",
+      "Mélanger échalote et vinaigre pour la mignonette.",
+      "Servir les huîtres sur lit de glace avec la mignonette à part."
+    ],
+    "prep_time_min": 20,
+    "cook_time_min": 15,
+    "difficulty": "medium",
+    "tags": [
+      "huîtres",
+      "mer",
+      "apéritif",
+      "sans cuisson"
+    ],
+    "meal_type": [
+      "aperitif"
+    ],
+    "cuisine": "française",
+    "servings": 4,
+    "search_terms": [
+      "huîtres mignonette",
+      "huîtres fraîches",
+      "huîtres vinaigre échalote"
+    ],
+    "compat": {
+      "storage_focus": [
+        "frigo",
+        "placard"
+      ]
+    },
+    "source": {
+      "type": "local_catalog",
+      "name": "keepeat_claude_batch_2"
+    },
+    "version": 1
+  },
+  {
+    "id": "fr_sables_bretons_au_beurre_sale",
+    "title": "Sablés bretons au beurre salé",
+    "summary": "Petits biscuits sablés fondants au beurre demi-sel.",
+    "ingredients_required": [
+      "farine",
+      "beurre demi-sel",
+      "sucre",
+      "jaune d'œuf"
+    ],
+    "ingredients_optional": [
+      "levure chimique"
+    ],
+    "steps": [
+      "Mélanger beurre pommade et sucre jusqu'à consistance crémeuse.",
+      "Ajouter le jaune d'œuf puis la farine, former une pâte homogène.",
+      "Étaler et découper des disques, laisser reposer 30 minutes au frais.",
+      "Cuire 15 minutes à four moyen jusqu'à légèrement dorés."
+    ],
+    "prep_time_min": 20,
+    "cook_time_min": 15,
+    "difficulty": "easy",
+    "tags": [
+      "biscuit",
+      "bretagne",
+      "beurre salé",
+      "goûter"
+    ],
+    "meal_type": [
+      "snack",
+      "dessert"
+    ],
+    "cuisine": "française",
+    "servings": 8,
+    "search_terms": [
+      "sablés bretons",
+      "sablés beurre salé",
+      "biscuits bretons"
+    ],
+    "compat": {
+      "storage_focus": [
+        "frigo",
+        "placard"
+      ]
+    },
+    "source": {
+      "type": "local_catalog",
+      "name": "keepeat_claude_batch_2"
+    },
+    "version": 1
+  },
+  {
+    "id": "fr_sauce_bearnaise_maison",
+    "title": "Sauce béarnaise maison",
+    "summary": "Sauce émulsionnée à l'estragon, vinaigre et beurre, pour accompagner les grillades.",
+    "ingredients_required": [
+      "jaunes d'œufs",
+      "beurre",
+      "vinaigre",
+      "échalote",
+      "estragon"
+    ],
+    "ingredients_optional": [
+      "cerfeuil",
+      "poivre en grains"
+    ],
+    "steps": [
+      "Faire réduire vinaigre, échalote et estragon dans une petite casserole.",
+      "Fouetter les jaunes d'œufs avec la réduction filtrée sur bain-marie doux.",
+      "Incorporer le beurre fondu petit à petit en fouettant jusqu'à épaississement.",
+      "Ajouter l'estragon frais ciselé avant de servir."
+    ],
+    "prep_time_min": 15,
+    "cook_time_min": 10,
+    "difficulty": "medium",
+    "tags": [
+      "sauce",
+      "béarnaise",
+      "accompagnement"
+    ],
+    "meal_type": [
+      "dinner"
+    ],
+    "cuisine": "française",
+    "servings": 4,
+    "search_terms": [
+      "sauce béarnaise",
+      "béarnaise maison",
+      "sauce pour viande"
+    ],
+    "compat": {
+      "storage_focus": [
+        "frigo",
+        "placard"
+      ]
+    },
+    "source": {
+      "type": "local_catalog",
+      "name": "keepeat_claude_batch_2"
+    },
+    "version": 1
+  },
+  {
+    "id": "fr_sauce_vinaigrette_maison_a_la_moutarde",
+    "title": "Sauce vinaigrette maison à la moutarde",
+    "summary": "Vinaigrette classique moutarde-vinaigre-huile pour salades du quotidien.",
+    "ingredients_required": [
+      "moutarde",
+      "vinaigre",
+      "huile"
+    ],
+    "ingredients_optional": [
+      "échalote",
+      "miel"
+    ],
+    "steps": [
+      "Mélanger la moutarde et le vinaigre dans un bol.",
+      "Ajouter l'huile en filet tout en fouettant pour émulsionner.",
+      "Assaisonner de sel et poivre.",
+      "Ajuster l'acidité selon le goût avant de napper la salade."
+    ],
+    "prep_time_min": 5,
+    "cook_time_min": 15,
+    "difficulty": "easy",
+    "tags": [
+      "sauce",
+      "vinaigrette",
+      "rapide",
+      "sans cuisson"
+    ],
+    "meal_type": [
+      "lunch"
+    ],
+    "cuisine": "française",
+    "servings": 4,
+    "search_terms": [
+      "vinaigrette maison",
+      "vinaigrette moutarde",
+      "sauce salade"
+    ],
+    "compat": {
+      "storage_focus": [
+        "frigo",
+        "placard"
+      ]
+    },
+    "source": {
+      "type": "local_catalog",
+      "name": "keepeat_claude_batch_2"
+    },
+    "version": 1
+  },
+  {
+    "id": "fr_papillote_de_saumon_aux_legumes",
+    "title": "Papillote de saumon aux légumes",
+    "summary": "Pavé de saumon cuit en papillote avec julienne de légumes, léger et sans matière grasse ajoutée.",
+    "ingredients_required": [
+      "pavé de saumon",
+      "carotte",
+      "courgette",
+      "citron"
+    ],
+    "ingredients_optional": [
+      "aneth",
+      "huile d'olive"
+    ],
+    "steps": [
+      "Découper les légumes en fine julienne.",
+      "Déposer le saumon sur une feuille de papier cuisson, entourer de légumes.",
+      "Ajouter quelques rondelles de citron, fermer hermétiquement la papillote.",
+      "Cuire 18 minutes à four chaud."
+    ],
+    "prep_time_min": 15,
+    "cook_time_min": 18,
+    "difficulty": "easy",
+    "tags": [
+      "papillote",
+      "saumon",
+      "léger",
+      "sans matière grasse"
+    ],
+    "meal_type": [
+      "dinner"
+    ],
+    "cuisine": "française",
+    "servings": 4,
+    "search_terms": [
+      "papillote de saumon",
+      "saumon en papillote",
+      "saumon léger légumes"
+    ],
+    "compat": {
+      "storage_focus": [
+        "frigo",
+        "placard"
+      ]
+    },
+    "source": {
+      "type": "local_catalog",
+      "name": "keepeat_claude_batch_2"
+    },
+    "version": 1
+  },
+  {
+    "id": "fr_escalopes_de_dinde_a_la_creme",
+    "title": "Escalopes de dinde à la crème",
+    "summary": "Escalopes de dinde poêlées, sauce crème et champignons.",
+    "ingredients_required": [
+      "escalopes de dinde",
+      "champignons de Paris",
+      "crème fraîche",
+      "oignon"
+    ],
+    "ingredients_optional": [
+      "vin blanc",
+      "persil"
+    ],
+    "steps": [
+      "Faire dorer les escalopes de dinde des deux côtés, réserver.",
+      "Faire revenir oignon et champignons émincés dans la même poêle.",
+      "Déglacer, ajouter la crème et laisser réduire légèrement.",
+      "Remettre les escalopes dans la sauce quelques minutes avant de servir."
+    ],
+    "prep_time_min": 10,
+    "cook_time_min": 20,
+    "difficulty": "easy",
+    "tags": [
+      "dinde",
+      "crème",
+      "champignons",
+      "rapide"
+    ],
+    "meal_type": [
+      "dinner"
+    ],
+    "cuisine": "française",
+    "servings": 4,
+    "search_terms": [
+      "escalopes de dinde crème",
+      "dinde champignons",
+      "escalope dinde sauce"
+    ],
+    "compat": {
+      "storage_focus": [
+        "frigo",
+        "placard"
+      ]
+    },
+    "source": {
+      "type": "local_catalog",
+      "name": "keepeat_claude_batch_2"
+    },
+    "version": 1
   }
 ]
