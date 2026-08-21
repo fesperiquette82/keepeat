@@ -10,14 +10,7 @@
 ## 🔴 Urgent / bloquant avant une vraie mise en production
 
 - [ ] **Politique de confidentialité** — n'existe nulle part dans l'app actuellement (constat de la revue RGPD, BUG-050/051). À rédiger et publier, avec un lien accessible depuis l'app. Nécessaire de toute façon pour le Play Store, indépendamment de l'import mail.
-- [ ] **Positionner `GEMINI_RECIPES_MODEL` et `GEMINI_OCR_MODEL` sur Render** — les deux valeurs par défaut codées en dur (`gemini-2.0-flash-lite`, une pour les recettes IA, une pour le scan de tickets/l'import mail) sont mortes côté Google (404 "no longer available"). Si ces variables ne sont pas positionnées en production, le repli IA recettes **et** le scan de tickets (photo + import mail) sont probablement cassés actuellement.
-  - Sur le dashboard Render du service backend → **Environment** → ajouter/modifier :
-    ```
-    GEMINI_RECIPES_MODEL=gemini-3.5-flash-lite
-    GEMINI_OCR_MODEL=gemini-3.5-flash-lite
-    ```
-    (`gemini-3.5-flash-lite` est la valeur déjà validée fonctionnelle pendant cette session — génération du catalogue de recettes.)
-  - Sauvegarder → Render redéploie automatiquement le service.
+- [x] **Positionner `GEMINI_RECIPES_MODEL` et `GEMINI_OCR_MODEL` sur Render** — fait le 2026-08-21 (`gemini-3.5-flash-lite` sur les deux variables).
 - [ ] **Tester un vrai achat premium** — `startPurchase()` (point 01) est câblé et testé unitairement, mais jamais validé en conditions réelles (pas de build natif Android disponible dans l'environnement de développement). À tester sur un appareil/émulateur Android avec le SKU `premium_monthly` configuré sur Google Play Console.
 
 ## 🟢 Partager l'app à des amis + leur donner le premium gratuitement
