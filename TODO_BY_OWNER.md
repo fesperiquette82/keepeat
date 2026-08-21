@@ -10,8 +10,34 @@
 ## 🔴 Urgent / bloquant avant une vraie mise en production
 
 - [ ] **Politique de confidentialité** — n'existe nulle part dans l'app actuellement (constat de la revue RGPD, BUG-050/051). À rédiger et publier, avec un lien accessible depuis l'app. Nécessaire de toute façon pour le Play Store, indépendamment de l'import mail.
-- [ ] **Vérifier `GEMINI_RECIPES_MODEL` sur Render** — le modèle par défaut codé en dur (`gemini-2.0-flash-lite`) est mort côté Google (404 "no longer available"). Si cette variable n'est pas positionnée en production, le repli IA recettes est probablement cassé actuellement. Vérification à 2 minutes ; remplacer par `gemini-3.5-flash-lite` ou équivalent supporté si besoin.
+- [ ] **Positionner `GEMINI_RECIPES_MODEL` et `GEMINI_OCR_MODEL` sur Render** — les deux valeurs par défaut codées en dur (`gemini-2.0-flash-lite`, une pour les recettes IA, une pour le scan de tickets/l'import mail) sont mortes côté Google (404 "no longer available"). Si ces variables ne sont pas positionnées en production, le repli IA recettes **et** le scan de tickets (photo + import mail) sont probablement cassés actuellement.
+  - Sur le dashboard Render du service backend → **Environment** → ajouter/modifier :
+    ```
+    GEMINI_RECIPES_MODEL=gemini-3.5-flash-lite
+    GEMINI_OCR_MODEL=gemini-3.5-flash-lite
+    ```
+    (`gemini-3.5-flash-lite` est la valeur déjà validée fonctionnelle pendant cette session — génération du catalogue de recettes.)
+  - Sauvegarder → Render redéploie automatiquement le service.
 - [ ] **Tester un vrai achat premium** — `startPurchase()` (point 01) est câblé et testé unitairement, mais jamais validé en conditions réelles (pas de build natif Android disponible dans l'environnement de développement). À tester sur un appareil/émulateur Android avec le SKU `premium_monthly` configuré sur Google Play Console.
+
+## 🟢 Partager l'app à des amis + leur donner le premium gratuitement
+
+- [ ] **Distribuer l'app** — depuis `frontend/`, lancer `eas build --platform android --profile preview` (profil déjà configuré dans `eas.json`). Ça génère un lien + QR code à partager directement — pas besoin du Play Store, pas de compte testeur à créer.
+- [ ] **Chaque ami crée un compte** dans l'app (email + mot de passe, vérification email) avant que tu puisses lui donner le premium.
+- [ ] **Vérifier que ton email est bien dans `ADMIN_EMAILS` sur Render** — confirmé par toi : c'est déjà le cas. C'est ce qui te donne les droits admin, **pas** une clé séparée : il n'existe aucune variable `ADMIN_KEY`/`ADMIN_TOKEN` dans ce projet. Le contrôle se fait uniquement sur l'email du compte connecté.
+- [ ] **Récupérer ton "token admin"** — ce n'est pas une valeur Render, c'est le jeton que l'API te renvoie quand tu te connectes avec TON compte (le même que dans l'app). Depuis un terminal :
+  ```bash
+  curl -X POST "https://<url-backend>/api/auth/login" \
+    -H "Content-Type: application/json" \
+    -d '{"email": "ton_email@exemple.com", "password": "ton_mot_de_passe"}'
+  ```
+  La réponse contient `"access_token": "eyJ..."` — c'est ce jeton (valable un temps limité) qu'il faut réutiliser à l'étape suivante.
+- [ ] **Activer le premium pour un ami** (répéter pour chaque ami, une fois qu'il a créé son compte) :
+  ```bash
+  curl -X PUT "https://<url-backend>/api/admin/users/email_ami@exemple.com/set-premium?premium=true" \
+    -H "Authorization: Bearer <access_token_récupéré_ci-dessus>"
+  ```
+  Réponse attendue : `{"ok": true, "email": "email_ami@exemple.com", "is_premium": true}`. Pas de limite de durée — reste actif jusqu'à ce que tu le désactives (`premium=false`) ou que le compte soit supprimé.
 
 ## 🟠 Pour activer l'import de tickets par email (BUG-051)
 
