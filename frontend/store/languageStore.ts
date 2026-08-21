@@ -151,7 +151,7 @@ const translations: Translations = {
   themeLight: { fr: 'Clair', en: 'Light' },
   themeDark: { fr: 'Sombre', en: 'Dark' },
   languageSection: { fr: 'Langue', en: 'Language' },
-  householdSize: { fr: 'Nombre de personnes du foyer', en: 'Household size' },
+  householdSize: { fr: 'Nombre de convives par défaut', en: 'Default number of diners' },
   peopleCount: { fr: '{count} personnes', en: '{count} people' },
   defaultRecipeHint: { fr: 'Valeur par défaut utilisée pour les recettes.', en: 'Default value used for recipes.' },
   productReminders: { fr: 'Rappels produits', en: 'Product reminders' },

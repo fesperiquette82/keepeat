@@ -1,6 +1,6 @@
 import React, { useEffect, useState } from 'react';
 import { SafeAreaView } from 'react-native-safe-area-context';
-import { View, Text, StyleSheet, TouchableOpacity, TextInput, ActivityIndicator, Alert, Share } from 'react-native';
+import { View, Text, StyleSheet, TouchableOpacity, TextInput, ActivityIndicator, Alert, Share, ScrollView } from 'react-native';
 import { useRouter } from 'expo-router';
 import { useHouseholdStore } from '../store/householdStore';
 import { useAuthStore } from '../store/authStore';
@@ -76,60 +76,62 @@ export default function HouseholdScreen() {
         <Text style={styles.title}>Foyer</Text>
       </View>
 
-      {isLoading && !household ? (
-        <ActivityIndicator style={styles.loader} color="#16A34A" />
-      ) : household ? (
-        <View style={styles.card}>
-          <Text style={styles.householdName}>{household.name}</Text>
-          <Text style={styles.subtitle}>{household.members.length} membre(s)</Text>
-          {household.members.map((member) => (
-            <View key={member.user_id} style={styles.memberRow}>
-              <Text style={styles.memberEmail}>{member.email || member.user_id}</Text>
-              <Text style={styles.memberRole}>{member.role === 'owner' ? 'Propriétaire' : 'Membre'}</Text>
-            </View>
-          ))}
+      <ScrollView contentContainerStyle={styles.scrollContent}>
+        {isLoading && !household ? (
+          <ActivityIndicator style={styles.loader} color="#16A34A" />
+        ) : household ? (
+          <View style={styles.card}>
+            <Text style={styles.householdName}>{household.name}</Text>
+            <Text style={styles.subtitle}>{household.members.length} membre(s)</Text>
+            {household.members.map((member) => (
+              <View key={member.user_id} style={styles.memberRow}>
+                <Text style={styles.memberEmail}>{member.email || member.user_id}</Text>
+                <Text style={styles.memberRole}>{member.role === 'owner' ? 'Propriétaire' : 'Membre'}</Text>
+              </View>
+            ))}
 
-          {isOwner && (
-            <TouchableOpacity style={styles.primaryButton} onPress={handleInvite} disabled={isInviting}>
-              {isInviting ? <ActivityIndicator color="#fff" /> : <Text style={styles.primaryLabel}>Inviter un membre</Text>}
+            {isOwner && (
+              <TouchableOpacity style={styles.primaryButton} onPress={handleInvite} disabled={isInviting}>
+                {isInviting ? <ActivityIndicator color="#fff" /> : <Text style={styles.primaryLabel}>Inviter un membre</Text>}
+              </TouchableOpacity>
+            )}
+
+            <TouchableOpacity style={styles.dangerButton} onPress={handleLeave}>
+              <Text style={styles.dangerLabel}>Quitter le foyer</Text>
             </TouchableOpacity>
-          )}
+          </View>
+        ) : (
+          <View style={styles.card}>
+            <Text style={styles.subtitle}>Partagez votre stock et votre abonnement premium avec votre foyer.</Text>
 
-          <TouchableOpacity style={styles.dangerButton} onPress={handleLeave}>
-            <Text style={styles.dangerLabel}>Quitter le foyer</Text>
-          </TouchableOpacity>
-        </View>
-      ) : (
-        <View style={styles.card}>
-          <Text style={styles.subtitle}>Partagez votre stock et votre abonnement premium avec votre foyer.</Text>
+            <Text style={styles.label}>Créer un foyer</Text>
+            <TextInput
+              style={styles.input}
+              placeholder="Nom du foyer"
+              value={name}
+              onChangeText={setName}
+              testID="household-name-input"
+            />
+            <TouchableOpacity style={styles.primaryButton} onPress={handleCreate} disabled={isLoading}>
+              <Text style={styles.primaryLabel}>Créer</Text>
+            </TouchableOpacity>
 
-          <Text style={styles.label}>Créer un foyer</Text>
-          <TextInput
-            style={styles.input}
-            placeholder="Nom du foyer"
-            value={name}
-            onChangeText={setName}
-            testID="household-name-input"
-          />
-          <TouchableOpacity style={styles.primaryButton} onPress={handleCreate} disabled={isLoading}>
-            <Text style={styles.primaryLabel}>Créer</Text>
-          </TouchableOpacity>
+            <Text style={[styles.label, styles.labelSpaced]}>Rejoindre un foyer existant</Text>
+            <TextInput
+              style={styles.input}
+              placeholder="Code d'invitation"
+              value={joinToken}
+              onChangeText={setJoinToken}
+              testID="household-join-input"
+            />
+            <TouchableOpacity style={styles.secondaryButton} onPress={handleJoin} disabled={isLoading}>
+              <Text style={styles.secondaryLabel}>Rejoindre</Text>
+            </TouchableOpacity>
+          </View>
+        )}
 
-          <Text style={[styles.label, styles.labelSpaced]}>Rejoindre un foyer existant</Text>
-          <TextInput
-            style={styles.input}
-            placeholder="Code d'invitation"
-            value={joinToken}
-            onChangeText={setJoinToken}
-            testID="household-join-input"
-          />
-          <TouchableOpacity style={styles.secondaryButton} onPress={handleJoin} disabled={isLoading}>
-            <Text style={styles.secondaryLabel}>Rejoindre</Text>
-          </TouchableOpacity>
-        </View>
-      )}
-
-      {!!error && <Text style={styles.errorText}>{error}</Text>}
+        {!!error && <Text style={styles.errorText}>{error}</Text>}
+      </ScrollView>
     </SafeAreaView>
   );
 }
@@ -137,6 +139,7 @@ export default function HouseholdScreen() {
 const styles = StyleSheet.create({
   container: { flex: 1, backgroundColor: '#F7F8FA', padding: 16 },
   header: { flexDirection: 'row', alignItems: 'center', gap: 12, marginBottom: 16 },
+  scrollContent: { paddingBottom: 40 },
   backText: { color: '#16A34A', fontWeight: '600' },
   title: { fontSize: 20, fontWeight: '800', color: '#111827' },
   loader: { marginTop: 24 },

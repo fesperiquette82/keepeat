@@ -1,6 +1,6 @@
 import React, { useCallback, useMemo, useState } from 'react';
 import { SafeAreaView } from 'react-native-safe-area-context';
-import { View, Text, StyleSheet, TouchableOpacity, Switch, ActivityIndicator, Alert, Linking } from 'react-native';
+import { View, Text, StyleSheet, TouchableOpacity, Switch, ActivityIndicator, Alert, Linking, ScrollView } from 'react-native';
 import Ionicons from '@expo/vector-icons/Ionicons';
 import { useRouter } from 'expo-router';
 import { getThemeColors, getThemeText } from '../utils/theme';
@@ -182,7 +182,7 @@ export default function SettingsScreen() {
         <View style={styles.backButton} />
       </View>
 
-      <View style={styles.content}>
+      <ScrollView contentContainerStyle={styles.content}>
         <View style={styles.card}>
           <Text style={styles.sectionTitle}>{t('languageSection')}</Text>
           <View style={styles.rowWrap}>
@@ -417,7 +417,7 @@ export default function SettingsScreen() {
             <Text style={styles.privacyPolicyLinkText}>{t('privacyPolicyButton')}</Text>
           </TouchableOpacity>
         </View>
-      </View>
+      </ScrollView>
     </SafeAreaView>
   );
 }
@@ -427,7 +427,7 @@ const createStyles = (C: ReturnType<typeof getThemeColors>, T: ReturnType<typeof
   header: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', paddingHorizontal: 16, paddingTop: 8, paddingBottom: 6 },
   backButton: { width: 34, height: 34, borderRadius: 17, backgroundColor: '#fff', alignItems: 'center', justifyContent: 'center' },
   title: { fontSize: 23, fontWeight: '800', color: C.text },
-  content: { padding: 16, gap: 10 },
+  content: { padding: 16, paddingBottom: 40, gap: 10 },
   card: { backgroundColor: '#fff', borderRadius: 12, padding: 12, gap: 10 },
   sectionTitle: { color: C.text, fontSize: 16, fontWeight: '700' },
   subLabel: { color: C.textMid, fontSize: 13, fontWeight: '600' },

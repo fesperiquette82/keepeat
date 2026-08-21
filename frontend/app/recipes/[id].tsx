@@ -361,7 +361,7 @@ export default function RecipeDetailScreen() {
               <Ionicons name="add" size={18} color={C.text} />
             </TouchableOpacity>
           </View>
-          <Text style={styles.servingsHint}>Base recette : {baseServings} personnes · Foyer : {householdSize}</Text>
+          <Text style={styles.servingsHint}>Base recette : {baseServings} personnes · Convives par défaut : {householdSize}</Text>
         </View>
 
         <View style={styles.card}>
