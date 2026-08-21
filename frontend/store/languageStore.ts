@@ -190,6 +190,7 @@ const translations: Translations = {
     en: 'File sharing is not available on this device.',
   },
   deleteAccountButton: { fr: 'Supprimer mon compte', en: 'Delete my account' },
+  privacyPolicyButton: { fr: 'Politique de confidentialité', en: 'Privacy policy' },
   adminSection: { fr: 'Administration', en: 'Administration' },
   adminMonitoringAccess: { fr: 'Accès monitoring backend (admin only).', en: 'Backend monitoring access (admin only).' },
   openMonitoringBackoffice: { fr: 'Ouvrir le back-office monitoring', en: 'Open monitoring back-office' },

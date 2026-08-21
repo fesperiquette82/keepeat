@@ -781,3 +781,19 @@ mais aucun utilisateur ne pouvait déclencher un achat réel.
 **Commandes exécutées :** `PYTHONPATH=backend pytest tests backend/tests` ; `npm run typecheck` ; `npm run lint` ; `npm run test:ci`
 **Résultat :** voir validation finale ci-dessous
 **Risques restants :** format webhook Brevo non vérifié en conditions réelles (voir constat ci-dessus) ; nécessite `EMAIL_IMPORT_DOMAIN` (domaine avec MX vers un service d'inbound parsing) avant d'être opérationnel — sans lui, `configured: false` explicite plutôt qu'un échec silencieux ; pas de garde-fou contre un email frauduleux visant une adresse d'import devinée (risque limité : ajoute au pire de faux articles de stock à l'utilisateur ciblé, aucune fuite de données, l'utilisateur peut les supprimer).
+
+---
+
+## BUG-052 — Politique de confidentialité non liée depuis l'app + désynchronisée des fonctionnalités récentes
+
+**Contexte :** une politique de confidentialité publique existe déjà depuis BUG-036 (`GET /privacy-policy`, exigée par le Play Store), mais deux problèmes distincts subsistaient : (1) aucun écran de l'app n'y renvoyait — un utilisateur ne pouvait la trouver qu'en devinant l'URL du backend ; (2) son contenu datait d'avant le partage de foyer (BUG-049) et l'import de tickets par email (BUG-051), donc ne documentait pas le partage de l'email entre membres d'un foyer ni l'envoi du contenu d'un email transféré à Google Gemini, ni le recours à Brevo pour les emails transactionnels.
+
+| ID | Sévérité | Statut | Résumé |
+|---|---|---|---|
+| BUG-052 | 🟡 CONFORMITÉ (mineur, page déjà publiée) | `CORRIGÉ` | `_PRIVACY_POLICY_HTML` (`backend/server.py`) complétée : sections « Données collectées » et « Services tiers » mentionnent désormais le foyer partagé, l'import de tickets par email et Brevo. `frontend/app/settings.tsx` ajoute un lien « Politique de confidentialité » (section Compte, à côté d'export/suppression) ouvrant `${API_URL}/privacy-policy` via `Linking.openURL`. |
+
+**Fichiers modifiés :** `backend/server.py`, `backend/tests/test_account_gdpr.py`, `frontend/app/settings.tsx`, `frontend/store/languageStore.ts`, `frontend/utils/householdGmailScreens.test.ts`
+**Tests ajoutés :** `test_account_gdpr.py::TestPublicGdprPages::test_privacy_policy_mentions_household_and_email_import` (vérifie la présence de « foyer », « Brevo », « import de tickets par e-mail » dans la page publique) ; `householdGmailScreens.test.ts` (assertion source que `settings.tsx` ouvre bien `buildApiUrl('/privacy-policy')` via `Linking.openURL`)
+**Commandes exécutées :** `PYTHONPATH=backend pytest backend/tests/test_account_gdpr.py` ; `node --test utils/householdGmailScreens.test.ts` ; `npx tsc --noEmit`
+**Résultat :** voir validation finale ci-dessous
+**Risques restants :** les CGU / mentions légales (identité de l'exploitant, statut juridique, conditions de facturation, responsabilité) restent à rédiger séparément — contenu propre à l'activité du propriétaire, pas un correctif de code (cf. note BUG-036).

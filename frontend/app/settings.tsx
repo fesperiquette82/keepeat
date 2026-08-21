@@ -1,6 +1,6 @@
 import React, { useCallback, useMemo, useState } from 'react';
 import { SafeAreaView } from 'react-native-safe-area-context';
-import { View, Text, StyleSheet, TouchableOpacity, Switch, ActivityIndicator, Alert } from 'react-native';
+import { View, Text, StyleSheet, TouchableOpacity, Switch, ActivityIndicator, Alert, Linking } from 'react-native';
 import Ionicons from '@expo/vector-icons/Ionicons';
 import { useRouter } from 'expo-router';
 import { getThemeColors, getThemeText } from '../utils/theme';
@@ -17,6 +17,7 @@ import { shareDebugLogsToGitHub } from '../utils/debugLogsGitHubSync';
 import { uploadDebugLogsToBackend } from '../utils/debugLogsBackendUpload';
 import { exportAccountData } from '../utils/accountService';
 import { saveAndShareAccountExport } from '../utils/accountExportFile';
+import { buildApiUrl } from '../utils/config';
 
 function formatLastUpdate(value: string | null, language: 'fr' | 'en', fallbackText: string): string {
   if (!value) return fallbackText;
@@ -406,6 +407,15 @@ export default function SettingsScreen() {
             <Ionicons name="trash-outline" size={16} color="#DC2626" />
             <Text style={styles.deleteAccountButtonText}>{t('deleteAccountButton')}</Text>
           </TouchableOpacity>
+
+          <TouchableOpacity
+            testID="settings-privacy-policy-link"
+            style={styles.privacyPolicyLink}
+            onPress={() => Linking.openURL(buildApiUrl('/privacy-policy'))}
+          >
+            <Ionicons name="document-text-outline" size={16} color={C.textMid} />
+            <Text style={styles.privacyPolicyLinkText}>{t('privacyPolicyButton')}</Text>
+          </TouchableOpacity>
         </View>
       </View>
     </SafeAreaView>
@@ -489,6 +499,15 @@ const createStyles = (C: ReturnType<typeof getThemeColors>, T: ReturnType<typeof
     backgroundColor: '#FEF2F2',
   },
   deleteAccountButtonText: { color: '#DC2626', fontWeight: '700', fontSize: 14 },
+  privacyPolicyLink: {
+    marginTop: 4,
+    minHeight: 36,
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    gap: 6,
+  },
+  privacyPolicyLinkText: { color: C.textMid, fontWeight: '600', fontSize: 13, textDecorationLine: 'underline' },
   restoreButtonText: { color: '#166534', fontWeight: '700', fontSize: 14 },
   successText: { color: '#166534', fontSize: 12, fontWeight: '500' },
   errorText: { color: '#B91C1C', fontSize: 12, fontWeight: '500' },

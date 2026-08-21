@@ -1027,8 +1027,11 @@ Contact : <a href="mailto:fesperiquette@hotmail.com">fesperiquette@hotmail.com</
   <li><strong>Compte</strong> : adresse e-mail, mot de passe sécurisé (haché).</li>
   <li><strong>Stock alimentaire</strong> : produits, codes-barres, dates de péremption, quantités.</li>
   <li><strong>Photos (OCR)</strong> : images envoyées temporairement à un service tiers (Google Gemini) pour analyse puis supprimées — aucune photo n’est stockée durablement.</li>
+  <li><strong>Import de tickets par e-mail (fonctionnalité Premium optionnelle)</strong> : si vous transférez un ticket de caisse vers l’adresse dédiée que l’application vous attribue, le contenu de cet e-mail est envoyé à Google Gemini pour analyse puis n’est pas conservé au-delà du traitement.</li>
+  <li><strong>Foyer partagé (fonctionnalité optionnelle)</strong> : si vous créez ou rejoignez un foyer, votre adresse e-mail est visible par les autres membres de ce même foyer, et votre stock alimentaire leur est partagé.</li>
   <li><strong>Achats in-app</strong> : données nécessaires à la gestion des abonnements via Google Play Billing.</li>
   <li><strong>Notifications push</strong> : token technique (Expo) pour l’envoi d’alertes.</li>
+  <li><strong>E-mails transactionnels</strong> : votre adresse e-mail est utilisée par notre prestataire d’envoi (Brevo) pour la vérification de compte, la réinitialisation de mot de passe et les alertes/rappels que vous avez activés.</li>
   <li><strong>Logs techniques</strong> : informations techniques (ex : adresse IP, appareil) utilisées pour la sécurité et le diagnostic.</li>
 </ul>
 
@@ -1044,9 +1047,10 @@ Contact : <a href="mailto:fesperiquette@hotmail.com">fesperiquette@hotmail.com</
 <ul>
   <li><strong>Render</strong> : hébergement backend.</li>
   <li><strong>MongoDB Atlas</strong> : base de données.</li>
-  <li><strong>Google Gemini</strong> : OCR et génération de recettes.</li>
+  <li><strong>Google Gemini</strong> : OCR, import de tickets par e-mail et génération de recettes.</li>
   <li><strong>Google Play Billing</strong> : gestion des abonnements.</li>
   <li><strong>Expo / EAS</strong> : notifications push.</li>
+  <li><strong>Brevo</strong> : envoi des e-mails transactionnels (vérification de compte, mot de passe, alertes).</li>
 </ul>
 <p>Certains services peuvent traiter des données hors UE avec des garanties appropriées.</p>
 

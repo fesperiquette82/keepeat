@@ -43,6 +43,13 @@ test('settings.tsx propose un accès au foyer', () => {
   assert.match(src, /router\.push\('\/household'\)/);
 });
 
+// BUG-036 : la politique de confidentialité (page publique backend /privacy-policy)
+// existait déjà mais n'était liée depuis aucun écran de l'app — corrigé ici.
+test('settings.tsx propose un lien vers la politique de confidentialité', () => {
+  const src = readSource('app/settings.tsx');
+  assert.match(src, /Linking\.openURL\(buildApiUrl\('\/privacy-policy'\)\)/);
+});
+
 // settings.tsx pointe désormais vers /email-import (BUG-051, boîte mail dédiée)
 // plutôt que /gmail-connect — cf. emailImportScreen.test.ts. L'écran et les
 // endpoints Gmail (ci-dessous) restent dans le dépôt, non branchés depuis les
