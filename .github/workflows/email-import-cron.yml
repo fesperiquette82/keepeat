@@ -1,0 +1,48 @@
+name: Email Import Cron
+
+# Déclenche le relevé de la boîte mail partagée d'import de tickets
+# (/api/internal/email-import/poll), même principe que alerts-cron.yml : Render
+# ne garantit pas la disponibilité continue du process pour une boucle interne
+# avec sleep, donc le sondage IMAP est piloté depuis l'extérieur.
+#
+# Chaque email relevé est marqué comme lu juste après sa tentative de
+# traitement (réussie ou non), donc un déclenchement toutes les 5 minutes est
+# sûr — jamais de retraitement en double.
+#
+# Nécessite le secret EMAIL_IMPORT_CRON_TOKEN (GitHub) — même valeur que la
+# variable d'environnement EMAIL_IMPORT_CRON_TOKEN sur Render.
+
+on:
+  schedule:
+    - cron: '*/5 * * * *'
+  workflow_dispatch: {}
+
+jobs:
+  run-email-import-poll:
+    name: Relever la boîte mail d'import de tickets
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Appeler /api/internal/email-import/poll
+        env:
+          EMAIL_IMPORT_CRON_TOKEN: ${{ secrets.EMAIL_IMPORT_CRON_TOKEN }}
+        run: |
+          set -e
+          if [ -z "$EMAIL_IMPORT_CRON_TOKEN" ]; then
+            echo "::error::Secret EMAIL_IMPORT_CRON_TOKEN absent — configurer Settings > Secrets and variables > Actions, avec la même valeur que la variable d'environnement Render EMAIL_IMPORT_CRON_TOKEN."
+            exit 1
+          fi
+
+          response=$(curl -sS -w "\n%{http_code}" --max-time 60 \
+            -X POST \
+            -H "Authorization: Bearer ${EMAIL_IMPORT_CRON_TOKEN}" \
+            https://keepeat-backend.onrender.com/api/internal/email-import/poll)
+          http_code=$(echo "$response" | tail -n1)
+          body=$(echo "$response" | sed '$d')
+          echo "HTTP $http_code"
+          echo "$body"
+
+          if [ "$http_code" != "200" ]; then
+            echo "::error::/api/internal/email-import/poll a répondu HTTP $http_code (attendu 200)."
+            exit 1
+          fi
