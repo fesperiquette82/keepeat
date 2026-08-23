@@ -35,7 +35,7 @@
 
 ## 🟠 Pour activer l'import de tickets par email (BUG-051/054)
 
-Simplifié le 23/08 (à ta demande) : plus de domaine à acheter ni de DNS à configurer — une seule boîte mail suffit, et l'app la relève elle-même toutes les 30 min (pas de webhook à mettre en place).
+Simplifié le 23/08 (à ta demande) : plus de domaine à acheter ni de DNS à configurer — une seule boîte mail suffit, et l'app la relève elle-même toutes les 30 min entre ~8h et ~22h heure de Paris (coupé la nuit, personne n'envoie de ticket à 3h du matin), pas de webhook à mettre en place.
 
 - [ ] **Créer un compte email dédié** (ex : `tickets.keepeat@gmail.com` ou similaire — n'importe quel fournisseur qui propose l'accès IMAP convient, Gmail est le plus simple).
 - [ ] **Activer la validation en 2 étapes** sur ce compte, puis générer un **mot de passe d'application** (Gmail : Compte Google → Sécurité → Mots de passe des applications). C'est ce mot de passe qu'il faut renseigner, jamais le vrai mot de passe du compte.
