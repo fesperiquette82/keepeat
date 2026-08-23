@@ -6,15 +6,28 @@ name: Email Import Cron
 # avec sleep, donc le sondage IMAP est piloté depuis l'extérieur.
 #
 # Chaque email relevé est marqué comme lu juste après sa tentative de
-# traitement (réussie ou non), donc un déclenchement toutes les 5 minutes est
-# sûr — jamais de retraitement en double.
+# traitement (réussie ou non), donc un déclenchement rapproché serait sûr côté
+# logique métier — jamais de retraitement en double. L'intervalle de 30 min
+# (même cadence que alerts-cron.yml) est choisi pour rester raisonnable en
+# minutes GitHub Actions consommées : ce n'est pas une fonctionnalité temps
+# réel (l'utilisateur transfère un email manuellement), un délai de quelques
+# dizaines de minutes est largement acceptable.
+#
+# Coupé entre ~22h et ~8h heure de Paris (personne n'envoie de ticket de
+# caisse au milieu de la nuit) : économise encore des minutes GitHub Actions.
+# GitHub Actions n'évalue les cron qu'en UTC, sans notion de fuseau horaire —
+# la plage `7-21` ci-dessous cible donc directement l'heure de Paris en hiver
+# (UTC+1, fenêtre exacte 08h-22h) ; en été (UTC+2, heure d'été), la fenêtre
+# réelle glisse d'une heure plus tard (09h-23h) — dérive mineure et sans
+# conséquence pour ce cas d'usage, pas la peine de complexifier avec un
+# horaire dépendant de la saison.
 #
 # Nécessite le secret EMAIL_IMPORT_CRON_TOKEN (GitHub) — même valeur que la
 # variable d'environnement EMAIL_IMPORT_CRON_TOKEN sur Render.
 
 on:
   schedule:
-    - cron: '*/5 * * * *'
+    - cron: '*/30 7-21 * * *'
   workflow_dispatch: {}
 
 jobs:
