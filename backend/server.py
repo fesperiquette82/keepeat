@@ -941,7 +941,6 @@ async def lifespan(app: FastAPI):
     await users_col.create_index("email", unique=True)
     await users_col.create_index("verification_token", sparse=True)
     await users_col.create_index("reset_token", sparse=True)
-    await users_col.create_index("email_import_code", unique=True, sparse=True)
     await receipt_tickets_col.create_index([("status", 1), ("created_at", -1)])
     await receipt_tickets_col.create_index([("user_id", 1), ("created_at", -1)])
     await _sync_shared_recipes_collection_from_catalog()
@@ -1027,7 +1026,7 @@ Contact : <a href="mailto:fesperiquette@hotmail.com">fesperiquette@hotmail.com</
   <li><strong>Compte</strong> : adresse e-mail, mot de passe sécurisé (haché).</li>
   <li><strong>Stock alimentaire</strong> : produits, codes-barres, dates de péremption, quantités.</li>
   <li><strong>Photos (OCR)</strong> : images envoyées temporairement à un service tiers (Google Gemini) pour analyse puis supprimées — aucune photo n’est stockée durablement.</li>
-  <li><strong>Import de tickets par e-mail (fonctionnalité Premium optionnelle)</strong> : si vous transférez un ticket de caisse vers l’adresse dédiée que l’application vous attribue, le contenu de cet e-mail est envoyé à Google Gemini pour analyse puis n’est pas conservé au-delà du traitement.</li>
+  <li><strong>Import de tickets par e-mail (fonctionnalité Premium optionnelle)</strong> : si vous transférez un ticket de caisse vers l’adresse d’import (la même pour tous les utilisateurs premium — c’est votre adresse d’expéditeur qui permet de vous identifier), le contenu de cet e-mail est envoyé à Google Gemini pour analyse puis n’est pas conservé au-delà du traitement.</li>
   <li><strong>Foyer partagé (fonctionnalité optionnelle)</strong> : si vous créez ou rejoignez un foyer, votre adresse e-mail est visible par les autres membres de ce même foyer, et votre stock alimentaire leur est partagé.</li>
   <li><strong>Achats in-app</strong> : données nécessaires à la gestion des abonnements via Google Play Billing.</li>
   <li><strong>Notifications push</strong> : token technique (Expo) pour l’envoi d’alertes.</li>
@@ -2287,14 +2286,23 @@ async def disconnect_gmail(
     return GmailConnectionStatusResponse(connected=False, connected_at=None, status="disconnected")
 
 
-# ── Import automatique des tickets — boîte mail dédiée (BUG-051) ─────────────
-# Alternative retenue à la connexion Gmail (BUG-050, phase 1 livrée mais phase 2
-# mise en pause après revue RGPD — cf. AUDIT_BUGS.md) : l'utilisateur transfère
-# lui-même ses tickets reçus par email vers une adresse dédiée à son compte
-# (tickets+<code>@EMAIL_IMPORT_DOMAIN). Geste actif et volontaire par email
-# transféré (pas de lecture automatisée d'une boîte mail) — pas d'OAuth, pas de
-# scope Google sensible, pas de DPIA nécessaire. Fonctionnalité premium, comme
-# l'OCR manuel dont elle réutilise le même quota (FEATURE_OCR).
+# ── Import automatique des tickets — boîte mail partagée (BUG-051/054) ───────
+# L'utilisateur transfère lui-même ses tickets reçus par email vers UNE adresse
+# unique, partagée par tous les utilisateurs premium (pas d'adresse par
+# utilisateur, pas de domaine dédié à posséder). L'app relève cette boîte par
+# sondage périodique (IMAP, cf. /internal/email-import/poll et
+# email_import_service.py) — pas de webhook temps réel, contrairement à BUG-051
+# initial (Brevo Inbound Parsing, abandonné : coûteux à mettre en place pour
+# l'utilisateur — domaine + MX + fournisseur d'inbound parsing). L'utilisateur
+# est retrouvé via l'adresse d'expéditeur du mail transféré (comparée à
+# users.email) plutôt que via un suffixe d'adresse — geste actif et volontaire,
+# pas de lecture automatisée d'une boîte tierce, pas d'OAuth par utilisateur,
+# pas de scope Google sensible à faire vérifier (c'est notre propre boîte, pas
+# celle d'un utilisateur). Fonctionnalité premium, comme l'OCR manuel dont elle
+# réutilise le même quota (FEATURE_OCR). cf. AUDIT_BUGS.md BUG-054 pour la
+# discussion complète des compromis (usurpation d'expéditeur : risque réel mais
+# sans bénéfice pour l'attaquant, et généralement filtré en amont par les
+# vérifications SPF/DKIM/DMARC des fournisseurs mail).
 
 @api_router.get("/integrations/email-import/address", response_model=EmailImportAddressResponse)
 async def get_email_import_address(
@@ -2306,36 +2314,22 @@ async def get_email_import_address(
         raise HTTPException(status_code=403, detail={"code": "PREMIUM_REQUIRED", "feature": "email_import"})
     if not email_import_service.is_configured():
         return EmailImportAddressResponse(configured=False, address=None)
-
-    user_doc = await users_col.find_one({"_id": ObjectId(current_user["id"])}, {"email_import_code": 1}) or {}
-    code = user_doc.get("email_import_code")
-    if not code:
-        code = email_import_service.generate_import_code(current_user["id"])
-        await users_col.update_one(
-            {"_id": ObjectId(current_user["id"])},
-            {"$set": {"email_import_code": code}},
-        )
-    return EmailImportAddressResponse(configured=True, address=email_import_service.build_import_address(code))
+    return EmailImportAddressResponse(configured=True, address=email_import_service.get_import_address())
 
 
-async def _process_inbound_email_item(item: Dict[str, Any]) -> None:
-    """Traite UN email du lot reçu par le webhook Brevo — résout l'utilisateur
-    depuis l'adresse dédiée, vérifie le plan et le quota, parse via Gemini, ajoute
-    au stock. Best-effort à chaque étape : un email non exploitable est ignoré et
-    journalisé, jamais une exception qui remonterait jusqu'au webhook (cf. appelant)."""
-    to_addresses = email_import_service.extract_to_addresses(item)
-    code = None
-    for address in to_addresses:
-        code = email_import_service.extract_code_from_address(address)
-        if code:
-            break
-    if not code:
-        logger.info("EMAIL_IMPORT aucune adresse dédiée reconnue dans To=%s", to_addresses)
+async def _process_inbound_email_message(sender_email: str, subject: str, email_text: str) -> None:
+    """Traite UN email relevé dans la boîte partagée — résout l'utilisateur
+    depuis l'adresse d'expéditeur, vérifie le plan et le quota, parse via
+    Gemini, ajoute au stock. Best-effort à chaque étape : un email non
+    exploitable est ignoré et journalisé, jamais une exception qui empêcherait
+    l'appelant de marquer l'email comme traité (cf. /internal/email-import/poll)."""
+    if not sender_email:
+        logger.info("EMAIL_IMPORT email sans expéditeur exploitable (sujet=%s)", subject)
         return
 
-    user_doc = await users_col.find_one({"email_import_code": code})
+    user_doc = await users_col.find_one({"email": sender_email})
     if not user_doc:
-        logger.info("EMAIL_IMPORT code inconnu — aucun utilisateur associé")
+        logger.info("EMAIL_IMPORT expéditeur non reconnu — aucun utilisateur associé")
         return
     uid = str(user_doc["_id"])
     current_user = {"id": uid, "is_premium": user_doc.get("is_premium", False)}
@@ -2345,7 +2339,6 @@ async def _process_inbound_email_item(item: Dict[str, Any]) -> None:
         logger.info("EMAIL_IMPORT user=%s non premium — email ignoré", uid)
         return
 
-    email_text = email_import_service.extract_email_text(item)
     if not email_text:
         logger.info("EMAIL_IMPORT user=%s aucun corps de texte exploitable", uid)
         return
@@ -2373,7 +2366,7 @@ async def _process_inbound_email_item(item: Dict[str, Any]) -> None:
         await _refund_feature_quota(user_id=uid, feature=FEATURE_OCR, quota_context=quota_context)
         logger.info(
             "EMAIL_IMPORT user=%s aucun article alimentaire détecté (sujet=%s)",
-            uid, email_import_service.extract_subject(item),
+            uid, subject,
         )
         return
 
@@ -2438,30 +2431,45 @@ async def _process_inbound_email_item(item: Dict[str, Any]) -> None:
                 logger.warning("EMAIL_IMPORT push notification échouée user=%s: %s", uid, exc)
 
 
-@api_router.post("/webhooks/email-import")
-async def email_import_webhook(request: Request, token: str = Query(default="")):
-    """Webhook Brevo Inbound Parsing (URL configurée avec ?token=<EMAIL_IMPORT_WEBHOOK_SECRET>
-    dans le tableau de bord Brevo). Retourne toujours 200 (best-effort — évite les
-    re-livraisons en boucle côté provider) sauf pour un token invalide.
+@api_router.post("/internal/email-import/poll", include_in_schema=False)
+async def run_email_import_poll(request: Request):
+    """Relève la boîte mail partagée (IMAP) et traite les emails non lus.
 
-    ⚠️ Format de payload basé sur la documentation publique Brevo, non vérifié
-    contre un paiement réel (aucun compte Brevo Inbound Parsing disponible dans cet
-    environnement) — cf. AUDIT_BUGS.md, à valider avant mise en production."""
-    expected_token = os.getenv("EMAIL_IMPORT_WEBHOOK_SECRET", "").strip()
-    if expected_token and token != expected_token:
+    Appelé par un cron externe (.github/workflows/email-import-cron.yml), même
+    convention que /internal/alerts/run — Render ne garantit pas la
+    disponibilité continue du process pour une boucle interne avec sleep.
+    Protégé par un jeton statique (EMAIL_IMPORT_CRON_TOKEN), même convention
+    que ALERTS_CRON_TOKEN.
+
+    Chaque email est marqué comme lu juste après sa tentative de traitement
+    (réussie ou non) pour ne jamais le retraiter en boucle — un email non
+    exploitable est journalisé, jamais une exception qui ferait échouer tout
+    le passage."""
+    cron_token = os.getenv("EMAIL_IMPORT_CRON_TOKEN", "").strip()
+    if not cron_token:
+        raise HTTPException(status_code=503, detail="EMAIL_IMPORT_CRON_TOKEN not configured")
+    if request.headers.get("Authorization") != f"Bearer {cron_token}":
         raise HTTPException(status_code=401, detail="Unauthorized")
 
-    try:
-        payload = await request.json()
-    except Exception:
-        return {"ok": True}
+    if not email_import_service.is_configured():
+        return {"ok": True, "processed": 0}
 
-    for item in email_import_service.extract_inbound_items(payload):
+    messages = await asyncio.to_thread(email_import_service.fetch_unseen_emails)
+    processed = 0
+    for message in messages:
         try:
-            await _process_inbound_email_item(item)
+            await _process_inbound_email_message(message["sender"], message["subject"], message["text"])
         except Exception:
-            logger.exception("EMAIL_IMPORT échec traitement d'un item du webhook")
-    return {"ok": True}
+            logger.exception("EMAIL_IMPORT échec traitement d'un email (uid=%s)", message.get("uid"))
+        finally:
+            try:
+                await asyncio.to_thread(email_import_service.mark_seen, message["uid"])
+            except Exception:
+                logger.exception("EMAIL_IMPORT échec marquage lu (uid=%s)", message.get("uid"))
+            processed += 1
+
+    logger.info("EMAIL_IMPORT_CRON completed processed=%d", processed)
+    return {"ok": True, "processed": processed}
 
 
 @api_router.post("/billing/google/rtdn")
