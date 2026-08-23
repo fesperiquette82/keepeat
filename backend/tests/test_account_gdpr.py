@@ -240,6 +240,19 @@ class TestPublicGdprPages:
         assert "Supprimer mon compte" in resp.text
         assert "/account-deletion" in resp.text
 
+    def test_privacy_policy_mentions_household_and_email_import(self, monkeypatch):
+        """BUG-049 (foyer partagé) et BUG-051 (import de tickets par e-mail) sont
+        arrivés après la rédaction initiale de la politique (BUG-036) — elle doit
+        documenter ces flux de données, pas seulement l'OCR photo."""
+        server = _load_server(monkeypatch)
+        from fastapi.testclient import TestClient
+        client = TestClient(server.app)
+        resp = client.get("/privacy-policy")
+        assert resp.status_code == 200
+        assert "foyer" in resp.text.lower()
+        assert "Brevo" in resp.text
+        assert "import de tickets par e-mail" in resp.text.lower()
+
     def test_account_deletion_page_is_publicly_reachable(self, monkeypatch):
         """Exigence Google Play : une page joignable sans connexion ni app installée."""
         server = _load_server(monkeypatch)

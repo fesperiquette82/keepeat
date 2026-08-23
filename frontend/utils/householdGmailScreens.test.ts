@@ -43,6 +43,43 @@ test('settings.tsx propose un accès au foyer', () => {
   assert.match(src, /router\.push\('\/household'\)/);
 });
 
+// BUG-036 : la politique de confidentialité (page publique backend /privacy-policy)
+// existait déjà mais n'était liée depuis aucun écran de l'app — corrigé ici.
+test('settings.tsx propose un lien vers la politique de confidentialité', () => {
+  const src = readSource('app/settings.tsx');
+  assert.match(src, /Linking\.openURL\(buildApiUrl\('\/privacy-policy'\)\)/);
+});
+
+// Le contenu de settings.tsx et household.tsx a grossi au fil des sessions (foyer,
+// import mail, politique de confidentialité...) au point que le dernier bouton
+// passait sous la barre de gestes Android sans aucun moyen de défiler jusqu'à lui.
+test('settings.tsx et household.tsx défilent (ScrollView) plutôt qu\'une View fixe', () => {
+  for (const path of ['app/settings.tsx', 'app/household.tsx']) {
+    const src = readSource(path);
+    assert.match(src, /<ScrollView/, `${path} doit utiliser ScrollView pour son contenu`);
+  }
+});
+
+// « Foyer » désigne deux choses différentes : le réglage local « nombre de
+// convives par défaut » (utilisé pour les recettes, sans rapport avec un
+// compte) et le vrai foyer partagé (BUG-049, stock/abonnement partagés entre
+// comptes). Les deux ne doivent plus partager le même mot, sous peine de
+// laisser croire qu'ils sont liés.
+test('le réglage local "convives par défaut" ne s\'appelle plus "foyer" (évite la confusion avec le vrai foyer partagé)', () => {
+  const languageSrc = readSource('store/languageStore.ts');
+  const householdSizeLine = languageSrc.split('\n').find((line) => line.trim().startsWith('householdSize:'));
+  assert.ok(householdSizeLine, 'la clé de traduction householdSize doit exister');
+  const labels = householdSizeLine!.match(/fr:\s*'([^']*)'|en:\s*'([^']*)'/g) ?? [];
+  assert.equal(labels.length, 2, 'la clé doit définir un libellé fr et en');
+  for (const label of labels) {
+    assert.doesNotMatch(label, /foyer/i, `le libellé ne doit plus contenir "foyer" (${label})`);
+    assert.doesNotMatch(label, /household/i, `le libellé ne doit plus contenir "household" (${label})`);
+  }
+
+  const recipeDetailSrc = readSource('app/recipes/[id].tsx');
+  assert.doesNotMatch(recipeDetailSrc, /Foyer\s*:\s*\{householdSize\}/, 'le hint de portions ne doit plus afficher "Foyer :"');
+});
+
 // settings.tsx pointe désormais vers /email-import (BUG-051, boîte mail dédiée)
 // plutôt que /gmail-connect — cf. emailImportScreen.test.ts. L'écran et les
 // endpoints Gmail (ci-dessous) restent dans le dépôt, non branchés depuis les

@@ -781,3 +781,38 @@ mais aucun utilisateur ne pouvait déclencher un achat réel.
 **Commandes exécutées :** `PYTHONPATH=backend pytest tests backend/tests` ; `npm run typecheck` ; `npm run lint` ; `npm run test:ci`
 **Résultat :** voir validation finale ci-dessous
 **Risques restants :** format webhook Brevo non vérifié en conditions réelles (voir constat ci-dessus) ; nécessite `EMAIL_IMPORT_DOMAIN` (domaine avec MX vers un service d'inbound parsing) avant d'être opérationnel — sans lui, `configured: false` explicite plutôt qu'un échec silencieux ; pas de garde-fou contre un email frauduleux visant une adresse d'import devinée (risque limité : ajoute au pire de faux articles de stock à l'utilisateur ciblé, aucune fuite de données, l'utilisateur peut les supprimer).
+
+---
+
+## BUG-052 — Politique de confidentialité non liée depuis l'app + désynchronisée des fonctionnalités récentes
+
+**Contexte :** une politique de confidentialité publique existe déjà depuis BUG-036 (`GET /privacy-policy`, exigée par le Play Store), mais deux problèmes distincts subsistaient : (1) aucun écran de l'app n'y renvoyait — un utilisateur ne pouvait la trouver qu'en devinant l'URL du backend ; (2) son contenu datait d'avant le partage de foyer (BUG-049) et l'import de tickets par email (BUG-051), donc ne documentait pas le partage de l'email entre membres d'un foyer ni l'envoi du contenu d'un email transféré à Google Gemini, ni le recours à Brevo pour les emails transactionnels.
+
+| ID | Sévérité | Statut | Résumé |
+|---|---|---|---|
+| BUG-052 | 🟡 CONFORMITÉ (mineur, page déjà publiée) | `CORRIGÉ` | `_PRIVACY_POLICY_HTML` (`backend/server.py`) complétée : sections « Données collectées » et « Services tiers » mentionnent désormais le foyer partagé, l'import de tickets par email et Brevo. `frontend/app/settings.tsx` ajoute un lien « Politique de confidentialité » (section Compte, à côté d'export/suppression) ouvrant `${API_URL}/privacy-policy` via `Linking.openURL`. |
+
+**Fichiers modifiés :** `backend/server.py`, `backend/tests/test_account_gdpr.py`, `frontend/app/settings.tsx`, `frontend/store/languageStore.ts`, `frontend/utils/householdGmailScreens.test.ts`
+**Tests ajoutés :** `test_account_gdpr.py::TestPublicGdprPages::test_privacy_policy_mentions_household_and_email_import` (vérifie la présence de « foyer », « Brevo », « import de tickets par e-mail » dans la page publique) ; `householdGmailScreens.test.ts` (assertion source que `settings.tsx` ouvre bien `buildApiUrl('/privacy-policy')` via `Linking.openURL`)
+**Commandes exécutées :** `PYTHONPATH=backend pytest backend/tests/test_account_gdpr.py` ; `node --test utils/householdGmailScreens.test.ts` ; `npx tsc --noEmit`
+**Résultat :** voir validation finale ci-dessous
+**Risques restants :** les CGU / mentions légales (identité de l'exploitant, statut juridique, conditions de facturation, responsabilité) restent à rédiger séparément — contenu propre à l'activité du propriétaire, pas un correctif de code (cf. note BUG-036).
+
+---
+
+## BUG-053 — Collision de nom "Foyer" + contenu de Réglages/Foyer inaccessible sous la barre de gestes Android
+
+**Contexte :** signalé par l'utilisateur à partir de captures d'écran réelles (`Paramètres` et `Détail recette`). Deux problèmes distincts sur le même écran :
+
+1. **Collision de nom :** le mot « Foyer » désignait deux concepts sans rapport sur le même écran Réglages — le réglage local `householdSize` (« Nombre de personnes du foyer », une préférence par appareil sans lien avec un compte, utilisée uniquement comme valeur par défaut des portions de recettes) et la vraie fonctionnalité de foyer partagé (BUG-049, stock/abonnement premium partagés entre plusieurs comptes). L'écran `recipes/[id].tsx` affichait `Foyer : {householdSize}`, ce qui laissait croire à tort que cette valeur reflétait le nombre de membres d'un foyer partagé réellement rejoint.
+2. **Contenu inaccessible :** `settings.tsx` et `household.tsx` rendaient tout leur contenu dans une `View` fixe (pas de `ScrollView`) à l'intérieur d'un `SafeAreaView`. Une fois le contenu de Réglages devenu trop long (ajout du foyer, de l'import mail, du lien politique de confidentialité...), le dernier bouton (« Gérer mon foyer ») passait sous la barre de gestes Android, sans aucun moyen de défiler pour l'atteindre — capture d'écran utilisateur à l'appui.
+
+| ID | Sévérité | Statut | Résumé |
+|---|---|---|---|
+| BUG-053 | 🔴 CRITIQUE (fonctionnalité inaccessible) | `CORRIGÉ` | `settings.tsx` et `household.tsx` : contenu déplacé dans `<ScrollView contentContainerStyle={...}>` avec `paddingBottom` généreux (40) pour garantir que le dernier élément reste atteignable au-dessus de la barre de gestes/navigation système, quelle que soit la hauteur de contenu. `householdSize` renommé côté libellés uniquement (clé de traduction et stockage local inchangés, pas de migration nécessaire) : « Nombre de personnes du foyer » → « Nombre de convives par défaut » (fr), « Household size » → « Default number of diners » (en) ; `recipes/[id].tsx` : `Foyer : {householdSize}` → `Convives par défaut : {householdSize}`. |
+
+**Fichiers modifiés :** `frontend/app/settings.tsx`, `frontend/app/household.tsx`, `frontend/app/recipes/[id].tsx`, `frontend/store/languageStore.ts`, `frontend/utils/householdGmailScreens.test.ts`
+**Tests ajoutés :** `householdGmailScreens.test.ts` (2 cas) : `settings.tsx`/`household.tsx` utilisent bien `<ScrollView>` ; le libellé `householdSize` (fr/en) et le hint de portions de `recipes/[id].tsx` ne contiennent plus « foyer »/« household ».
+**Commandes exécutées :** `node --test utils/householdGmailScreens.test.ts` ; `npx tsc --noEmit`
+**Résultat :** voir validation finale ci-dessous
+**Risques restants :** aucun autre écran identifié comme à risque immédiat (`email-import.tsx`, `delete-account.tsx` restent courts, une seule carte) — à surveiller si leur contenu grandit.
