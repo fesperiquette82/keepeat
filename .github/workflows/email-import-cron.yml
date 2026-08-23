@@ -6,15 +6,19 @@ name: Email Import Cron
 # avec sleep, donc le sondage IMAP est piloté depuis l'extérieur.
 #
 # Chaque email relevé est marqué comme lu juste après sa tentative de
-# traitement (réussie ou non), donc un déclenchement toutes les 5 minutes est
-# sûr — jamais de retraitement en double.
+# traitement (réussie ou non), donc un déclenchement rapproché serait sûr côté
+# logique métier — jamais de retraitement en double. L'intervalle de 30 min
+# (même cadence que alerts-cron.yml) est choisi pour rester raisonnable en
+# minutes GitHub Actions consommées : ce n'est pas une fonctionnalité temps
+# réel (l'utilisateur transfère un email manuellement), un délai de quelques
+# dizaines de minutes est largement acceptable.
 #
 # Nécessite le secret EMAIL_IMPORT_CRON_TOKEN (GitHub) — même valeur que la
 # variable d'environnement EMAIL_IMPORT_CRON_TOKEN sur Render.
 
 on:
   schedule:
-    - cron: '*/5 * * * *'
+    - cron: '*/30 * * * *'
   workflow_dispatch: {}
 
 jobs:
