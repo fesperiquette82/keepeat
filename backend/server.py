@@ -123,6 +123,7 @@ from backend.priority_refresh import build_priority_refresh_state
 from backend.observability import (
     build_activation_funnel,
     build_crash_reports_overview,
+    build_email_import_overview,
     build_operational_overview,
     build_monitoring_kpis,
     extract_user_id_from_auth_header,
@@ -2325,11 +2326,23 @@ async def _process_inbound_email_message(sender_email: str, subject: str, email_
     l'appelant de marquer l'email comme traité (cf. /internal/email-import/poll)."""
     if not sender_email:
         logger.info("EMAIL_IMPORT email sans expéditeur exploitable (sujet=%s)", subject)
+        await track_business_event(
+            business_events_col=business_events_col,
+            user_id=None,
+            event_name="email_import_sender_missing",
+            event_category="premium",
+        )
         return
 
     user_doc = await users_col.find_one({"email": sender_email})
     if not user_doc:
         logger.info("EMAIL_IMPORT expéditeur non reconnu — aucun utilisateur associé")
+        await track_business_event(
+            business_events_col=business_events_col,
+            user_id=None,
+            event_name="email_import_sender_unrecognized",
+            event_category="premium",
+        )
         return
     uid = str(user_doc["_id"])
     current_user = {"id": uid, "is_premium": user_doc.get("is_premium", False)}
@@ -2337,16 +2350,34 @@ async def _process_inbound_email_message(sender_email: str, subject: str, email_
     billing_doc = await resolve_billing_user_doc(user_doc, users_col=users_col, households_col=households_col)
     if resolve_plan(billing_doc) != PREMIUM_PLAN:
         logger.info("EMAIL_IMPORT user=%s non premium — email ignoré", uid)
+        await track_business_event(
+            business_events_col=business_events_col,
+            user_id=uid,
+            event_name="email_import_non_premium",
+            event_category="premium",
+        )
         return
 
     if not email_text:
         logger.info("EMAIL_IMPORT user=%s aucun corps de texte exploitable", uid)
+        await track_business_event(
+            business_events_col=business_events_col,
+            user_id=uid,
+            event_name="email_import_empty_body",
+            event_category="premium",
+        )
         return
 
     try:
         quota_context = await _enforce_feature_access(current_user=current_user, feature=FEATURE_OCR, consume_quota=True)
     except HTTPException as exc:
         logger.info("EMAIL_IMPORT user=%s quota OCR épuisé — email ignoré (%s)", uid, exc.detail)
+        await track_business_event(
+            business_events_col=business_events_col,
+            user_id=uid,
+            event_name="email_import_quota_exhausted",
+            event_category="premium",
+        )
         return
 
     try:
@@ -2359,6 +2390,12 @@ async def _process_inbound_email_message(sender_email: str, subject: str, email_
     except Exception as exc:
         await _refund_feature_quota(user_id=uid, feature=FEATURE_OCR, quota_context=quota_context)
         logger.warning("EMAIL_IMPORT user=%s échec parsing Gemini: %s", uid, exc)
+        await track_business_event(
+            business_events_col=business_events_col,
+            user_id=uid,
+            event_name="email_import_parse_failed",
+            event_category="premium",
+        )
         return
 
     items = result.get("items") or []
@@ -2367,6 +2404,12 @@ async def _process_inbound_email_message(sender_email: str, subject: str, email_
         logger.info(
             "EMAIL_IMPORT user=%s aucun article alimentaire détecté (sujet=%s)",
             uid, subject,
+        )
+        await track_business_event(
+            business_events_col=business_events_col,
+            user_id=uid,
+            event_name="email_import_no_items",
+            event_category="premium",
         )
         return
 
@@ -5222,6 +5265,8 @@ async def admin_monitoring_dashboard(
             }
         if block_name == "crash_reports":
             return {"total": 0, "recent": []}
+        if block_name == "email_import_overview":
+            return {"total": 0, "succeeded": 0, "by_outcome": {}}
         if block_name == "external_service_quotas":
             return {"generated_at": utc_now().isoformat(), "services": [], "comparison_chart": [], "notes": {}}
         return None
@@ -5290,6 +5335,16 @@ async def admin_monitoring_dashboard(
         crash_reports = {}
 
     try:
+        email_import_overview = await build_email_import_overview(
+            business_events_col=business_events_col,
+            start_iso=start_iso,
+            end_iso=end_iso,
+        )
+    except Exception as exc:
+        logger.warning("admin_monitoring_dashboard source failed: email_import_overview (%s)", exc)
+        email_import_overview = {}
+
+    try:
         external_service_quotas = await build_external_services_quota_snapshot(
             service_usage_logs_col=service_usage_logs_col,
             api_request_logs_col=api_request_logs_col,
@@ -5326,6 +5381,7 @@ async def admin_monitoring_dashboard(
     product_funnel = _safe_block("product_funnel", lambda: _json_safe(overview.get("product_funnel")) if isinstance(overview.get("product_funnel"), dict) else {})
     activation_funnel_safe = _safe_block("activation_funnel", lambda: _json_safe(activation_funnel) if isinstance(activation_funnel, dict) and activation_funnel else _block_fallback("activation_funnel"))
     crash_reports_safe = _safe_block("crash_reports", lambda: _json_safe(crash_reports) if isinstance(crash_reports, dict) and crash_reports else _block_fallback("crash_reports"))
+    email_import_overview_safe = _safe_block("email_import_overview", lambda: _json_safe(email_import_overview) if isinstance(email_import_overview, dict) and email_import_overview else _block_fallback("email_import_overview"))
     critical_flows = _safe_block("critical_flows", lambda: _json_safe(overview.get("critical_flows")) if isinstance(overview.get("critical_flows"), dict) else {})
     top_incidents = _safe_block("top_api_issues", lambda: _json_safe(overview.get("top_incidents")) if isinstance(overview.get("top_incidents"), list) else [])
 
@@ -5383,6 +5439,7 @@ async def admin_monitoring_dashboard(
         },
         "activation_funnel": activation_funnel_safe,
         "crash_reports": crash_reports_safe,
+        "email_import_overview": email_import_overview_safe,
         "cost_metrics": cost_metrics,
         "ocr_image_enrichment": ocr_image_enrichment,
         "external_service_quotas": external_service_quotas_safe,

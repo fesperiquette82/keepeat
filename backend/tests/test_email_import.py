@@ -181,7 +181,11 @@ class FakeAppState:
 
 
 class FakeBusinessEventsCol:
-    async def insert_one(self, _doc):
+    def __init__(self):
+        self.inserted: list[dict] = []
+
+    async def insert_one(self, doc):
+        self.inserted.append(dict(doc))
         return None
 
 
@@ -364,6 +368,10 @@ class TestEmailImportPollEndpoint:
         counter_id = f"usage:{PREMIUM_USER_ID}:ocr_receipt:{server._current_period_key()}"
         assert app_state.docs[counter_id]["used"] == 1
         server.send_expo_push.assert_awaited_once()
+        tracked = server.business_events_col.inserted
+        assert len(tracked) == 1
+        assert tracked[0]["event_name"] == "email_import_succeeded"
+        assert tracked[0]["user_id"] == PREMIUM_USER_ID
 
     def test_unknown_sender_is_ignored_but_still_marked_seen(self, monkeypatch):
         server = _load_server(monkeypatch)
@@ -383,6 +391,33 @@ class TestEmailImportPollEndpoint:
         assert resp.status_code == 200
         assert resp.json() == {"ok": True, "processed": 1}
         assert marked_seen == [b"1"]
+        tracked = server.business_events_col.inserted
+        assert len(tracked) == 1
+        assert tracked[0]["event_name"] == "email_import_sender_unrecognized"
+        assert tracked[0]["user_id"] is None
+
+    def test_missing_sender_is_ignored_but_still_marked_seen(self, monkeypatch):
+        server = _load_server(monkeypatch)
+        monkeypatch.setenv("EMAIL_IMPORT_CRON_TOKEN", "cron-secret")
+        self._setup(monkeypatch, server)
+        monkeypatch.setattr(
+            server.email_import_service, "fetch_unseen_emails",
+            lambda: [{"uid": b"1", "sender": "", "subject": "?", "text": "..."}],
+        )
+        marked_seen = []
+        monkeypatch.setattr(server.email_import_service, "mark_seen", lambda uid: marked_seen.append(uid))
+
+        from fastapi.testclient import TestClient
+        client = TestClient(server.app)
+        resp = client.post("/api/internal/email-import/poll", headers=self._headers())
+
+        assert resp.status_code == 200
+        assert resp.json() == {"ok": True, "processed": 1}
+        assert marked_seen == [b"1"]
+        tracked = server.business_events_col.inserted
+        assert len(tracked) == 1
+        assert tracked[0]["event_name"] == "email_import_sender_missing"
+        assert tracked[0]["user_id"] is None
 
     def test_free_plan_sender_is_ignored_no_stock_inserted(self, monkeypatch):
         server = _load_server(monkeypatch)
@@ -399,6 +434,35 @@ class TestEmailImportPollEndpoint:
         assert resp.status_code == 200
         assert stock_col.inserted == []
         server.parse_email_receipt_text.assert_not_awaited()
+        tracked = server.business_events_col.inserted
+        assert len(tracked) == 1
+        assert tracked[0]["event_name"] == "email_import_non_premium"
+        assert tracked[0]["user_id"] == FREE_USER_ID
+
+    def test_empty_body_is_ignored_but_still_marked_seen(self, monkeypatch):
+        server = _load_server(monkeypatch)
+        monkeypatch.setenv("EMAIL_IMPORT_CRON_TOKEN", "cron-secret")
+        email, _, stock_col, _ = self._setup(monkeypatch, server)
+        monkeypatch.setattr(
+            server.email_import_service, "fetch_unseen_emails",
+            lambda: [{"uid": b"1", "sender": email, "subject": "?", "text": ""}],
+        )
+        marked_seen = []
+        monkeypatch.setattr(server.email_import_service, "mark_seen", lambda uid: marked_seen.append(uid))
+        monkeypatch.setattr(server, "parse_email_receipt_text", AsyncMock())
+
+        from fastapi.testclient import TestClient
+        client = TestClient(server.app)
+        resp = client.post("/api/internal/email-import/poll", headers=self._headers())
+
+        assert resp.status_code == 200
+        assert marked_seen == [b"1"]
+        assert stock_col.inserted == []
+        server.parse_email_receipt_text.assert_not_awaited()
+        tracked = server.business_events_col.inserted
+        assert len(tracked) == 1
+        assert tracked[0]["event_name"] == "email_import_empty_body"
+        assert tracked[0]["user_id"] == PREMIUM_USER_ID
 
     def test_quota_exhausted_skips_without_error(self, monkeypatch):
         server = _load_server(monkeypatch)
@@ -415,6 +479,10 @@ class TestEmailImportPollEndpoint:
         assert resp.status_code == 200
         assert stock_col.inserted == []
         server.parse_email_receipt_text.assert_not_awaited()
+        tracked = server.business_events_col.inserted
+        assert len(tracked) == 1
+        assert tracked[0]["event_name"] == "email_import_quota_exhausted"
+        assert tracked[0]["user_id"] == PREMIUM_USER_ID
 
     def test_empty_parse_result_refunds_quota_and_inserts_nothing(self, monkeypatch):
         server = _load_server(monkeypatch)
@@ -435,6 +503,10 @@ class TestEmailImportPollEndpoint:
         assert stock_col.inserted == []
         counter_id = f"usage:{PREMIUM_USER_ID}:ocr_receipt:{server._current_period_key()}"
         assert app_state.docs[counter_id]["used"] == 0  # réservé (1) puis remboursé (0)
+        tracked = server.business_events_col.inserted
+        assert len(tracked) == 1
+        assert tracked[0]["event_name"] == "email_import_no_items"
+        assert tracked[0]["user_id"] == PREMIUM_USER_ID
 
     def test_gemini_failure_refunds_quota_and_does_not_crash(self, monkeypatch):
         server = _load_server(monkeypatch)
@@ -452,6 +524,10 @@ class TestEmailImportPollEndpoint:
         assert stock_col.inserted == []
         counter_id = f"usage:{PREMIUM_USER_ID}:ocr_receipt:{server._current_period_key()}"
         assert app_state.docs[counter_id]["used"] == 0
+        tracked = server.business_events_col.inserted
+        assert len(tracked) == 1
+        assert tracked[0]["event_name"] == "email_import_parse_failed"
+        assert tracked[0]["user_id"] == PREMIUM_USER_ID
 
     def test_multiple_messages_all_marked_seen_even_if_one_fails(self, monkeypatch):
         server = _load_server(monkeypatch)

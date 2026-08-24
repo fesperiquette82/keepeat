@@ -23,6 +23,59 @@ export interface MonitoringDashboardResponse {
   top_api_issues: Array<Record<string, unknown>>;
   top_service_usage: Array<Record<string, unknown>>;
   estimated_cost_summary?: Record<string, number>;
+  operational_status?: string;
+  operational_status_reasons?: string[];
+  critical_flows?: Record<string, {
+    endpoint_key: string;
+    calls: number;
+    success: number;
+    errors: number;
+    error_rate: number;
+    avg_latency_ms: number;
+    severity: 'ok' | 'degraded' | 'critical' | string;
+    label: string;
+    business_criticality?: string;
+  }>;
+  product_funnel?: {
+    users_with_receipt_scan?: number;
+    users_with_stock_add?: number;
+    users_with_recipes_view?: number;
+    premium_conversion_rate?: number;
+  };
+  activation_funnel?: {
+    registered: number;
+    added_product: number;
+    scanned_receipt: number;
+    viewed_paywall: number;
+    purchased: number;
+    rates: {
+      added_product: number;
+      scanned_receipt: number;
+      viewed_paywall: number;
+      purchased: number;
+    };
+  };
+  crash_reports?: {
+    total: number;
+    recent: Array<{
+      message?: string;
+      screen?: string;
+      platform?: string;
+      app_version?: string;
+      created_at?: string;
+    }>;
+  };
+  cost_metrics?: {
+    ocr_cost_eur: number;
+    ocr_cost_per_scan_eur?: number | null;
+    cost_per_active_user_eur?: number | null;
+    estimated_net_revenue_eur: number;
+  };
+  email_import_overview?: {
+    total: number;
+    succeeded: number;
+    by_outcome: Record<string, number>;
+  };
   external_service_quotas?: {
     generated_at?: string;
     services?: Array<{
@@ -169,6 +222,31 @@ export interface MonitoringCostsResponse {
   }>;
 }
 
+export interface MonitoringTrendsResponse {
+  generated_at: string;
+  days: number;
+  dau: Array<{ date: string; count: number }>;
+  new_users: Array<{ date: string; count: number }>;
+  errors: Array<{ date: string; count: number }>;
+  costs: Array<{ date: string; cost: number }>;
+}
+
+export interface MonitoringApiDrillResponse {
+  endpoint_key: string;
+  days: number;
+  total_calls: number;
+  by_status: Array<{ status_code: number; count: number; avg_ms: number }>;
+  last_errors: Array<{
+    id?: string;
+    method?: string;
+    path?: string;
+    status_code?: number;
+    duration_ms?: number;
+    error_type?: string;
+    created_at?: string;
+  }>;
+}
+
 export interface MonitoringEventsResponse {
   page: number;
   page_size: number;
@@ -286,4 +364,16 @@ export async function getMonitoringUsage(token: string, signal?: AbortSignal) {
 
 export async function getMonitoringCosts(token: string, signal?: AbortSignal) {
   return adminGet<MonitoringCostsResponse>('/api/admin/monitoring/costs', token, signal);
+}
+
+export async function getMonitoringTrends(token: string, options: { days?: number }, signal?: AbortSignal) {
+  return adminGet<MonitoringTrendsResponse>(`/api/admin/monitoring/trends${buildQuery(options)}`, token, signal);
+}
+
+export async function getMonitoringApiDrill(
+  token: string,
+  options: { endpoint_key: string; days?: number },
+  signal?: AbortSignal,
+) {
+  return adminGet<MonitoringApiDrillResponse>(`/api/admin/monitoring/api-drill${buildQuery(options)}`, token, signal);
 }

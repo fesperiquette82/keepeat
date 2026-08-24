@@ -29,6 +29,15 @@ _EVENT_NAME_ALLOWED = {
     "premium_checkout_succeeded",
     "premium_restored",
     "account_deleted",
+    "email_import_sender_missing",
+    "email_import_sender_unrecognized",
+    "email_import_non_premium",
+    "email_import_empty_body",
+    "email_import_quota_exhausted",
+    "email_import_parse_failed",
+    "email_import_no_items",
+    "email_import_succeeded",
+    "email_import_empty",
 }
 
 _CRITICAL_ENDPOINTS: dict[str, dict[str, Any]] = {
@@ -612,6 +621,38 @@ async def build_activation_funnel(
             "viewed_paywall": _rate(viewed_paywall),
             "purchased": _rate(purchased),
         },
+    }
+
+
+async def build_email_import_overview(
+    *,
+    business_events_col,
+    start_iso: str,
+    end_iso: str,
+) -> dict[str, Any]:
+    """Résumé de l'import de tickets par email (BUG-054) sur la période :
+    combien d'emails ont été importés avec succès, et pourquoi les autres ont
+    été ignorés. Seule source de visibilité admin sur ce flux — contrairement
+    à l'OCR photo, il n'écrit jamais dans receipt_tickets_col (écriture
+    directe en stock), donc n'apparaît dans aucune autre vue du dashboard.
+    """
+    pipeline = [
+        {
+            "$match": {
+                "created_at": {"$gte": start_iso, "$lte": end_iso},
+                "event_name": {"$regex": "^email_import_"},
+            }
+        },
+        {"$group": {"_id": "$event_name", "count": {"$sum": 1}}},
+    ]
+    rows = await business_events_col.aggregate(pipeline).to_list(length=20)
+    by_outcome = {str(row["_id"]): int(row["count"]) for row in rows if row.get("_id")}
+    succeeded = by_outcome.get("email_import_succeeded", 0)
+    total = sum(by_outcome.values())
+    return {
+        "total": total,
+        "succeeded": succeeded,
+        "by_outcome": by_outcome,
     }
 
 
