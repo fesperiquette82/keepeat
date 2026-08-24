@@ -203,6 +203,7 @@ def test_dashboard_returns_200_with_nominal_payload(monkeypatch):
     assert isinstance(payload.get("critical_flows"), dict)
     assert isinstance(payload.get("product_funnel"), dict)
     assert isinstance(payload.get("activation_funnel"), dict)
+    assert isinstance(payload.get("email_import_overview"), dict)
     assert isinstance(payload.get("frontend_deployment"), dict)
     assert isinstance(payload.get("external_service_quotas"), dict)
     assert isinstance(payload["external_service_quotas"].get("services"), list)
@@ -237,6 +238,54 @@ def test_dashboard_returns_activation_funnel_block(monkeypatch):
     assert funnel["registered"] == 4
     assert funnel["purchased"] == 1
     assert funnel["rates"]["purchased"] == 0.25
+
+
+def test_dashboard_returns_email_import_overview_block(monkeypatch):
+    """BUG-054 : le dashboard doit exposer un résumé de l'import de tickets par
+    email (succès/échecs par raison) — seule source de visibilité admin sur ce
+    flux, qui n'écrit jamais dans receipt_tickets_col."""
+    _patch_dashboard_sources(monkeypatch)
+    _with_admin_override()
+
+    async def _fake_email_import_overview(**kwargs):
+        _ = kwargs
+        return {
+            "total": 5,
+            "succeeded": 2,
+            "by_outcome": {
+                "email_import_succeeded": 2,
+                "email_import_sender_unrecognized": 3,
+            },
+        }
+
+    monkeypatch.setattr(server, "build_email_import_overview", _fake_email_import_overview)
+
+    response = asyncio.run(_request("/api/admin/monitoring/dashboard?days=7"))
+    server.app.dependency_overrides = {}
+
+    assert response.status_code == 200
+    overview = response.json().get("email_import_overview")
+    assert isinstance(overview, dict)
+    assert overview["total"] == 5
+    assert overview["succeeded"] == 2
+    assert overview["by_outcome"]["email_import_sender_unrecognized"] == 3
+
+
+def test_dashboard_survives_email_import_overview_exception_with_zeroed_fallback(monkeypatch):
+    _patch_dashboard_sources(monkeypatch)
+    _with_admin_override()
+
+    async def _failing_email_import_overview(**kwargs):
+        _ = kwargs
+        raise RuntimeError("boom")
+
+    monkeypatch.setattr(server, "build_email_import_overview", _failing_email_import_overview)
+
+    response = asyncio.run(_request("/api/admin/monitoring/dashboard?days=7"))
+    server.app.dependency_overrides = {}
+
+    assert response.status_code == 200
+    assert response.json().get("email_import_overview") == {"total": 0, "succeeded": 0, "by_outcome": {}}
 
 
 def test_dashboard_survives_activation_funnel_exception_with_zeroed_fallback(monkeypatch):

@@ -8,6 +8,7 @@ import {
   ErrorState,
   formatDate,
   formatMoney,
+  formatPct,
   KpiCard,
   LoadingState,
   StatusBadge,
@@ -81,6 +82,9 @@ export default function AdminMonitoringDashboardScreen() {
             <Text>DB: {health.db?.ok ? 'OK' : 'Down'}</Text>
             <Text>Uptime: {health.uptime_seconds ?? 0}s</Text>
             <Text>Dernière erreur critique: {formatDate(health.last_critical_error?.created_at)}</Text>
+            {(dashboard.operational_status_reasons || []).map((reason, idx) => (
+              <Text key={idx} style={{ color: '#B45309', fontSize: 12 }}>⚠ {reason}</Text>
+            ))}
           </AdminSectionCard>
 
           <View style={{ flexDirection: 'row', flexWrap: 'wrap', gap: 8 }}>
@@ -89,7 +93,64 @@ export default function AdminMonitoringDashboardScreen() {
             <KpiCard label="Free / Premium" value={`${dashboard.users?.free ?? 0} / ${dashboard.users?.premium ?? 0}`} />
             <KpiCard label="Active subscriptions" value={String(dashboard.subscriptions?.active ?? 0)} />
             <KpiCard label="Estimated MRR" value={formatMoney(Number(dashboard.subscriptions?.estimated_mrr_eur ?? 0))} />
+            <KpiCard label="Conversion premium" value={formatPct(dashboard.product_funnel?.premium_conversion_rate ?? 0)} />
           </View>
+
+          <AdminSectionCard title="Entonnoir d'activation">
+            {dashboard.activation_funnel && dashboard.activation_funnel.registered > 0 ? (
+              <>
+                <Text>Inscrits sur la période: {dashboard.activation_funnel.registered}</Text>
+                <Text>• Ont ajouté un produit: {dashboard.activation_funnel.added_product} ({formatPct(dashboard.activation_funnel.rates.added_product)})</Text>
+                <Text>• Ont scanné un ticket: {dashboard.activation_funnel.scanned_receipt} ({formatPct(dashboard.activation_funnel.rates.scanned_receipt)})</Text>
+                <Text>• Ont vu le paywall: {dashboard.activation_funnel.viewed_paywall} ({formatPct(dashboard.activation_funnel.rates.viewed_paywall)})</Text>
+                <Text>• Ont acheté: {dashboard.activation_funnel.purchased} ({formatPct(dashboard.activation_funnel.rates.purchased)})</Text>
+              </>
+            ) : (
+              <EmptyState label="Aucun inscrit sur cette période." />
+            )}
+          </AdminSectionCard>
+
+          <AdminSectionCard title="Flux critiques">
+            {Object.values(dashboard.critical_flows || {}).map((flow) => (
+              <View key={flow.endpoint_key} style={{ marginBottom: 6 }}>
+                <Text>
+                  {flow.severity !== 'ok' ? '⚠ ' : '• '}
+                  {flow.label} ({flow.endpoint_key}) — {flow.calls} appels, {formatPct(flow.error_rate)} d&apos;erreurs, {Math.round(flow.avg_latency_ms)}ms
+                </Text>
+              </View>
+            ))}
+            {Object.keys(dashboard.critical_flows || {}).length === 0 && <EmptyState label="Aucun flux critique suivi." />}
+          </AdminSectionCard>
+
+          <AdminSectionCard title="Import de tickets par email">
+            {dashboard.email_import_overview && dashboard.email_import_overview.total > 0 ? (
+              <>
+                <Text>Total traité: {dashboard.email_import_overview.total}</Text>
+                <Text>Importés avec succès: {dashboard.email_import_overview.succeeded}</Text>
+                {Object.entries(dashboard.email_import_overview.by_outcome)
+                  .filter(([name]) => name !== 'email_import_succeeded')
+                  .map(([name, count]) => (
+                    <Text key={name}>• {name}: {count}</Text>
+                  ))}
+              </>
+            ) : (
+              <EmptyState label="Aucun email traité sur cette période." />
+            )}
+          </AdminSectionCard>
+
+          <AdminSectionCard title="Coûts & revenu">
+            <Text>Coût OCR: {formatMoney(dashboard.cost_metrics?.ocr_cost_eur ?? 0)}</Text>
+            <Text>Coût par utilisateur actif: {formatMoney(dashboard.cost_metrics?.cost_per_active_user_eur ?? 0)}</Text>
+            <Text>Revenu net estimé: {formatMoney(dashboard.cost_metrics?.estimated_net_revenue_eur ?? 0)}</Text>
+          </AdminSectionCard>
+
+          <AdminSectionCard title="Crashs frontend">
+            <Text>Total sur la période: {dashboard.crash_reports?.total ?? 0}</Text>
+            {(dashboard.crash_reports?.recent || []).slice(0, 5).map((crash, idx) => (
+              <Text key={idx} numberOfLines={2}>• [{crash.screen || '?'}] {crash.message || 'sans message'}</Text>
+            ))}
+            {(!dashboard.crash_reports || dashboard.crash_reports.total === 0) && <EmptyState label="Aucun crash remonté." />}
+          </AdminSectionCard>
 
           <AdminSectionCard title="Top API issues">
             {(dashboard.top_api_issues || []).slice(0, 5).map((row, idx) => (

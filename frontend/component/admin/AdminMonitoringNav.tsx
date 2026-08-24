@@ -9,6 +9,7 @@ const LINKS = [
   { label: 'Users', path: '/admin/monitoring/users' },
   { label: 'Subscriptions', path: '/admin/monitoring/subscriptions' },
   { label: 'Services', path: '/admin/monitoring/services-usage' },
+  { label: 'Trends', path: '/admin/monitoring/trends' },
   { label: 'Events', path: '/admin/monitoring/events' },
   { label: 'Tickets', path: '/admin/monitoring/receipt-tickets' },
 ];
