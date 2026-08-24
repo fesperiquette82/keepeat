@@ -37,17 +37,11 @@
 
 Simplifié le 23/08 (à ta demande) : plus de domaine à acheter ni de DNS à configurer — une seule boîte mail suffit, et l'app la relève elle-même toutes les 30 min entre ~8h et ~22h heure de Paris (coupé la nuit, personne n'envoie de ticket à 3h du matin), pas de webhook à mettre en place.
 
-- [ ] **Créer un compte email dédié** (ex : `tickets.keepeat@gmail.com` ou similaire — n'importe quel fournisseur qui propose l'accès IMAP convient, Gmail est le plus simple).
-- [ ] **Activer la validation en 2 étapes** sur ce compte, puis générer un **mot de passe d'application** (Gmail : Compte Google → Sécurité → Mots de passe des applications). C'est ce mot de passe qu'il faut renseigner, jamais le vrai mot de passe du compte.
-- [ ] **Renseigner sur Render** :
-  ```
-  EMAIL_IMPORT_INBOX_ADDRESS=tickets.keepeat@gmail.com
-  EMAIL_IMPORT_INBOX_APP_PASSWORD=<le mot de passe d'application généré>
-  EMAIL_IMPORT_CRON_TOKEN=<générer avec : python -c "import secrets; print(secrets.token_urlsafe(32))">
-  ```
-  (`EMAIL_IMPORT_IMAP_HOST`/`EMAIL_IMPORT_IMAP_PORT` ont déjà des valeurs par défaut adaptées à Gmail — à ne toucher que pour un autre fournisseur.)
-- [ ] **Ajouter le secret GitHub Actions `EMAIL_IMPORT_CRON_TOKEN`** (Settings → Secrets and variables → Actions du dépôt) avec la même valeur que sur Render — c'est lui qui déclenche le relevé automatique toutes les 30 minutes (`.github/workflows/email-import-cron.yml`).
-- [ ] **Envoyer un vrai email de test transféré** une fois configuré, pour vérifier que les articles remontent bien dans le stock (nécessite d'avoir un compte premium dont l'email d'expédition correspond à celui utilisé dans l'app).
+- [x] **Créer un compte email dédié** — fait le 24/08 : `keepeatfe@gmail.com`.
+- [x] **Activer la validation en 2 étapes + générer un mot de passe d'application** — fait le 24/08.
+- [x] **Renseigner sur Render** (`EMAIL_IMPORT_INBOX_ADDRESS`, `EMAIL_IMPORT_INBOX_APP_PASSWORD`, `EMAIL_IMPORT_CRON_TOKEN`) — posé via l'API Render le 24/08, service `keepeat-backend` redéployé (déploiement `dep-da6174m417fc7390p55g`, live).
+- [ ] **Ajouter le secret GitHub Actions `EMAIL_IMPORT_CRON_TOKEN`** (Settings → Secrets and variables → Actions du dépôt `fesperiquette82/keepeat`) avec la même valeur que sur Render — c'est lui qui déclenche le relevé automatique toutes les 30 minutes (`.github/workflows/email-import-cron.yml`). Pas faisable depuis Claude Code cloud : la gestion des secrets Actions est bloquée par la politique réseau de cet environnement. Valeur donnée dans la conversation du 24/08 à reporter telle quelle.
+- [ ] **Envoyer un vrai email de test transféré** une fois le secret GitHub ajouté, pour vérifier que les articles remontent bien dans le stock (nécessite d'avoir un compte premium dont l'email d'expédition correspond à celui utilisé dans l'app).
 
 ## 🟡 Optionnel — seulement si l'import Gmail (BUG-050) est relancé un jour
 
