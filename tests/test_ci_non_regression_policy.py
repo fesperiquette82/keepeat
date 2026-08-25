@@ -1741,3 +1741,24 @@ def test_production_health_check_freshness_ancestry_logic_end_to_end():
             "Un déploiement réellement en retard doit toujours être détecté"
 
 
+def test_production_health_check_tolerates_render_free_tier_cold_start():
+    """
+    Regression : le plan Render gratuit éteint le service après ~15 min d'inactivité
+    et met jusqu'à 35-40s à redémarrer complètement (constaté en logs Render le
+    2026-08-25 : requête à 14:22:38Z, "Application startup complete" à 14:23:14Z,
+    soit ~36s plus tard) avant de répondre à la première requête. Le timeout de 20s
+    du curl vers /health confondait systématiquement ce cold-start normal avec une
+    vraie panne, faisant échouer le workflow à tort à chaque redémarrage à froid —
+    observé en échec sur la quasi-totalité des exécutions entre le 23/08 et le
+    25/08/2026. --max-time doit rester nettement au-dessus de la durée de cold-start
+    mesurée pour ne pas réintroduire ce faux positif.
+    """
+    workflow = Path(".github/workflows/production-health-check.yml").read_text(encoding="utf-8")
+
+    health_check_section = workflow.split("Vérifier /health")[1].split("Vérifier que le backend déployé")[0]
+    match = re.search(r"--max-time (\d+) https://keepeat-backend\.onrender\.com/health", health_check_section)
+    assert match is not None, "Le curl vers /health doit préciser --max-time"
+    assert int(match.group(1)) >= 60, \
+        "Le timeout du health-check doit largement dépasser la durée de cold-start mesurée (~36s) pour ne pas confondre un redémarrage à froid normal avec une vraie panne"
+
+
