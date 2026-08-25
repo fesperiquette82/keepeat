@@ -101,14 +101,26 @@ function baseNormalize(value: string): string {
     .trim();
 }
 
+// Comparaison ingrédient/stock appelée pour chaque paire (article en stock × ingrédient
+// de recette) — potentiellement des milliers de fois par écran (buildRecipeAssociationsSnapshot
+// recalcule les associations pour tout le stock à chaque focus de l'onglet Recettes). Le
+// nombre de chaînes distinctes réellement rencontrées est lui bien plus restreint (noms de
+// stock + ingrédients de recettes réutilisés d'une paire à l'autre) : mémoïser évite de
+// refaire le même travail de normalisation (regex + tokenisation) pour la même chaîne.
+const normalizeForComparisonCache = new Map<string, string>();
+
 function normalizeForComparison(value: string): string {
-  return baseNormalize(value)
+  const cached = normalizeForComparisonCache.get(value);
+  if (cached !== undefined) return cached;
+  const result = baseNormalize(value)
     .split(' ')
     .filter(Boolean)
     .map(normalizeToken)
     .filter((token) => !NON_DISTINCTIVE_TOKENS.has(token))
     .join(' ')
     .trim();
+  normalizeForComparisonCache.set(value, result);
+  return result;
 }
 
 function tokenSet(value: string): Set<string> {
@@ -135,11 +147,20 @@ export function normalizeIngredientName(value: string): string {
   return normalizeForComparison(value);
 }
 
+// Repli coûteux (boucle sur tous les alias de tous les concepts, avec allocation d'un
+// Set par alias) déclenché dès que `normalizedName` n'est pas une correspondance exacte —
+// mémoïsé pour la même raison que normalizeForComparison ci-dessus : le nombre de noms
+// distincts réellement rencontrés est petit face au nombre de paires comparées.
+const detectIngredientConceptCache = new Map<string, IngredientConceptKey | null>();
+
 function detectIngredientConcept(normalizedName: string): IngredientConceptKey | null {
   if (!normalizedName) return null;
   if (CONCEPT_ALIAS_TO_KEY.has(normalizedName)) {
     return CONCEPT_ALIAS_TO_KEY.get(normalizedName) ?? null;
   }
+
+  const cached = detectIngredientConceptCache.get(normalizedName);
+  if (cached !== undefined) return cached;
 
   let bestConcept: IngredientConceptKey | null = null;
   let bestScore = 0;
@@ -163,6 +184,7 @@ function detectIngredientConcept(normalizedName: string): IngredientConceptKey |
     }
   }
 
+  detectIngredientConceptCache.set(normalizedName, bestConcept);
   return bestConcept;
 }
 

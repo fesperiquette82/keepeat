@@ -53,6 +53,19 @@ test('matchRecipeIngredientsToStock retourne les ids attendus avec concepts', ()
   assert.deepEqual(result.unmatchedIngredients, []);
 });
 
+test("(régression perf) la mémoïsation de normalizeForComparison/detectIngredientConcept reste correcte sur des appels répétés et croisés", () => {
+  // normalizeForComparison/detectIngredientConcept sont maintenant mémoïsés (par chaîne
+  // exacte) car appelés potentiellement des milliers de fois par écran (une paire par
+  // article en stock × ingrédient de recette). Vérifie qu'un appel répété avec la même
+  // chaîne reste stable, et qu'un appel intercalé avec une chaîne différente ne pollue
+  // pas le résultat de la première (pas de collision de clé de cache).
+  assert.equal(normalizeIngredientName('Œufs'), 'oeuf');
+  assert.equal(isClearIngredientMatch('Ketchup', 'tomates concassées'), false);
+  assert.equal(normalizeIngredientName('Œufs'), 'oeuf');
+  assert.equal(isClearIngredientMatch('Passierte Tomaten', 'tomates concassées'), true);
+  assert.equal(isClearIngredientMatch('Ketchup', 'tomates concassées'), false);
+});
+
 test('computeRecipeIngredientAvailability est cohérent avec le moteur robuste', () => {
   const stock = [item('1', 'Passierte Tomaten'), item('2', 'yaourt nature')];
   const availability = computeRecipeIngredientAvailability(stock, [

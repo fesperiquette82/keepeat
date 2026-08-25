@@ -132,12 +132,18 @@ export function buildStockItemRecipeSections(
   const itemExpiryDays = daysUntil(item.expiry_date);
   const itemIsUrgent = itemExpiryDays !== null && itemExpiryDays <= 2;
 
+  // Invariant sur toute la boucle ci-dessous (ne dépend pas de `recipe`) — sorti du
+  // .map() pour ne filtrer qu'une fois au lieu d'une fois par recette (le nombre de
+  // recettes candidates peut être élevé, et cette fonction est elle-même appelée une
+  // fois par article en stock par buildRecipeAssociationsSnapshot).
+  const otherActiveStock = activeStock.filter((stockItem) => stockItem.id !== item.id);
+
   const scoredRecipes = uniqueRecipes
     .map((recipe) => {
       const direct = directRecipes.some((directRecipe) => directRecipe.id === recipe.id);
       const { matchedCount, usesOtherUrgentCount } = countAvailableStockIngredients(
         recipe,
-        activeStock.filter((stockItem) => stockItem.id !== item.id),
+        otherActiveStock,
       );
       const duration = recipeDuration(recipe);
       const score =
