@@ -1,5 +1,7 @@
 import assert from 'node:assert/strict';
 import test from 'node:test';
+import fs from 'node:fs';
+import path from 'node:path';
 
 import { buildStockItemDetailRecipeBlocks } from './stockItemDetailRecipes';
 import type { DashboardStockItem } from '../data/mockDashboardData';
@@ -119,6 +121,24 @@ test('sépare les suggestions globales des recettes réellement liées pour évi
   assert.deepEqual(sections.directRecipes.map((recipe) => recipe.id), []);
   assert.deepEqual(sections.antiWasteRecipes.map((recipe) => recipe.id), []);
   assert.deepEqual(sections.globalSuggestions.map((recipe) => recipe.id), ['r-omelette']);
+});
+
+test("(régression perf) le filtre « autres articles actifs » n'est calculé qu'une fois par article, pas une fois par recette candidate", () => {
+  // buildStockItemRecipeSections est appelée une fois PAR ARTICLE EN STOCK par
+  // buildRecipeAssociationsSnapshot (recipeAssociations.ts), donc toute étape
+  // O(nombre d'articles) recalculée à l'intérieur du .map() sur les recettes
+  // rend l'ensemble O(articles² × recettes) — synchrone sur le thread JS à chaque
+  // fois que l'onglet Recettes reprend le focus (useFocusEffect). Vérifie que le
+  // filtre invariant est bien sorti de la boucle plutôt que de tester un
+  // comportement observable identique dans les deux cas (voir analyse : cette
+  // exclusion ne change jamais la sortie publique de la fonction, seulement son coût).
+  const src = fs.readFileSync(path.join(process.cwd(), 'utils/stockItemRecipes.ts'), 'utf8');
+  const mapStart = src.indexOf('.map((recipe) => {');
+  const filterCall = 'activeStock.filter((stockItem) => stockItem.id !== item.id)';
+  const filterIndex = src.indexOf(filterCall);
+  assert.ok(filterIndex !== -1, 'le filtre attendu doit exister quelque part dans le fichier');
+  assert.ok(filterIndex < mapStart, 'le filtre doit être calculé avant le .map() sur les recettes, pas à l’intérieur');
+  assert.ok(!src.slice(mapStart).includes(filterCall), 'le filtre ne doit pas être recalculé à l’intérieur du .map()');
 });
 
 test('construit la route de navigation vers le détail recette existant', () => {

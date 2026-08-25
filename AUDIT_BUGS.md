@@ -857,3 +857,22 @@ mais aucun utilisateur ne pouvait déclencher un achat réel.
 **Commandes exécutées :** voir validation finale ci-dessous
 **Résultat :** voir validation finale ci-dessous
 **Risques restants :** aucun.
+
+## BUG-056 — Manque de réactivité au toucher (perçu en quittant l'onglet Recettes)
+
+**Contexte :** signalé par l'utilisateur — appuis boutons peu réactifs, notamment en passant de l'onglet Recettes à Stock, avec l'intuition que « l'affichage des recettes prend un certain temps ». `recipes.tsx` déclenche `fetchStock()` à chaque prise de focus (`useFocusEffect`), qui — même quand le cache est frais et qu'aucun appel réseau n'est fait — appelle systématiquement `recomputeRecipeAssociationsFromCache()` (`recipesStore.ts`), donc `buildRecipeAssociationsSnapshot()` (`recipeAssociations.ts`) pour TOUT le stock, en synchrone sur le thread JS.
+
+Deux points chauds identifiés par lecture de code :
+
+1. **`buildStockItemRecipeSections`** (`stockItemRecipes.ts`), appelée une fois par article en stock : un filtre `activeStock.filter(id !== item.id)` — invariant sur toute la boucle des recettes candidates — était recalculé à l'intérieur du `.map()` sur les recettes au lieu d'une fois avant. Complexité en articles² × recettes au lieu d'articles × recettes pour cette étape.
+2. **`normalizeForComparison`/`detectIngredientConcept`** (`ingredientMatching.ts`), appelées pour CHAQUE paire (article de stock × ingrédient de recette comparé) — potentiellement des milliers de fois par recalcul complet. Le chemin de repli de `detectIngredientConcept` (quand la chaîne normalisée n'est pas un alias exact) boucle sur tous les alias de tous les concepts (~150-250 entrées) avec une allocation de `Set` par alias à chaque appel — sans aucune mémoïsation, alors que l'univers de chaînes réellement rencontrées (noms d'articles + ingrédients de recettes) est beaucoup plus restreint que le nombre de paires comparées.
+
+| ID | Sévérité | Statut | Résumé |
+|---|---|---|---|
+| BUG-056 | 🟡 PERFORMANCE (aucun changement de comportement, gain de coût CPU sur le thread JS) | `CORRIGÉ` | `stockItemRecipes.ts` : le filtre invariant est sorti du `.map()` sur les recettes (calculé une seule fois par article au lieu d'une fois par recette candidate). `ingredientMatching.ts` : `normalizeForComparison()` et `detectIngredientConcept()` sont désormais mémoïsées (`Map` par chaîne exacte / chaîne déjà normalisée) — un appel répété avec la même chaîne devient O(1) au lieu de refaire la normalisation regex ou la boucle de repli sur tous les alias. Les deux optimisations sont des refactors purs (sortie identique, prouvé par la suite de tests existante inchangée qui continue de passer) — aucun changement de comportement observable, uniquement du coût CPU économisé. |
+
+**Fichiers modifiés :** `frontend/utils/stockItemRecipes.ts`, `frontend/utils/ingredientMatching.ts`, `frontend/utils/stockItemRecipes.test.ts`, `frontend/utils/ingredientMatching.test.ts`
+**Tests ajoutés/mis à jour :** `stockItemRecipes.test.ts` — 1 nouveau test (source-scan, vérifie que le filtre reste bien hors du `.map()`, garde-fou contre une régression future de ce hoist) ; `ingredientMatching.test.ts` — 1 nouveau test (appels répétés/croisés sur les fonctions mémoïsées, vérifie l'absence de collision de cache).
+**Commandes exécutées :** `npm run lint` ; `npx tsc --noEmit` ; `npm run test:ci` (backend non concerné par ce changement, frontend uniquement)
+**Résultat :** PASS — lint/typecheck propres, tests 315/316 (1 skip pré-existant sans rapport) + 6/6 + 2/2
+**Risques restants :** aucune mesure sur device réel n'a pu être faite depuis cet environnement (pas d'accès à un appareil/émulateur) — l'amélioration est déduite de l'analyse de complexité algorithmique du code, pas d'un profilage direct. À confirmer par l'utilisateur en usage réel.
