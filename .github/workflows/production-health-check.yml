@@ -20,7 +20,13 @@ jobs:
       - name: Vérifier /health (app + connexion MongoDB)
         run: |
           set -e
-          response=$(curl -sS -w "\n%{http_code}" --max-time 20 https://keepeat-backend.onrender.com/health)
+          # Plan Render gratuit : le service s'éteint après ~15 min d'inactivité et met
+          # jusqu'à 35-40s à redémarrer complètement (image + Python + lifespan FastAPI,
+          # constaté en logs) avant de répondre à la première requête. Un timeout de 20s
+          # confondait systématiquement un cold-start normal avec une vraie panne — 90s
+          # laisse largement la marge pour ce cas, sans changer le comportement en cas de
+          # panne réelle (le service ne répond alors jamais, quel que soit le délai).
+          response=$(curl -sS -w "\n%{http_code}" --max-time 90 https://keepeat-backend.onrender.com/health)
           http_code=$(echo "$response" | tail -n1)
           body=$(echo "$response" | sed '$d')
           echo "HTTP $http_code"
@@ -43,7 +49,9 @@ jobs:
           # ne redéploie pas le backend, ce n'est donc PAS un retard. On compare au
           # dernier commit qui, lui, aurait dû déclencher un déploiement.
           expected_sha=$(git log -1 --format=%H -- backend/ .github/workflows/deploy-render-backend.yml)
-          build_info=$(curl -sS --max-time 20 https://keepeat-backend.onrender.com/api/build-info)
+          # Le step précédent a déjà réveillé le service (ou a échoué avant d'arriver ici) —
+          # 30s reste une marge confortable pour cet appel qui suit un backend désormais chaud.
+          build_info=$(curl -sS --max-time 30 https://keepeat-backend.onrender.com/api/build-info)
           echo "build-info: $build_info"
           deployed_commit=$(echo "$build_info" | python3 -c "import json,sys; print(json.load(sys.stdin).get('commit','unknown'))" 2>/dev/null || echo "unknown")
           echo "Commit déployé                        : $deployed_commit"

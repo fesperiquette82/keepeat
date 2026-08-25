@@ -876,3 +876,20 @@ Deux points chauds identifiés par lecture de code :
 **Commandes exécutées :** `npm run lint` ; `npx tsc --noEmit` ; `npm run test:ci` (backend non concerné par ce changement, frontend uniquement)
 **Résultat :** PASS — lint/typecheck propres, tests 315/316 (1 skip pré-existant sans rapport) + 6/6 + 2/2
 **Risques restants :** aucune mesure sur device réel n'a pu être faite depuis cet environnement (pas d'accès à un appareil/émulateur) — l'amélioration est déduite de l'analyse de complexité algorithmique du code, pas d'un profilage direct. À confirmer par l'utilisateur en usage réel.
+
+## BUG-057 — Deux crons GitHub Actions cassés (ALERTS_CRON_TOKEN absent) + faux positifs du health-check (cold-start Render)
+
+**Contexte :** vérification de routine des jobs GitHub Actions demandée par l'utilisateur. Deux problèmes distincts trouvés, sans rapport avec les changements de code récents.
+
+1. **`Alerts Cron` échouait à 100% depuis au moins le 23/08 17h15** (aucun succès observé dans tout l'historique consulté) : le secret GitHub Actions `ALERTS_CRON_TOKEN` était vide, ET la variable d'environnement correspondante n'existait même pas sur Render (seule `EMAIL_IMPORT_CRON_TOKEN` y était présente). Conséquence concrète : les rappels de péremption (J-2/J-0), le résumé hebdomadaire et les alertes d'inactivité (BUG-037) ne partaient à personne depuis la mise en place de ce cron.
+2. **`Production Health Check` échouait ~70% du temps** : `curl --max-time 20` vers `/health` timeout, alors que l'application elle-même est saine. Confirmé par les logs Render (`list_logs`) sur un échec précis : requête envoyée à 14:22:38Z pendant que le service (plan gratuit, s'éteint après ~15 min d'inactivité) était éteint ; le process ne démarre qu'à 14:22:47Z et termine son démarrage complet ("Application startup complete") à 14:23:14Z — soit ~36s après la requête, largement au-delà des 20s de timeout. Le check tournant lui-même toutes les 15 minutes (`cron: '*/15 * * * *'`), il finit régulièrement par arriver pile au moment où le service vient de s'éteindre.
+
+| ID | Sévérité | Statut | Résumé |
+|---|---|---|---|
+| BUG-057 | 🔴 MAJEUR (point 1 : fonctionnalité alertes silencieusement inopérante en prod) / 🟡 MINEUR (point 2 : faux positifs de monitoring) | `CORRIGÉ` | **Point 1 :** `ALERTS_CRON_TOKEN` généré et posé sur Render via l'API (redéploiement effectué), secret GitHub Actions ajouté par l'utilisateur, vérifié par un déclenchement manuel du workflow — réponse `HTTP 200 {"results":{"recalls":"ok","inactivity":"ok","daily_expiry":"ok","weekly_expiry":"ok"}}`. **Point 2 :** `.github/workflows/production-health-check.yml` — `--max-time` du curl vers `/health` relevé de 20s à 90s (marge confortable au-dessus des ~36s de cold-start mesurés) ; `--max-time` du curl vers `/api/build-info` (step suivant, backend déjà réveillé) relevé de 20s à 30s par cohérence. Pas de changement du comportement en cas de panne réelle : un service réellement indisponible ne répond jamais, quel que soit le délai. |
+
+**Fichiers modifiés :** `.github/workflows/production-health-check.yml`, `tests/test_ci_non_regression_policy.py`
+**Tests ajoutés/mis à jour :** `test_ci_non_regression_policy.py` — 1 nouveau test (`test_production_health_check_tolerates_render_free_tier_cold_start`), vérifie par lecture du fichier YAML que `--max-time` du health-check reste ≥ 60s, garde-fou contre un retour au timeout de 20s qui causait les faux positifs.
+**Commandes exécutées :** `python -m pytest tests/test_ci_non_regression_policy.py`
+**Résultat :** PASS (46/46)
+**Risques restants :** le plan Render restant gratuit, un cold-start reste possible sur la toute première requête après une longue inactivité — 90s couvre confortablement la durée mesurée mais n'élimine pas la cause racine (passage à un plan payant, hors périmètre technique de cette session). Warning `passlib`/`bcrypt` ("(trapped) error reading bcrypt version") observé au démarrage dans les mêmes logs — non bloquant (déjà intercepté par passlib, l'application démarre normalement juste après), connu et sans rapport avec cette investigation, non traité ici.
