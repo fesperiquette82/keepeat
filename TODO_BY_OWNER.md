@@ -40,8 +40,8 @@ Simplifié le 23/08 (à ta demande) : plus de domaine à acheter ni de DNS à co
 - [x] **Créer un compte email dédié** — fait le 24/08 : `keepeatfe@gmail.com`.
 - [x] **Activer la validation en 2 étapes + générer un mot de passe d'application** — fait le 24/08.
 - [x] **Renseigner sur Render** (`EMAIL_IMPORT_INBOX_ADDRESS`, `EMAIL_IMPORT_INBOX_APP_PASSWORD`, `EMAIL_IMPORT_CRON_TOKEN`) — posé via l'API Render le 24/08, service `keepeat-backend` redéployé (déploiement `dep-da6174m417fc7390p55g`, live).
-- [ ] **Ajouter le secret GitHub Actions `EMAIL_IMPORT_CRON_TOKEN`** (Settings → Secrets and variables → Actions du dépôt `fesperiquette82/keepeat`) avec la même valeur que sur Render — c'est lui qui déclenche le relevé automatique toutes les 30 minutes (`.github/workflows/email-import-cron.yml`). Pas faisable depuis Claude Code cloud : la gestion des secrets Actions est bloquée par la politique réseau de cet environnement. Valeur donnée dans la conversation du 24/08 à reporter telle quelle.
-- [ ] **Envoyer un vrai email de test transféré** une fois le secret GitHub ajouté, pour vérifier que les articles remontent bien dans le stock (nécessite d'avoir un compte premium dont l'email d'expédition correspond à celui utilisé dans l'app).
+- [x] **Ajouter le secret GitHub Actions `EMAIL_IMPORT_CRON_TOKEN`** — fait le 24/08. Le cron tourne bien (`processed=20` sur le premier run), mais **les 20 emails traités ont tous été rejetés « expéditeur non reconnu »** (logs Render) — probablement les emails automatiques de création du compte `keepeatfe@gmail.com`, ou le ticket de test envoyé depuis une adresse ne correspondant pas exactement à l'email du compte KeepEat. Voir le point suivant.
+- [ ] **Réessayer un email de test transféré** depuis l'adresse EXACTE de ton compte KeepEat (le mail forwardé doit avoir cette adresse en expéditeur `From:`), et vérifier dans l'app que les articles remontent bien dans le stock (nécessite un compte premium).
 
 ## 🟡 Optionnel — seulement si l'import Gmail (BUG-050) est relancé un jour
 
@@ -54,4 +54,4 @@ Simplifié le 23/08 (à ta demande) : plus de domaine à acheter ni de DNS à co
 
 ---
 
-*Dernière mise à jour : 2026-08-20, à l'issue des points 07 (catalogue), 01 (achat premium), recalibrage gratuit/premium, partage foyer et import de tickets par email.*
+*Dernière mise à jour : 2026-08-25, après activation de l'import de tickets par email (secret GitHub ajouté, test réel à refaire) et réparation des crons Alerts/Health Check (BUG-057, aucune action de ta part nécessaire sur ce point).*
