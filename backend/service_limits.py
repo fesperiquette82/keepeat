@@ -5,6 +5,8 @@ from datetime import datetime, timedelta, timezone
 from typing import Any
 
 from backend.app_core import utc_now
+from backend.food_defaults_service import ACTION_NAME as _FOOD_DEFAULTS_ACTION_NAME
+from backend.food_defaults_service import SERVICE_NAME as _FOOD_DEFAULTS_SERVICE_NAME
 
 
 def _parse_int_env(name: str) -> int | None:
@@ -111,6 +113,23 @@ async def build_external_services_quota_snapshot(*, service_usage_logs_col, api_
             "source_of_truth": "service_usage_logs:service_name=ai_recipes/action_name=generate_recipes",
             "pricing_note": os.getenv("SERVICE_PRICING_NOTE_GEMINI_RECIPES", "unknown"),
             "upgrade_note": os.getenv("SERVICE_UPGRADE_NOTE_GEMINI_RECIPES", "à renseigner"),
+        },
+        {
+            "service_key": "gemini_food_defaults",
+            "display_name": "Gemini Food Defaults",
+            "category": "ai",
+            "required_envs": ["GEMINI_FOOD_DEFAULTS_API_KEY", "GEMINI_OCR_API_KEY"],
+            "free_tier_limited": True,
+            "quota_env": "SERVICE_LIMIT_GEMINI_FOOD_DEFAULTS_REQUESTS_PER_MONTH",
+            "quota_period": "month",
+            "quota_unit": "requests",
+            "usage_loader": lambda: _usage_from_service_logs(
+                _FOOD_DEFAULTS_SERVICE_NAME, _FOOD_DEFAULTS_ACTION_NAME, month_start.isoformat(), next_month_start.isoformat()
+            ),
+            "usage_window": "current_month",
+            "source_of_truth": f"service_usage_logs:service_name={_FOOD_DEFAULTS_SERVICE_NAME}/action_name={_FOOD_DEFAULTS_ACTION_NAME}",
+            "pricing_note": os.getenv("SERVICE_PRICING_NOTE_GEMINI_FOOD_DEFAULTS", "unknown"),
+            "upgrade_note": os.getenv("SERVICE_UPGRADE_NOTE_GEMINI_FOOD_DEFAULTS", "à renseigner"),
         },
         {
             "service_key": "openfoodfacts",

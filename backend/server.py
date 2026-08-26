@@ -192,6 +192,7 @@ receipt_tickets_col = db["receipt_tickets"]
 ocr_normalizations_col = db["ocr_normalizations"]
 crash_reports_col = db["crash_reports"]
 households_col = db["households"]
+food_defaults_col = db["food_defaults"]
 
 _BACKEND_URL = os.getenv("BACKEND_URL", "https://keepeat-backend.onrender.com")
 _GOOGLE_ANDROID_PACKAGE = os.getenv("GOOGLE_ANDROID_PACKAGE", "com.fesperiquette.keepeat")
@@ -944,6 +945,7 @@ async def lifespan(app: FastAPI):
     await users_col.create_index("reset_token", sparse=True)
     await receipt_tickets_col.create_index([("status", 1), ("created_at", -1)])
     await receipt_tickets_col.create_index([("user_id", 1), ("created_at", -1)])
+    await food_defaults_col.create_index("key", unique=True)
     await _sync_shared_recipes_collection_from_catalog()
 
     # Les vérifications d'alertes (rappels, inactivité, péremption J-2/J-0, résumé
