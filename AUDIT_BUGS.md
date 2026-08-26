@@ -907,3 +907,17 @@ Deux points chauds identifiés par lecture de code :
 **Commandes exécutées :** `PYTHONPATH=backend python -m pytest backend/tests/test_ocr_service.py backend/tests/test_stock_item_ingestion.py -q`
 **Résultat :** PASS (83/83)
 **Risques restants :** aucun — `test_null_days_returns_none` et `test_zero_days_returns_same_date` confirment que le comportement sur `shelf_days` falsy n'a pas changé.
+
+## BUG-059 — Scan de ticket : une seule zone de stockage appliquée à tout le lot (ex. chips classées "Frigo")
+
+**Contexte :** capture d'écran utilisateur montrant "Chips pomme de terre truffe" classée au Frigo dans le stock. Cause identifiée : `frontend/app/scan-receipt.tsx` calculait un **vote majoritaire sur l'ensemble du ticket** (zone la plus fréquente parmi tous les produits détectés) puis appliquait cette **unique** zone à tous les articles lors de l'ajout (`handleAdd`), alors que Gemini classe déjà chaque article individuellement et qu'une fonction de zone par-article existait déjà sans être utilisée à cet endroit (`frontend/utils/receiptExpiry.ts::defaultReceiptZone`). Concrètement, un ticket contenant majoritairement des produits de frigo faisait classer au frigo même les produits secs (chips, pâtes, etc.). Par ailleurs, l'écran d'édition (`frontend/app/edit-product.tsx`) n'exposait aucun moyen de corriger la zone d'un article a posteriori.
+
+| ID | Sévérité | Statut | Résumé |
+|---|---|---|---|
+| BUG-059 | 🟠 IMPORTANT (donnée visiblement fausse en production) | `CORRIGÉ` | **scan-receipt.tsx** : le sélecteur de zone devient une **surcharge manuelle optionnelle** (`zoneOverride`, défaut `null`) au lieu d'un défaut calculé par vote majoritaire ; chaque produit reçoit désormais sa propre zone via `defaultReceiptZone(p)` sauf si l'utilisateur force explicitement une zone unique pour tout le ticket (chip actif re-tapable pour revenir à l'automatique). **edit-product.tsx** : ajout d'un sélecteur de zone de stockage (3 chips Frigo/Placard/Congélateur, mêmes conventions que `add-product.tsx`), envoyé dans les `updates` de `persistProductEdit` — permet désormais de corriger une zone erronée directement dans l'app. |
+
+**Fichiers modifiés :** `frontend/app/scan-receipt.tsx`, `frontend/app/edit-product.tsx`
+**Tests ajoutés/mis à jour :** `frontend/utils/receiptExpiry.test.ts` — nouveau test de non-régression confirmant qu'un produit de frigo et des chips (placard) dans le même ticket reçoivent chacun leur propre zone sans contamination croisée ; `frontend/utils/productEditFlow.test.ts` — nouveau test confirmant que `storageZone` est transmis tel quel par `persistProductEdit`.
+**Commandes exécutées :** `npm run lint && npx tsc --noEmit && npm run test:ci`
+**Résultat :** PASS (lint clean, tsc clean, 325/325 tests unitaires + intégration + smoke)
+**Risques restants :** aucun — le composant écran lui-même n'est pas testé unitairement (convention du dépôt : tests sur les fonctions pures), mais toute la logique de résolution de zone qu'il consomme (`defaultReceiptZone`, `computeReceiptItemExpiry`) reste couverte.

@@ -24,6 +24,13 @@ import { getThemeColors } from '../utils/theme';
 import { persistProductEdit, toApiExpiryDate } from '../utils/productEditFlow';
 
 type DateInputMode = 'duration' | 'date' | 'camera';
+type StorageZoneKey = 'frigo' | 'placard' | 'congelateur';
+
+const STORAGE_ZONES: { key: StorageZoneKey; fr: string; en: string; icon: string }[] = [
+  { key: 'frigo',       fr: 'Frigo',       en: 'Fridge',  icon: '🧊' },
+  { key: 'placard',     fr: 'Placard',      en: 'Pantry',  icon: '📦' },
+  { key: 'congelateur', fr: 'Congélateur',  en: 'Freezer', icon: '❄️' },
+];
 
 export default function EditProductScreen() {
   const router = useRouter();
@@ -41,6 +48,7 @@ export default function EditProductScreen() {
   const [quantity, setQuantity] = useState('');
   const [notes, setNotes] = useState('');
   const [expiryDate, setExpiryDate] = useState<Date | null>(null);
+  const [storageZone, setStorageZone] = useState<StorageZoneKey | null>(null);
   const [isSaving, setIsSaving] = useState(false);
 
   const [dateInputMode, setDateInputMode] = useState<DateInputMode>('date');
@@ -61,6 +69,7 @@ export default function EditProductScreen() {
       setBrand(foundItem.brand || '');
       setQuantity(foundItem.quantity || '');
       setNotes(foundItem.notes || '');
+      setStorageZone(foundItem.storageZone ?? null);
       if (foundItem.expiry_date) {
         try {
           setExpiryDate(parseISO(foundItem.expiry_date));
@@ -100,6 +109,7 @@ export default function EditProductScreen() {
         quantity: quantity.trim() || undefined,
         expiry_date: toApiExpiryDate(expiryDate),
         notes: notes.trim() || undefined,
+        storageZone: storageZone ?? undefined,
         },
       });
       if (!didPersist) {
@@ -178,6 +188,26 @@ export default function EditProductScreen() {
               placeholder={t('exampleQuantity')}
               placeholderTextColor={C.textMid}
             />
+          </View>
+
+          <View style={styles.inputGroup}>
+            <Text style={styles.label}>{language === 'fr' ? 'Zone de stockage' : 'Storage zone'}</Text>
+            <View style={styles.zoneRow}>
+              {STORAGE_ZONES.map(z => {
+                const active = storageZone === z.key;
+                return (
+                  <TouchableOpacity
+                    key={z.key}
+                    style={[styles.zoneChip, active && styles.zoneChipActive]}
+                    onPress={() => setStorageZone(prev => (prev === z.key ? null : z.key))}
+                  >
+                    <Text style={[styles.zoneChipText, active && styles.zoneChipTextActive]}>
+                      {z.icon} {language === 'fr' ? z.fr : z.en}
+                    </Text>
+                  </TouchableOpacity>
+                );
+              })}
+            </View>
           </View>
 
           <View style={styles.inputGroup}>
@@ -365,6 +395,15 @@ const createStyles = (C: ReturnType<typeof getThemeColors>) => StyleSheet.create
     backgroundColor: C.surfaceMuted, borderRadius: 10, padding: 14, gap: 10,
   },
   dateButtonText: { flex: 1, fontSize: 16, color: C.text },
+
+  zoneRow: { flexDirection: 'row', gap: 8, flexWrap: 'wrap' },
+  zoneChip: {
+    paddingVertical: 8, paddingHorizontal: 14, borderRadius: 999,
+    backgroundColor: C.surfaceMuted, borderWidth: 1, borderColor: C.border,
+  },
+  zoneChipActive: { backgroundColor: C.primaryLight, borderColor: C.primary },
+  zoneChipText: { color: C.textMid, fontSize: 13, fontWeight: '600' },
+  zoneChipTextActive: { color: C.primary },
 
   currentDateBox: {
     flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between',

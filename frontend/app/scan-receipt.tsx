@@ -94,9 +94,14 @@ export default function ScanReceiptScreen() {
   const [products, setProducts] = useState<ReceiptProduct[]>([]);
   const [selected, setSelected] = useState<Set<number>>(new Set());
   const [isSaving, setIsSaving] = useState(false);
-  const [storageZone, setStorageZone] = useState<StorageZone>('fridge');
+  // null = pas de surcharge : chaque produit reçoit sa propre zone déduite
+  // de sa catégorie (defaultReceiptZone). Un choix explicite ici force la
+  // même zone pour tout le ticket.
+  const [zoneOverride, setZoneOverride] = useState<StorageZone | null>(null);
   const [pendingImage, setPendingImage] = useState<string | null>(null);
   const [isReporting, setIsReporting] = useState(false);
+
+  const effectiveZone = (p: ReceiptProduct): StorageZone => zoneOverride ?? defaultReceiptZone(p);
 
   // ── Capture & analyse ──────────────────────────────────────────────────────
 
@@ -120,13 +125,7 @@ export default function ScanReceiptScreen() {
         return;
       }
 
-      // Choisir la zone par défaut à partir de la majorité des produits
-      const zoneCounts: Record<StorageZone, number> = { fridge: 0, pantry: 0, freezer: 0 };
-      detected.forEach(p => { zoneCounts[defaultReceiptZone(p)]++; });
-      const dominantZone = (Object.entries(zoneCounts) as [StorageZone, number][])
-        .sort((a, b) => b[1] - a[1])[0][0];
-      setStorageZone(dominantZone);
-
+      setZoneOverride(null);
       setProducts(detected);
       setSelected(new Set(detected.map((_, i) => i)));
       setMode('confirm');
@@ -204,18 +203,19 @@ export default function ScanReceiptScreen() {
     setIsSaving(true);
     try {
       await Promise.all(
-        toAdd.map(p =>
-          addItem({
+        toAdd.map(p => {
+          const zone = effectiveZone(p);
+          return addItem({
             name:          p.name,
             brand:         p.brand ?? undefined,
             image_url:     p.image_url ?? undefined,
             category:      p.category,
             food_category: p.food_category,
             quantity:      p.quantity != null ? String(p.quantity) : undefined,
-            expiry_date:   computeReceiptItemExpiry(p, storageZone),
-            storageZone:   storageZone === 'fridge' ? 'frigo' : storageZone === 'freezer' ? 'congelateur' : 'placard',
-          }, { source: 'receipt_ocr' }),
-        ),
+            expiry_date:   computeReceiptItemExpiry(p, zone),
+            storageZone:   zone === 'fridge' ? 'frigo' : zone === 'freezer' ? 'congelateur' : 'placard',
+          }, { source: 'receipt_ocr' });
+        }),
       );
       await fetchHistory();
       router.replace('/');
@@ -423,18 +423,18 @@ export default function ScanReceiptScreen() {
       {/* Subtitle */}
       <Text style={styles.confirmSub}>
         {isFr
-          ? 'Sélectionnez les produits et choisissez la zone de stockage pour les dates auto.'
-          : 'Select products and choose storage zone for auto expiry dates.'}
+          ? 'Sélectionnez les produits. Zone de stockage automatique par produit — forcez-en une pour tout le ticket si besoin.'
+          : 'Select products. Storage zone is automatic per product — force one for the whole receipt if needed.'}
       </Text>
 
-      {/* Storage zone selector */}
+      {/* Storage zone override (optionnel, applique la même zone à tout le ticket) */}
       <View style={styles.zoneRow}>
-        <Text style={styles.zoneLabel}>{isFr ? 'Zone :' : 'Zone:'}</Text>
+        <Text style={styles.zoneLabel}>{isFr ? 'Forcer :' : 'Force:'}</Text>
         {STORAGE_ZONES.map(z => (
           <TouchableOpacity
             key={z.key}
-            style={[styles.zoneChip, storageZone === z.key && styles.zoneChipActive]}
-            onPress={() => setStorageZone(z.key)}
+            style={[styles.zoneChip, zoneOverride === z.key && styles.zoneChipActive]}
+            onPress={() => setZoneOverride(current => (current === z.key ? null : z.key))}
           >
             <Text style={styles.zoneChipText}>{z.icon} {isFr ? z.fr : z.en}</Text>
           </TouchableOpacity>
@@ -468,7 +468,7 @@ export default function ScanReceiptScreen() {
               <View style={styles.productInfo}>
                 <Text style={styles.productName}>{p.name}</Text>
                 {(() => {
-                  const expiry = computeReceiptItemExpiry(p, storageZone);
+                  const expiry = computeReceiptItemExpiry(p, effectiveZone(p));
                   if (expiry) {
                     const d = new Date(expiry);
                     const label = d.toLocaleDateString(isFr ? 'fr-FR' : 'en-GB', { day: '2-digit', month: 'short', year: 'numeric' });
