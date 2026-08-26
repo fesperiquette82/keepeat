@@ -390,12 +390,20 @@ def _parse_receipt_json(text: str) -> tuple[str | None, str | None, str | None, 
 def _compute_expiry(purchase_date_str: str | None, shelf_days: int | None) -> str | None:
     """Calcule la date d'expiration : date_achat + durée_conservation.
 
-    Retourne None si la date d'achat ou la durée est absente/invalide.
+    Si la date d'achat est absente ou invalide, la date du jour est utilisée
+    comme base plutôt que de perdre l'estimation. Retourne None uniquement
+    si la durée de conservation elle-même est absente/nulle.
     """
-    if not purchase_date_str or not shelf_days:
+    if not shelf_days:
         return None
+    base_date = utc_now().date()
+    if purchase_date_str:
+        try:
+            base_date = date.fromisoformat(purchase_date_str)
+        except Exception:
+            pass
     try:
-        return (date.fromisoformat(purchase_date_str) + timedelta(days=shelf_days)).isoformat()
+        return (base_date + timedelta(days=shelf_days)).isoformat()
     except Exception:
         return None
 

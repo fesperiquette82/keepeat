@@ -893,3 +893,17 @@ Deux points chauds identifiés par lecture de code :
 **Commandes exécutées :** `python -m pytest tests/test_ci_non_regression_policy.py`
 **Résultat :** PASS (46/46)
 **Risques restants :** le plan Render restant gratuit, un cold-start reste possible sur la toute première requête après une longue inactivité — 90s couvre confortablement la durée mesurée mais n'élimine pas la cause racine (passage à un plan payant, hors périmètre technique de cette session). Warning `passlib`/`bcrypt` ("(trapped) error reading bcrypt version") observé au démarrage dans les mêmes logs — non bloquant (déjà intercepté par passlib, l'application démarre normalement juste après), connu et sans rapport avec cette investigation, non traité ici.
+
+## BUG-058 — Qualité des données stock : "Date inconnue" évitable perdue faute de date d'achat
+
+**Contexte :** demande utilisateur suite à une capture d'écran du stock montrant des articles sans date de péremption et une zone de stockage erronée (chips classées "Frigo"). Investigation : le symptôme "zone erronée" est un bug d'interface distinct (scan-receipt.tsx applique un vote majoritaire à tout le ticket — traité séparément, BUG-059) ; le "Date inconnue" a une cause backend précise traitée ici : `ocr_service._compute_expiry(purchase_date_str, shelf_days)` retournait `None` dès que `purchase_date_str` était absent ou invalide, même quand une durée de conservation par défaut par catégorie (`SHELF_BY_CATEGORY`) était disponible — perdant une estimation pourtant calculable. Ce cas se produit sur tout ticket/email où Gemini ne renvoie pas de date d'achat exploitable.
+
+| ID | Sévérité | Statut | Résumé |
+|---|---|---|---|
+| BUG-058 | 🟡 MINEUR (perte d'information, pas de donnée fausse) | `CORRIGÉ` | `_compute_expiry` utilise désormais la date du jour comme base quand `purchase_date_str` est absent/invalide, au lieu de renvoyer `None` — ne renvoie `None` que si `shelf_days` lui-même est absent/nul (comportement inchangé sur ce point). Bénéficie à la fois au scan de ticket caméra et à l'import par email. |
+
+**Fichiers modifiés :** `backend/ocr_service.py`
+**Tests ajoutés/mis à jour :** `backend/tests/test_ocr_service.py` — `TestComputeExpiry::test_null_date_falls_back_to_today` et `test_invalid_date_falls_back_to_today` (remplacent les anciens tests `*_returns_none`, avec `utc_now` mocké pour un résultat déterministe) ; `TestOcrReceiptMocked::test_nominal_success_v1_compat` mis à jour (l'article sans date d'achat obtient désormais une `expiry_date_fridge` basée sur aujourd'hui au lieu de `None`).
+**Commandes exécutées :** `PYTHONPATH=backend python -m pytest backend/tests/test_ocr_service.py backend/tests/test_stock_item_ingestion.py -q`
+**Résultat :** PASS (83/83)
+**Risques restants :** aucun — `test_null_days_returns_none` et `test_zero_days_returns_same_date` confirment que le comportement sur `shelf_days` falsy n'a pas changé.

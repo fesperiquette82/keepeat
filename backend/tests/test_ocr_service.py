@@ -8,6 +8,7 @@ from __future__ import annotations
 import importlib
 import json
 import sys
+from datetime import date, datetime, timedelta, timezone
 from pathlib import Path
 from unittest.mock import AsyncMock, MagicMock, call, patch
 
@@ -379,7 +380,9 @@ class TestOcrReceiptMocked:
         assert items[0]["food_category"] == "frais"
         assert items[0]["shelf_life_fridge"] == 7
         assert items[0]["purchase_date"] is None
-        assert items[0]["expiry_date_fridge"] is None
+        # Pas de date d'achat connue → estimation basée sur aujourd'hui plutôt
+        # que perdue (cf. BUG "Date inconnue" / _compute_expiry fallback).
+        assert items[0]["expiry_date_fridge"] == (date.today() + timedelta(days=7)).isoformat()
         assert items[1]["name"] == "Pâtes"
         assert items[1]["shelf_life_pantry"] == 365
 
@@ -648,14 +651,18 @@ class TestComputeExpiry:
         # 2024 est bissextile → +365j depuis jan donne jan de l'année suivante - 1 jour
         assert _compute_expiry("2024-01-15", 365) == "2025-01-14"
 
-    def test_null_date_returns_none(self):
-        assert _compute_expiry(None, 7) is None
+    def test_null_date_falls_back_to_today(self):
+        with patch("ocr_service.utc_now") as mock_utc_now:
+            mock_utc_now.return_value = datetime(2024, 1, 15, tzinfo=timezone.utc)
+            assert _compute_expiry(None, 7) == "2024-01-22"
 
     def test_null_days_returns_none(self):
         assert _compute_expiry("2024-01-15", None) is None
 
-    def test_invalid_date_returns_none(self):
-        assert _compute_expiry("not-a-date", 7) is None
+    def test_invalid_date_falls_back_to_today(self):
+        with patch("ocr_service.utc_now") as mock_utc_now:
+            mock_utc_now.return_value = datetime(2024, 1, 15, tzinfo=timezone.utc)
+            assert _compute_expiry("not-a-date", 7) == "2024-01-22"
 
     def test_zero_days_returns_same_date(self):
         assert _compute_expiry("2024-01-15", 0) is None  # 0 est falsy
