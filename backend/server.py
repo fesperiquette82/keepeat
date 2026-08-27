@@ -119,6 +119,7 @@ from backend.household_service import (
 from backend import gmail_oauth_service
 from backend import email_import_service
 from backend.ocr_service import SHELF_BY_CATEGORY, OcrApiError, ocr_receipt, parse_email_receipt_text
+from backend.food_defaults_service import resolve_food_defaults
 from backend.priority_refresh import build_priority_refresh_state
 from backend.observability import (
     build_activation_funnel,
@@ -192,6 +193,7 @@ receipt_tickets_col = db["receipt_tickets"]
 ocr_normalizations_col = db["ocr_normalizations"]
 crash_reports_col = db["crash_reports"]
 households_col = db["households"]
+food_defaults_col = db["food_defaults"]
 
 _BACKEND_URL = os.getenv("BACKEND_URL", "https://keepeat-backend.onrender.com")
 _GOOGLE_ANDROID_PACKAGE = os.getenv("GOOGLE_ANDROID_PACKAGE", "com.fesperiquette.keepeat")
@@ -944,6 +946,7 @@ async def lifespan(app: FastAPI):
     await users_col.create_index("reset_token", sparse=True)
     await receipt_tickets_col.create_index([("status", 1), ("created_at", -1)])
     await receipt_tickets_col.create_index([("user_id", 1), ("created_at", -1)])
+    await food_defaults_col.create_index("key", unique=True)
     await _sync_shared_recipes_collection_from_catalog()
 
     # Les vérifications d'alertes (rappels, inactivité, péremption J-2/J-0, résumé
@@ -2386,6 +2389,7 @@ async def _process_inbound_email_message(sender_email: str, subject: str, email_
             email_text=email_text,
             normalizations_col=ocr_normalizations_col,
             products_cache_col=products_cache_col,
+            food_defaults_col=food_defaults_col,
         )
     except Exception as exc:
         await _refund_feature_quota(user_id=uid, feature=FEATURE_OCR, quota_context=quota_context)
@@ -2666,6 +2670,41 @@ def _resolve_stock_storage_zone(item: StockItemCreate, food_category: str) -> st
         return "placard"
     return None
 
+
+_ZONE_TO_SHELF_LIFE_KEY = {"frigo": "fridge", "placard": "pantry", "congelateur": "freezer"}
+
+
+async def _apply_food_defaults_fallback(
+    *, name: str, food_category: str, storage_zone: str | None, expiry_date: str | None,
+) -> tuple[str | None, str | None]:
+    """Complète storageZone/expiry_date manquants via le cache food_defaults,
+    IA (Gemini) en tout dernier recours sur cache-miss uniquement (cf.
+    resolve_food_defaults — plafond mensuel global + repli silencieux déjà
+    géré à l'intérieur). Ne modifie jamais une valeur déjà connue."""
+    if storage_zone is not None and expiry_date:
+        return storage_zone, expiry_date
+    gemini_key = os.environ.get("GEMINI_FOOD_DEFAULTS_API_KEY") or os.environ.get("GEMINI_OCR_API_KEY") or None
+    food_defaults = await resolve_food_defaults(
+        name=name,
+        food_category=food_category,
+        food_defaults_col=food_defaults_col,
+        service_usage_logs_col=service_usage_logs_col,
+        gemini_api_key=gemini_key,
+        gemini_model=os.environ.get("GEMINI_FOOD_DEFAULTS_MODEL") or os.environ.get("GEMINI_OCR_MODEL"),
+    )
+    if not food_defaults:
+        return storage_zone, expiry_date
+
+    resolved_zone = storage_zone or food_defaults.get("storage_zone")
+    resolved_expiry = expiry_date
+    if not resolved_expiry:
+        shelf_days_map = food_defaults.get("shelf_life_days") or {}
+        shelf_key = _ZONE_TO_SHELF_LIFE_KEY.get(resolved_zone or "placard", "pantry")
+        days = shelf_days_map.get(shelf_key)
+        if isinstance(days, int) and days > 0:
+            resolved_expiry = (utc_now().date() + timedelta(days=days)).isoformat()
+    return resolved_zone, resolved_expiry
+
 @api_router.get("/stock", response_model=List[StockItem])
 async def get_stock(
     status: str = "active",
@@ -2693,6 +2732,12 @@ async def add_stock(
 ):
     resolved_food_category = _resolve_stock_food_category(item)
     resolved_storage_zone = _resolve_stock_storage_zone(item, resolved_food_category)
+    resolved_storage_zone, resolved_expiry_date = await _apply_food_defaults_fallback(
+        name=item.name,
+        food_category=resolved_food_category,
+        storage_zone=resolved_storage_zone,
+        expiry_date=item.expiry_date,
+    )
     doc = item.model_dump()
     doc["user_id"] = current_user["id"]
     doc["added_date"] = utc_now().isoformat()
@@ -2701,6 +2746,7 @@ async def add_stock(
     doc["thrown_date"] = None
     doc["food_category"] = resolved_food_category
     doc["storageZone"] = resolved_storage_zone
+    doc["expiry_date"] = resolved_expiry_date
 
     res = await stock_col.insert_one(doc)
     created = await stock_col.find_one({"_id": res.inserted_id})
@@ -3085,6 +3131,25 @@ async def get_product(
         metadata_json={"barcode": barcode, "found": bool(product)},
     )
     shelf_life = infer_shelf_life(product if product else ProductBase(barcode=barcode))
+    if shelf_life.category_fr == "Général" and product and product.name.strip():
+        gemini_key = os.environ.get("GEMINI_FOOD_DEFAULTS_API_KEY") or os.environ.get("GEMINI_OCR_API_KEY") or None
+        food_defaults = await resolve_food_defaults(
+            name=product.name,
+            food_category=infer_food_category(product),
+            food_defaults_col=food_defaults_col,
+            service_usage_logs_col=service_usage_logs_col,
+            gemini_api_key=gemini_key,
+            gemini_model=os.environ.get("GEMINI_FOOD_DEFAULTS_MODEL") or os.environ.get("GEMINI_OCR_MODEL"),
+        )
+        if food_defaults:
+            shelf_days = food_defaults.get("shelf_life_days") or {}
+            shelf_life = ShelfLife(
+                category_fr=shelf_life.category_fr,
+                refrigerator_days=shelf_days.get("fridge"),
+                freezer_days=shelf_days.get("freezer"),
+                pantry_days=shelf_days.get("pantry"),
+                tips_fr=shelf_life.tips_fr,
+            )
     return ProductLookupResponse(
         found=product is not None,
         product=product,
@@ -4123,6 +4188,7 @@ async def ocr_receipt_route(
                 current_user=current_user,
                 normalizations_col=ocr_normalizations_col,
                 products_cache_col=products_cache_col,
+                food_defaults_col=food_defaults_col,
             )
         except HTTPException as exc:
             await _refund_feature_quota(user_id=current_user["id"], feature=FEATURE_OCR, quota_context=quota_context)

@@ -12,6 +12,7 @@ import httpx
 from fastapi import HTTPException, Request
 
 from backend.app_core import logger, utc_now
+from backend.food_defaults_service import enrich_food_defaults_from_static
 
 
 class OcrApiError(RuntimeError):
@@ -208,6 +209,18 @@ def _decode_base64_image(b64_data: str) -> bytes:
         raise HTTPException(status_code=400, detail="Image base64 invalide") from exc
 
 
+def _default_zone_from_shelf(shelf: dict[str, int | None]) -> str:
+    """Même règle que le frontend (receiptExpiry.ts::defaultReceiptZone) : la
+    zone où l'aliment a une durée de conservation connue, frigo en priorité."""
+    if shelf.get("fridge"):
+        return "frigo"
+    if shelf.get("pantry"):
+        return "placard"
+    if shelf.get("freezer"):
+        return "congelateur"
+    return "placard"
+
+
 def _normalize_receipt_item(item: dict[str, Any], purchase_date: str | None) -> dict[str, Any] | None:
     raw_title = str(item.get("raw_title") or item.get("title") or item.get("name") or "").strip()
     normalized_title = str(item.get("normalized_title") or item.get("name") or raw_title).strip()
@@ -273,6 +286,7 @@ def _normalize_receipt_item(item: dict[str, Any], purchase_date: str | None) -> 
         "expiry_date_fridge": _compute_expiry(purchase_date, shelf["fridge"]),
         "expiry_date_pantry": _compute_expiry(purchase_date, shelf["pantry"]),
         "expiry_date_freezer": _compute_expiry(purchase_date, shelf["freezer"]),
+        "storage_zone": _default_zone_from_shelf(shelf),
     }
 
 
@@ -390,12 +404,20 @@ def _parse_receipt_json(text: str) -> tuple[str | None, str | None, str | None, 
 def _compute_expiry(purchase_date_str: str | None, shelf_days: int | None) -> str | None:
     """Calcule la date d'expiration : date_achat + durée_conservation.
 
-    Retourne None si la date d'achat ou la durée est absente/invalide.
+    Si la date d'achat est absente ou invalide, la date du jour est utilisée
+    comme base plutôt que de perdre l'estimation. Retourne None uniquement
+    si la durée de conservation elle-même est absente/nulle.
     """
-    if not purchase_date_str or not shelf_days:
+    if not shelf_days:
         return None
+    base_date = utc_now().date()
+    if purchase_date_str:
+        try:
+            base_date = date.fromisoformat(purchase_date_str)
+        except Exception:
+            pass
     try:
-        return (date.fromisoformat(purchase_date_str) + timedelta(days=shelf_days)).isoformat()
+        return (base_date + timedelta(days=shelf_days)).isoformat()
     except Exception:
         return None
 
@@ -453,6 +475,7 @@ async def ocr_receipt(
     request_payload: dict[str, Any] | None = None,
     normalizations_col: Any = None,
     products_cache_col: Any = None,
+    food_defaults_col: Any = None,
 ) -> dict[str, Any]:
     gemini_key = os.environ.get("GEMINI_OCR_API_KEY", "")
     if not gemini_key:
@@ -513,6 +536,7 @@ async def ocr_receipt(
         current_user=current_user,
         normalizations_col=normalizations_col,
         products_cache_col=products_cache_col,
+        food_defaults_col=food_defaults_col,
         mime_type=mime_type,
         image_b64_len=len(image_b64),
     )
@@ -524,6 +548,7 @@ async def parse_email_receipt_text(
     email_text: str,
     normalizations_col: Any = None,
     products_cache_col: Any = None,
+    food_defaults_col: Any = None,
 ) -> dict[str, Any]:
     """Variante texte de ocr_receipt() (BUG-051 — import automatique par email) :
     même pipeline Gemini + normalisation/enrichissement, mais l'entrée est le texte
@@ -554,6 +579,7 @@ async def parse_email_receipt_text(
         current_user=current_user,
         normalizations_col=normalizations_col,
         products_cache_col=products_cache_col,
+        food_defaults_col=food_defaults_col,
         mime_type=None,
         image_b64_len=None,
     )
@@ -567,6 +593,7 @@ async def _call_gemini_receipt_parser(
     current_user: dict[str, Any],
     normalizations_col: Any,
     products_cache_col: Any,
+    food_defaults_col: Any = None,
     mime_type: str | None,
     image_b64_len: int | None,
 ) -> dict[str, Any]:
@@ -831,6 +858,17 @@ async def _call_gemini_receipt_parser(
         except Exception as exc:
             logger.warning(
                 "OCR normalization enrich failed — user=%s: %s",
+                current_user["id"], exc,
+            )
+
+    # ── Enrichissement cache food_defaults (zéro coût IA — catégorie déjà
+    # classée par ce même appel Gemini, silencieux si erreur) ─────────────────
+    if food_defaults_col is not None and result:
+        try:
+            await enrich_food_defaults_from_static(food_defaults_col, result)
+        except Exception as exc:
+            logger.warning(
+                "OCR food_defaults enrich failed — user=%s: %s",
                 current_user["id"], exc,
             )
 

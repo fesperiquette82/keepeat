@@ -44,3 +44,18 @@ test('toApiExpiryDate normalise les dates au format API', () => {
   assert.equal(value, '2026-04-20');
   assert.equal(toApiExpiryDate(null), undefined);
 });
+
+test("(régression edit-product) persistProductEdit transmet storageZone sans le modifier", async () => {
+  let receivedUpdates: unknown;
+  await persistProductEdit({
+    itemId: 'item-3',
+    updates: { name: 'Chips pomme de terre truffe', storageZone: 'placard' },
+    updateItem: async (_itemId, updates) => {
+      receivedUpdates = updates;
+      return { id: 'item-3' };
+    },
+    fetchStock: async () => {},
+  });
+
+  assert.deepEqual(receivedUpdates, { name: 'Chips pomme de terre truffe', storageZone: 'placard' });
+});

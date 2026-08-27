@@ -100,6 +100,23 @@ def test_service_with_known_quota_and_unknown_usage(monkeypatch):
     assert item["status"] == "unknown"
 
 
+def test_gemini_food_defaults_service_visible_with_usage(monkeypatch):
+    # Pas de clé dédiée à configurer : la clé OCR existante suffit (cf.
+    # food_defaults_service.py, réutilisation par défaut de GEMINI_OCR_API_KEY).
+    monkeypatch.setenv("GEMINI_OCR_API_KEY", "x")
+    monkeypatch.setenv("SERVICE_LIMIT_GEMINI_FOOD_DEFAULTS_REQUESTS_PER_MONTH", "200")
+    payload = asyncio.run(build_external_services_quota_snapshot(
+        service_usage_logs_col=FakeCollection({("ai_food_defaults", "resolve_food_defaults"): 12}),
+        api_request_logs_col=FakeCollection({}, api_count=0),
+    ))
+    item = next(row for row in payload["services"] if row["service_key"] == "gemini_food_defaults")
+    assert item["configured"] is True
+    assert item["usage_current_period"] == 12
+    assert item["quota_limit_value"] == 200
+    assert item["usage_remaining"] == 188
+    assert item["status"] == "ok"
+
+
 def test_payload_serialization_stable(monkeypatch):
     monkeypatch.setenv("GEMINI_OCR_API_KEY", "x")
     monkeypatch.setenv("SERVICE_LIMIT_GEMINI_OCR_REQUESTS_PER_MONTH", "100")

@@ -8,6 +8,7 @@ from __future__ import annotations
 import importlib
 import json
 import sys
+from datetime import date, datetime, timedelta, timezone
 from pathlib import Path
 from unittest.mock import AsyncMock, MagicMock, call, patch
 
@@ -21,6 +22,7 @@ from ocr_service import (
     OcrApiError,
     _decode_base64_image,
     _compute_expiry,
+    _default_zone_from_shelf,
     _detect_mime_type,
     _enrich_normalizations,
     _extract_gemini_text,
@@ -379,7 +381,9 @@ class TestOcrReceiptMocked:
         assert items[0]["food_category"] == "frais"
         assert items[0]["shelf_life_fridge"] == 7
         assert items[0]["purchase_date"] is None
-        assert items[0]["expiry_date_fridge"] is None
+        # Pas de date d'achat connue → estimation basée sur aujourd'hui plutôt
+        # que perdue (cf. BUG "Date inconnue" / _compute_expiry fallback).
+        assert items[0]["expiry_date_fridge"] == (date.today() + timedelta(days=7)).isoformat()
         assert items[1]["name"] == "Pâtes"
         assert items[1]["shelf_life_pantry"] == 365
 
@@ -648,14 +652,18 @@ class TestComputeExpiry:
         # 2024 est bissextile → +365j depuis jan donne jan de l'année suivante - 1 jour
         assert _compute_expiry("2024-01-15", 365) == "2025-01-14"
 
-    def test_null_date_returns_none(self):
-        assert _compute_expiry(None, 7) is None
+    def test_null_date_falls_back_to_today(self):
+        with patch("ocr_service.utc_now") as mock_utc_now:
+            mock_utc_now.return_value = datetime(2024, 1, 15, tzinfo=timezone.utc)
+            assert _compute_expiry(None, 7) == "2024-01-22"
 
     def test_null_days_returns_none(self):
         assert _compute_expiry("2024-01-15", None) is None
 
-    def test_invalid_date_returns_none(self):
-        assert _compute_expiry("not-a-date", 7) is None
+    def test_invalid_date_falls_back_to_today(self):
+        with patch("ocr_service.utc_now") as mock_utc_now:
+            mock_utc_now.return_value = datetime(2024, 1, 15, tzinfo=timezone.utc)
+            assert _compute_expiry("not-a-date", 7) == "2024-01-22"
 
     def test_zero_days_returns_same_date(self):
         assert _compute_expiry("2024-01-15", 0) is None  # 0 est falsy
@@ -775,3 +783,78 @@ class TestNormalizeReceiptItemBrandQuantity:
         assert result is not None
         assert result["brand"] == "Yoplait"
         assert result["quantity"] == 4
+
+
+# ── _default_zone_from_shelf / storage_zone (BUG-060) ───────────────────────────
+
+class TestDefaultZoneFromShelf:
+    def test_fridge_priority(self):
+        assert _default_zone_from_shelf({"fridge": 7, "pantry": 365, "freezer": None}) == "frigo"
+
+    def test_pantry_when_no_fridge(self):
+        assert _default_zone_from_shelf({"fridge": None, "pantry": 180, "freezer": None}) == "placard"
+
+    def test_freezer_when_only_freezer(self):
+        assert _default_zone_from_shelf({"fridge": None, "pantry": None, "freezer": 90}) == "congelateur"
+
+    def test_pantry_fallback_when_nothing_known(self):
+        assert _default_zone_from_shelf({"fridge": None, "pantry": None, "freezer": None}) == "placard"
+
+
+class TestNormalizeReceiptItemStorageZone:
+    def test_chips_category_gets_pantry_zone_not_fridge(self):
+        # Régression BUG-059/060 : un produit d'épicerie sèche (ex. chips) ne
+        # doit jamais recevoir la zone frigo, quel que soit le reste du ticket.
+        item = {"raw_title": "CHIPS TRUFFE", "normalized_title": "Chips pomme de terre truffe", "category": "epicerie"}
+        result = _normalize_receipt_item(item, None)
+        assert result is not None
+        assert result["storage_zone"] == "placard"
+
+    def test_fresh_category_gets_fridge_zone(self):
+        item = {"raw_title": "LAIT 1L", "normalized_title": "Lait demi-écrémé", "category": "frais"}
+        result = _normalize_receipt_item(item, None)
+        assert result is not None
+        assert result["storage_zone"] == "frigo"
+
+
+# ── enrichissement food_defaults (BUG-060) ──────────────────────────────────────
+
+class TestOcrReceiptFoodDefaultsEnrichment:
+    @pytest.mark.anyio
+    async def test_enrich_called_when_food_defaults_col_provided(self, monkeypatch):
+        monkeypatch.setenv("GEMINI_OCR_API_KEY", "fake-key")
+        products = [{"name": "Chips pomme de terre truffe", "category": "epicerie"}]
+        resp = _gemini_ok_response(products)
+        food_defaults_col = MagicMock()
+        with patch("ocr_service.httpx.AsyncClient") as mock_client, \
+             patch("ocr_service.enrich_food_defaults_from_static", new=AsyncMock()) as mock_enrich:
+            mock_client.return_value.__aenter__ = AsyncMock(return_value=MagicMock(post=AsyncMock(return_value=resp)))
+            mock_client.return_value.__aexit__ = AsyncMock(return_value=False)
+            await ocr_receipt(_make_request(), _make_user(), food_defaults_col=food_defaults_col)
+        mock_enrich.assert_awaited_once()
+        assert mock_enrich.await_args.args[0] is food_defaults_col
+
+    @pytest.mark.anyio
+    async def test_enrich_not_called_when_food_defaults_col_absent(self, monkeypatch):
+        monkeypatch.setenv("GEMINI_OCR_API_KEY", "fake-key")
+        products = [{"name": "Chips pomme de terre truffe", "category": "epicerie"}]
+        resp = _gemini_ok_response(products)
+        with patch("ocr_service.httpx.AsyncClient") as mock_client, \
+             patch("ocr_service.enrich_food_defaults_from_static", new=AsyncMock()) as mock_enrich:
+            mock_client.return_value.__aenter__ = AsyncMock(return_value=MagicMock(post=AsyncMock(return_value=resp)))
+            mock_client.return_value.__aexit__ = AsyncMock(return_value=False)
+            await ocr_receipt(_make_request(), _make_user())
+        mock_enrich.assert_not_awaited()
+
+    @pytest.mark.anyio
+    async def test_enrich_failure_does_not_break_ocr_receipt(self, monkeypatch):
+        monkeypatch.setenv("GEMINI_OCR_API_KEY", "fake-key")
+        products = [{"name": "Chips pomme de terre truffe", "category": "epicerie"}]
+        resp = _gemini_ok_response(products)
+        food_defaults_col = MagicMock()
+        with patch("ocr_service.httpx.AsyncClient") as mock_client, \
+             patch("ocr_service.enrich_food_defaults_from_static", new=AsyncMock(side_effect=RuntimeError("boom"))):
+            mock_client.return_value.__aenter__ = AsyncMock(return_value=MagicMock(post=AsyncMock(return_value=resp)))
+            mock_client.return_value.__aexit__ = AsyncMock(return_value=False)
+            result = await ocr_receipt(_make_request(), _make_user(), food_defaults_col=food_defaults_col)
+        assert len(result["items"]) == 1
