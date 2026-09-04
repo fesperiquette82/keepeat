@@ -121,9 +121,9 @@ def _imap_config() -> dict[str, Any]:
 def fetch_unseen_emails(*, limit: int = 20) -> list[dict[str, Any]]:
     """Se connecte à la boîte partagée et retourne les emails non lus (jusqu'à
     `limit`), sous forme de dicts {"uid": bytes, "sender": str, "subject": str,
-    "text": str}. Ne marque rien comme lu — c'est à l'appelant de le faire via
-    mark_seen() une fois chaque email traité (un par un, pour ne jamais perdre
-    un ticket si le process s'interrompt en cours de lot)."""
+    "text": str}. Ne déplace rien — c'est à l'appelant de le faire via
+    move_to_processed() une fois chaque email traité (un par un, pour ne
+    jamais perdre un ticket si le process s'interrompt en cours de lot)."""
     config = _imap_config()
     if not config["address"] or not config["password"]:
         return []
@@ -157,7 +157,29 @@ def fetch_unseen_emails(*, limit: int = 20) -> list[dict[str, Any]]:
     return results
 
 
-def mark_seen(uid: bytes) -> None:
+_PROCESSED_MAILBOX = "KeepEat/Traites"
+
+
+def _ensure_processed_mailbox(conn: imaplib.IMAP4_SSL) -> None:
+    """Crée le dossier de destination s'il n'existe pas déjà — idempotent :
+    un CREATE sur un dossier existant renvoie une erreur IMAP sans
+    conséquence, qu'on ignore silencieusement plutôt que de la traiter
+    comme un échec de move_to_processed()."""
+    try:
+        conn.create(_PROCESSED_MAILBOX)
+    except Exception:
+        pass
+
+
+def move_to_processed(uid: bytes) -> None:
+    """Sort l'email de l'INBOX vers `_PROCESSED_MAILBOX` une fois sa
+    tentative de traitement terminée (réussie ou non) — remplace l'ancien
+    marquage \\Seen : un email physiquement sorti de l'INBOX ne peut plus
+    être re-relevé par fetch_unseen_emails (qui ne cherche que dans
+    l'INBOX), même si un client mail externe modifiait ses flags entre
+    temps. Bénéfice supplémentaire : le dossier sert d'historique
+    consultable directement dans la boîte mail, sans avoir besoin des logs
+    applicatifs pour savoir ce qui a été relevé."""
     config = _imap_config()
     if not config["address"] or not config["password"]:
         return
@@ -165,7 +187,12 @@ def mark_seen(uid: bytes) -> None:
     try:
         conn.login(config["address"], config["password"])
         conn.select("INBOX")
-        conn.uid("store", uid, "+FLAGS", "(\\Seen)")
+        _ensure_processed_mailbox(conn)
+        copy_status, copy_data = conn.uid("copy", uid, _PROCESSED_MAILBOX)
+        if copy_status != "OK":
+            raise RuntimeError(f"IMAP COPY vers {_PROCESSED_MAILBOX} échoué (uid={uid!r}, status={copy_status}, data={copy_data!r})")
+        conn.uid("store", uid, "+FLAGS", "(\\Deleted)")
+        conn.expunge()
     finally:
         try:
             conn.logout()
