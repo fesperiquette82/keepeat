@@ -13,6 +13,11 @@
 - [ ] **CGU / mentions légales** — ce document-là, en revanche, n'existe vraiment pas. Contenu propre à ton activité (identité de l'exploitant, statut juridique, conditions de facturation, responsabilité) que je ne peux pas rédiger sans toi — dis-moi si tu veux qu'on s'y attelle.
 - [x] **Positionner `GEMINI_RECIPES_MODEL` et `GEMINI_OCR_MODEL` sur Render** — fait le 2026-08-21 (`gemini-3.5-flash-lite` sur les deux variables).
 - [ ] **Tester un vrai achat premium** — `startPurchase()` (point 01) est câblé et testé unitairement, mais jamais validé en conditions réelles (pas de build natif Android disponible dans l'environnement de développement). À tester sur un appareil/émulateur Android avec le SKU `premium_monthly` configuré sur Google Play Console.
+- [ ] **Enregistrement "Android Developer Verification"** (échéance Google : **30/09/2026**, donc dans les prochaines semaines) — Google impose désormais cet enregistrement même pour les apps distribuées hors Play Store ; sans lui, un APK non enregistré ne pourra plus être installé/mis à jour par sideload (QR code EAS, cf. section "Distribuer l'app" ci-dessous) sur un appareil Android certifié (quasi tous les téléphones avec Google Play Services) après cette date. Action 100% côté compte Google, je ne peux pas la faire à ta place :
+  1. Ouvrir la Play Console (pas besoin de publier l'app sur le Store pour cette étape).
+  2. Repérer la section "validation des développeurs Android" / "Android Developer Verification" sur la page d'accueil.
+  3. Enregistrer le nom de package KeepEat (`com.fesperiquette.keepeat`) et la clé de signature utilisée par le build EAS.
+  4. Si tu n'as pas encore de compte Play Console, il faudra probablement en créer un (frais uniques ~25$) rien que pour cette étape d'enregistrement, même sans intention de publier sur le Store.
 
 ## 🟢 Partager l'app à des amis + leur donner le premium gratuitement
 
