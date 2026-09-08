@@ -2488,10 +2488,11 @@ async def run_email_import_poll(request: Request):
     Protégé par un jeton statique (EMAIL_IMPORT_CRON_TOKEN), même convention
     que ALERTS_CRON_TOKEN.
 
-    Chaque email est marqué comme lu juste après sa tentative de traitement
-    (réussie ou non) pour ne jamais le retraiter en boucle — un email non
-    exploitable est journalisé, jamais une exception qui ferait échouer tout
-    le passage."""
+    Chaque email est déplacé vers le dossier `KeepEat/Traites` juste après sa
+    tentative de traitement (réussie ou non) pour ne jamais le retraiter en
+    boucle — un email non exploitable est journalisé, jamais une exception
+    qui ferait échouer tout le passage. Ce dossier sert aussi d'historique
+    consultable directement dans la boîte mail."""
     cron_token = os.getenv("EMAIL_IMPORT_CRON_TOKEN", "").strip()
     if not cron_token:
         raise HTTPException(status_code=503, detail="EMAIL_IMPORT_CRON_TOKEN not configured")
@@ -2510,9 +2511,9 @@ async def run_email_import_poll(request: Request):
             logger.exception("EMAIL_IMPORT échec traitement d'un email (uid=%s)", message.get("uid"))
         finally:
             try:
-                await asyncio.to_thread(email_import_service.mark_seen, message["uid"])
+                await asyncio.to_thread(email_import_service.move_to_processed, message["uid"])
             except Exception:
-                logger.exception("EMAIL_IMPORT échec marquage lu (uid=%s)", message.get("uid"))
+                logger.exception("EMAIL_IMPORT échec déplacement vers %s (uid=%s)", email_import_service._PROCESSED_MAILBOX, message.get("uid"))
             processed += 1
 
     logger.info("EMAIL_IMPORT_CRON completed processed=%d", processed)

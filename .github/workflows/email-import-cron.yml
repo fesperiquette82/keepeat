@@ -5,9 +5,10 @@ name: Email Import Cron
 # ne garantit pas la disponibilité continue du process pour une boucle interne
 # avec sleep, donc le sondage IMAP est piloté depuis l'extérieur.
 #
-# Chaque email relevé est marqué comme lu juste après sa tentative de
-# traitement (réussie ou non), donc un déclenchement rapproché serait sûr côté
-# logique métier — jamais de retraitement en double. L'intervalle de 30 min
+# Chaque email relevé est déplacé vers le dossier KeepEat/Traites juste après
+# sa tentative de traitement (réussie ou non), donc un déclenchement rapproché
+# serait sûr côté logique métier — jamais de retraitement en double.
+# L'intervalle de 30 min
 # (même cadence que alerts-cron.yml) est choisi pour rester raisonnable en
 # minutes GitHub Actions consommées : ce n'est pas une fonctionnalité temps
 # réel (l'utilisateur transfère un email manuellement), un délai de quelques

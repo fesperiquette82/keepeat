@@ -12,7 +12,7 @@ import importlib
 import sys
 from email.message import EmailMessage
 from pathlib import Path
-from unittest.mock import AsyncMock
+from unittest.mock import AsyncMock, MagicMock
 
 import pytest
 from bson import ObjectId
@@ -97,11 +97,59 @@ class TestEmailImportServiceUnit:
         from backend import email_import_service as svc
         assert svc.fetch_unseen_emails() == []
 
-    def test_mark_seen_noop_when_not_configured(self, monkeypatch):
+    def test_move_to_processed_noop_when_not_configured(self, monkeypatch):
         monkeypatch.delenv("EMAIL_IMPORT_INBOX_ADDRESS", raising=False)
         monkeypatch.delenv("EMAIL_IMPORT_INBOX_APP_PASSWORD", raising=False)
         from backend import email_import_service as svc
-        svc.mark_seen(b"1")  # ne doit pas lever, même sans connexion IMAP
+        svc.move_to_processed(b"1")  # ne doit pas lever, même sans connexion IMAP
+
+    def test_move_to_processed_creates_folder_copies_deletes_and_expunges(self, monkeypatch):
+        monkeypatch.setenv("EMAIL_IMPORT_INBOX_ADDRESS", "keepeatfe@gmail.com")
+        monkeypatch.setenv("EMAIL_IMPORT_INBOX_APP_PASSWORD", "app-password")
+        from backend import email_import_service as svc
+
+        conn = MagicMock()
+        conn.uid.return_value = ("OK", [b"1"])
+        monkeypatch.setattr(svc.imaplib, "IMAP4_SSL", MagicMock(return_value=conn))
+
+        svc.move_to_processed(b"42")
+
+        conn.login.assert_called_once_with("keepeatfe@gmail.com", "app-password")
+        conn.select.assert_called_once_with("INBOX")
+        conn.create.assert_called_once_with(svc._PROCESSED_MAILBOX)
+        assert conn.uid.call_args_list[0].args == ("copy", b"42", svc._PROCESSED_MAILBOX)
+        assert conn.uid.call_args_list[1].args == ("store", b"42", "+FLAGS", "(\\Deleted)")
+        conn.expunge.assert_called_once()
+        conn.logout.assert_called_once()
+
+    def test_move_to_processed_ignores_create_error_when_folder_already_exists(self, monkeypatch):
+        monkeypatch.setenv("EMAIL_IMPORT_INBOX_ADDRESS", "keepeatfe@gmail.com")
+        monkeypatch.setenv("EMAIL_IMPORT_INBOX_APP_PASSWORD", "app-password")
+        from backend import email_import_service as svc
+
+        conn = MagicMock()
+        conn.create.side_effect = Exception("[ALREADYEXISTS] Folder already exists")
+        conn.uid.return_value = ("OK", [b"1"])
+        monkeypatch.setattr(svc.imaplib, "IMAP4_SSL", MagicMock(return_value=conn))
+
+        svc.move_to_processed(b"42")  # ne doit pas lever malgré l'échec du CREATE
+
+        conn.expunge.assert_called_once()
+
+    def test_move_to_processed_raises_and_still_logs_out_when_copy_fails(self, monkeypatch):
+        monkeypatch.setenv("EMAIL_IMPORT_INBOX_ADDRESS", "keepeatfe@gmail.com")
+        monkeypatch.setenv("EMAIL_IMPORT_INBOX_APP_PASSWORD", "app-password")
+        from backend import email_import_service as svc
+
+        conn = MagicMock()
+        conn.uid.return_value = ("NO", [b"copy failed"])
+        monkeypatch.setattr(svc.imaplib, "IMAP4_SSL", MagicMock(return_value=conn))
+
+        with pytest.raises(RuntimeError):
+            svc.move_to_processed(b"42")
+
+        conn.expunge.assert_not_called()
+        conn.logout.assert_called_once()  # cleanup exécuté même en cas d'échec
 
 
 # ---------------------------------------------------------------------------
@@ -344,7 +392,7 @@ class TestEmailImportPollEndpoint:
             lambda: [{"uid": b"1", "sender": email, "subject": "Votre ticket Carrefour", "text": "Lait demi-écrémé x1"}],
         )
         marked_seen = []
-        monkeypatch.setattr(server.email_import_service, "mark_seen", lambda uid: marked_seen.append(uid))
+        monkeypatch.setattr(server.email_import_service, "move_to_processed", lambda uid: marked_seen.append(uid))
         monkeypatch.setattr(
             server, "parse_email_receipt_text",
             AsyncMock(return_value={
@@ -382,7 +430,7 @@ class TestEmailImportPollEndpoint:
             lambda: [{"uid": b"1", "sender": "inconnu@example.com", "subject": "?", "text": "..."}],
         )
         marked_seen = []
-        monkeypatch.setattr(server.email_import_service, "mark_seen", lambda uid: marked_seen.append(uid))
+        monkeypatch.setattr(server.email_import_service, "move_to_processed", lambda uid: marked_seen.append(uid))
 
         from fastapi.testclient import TestClient
         client = TestClient(server.app)
@@ -405,7 +453,7 @@ class TestEmailImportPollEndpoint:
             lambda: [{"uid": b"1", "sender": "", "subject": "?", "text": "..."}],
         )
         marked_seen = []
-        monkeypatch.setattr(server.email_import_service, "mark_seen", lambda uid: marked_seen.append(uid))
+        monkeypatch.setattr(server.email_import_service, "move_to_processed", lambda uid: marked_seen.append(uid))
 
         from fastapi.testclient import TestClient
         client = TestClient(server.app)
@@ -424,7 +472,7 @@ class TestEmailImportPollEndpoint:
         monkeypatch.setenv("EMAIL_IMPORT_CRON_TOKEN", "cron-secret")
         email, _, stock_col, _ = self._setup(monkeypatch, server, premium=False)
         monkeypatch.setattr(server.email_import_service, "fetch_unseen_emails", lambda: [{"uid": b"1", "sender": email, "subject": "?", "text": "Lait x1"}])
-        monkeypatch.setattr(server.email_import_service, "mark_seen", lambda uid: None)
+        monkeypatch.setattr(server.email_import_service, "move_to_processed", lambda uid: None)
         monkeypatch.setattr(server, "parse_email_receipt_text", AsyncMock())
 
         from fastapi.testclient import TestClient
@@ -448,7 +496,7 @@ class TestEmailImportPollEndpoint:
             lambda: [{"uid": b"1", "sender": email, "subject": "?", "text": ""}],
         )
         marked_seen = []
-        monkeypatch.setattr(server.email_import_service, "mark_seen", lambda uid: marked_seen.append(uid))
+        monkeypatch.setattr(server.email_import_service, "move_to_processed", lambda uid: marked_seen.append(uid))
         monkeypatch.setattr(server, "parse_email_receipt_text", AsyncMock())
 
         from fastapi.testclient import TestClient
@@ -469,7 +517,7 @@ class TestEmailImportPollEndpoint:
         monkeypatch.setenv("EMAIL_IMPORT_CRON_TOKEN", "cron-secret")
         email, _, stock_col, app_state = self._setup(monkeypatch, server, used=200)
         monkeypatch.setattr(server.email_import_service, "fetch_unseen_emails", lambda: [{"uid": b"1", "sender": email, "subject": "?", "text": "Lait x1"}])
-        monkeypatch.setattr(server.email_import_service, "mark_seen", lambda uid: None)
+        monkeypatch.setattr(server.email_import_service, "move_to_processed", lambda uid: None)
         monkeypatch.setattr(server, "parse_email_receipt_text", AsyncMock())
 
         from fastapi.testclient import TestClient
@@ -489,7 +537,7 @@ class TestEmailImportPollEndpoint:
         monkeypatch.setenv("EMAIL_IMPORT_CRON_TOKEN", "cron-secret")
         email, _, stock_col, app_state = self._setup(monkeypatch, server)
         monkeypatch.setattr(server.email_import_service, "fetch_unseen_emails", lambda: [{"uid": b"1", "sender": email, "subject": "?", "text": "newsletter, pas un ticket"}])
-        monkeypatch.setattr(server.email_import_service, "mark_seen", lambda uid: None)
+        monkeypatch.setattr(server.email_import_service, "move_to_processed", lambda uid: None)
         monkeypatch.setattr(
             server, "parse_email_receipt_text",
             AsyncMock(return_value={"purchase_date": None, "merchant": None, "currency": "EUR", "items": [], "ignored_items": []}),
@@ -513,7 +561,7 @@ class TestEmailImportPollEndpoint:
         monkeypatch.setenv("EMAIL_IMPORT_CRON_TOKEN", "cron-secret")
         email, _, stock_col, app_state = self._setup(monkeypatch, server)
         monkeypatch.setattr(server.email_import_service, "fetch_unseen_emails", lambda: [{"uid": b"1", "sender": email, "subject": "?", "text": "Lait x1"}])
-        monkeypatch.setattr(server.email_import_service, "mark_seen", lambda uid: None)
+        monkeypatch.setattr(server.email_import_service, "move_to_processed", lambda uid: None)
         monkeypatch.setattr(server, "parse_email_receipt_text", AsyncMock(side_effect=RuntimeError("gemini down")))
 
         from fastapi.testclient import TestClient
@@ -541,7 +589,7 @@ class TestEmailImportPollEndpoint:
             ],
         )
         marked_seen = []
-        monkeypatch.setattr(server.email_import_service, "mark_seen", lambda uid: marked_seen.append(uid))
+        monkeypatch.setattr(server.email_import_service, "move_to_processed", lambda uid: marked_seen.append(uid))
         monkeypatch.setattr(
             server, "parse_email_receipt_text",
             AsyncMock(return_value={
