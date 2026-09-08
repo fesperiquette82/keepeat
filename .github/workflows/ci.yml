@@ -87,7 +87,12 @@ jobs:
           JWT_SECRET: "test_secret_ci"
           GEMINI_OCR_API_KEY: "dummy_for_tests"
           GEMINI_RECIPES_API_KEY: "dummy_for_tests"
-          PYTHONPATH: ${{ github.workspace }}
+          # `backend/` doit figurer dans PYTHONPATH : 12 fichiers de tests/
+          # importent des modules par leur nom nu (`from models import Recipe`,
+          # `from server import ...`) et non via le paquet `backend.`. L'ancienne
+          # sélection à 7 fichiers ne touchait aucun d'entre eux, ce qui masquait
+          # cette lacune de configuration.
+          PYTHONPATH: ${{ github.workspace }}:${{ github.workspace }}/backend
         run: python -m pytest tests backend/tests --tb=short -q
 
   policy-pr-checks:
