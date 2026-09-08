@@ -472,7 +472,16 @@ export default function ScanReceiptScreen() {
                   if (expiry) {
                     const d = new Date(expiry);
                     const label = d.toLocaleDateString(isFr ? 'fr-FR' : 'en-GB', { day: '2-digit', month: 'short', year: 'numeric' });
-                    return <Text style={styles.productHint}>{isFr ? `DLC auto : ${label}` : `Auto expiry: ${label}`}</Text>;
+                    // BUG-073 : « DLC auto » présentait une estimation avec la
+                    // même autorité qu'une date lue sur l'emballage. Le libellé
+                    // dit désormais qu'il s'agit d'une estimation à vérifier.
+                    return (
+                      <Text style={styles.productHint}>
+                        {isFr
+                          ? `Date estimée : ${label} — à vérifier sur l'emballage`
+                          : `Estimated date: ${label} — check the packaging`}
+                      </Text>
+                    );
                   }
                   return hint ? <Text style={styles.productHint}>{hint}</Text> : null;
                 })()}

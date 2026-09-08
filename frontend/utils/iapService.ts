@@ -14,6 +14,9 @@ import {
 type SubscriptionPurchase = any;
 import { Platform } from 'react-native';
 
+import { logger } from './logger';
+import { processPurchaseUpdate } from './purchaseAcknowledgement';
+
 export const PREMIUM_SKU = 'premium_monthly';
 
 const SKUS = Platform.select({
@@ -66,15 +69,20 @@ export function subscribeToPurchaseUpdates(
 ): () => void {
   const updateListener = purchaseUpdatedListener(async (purchase: SubscriptionPurchase) => {
     if (!purchase.purchaseToken) return;
-    try {
-      await onSuccess({
-        purchaseToken: purchase.purchaseToken,
-        productId: purchase.productId,
-        transactionId: purchase.transactionId,
-      });
-    } finally {
-      await finishTransaction({ purchase, isConsumable: false });
-    }
+    // BUG-062 : on n'acquitte l'achat auprès de Google QU'APRÈS activation
+    // confirmée — règle et justification dans purchaseAcknowledgement.ts, où
+    // elle est testable sans les modules natifs.
+    await processPurchaseUpdate(purchase, {
+      activate: (p: SubscriptionPurchase) =>
+        onSuccess({
+          purchaseToken: p.purchaseToken,
+          productId: p.productId,
+          transactionId: p.transactionId,
+        }),
+      finish: (p: SubscriptionPurchase) => finishTransaction({ purchase: p, isConsumable: false }),
+      onError: (err) => onError(err as PurchaseError),
+      logWarn: (message, err) => logger.warn(message, err),
+    });
   });
 
   const errorListener = purchaseErrorListener((error: PurchaseError) => {

@@ -109,6 +109,14 @@ from backend.entitlements import (
     refund_quota,
     resolve_plan,
 )
+from backend.google_play_billing import (
+    SubscriptionAction,
+    VerificationOutcome,
+    action_for_notification,
+    classify_verification_status,
+    is_payment_received,
+    may_grant_without_verification,
+)
 from backend.household_service import (
     MAX_HOUSEHOLD_MEMBERS,
     decode_invite_token,
@@ -125,6 +133,7 @@ from backend.observability import (
     build_activation_funnel,
     build_crash_reports_overview,
     build_email_import_overview,
+    build_premium_verification_overview,
     build_operational_overview,
     build_monitoring_kpis,
     extract_user_id_from_auth_header,
@@ -197,6 +206,8 @@ food_defaults_col = db["food_defaults"]
 
 _BACKEND_URL = os.getenv("BACKEND_URL", "https://keepeat-backend.onrender.com")
 _GOOGLE_ANDROID_PACKAGE = os.getenv("GOOGLE_ANDROID_PACKAGE", "com.fesperiquette.keepeat")
+# Durée de conservation d'un ticket de caisse signalé pour assistance (BUG-069).
+_RECEIPT_TICKET_RETENTION_DAYS = int(os.getenv("RECEIPT_TICKET_RETENTION_DAYS", "90") or "90")
 APP_STARTED_AT = utc_now()
 TEST_FIXTURES = clone_fixtures()
 
@@ -941,9 +952,23 @@ async def lifespan(app: FastAPI):
     await stock_col.create_index([("user_id", 1), ("status", 1), ("expiry_date", 1)])
     await stock_col.create_index([("user_id", 1), ("status", 1), ("consumed_date", 1)])
     await stock_col.create_index([("user_id", 1), ("status", 1), ("thrown_date", 1)])
+    # BUG-065 : un ajout rejoué (réponse perdue après écriture) ne doit pas
+    # créer de doublon. Index partiel : seuls les documents portant un
+    # identifiant de mutation client sont contraints, les articles existants
+    # (sans ce champ) ne sont pas affectés.
+    await stock_col.create_index(
+        [("user_id", 1), ("client_mutation_id", 1)],
+        unique=True,
+        partialFilterExpression={"client_mutation_id": {"$exists": True}},
+    )
     await users_col.create_index("email", unique=True)
     await users_col.create_index("verification_token", sparse=True)
     await users_col.create_index("reset_token", sparse=True)
+    # BUG-069 : purge automatique des tickets signalés (photo incluse) au terme
+    # de leur durée de conservation. `expires_at` est une vraie date BSON —
+    # `created_at` étant une chaîne ISO, un index TTL posé dessus n'aurait
+    # jamais rien supprimé.
+    await receipt_tickets_col.create_index("expires_at", expireAfterSeconds=0)
     await receipt_tickets_col.create_index([("status", 1), ("created_at", -1)])
     await receipt_tickets_col.create_index([("user_id", 1), ("created_at", -1)])
     await food_defaults_col.create_index("key", unique=True)
@@ -1017,7 +1042,7 @@ _PRIVACY_POLICY_HTML = """<!DOCTYPE html>
 </head>
 <body>
 <h1>Politique de confidentialité — KeepEat</h1>
-<p><em>Dernière mise à jour : août 2026</em></p>
+<p><em>Dernière mise à jour : septembre 2026</em></p>
 
 <h2>1. Qui sommes-nous ?</h2>
 <p>
@@ -1029,7 +1054,8 @@ Contact : <a href="mailto:fesperiquette@hotmail.com">fesperiquette@hotmail.com</
 <ul>
   <li><strong>Compte</strong> : adresse e-mail, mot de passe sécurisé (haché).</li>
   <li><strong>Stock alimentaire</strong> : produits, codes-barres, dates de péremption, quantités.</li>
-  <li><strong>Photos (OCR)</strong> : images envoyées temporairement à un service tiers (Google Gemini) pour analyse puis supprimées — aucune photo n’est stockée durablement.</li>
+  <li><strong>Photos (OCR)</strong> : images envoyées à un service tiers (Google Gemini) pour analyse, puis supprimées immédiatement — elles ne sont pas conservées.<br>
+  <strong>Exception :</strong> si vous <em>signalez</em> un ticket mal reconnu pour demander de l’aide, la photo de ce ticket et votre adresse e-mail sont conservées afin de diagnostiquer le problème, puis supprimées automatiquement au bout de 90 jours. Ce signalement est toujours une action volontaire de votre part.</li>
   <li><strong>Import de tickets par e-mail (fonctionnalité Premium optionnelle)</strong> : si vous transférez un ticket de caisse vers l’adresse d’import (la même pour tous les utilisateurs premium — c’est votre adresse d’expéditeur qui permet de vous identifier), le contenu de cet e-mail est envoyé à Google Gemini pour analyse puis n’est pas conservé au-delà du traitement.</li>
   <li><strong>Foyer partagé (fonctionnalité optionnelle)</strong> : si vous créez ou rejoignez un foyer, votre adresse e-mail est visible par les autres membres de ce même foyer, et votre stock alimentaire leur est partagé.</li>
   <li><strong>Achats in-app</strong> : données nécessaires à la gestion des abonnements via Google Play Billing.</li>
@@ -1527,7 +1553,7 @@ async def login(request: Request, body: UserLogin):
 
     user_id = str(doc["_id"])
     await users_col.update_one({"_id": doc["_id"]}, {"$set": {"last_login": utc_now().isoformat()}})
-    token = create_token(user_id)
+    token = create_token(user_id, doc.get("session_version", 0))
     return TokenResponse(
         access_token=token,
         user=UserResponse(
@@ -1564,7 +1590,7 @@ async def verify_email(request: Request, body: VerifyEmailBody):
         {"$set": {"email_verified": True, "last_login": utc_now().isoformat()},
          "$unset": {"verification_token": "", "verification_token_exp": ""}},
     )
-    token = create_token(user_id)
+    token = create_token(user_id, doc.get("session_version", 0))
     return TokenResponse(
         access_token=token,
         user=UserResponse(
@@ -1654,11 +1680,18 @@ async def reset_password(request: Request, body: ResetPasswordBody):
     if utc_now() > exp:
         raise HTTPException(status_code=400, detail="TOKEN_EXPIRED")
 
+    # BUG-068 : incrémenter la version de session invalide instantanément TOUS
+    # les jetons émis avant ce changement de mot de passe. Sans cela, un jeton
+    # déjà volé restait utilisable jusqu'à 30 jours malgré la réinitialisation —
+    # c'est-à-dire précisément dans le scénario où l'utilisateur réinitialise
+    # parce qu'il soupçonne une compromission.
     await users_col.update_one(
         {"_id": doc["_id"]},
         {"$set": {"hashed_password": hash_password(body.new_password)},
+         "$inc": {"session_version": 1},
          "$unset": {"reset_token": "", "reset_token_exp": ""}},
     )
+    logger.info("AUTH sessions révoquées après réinitialisation du mot de passe")
     return {"message": "password_updated"}
 
 
@@ -1710,6 +1743,57 @@ async def export_account_data(current_user: Dict[str, Any] = Depends(_get_curren
     }
 
 
+async def _detach_user_from_household(user_id: str, household_id: Any) -> None:
+    """Sort un utilisateur de son foyer avant suppression de compte (BUG-069).
+
+    Contrairement à `leave_household`, on ne peut pas refuser l'opération quand
+    le partant est propriétaire et que d'autres membres restent : le compte
+    disparaît de toute façon. La propriété est donc **transférée** au plus ancien
+    membre restant, ce qui préserve l'abonnement partagé du foyer ; le foyer
+    n'est supprimé que s'il ne reste personne. Best-effort : un foyer
+    introuvable ou une base indisponible ne doit jamais empêcher l'effacement du
+    compte, qui est un droit de l'utilisateur."""
+    if not household_id:
+        return
+    try:
+        doc = await households_col.find_one({"_id": ObjectId(household_id)})
+        if not doc:
+            return
+        remaining = [mid for mid in doc.get("member_ids", []) if mid != user_id]
+        if not remaining:
+            await households_col.delete_one({"_id": ObjectId(household_id)})
+            logger.info("ACCOUNT_DELETE foyer supprimé (dernier membre) household=%s", household_id)
+            return
+        updates: dict[str, Any] = {"member_ids": remaining}
+        if doc.get("owner_id") == user_id:
+            updates["owner_id"] = remaining[0]
+            logger.info(
+                "ACCOUNT_DELETE propriété du foyer transférée household=%s", household_id
+            )
+        await households_col.update_one({"_id": ObjectId(household_id)}, {"$set": updates})
+    except Exception as exc:
+        logger.warning("ACCOUNT_DELETE détachement du foyer échoué: %s", exc)
+
+
+async def _revoke_gmail_connection_best_effort(user_id: str) -> None:
+    """Révoque le jeton Gmail auprès de Google avant suppression (BUG-069).
+
+    Sans cette révocation, l'autorisation accordée par l'utilisateur survivait à
+    son compte. Best-effort, pour la même raison que ci-dessus."""
+    try:
+        user_doc = await users_col.find_one({"_id": ObjectId(user_id)}, {"gmail_connection": 1})
+        connection = (user_doc or {}).get("gmail_connection") or {}
+        encrypted = connection.get("refresh_token_encrypted")
+        if not encrypted:
+            return
+        refresh_token = gmail_oauth_service.decrypt_refresh_token(encrypted)
+        if refresh_token:
+            await gmail_oauth_service.revoke_token(token=refresh_token)
+            logger.info("ACCOUNT_DELETE jeton Gmail révoqué")
+    except Exception as exc:
+        logger.warning("ACCOUNT_DELETE révocation Gmail échouée: %s", exc)
+
+
 @api_router.delete("/account", response_model=AccountDeletionResponse)
 async def delete_account(
     body: AccountDeletionBody,
@@ -1729,6 +1813,16 @@ async def delete_account(
     user_doc = await users_col.find_one({"_id": ObjectId(uid)}, {"hashed_password": 1})
     if not user_doc or not verify_password(body.confirm_password, user_doc.get("hashed_password") or _DUMMY_HASH):
         raise HTTPException(status_code=403, detail="Mot de passe incorrect")
+
+    # BUG-069 : la suppression de compte n'exécutait ni la logique de départ du
+    # foyer, ni la révocation Gmail. Un propriétaire supprimé laissait un foyer
+    # orphelin — `owner_id` pointant vers un compte inexistant et l'utilisateur
+    # toujours listé dans `member_ids` — ce qui fausse le partage d'abonnement
+    # (resolve_billing_user_doc suit `owner_id`) et la visibilité du stock
+    # partagé. Le jeton Gmail, lui, restait valide côté Google après la
+    # disparition du compte qui l'avait accordé.
+    await _detach_user_from_household(uid, current_user.get("household_id"))
+    await _revoke_gmail_connection_best_effort(uid)
 
     stock_result = await stock_col.delete_many({"user_id": uid})
     tickets_result = await receipt_tickets_col.delete_many({"user_id": uid})
@@ -1845,23 +1939,28 @@ async def _get_google_play_access_token(credentials_json: str) -> str | None:
 async def _verify_google_play_subscription(
     purchase_token: str,
     subscription_id: str,
-) -> dict | None:
+) -> tuple[VerificationOutcome, dict | None]:
     """
     Vérifie un abonnement via Google Play Developer API.
-    Retourne le dict de réponse si disponible, None si non configuré ou en cas d'erreur.
-    Quand None est retourné en dev (GOOGLE_PLAY_SERVICE_ACCOUNT_JSON absent),
-    l'appelant doit appliquer une durée fixe de 30 jours (fail-open contrôlé).
+
+    Retourne `(outcome, données)` — cf. `google_play_billing.VerificationOutcome`.
+    L'ancienne signature renvoyait `None` aussi bien pour « non configuré » que
+    pour « Google a refusé » et « le réseau est tombé », et l'appelant accordait
+    30 jours de Premium dans les trois cas (BUG-062). Distinguer les trois est
+    tout l'objet de ce changement : seul VERIFIED peut mener à un droit.
     """
     sa_json = os.getenv("GOOGLE_PLAY_SERVICE_ACCOUNT_JSON", "").strip()
     if not sa_json:
         logger.warning(
-            "GOOGLE_PLAY_SERVICE_ACCOUNT_JSON non configuré — vérification Google Play ignorée (mode dev)"
+            "GOOGLE_PLAY_SERVICE_ACCOUNT_JSON non configuré — vérification Google Play impossible"
         )
-        return None
+        return VerificationOutcome.NOT_CONFIGURED, None
 
     access_token = await _get_google_play_access_token(sa_json)
     if not access_token:
-        return None
+        # Credentials illisibles/expirés : notre configuration est en cause, pas
+        # l'achat de l'utilisateur — réessayable.
+        return VerificationOutcome.UNAVAILABLE, None
 
     url = (
         f"https://androidpublisher.googleapis.com/androidpublisher/v3/applications"
@@ -1870,51 +1969,109 @@ async def _verify_google_play_subscription(
     try:
         async with httpx.AsyncClient(timeout=15) as http_client:
             resp = await http_client.get(url, headers={"Authorization": f"Bearer {access_token}"})
-        if resp.status_code == 200:
-            return resp.json()
-        logger.warning("Google Play Developer API returned HTTP %s", resp.status_code)
-        return None
     except Exception as exc:
         logger.error("Google Play Developer API request failed: %s", exc)
-        return None
+        return VerificationOutcome.UNAVAILABLE, None
+
+    outcome = classify_verification_status(resp.status_code)
+    if outcome is VerificationOutcome.VERIFIED:
+        return outcome, resp.json()
+    logger.warning(
+        "Google Play Developer API returned HTTP %s → %s", resp.status_code, outcome.value
+    )
+    return outcome, None
 
 
 async def _handle_subscription_active(purchase_token: str, subscription_id: str) -> None:
-    """Marque l'abonnement comme actif suite à un RTDN d'achat ou de renouvellement."""
-    play_data = await _verify_google_play_subscription(purchase_token, subscription_id)
+    """Marque l'abonnement comme actif suite à un RTDN d'achat/renouvellement.
+
+    L'échéance vient de Google quand la vérification aboutit. Si elle échoue, on
+    ne fabrique plus une échéance de 30 jours (BUG-062) : on conserve celle déjà
+    connue et on laisse la réconciliation ultérieure trancher. Sans échéance
+    connue du tout, l'accès reste ouvert mais explicitement marqué comme non
+    vérifié — un RTDN signé par Google reste une indication forte d'achat réel,
+    contrairement à un simple appel client."""
+    outcome, play_data = await _verify_google_play_subscription(purchase_token, subscription_id)
     expiry_millis = play_data.get("expiryTimeMillis") if play_data else None
+    updates: dict[str, Any] = {
+        "is_premium": True,
+        "subscription_status": "active",
+        "subscription_updated_at": utc_now().isoformat(),
+        "subscription_verified": outcome is VerificationOutcome.VERIFIED,
+    }
+    if expiry_millis:
+        updates["subscription_expires_at"] = datetime.fromtimestamp(
+            int(expiry_millis) / 1000, tz=timezone.utc
+        ).isoformat()
+    result = await users_col.update_one(
+        {"store_purchase_token": purchase_token},
+        {"$set": updates},
+    )
+    logger.info(
+        "RTDN subscription activated token=...%s matched=%d outcome=%s expires_at=%s",
+        purchase_token[-6:], result.matched_count, outcome.value,
+        updates.get("subscription_expires_at", "unchanged"),
+    )
+
+
+async def _handle_subscription_canceled(purchase_token: str, subscription_id: str) -> None:
+    """Résiliation : couper le renouvellement SANS retirer la période déjà payée.
+
+    `resolve_plan` accorde déjà Premium tant que `subscription_expires_at` est
+    dans le futur, y compris avec un `subscription_status` autre qu'« active » :
+    il suffit donc de conserver `is_premium` et l'échéance pour que les droits
+    s'éteignent d'eux-mêmes le jour venu (BUG-063). Sans échéance connue —
+    ni côté Google, ni en base — on ne peut pas savoir jusqu'à quand l'accès est
+    dû : on désactive, faute de mieux, plutôt que d'accorder un Premium
+    perpétuel (`expires_at is None` vaut « illimité » pour resolve_plan)."""
+    _, play_data = await _verify_google_play_subscription(purchase_token, subscription_id)
+    expiry_millis = play_data.get("expiryTimeMillis") if play_data else None
+    expires_at: str | None = None
     if expiry_millis:
         expires_at = datetime.fromtimestamp(int(expiry_millis) / 1000, tz=timezone.utc).isoformat()
     else:
-        expires_at = (utc_now() + timedelta(days=30)).isoformat()
+        known = await users_col.find_one(
+            {"store_purchase_token": purchase_token}, {"subscription_expires_at": 1}
+        )
+        expires_at = (known or {}).get("subscription_expires_at")
+
+    if not expires_at:
+        logger.warning(
+            "RTDN cancel sans échéance connue token=...%s — désactivation immédiate",
+            purchase_token[-6:],
+        )
+        await _handle_subscription_inactive(purchase_token, reason="canceled_without_expiry")
+        return
+
     result = await users_col.update_one(
         {"store_purchase_token": purchase_token},
         {"$set": {
             "is_premium": True,
-            "subscription_status": "active",
+            "subscription_status": "canceled",
             "subscription_expires_at": expires_at,
             "subscription_updated_at": utc_now().isoformat(),
         }},
     )
     logger.info(
-        "RTDN subscription activated token=...%s matched=%d expires_at=%s",
+        "RTDN subscription canceled (droits conservés) token=...%s matched=%d until=%s",
         purchase_token[-6:], result.matched_count, expires_at,
     )
 
 
-async def _handle_subscription_inactive(purchase_token: str) -> None:
-    """Désactive le premium suite à un RTDN d'annulation/expiration."""
+async def _handle_subscription_inactive(purchase_token: str, *, reason: str = "inactive") -> None:
+    """Retire le premium : expiration, remboursement, mise en attente ou pause."""
     result = await users_col.update_one(
         {"store_purchase_token": purchase_token},
         {"$set": {
             "is_premium": False,
             "subscription_status": "inactive",
+            "subscription_inactive_reason": reason,
             "subscription_updated_at": utc_now().isoformat(),
         }},
     )
     logger.info(
-        "RTDN subscription deactivated token=...%s matched=%d",
-        purchase_token[-6:], result.matched_count,
+        "RTDN subscription deactivated token=...%s matched=%d reason=%s",
+        purchase_token[-6:], result.matched_count, reason,
     )
 
 
@@ -1950,15 +2107,32 @@ async def verify_google_subscription(
         logger.warning("BILLING purchase_token demo rejeté user=%s", current_user["id"])
         raise HTTPException(status_code=400, detail={"code": "INVALID_PURCHASE_TOKEN", "reason": "Demo tokens not accepted"})
 
+    # Un jeton d'achat appartient à un seul compte (BUG-062) : sans ce contrôle,
+    # un jeton partagé entre plusieurs comptes leur offrait à chacun le Premium,
+    # et un RTDN ultérieur (qui cible `store_purchase_token`) frappait un compte
+    # arbitraire parmi eux.
+    existing_owner = await users_col.find_one(
+        {"store_purchase_token": purchase_token, "_id": {"$ne": ObjectId(current_user["id"])}},
+        {"_id": 1},
+    )
+    if existing_owner:
+        logger.warning(
+            "BILLING purchase_token déjà rattaché à un autre compte user=%s", current_user["id"]
+        )
+        raise HTTPException(
+            status_code=409,
+            detail={"code": "PURCHASE_TOKEN_ALREADY_LINKED"},
+        )
+
     # Vérification via Google Play Developer API
-    play_data = await _verify_google_play_subscription(
+    outcome, play_data = await _verify_google_play_subscription(
         purchase_token=purchase_token,
         subscription_id=body.product_id,
     )
-    if play_data is not None:
-        # paymentState : 0=pending, 1=received, 2=free trial — null=deferred
-        payment_state = play_data.get("paymentState")
-        if payment_state not in (1, 2):
+
+    if outcome is VerificationOutcome.VERIFIED and play_data is not None:
+        if not is_payment_received(play_data.get("paymentState")):
+            payment_state = play_data.get("paymentState")
             logger.warning(
                 "BILLING paymentState invalide=%s user=%s", payment_state, current_user["id"]
             )
@@ -1971,9 +2145,59 @@ async def verify_google_subscription(
             expires_at = datetime.fromtimestamp(int(expiry_millis) / 1000, tz=timezone.utc).isoformat()
         else:
             expires_at = (utc_now() + timedelta(days=30)).isoformat()
-    else:
-        # GOOGLE_PLAY_SERVICE_ACCOUNT_JSON absent (env dev) — durée fixe de 30 jours
+    elif outcome is VerificationOutcome.INVALID:
+        # Google a tranché : ce jeton ne donne droit à rien.
+        await track_business_event(
+            business_events_col=business_events_col,
+            user_id=current_user["id"],
+            event_name="premium_verification_rejected",
+            event_category="premium",
+            metadata_json={"product_id": body.product_id},
+        )
+        logger.warning("BILLING achat refusé par Google user=%s", current_user["id"])
+        raise HTTPException(
+            status_code=402,
+            detail={"code": "PURCHASE_REJECTED"},
+        )
+    elif may_grant_without_verification(
+        is_test_environment=is_test_env(),
+        allow_unverified=os.getenv("ALLOW_UNVERIFIED_PURCHASES", "").strip().lower() == "true",
+    ):
+        # Dev/test explicite uniquement — jamais atteint en production.
+        logger.warning(
+            "BILLING attribution sans vérification (ALLOW_UNVERIFIED_PURCHASES) user=%s outcome=%s",
+            current_user["id"], outcome.value,
+        )
         expires_at = (utc_now() + timedelta(days=30)).isoformat()
+    else:
+        # Panne réseau, credentials cassés ou service account absent en
+        # production : l'achat est peut-être valide, mais on n'en a PAS la
+        # preuve. On mémorise la demande pour la revérifier plus tard et on
+        # répond 503 — surtout pas un Premium offert (BUG-062).
+        await users_col.update_one(
+            {"_id": ObjectId(current_user["id"])},
+            {"$set": {
+                "pending_purchase_token": purchase_token,
+                "pending_purchase_product_id": body.product_id,
+                "pending_purchase_platform": body.platform,
+                "pending_purchase_since": utc_now().isoformat(),
+            }},
+        )
+        await track_business_event(
+            business_events_col=business_events_col,
+            user_id=current_user["id"],
+            event_name="premium_verification_unavailable",
+            event_category="premium",
+            metadata_json={"outcome": outcome.value, "product_id": body.product_id},
+        )
+        logger.error(
+            "BILLING vérification indisponible user=%s outcome=%s — aucun droit accordé",
+            current_user["id"], outcome.value,
+        )
+        raise HTTPException(
+            status_code=503,
+            detail={"code": "VERIFICATION_UNAVAILABLE", "retryable": True},
+        )
 
     await users_col.update_one(
         {"_id": ObjectId(current_user["id"])},
@@ -2531,13 +2755,20 @@ async def google_play_rtdn(request: Request):
       - URL de l'endpoint : https://keepeat-backend.onrender.com/api/billing/google/rtdn
       - Définir GOOGLE_RTDN_TOKEN et ajouter ?token=<valeur> à l'URL OU configurer
         l'authentification Pub/Sub native (recommandé).
+
+    L'authentification est OBLIGATOIRE (BUG-063) : sans `GOOGLE_RTDN_TOKEN`, la
+    route répond 503 au lieu d'accepter n'importe quelle requête. Auparavant un
+    secret absent désactivait silencieusement le contrôle, laissant quiconque
+    connaissant l'URL activer ou couper le Premium d'un porteur de jeton. Même
+    convention que `run_alerts_cron` / `run_email_import_poll`.
     """
-    # Vérification optionnelle par token Bearer (défini dans GOOGLE_RTDN_TOKEN)
     rtdn_token = os.getenv("GOOGLE_RTDN_TOKEN", "").strip()
-    if rtdn_token:
-        auth_header = request.headers.get("Authorization", "")
-        if auth_header != f"Bearer {rtdn_token}":
-            raise HTTPException(status_code=401, detail="Unauthorized")
+    if not rtdn_token:
+        logger.error("RTDN reçu mais GOOGLE_RTDN_TOKEN non configuré — requête rejetée")
+        raise HTTPException(status_code=503, detail="GOOGLE_RTDN_TOKEN not configured")
+    auth_header = request.headers.get("Authorization", "")
+    if auth_header != f"Bearer {rtdn_token}":
+        raise HTTPException(status_code=401, detail="Unauthorized")
 
     try:
         body = await request.json()
@@ -2565,15 +2796,31 @@ async def google_play_rtdn(request: Request):
     if not purchase_token:
         return {"ok": True}
 
-    # notificationType : 1=PURCHASED, 2=RENEWED, 4=PURCHASED_WITH_DEFERRED, 7=RESTARTED → actif
-    # 3=CANCELED, 6=IN_GRACE_PERIOD, 12=EXPIRED, 13=ON_HOLD → inactif
+    # Correspondance numéro → effet : cf. backend/google_play_billing.py, qui
+    # porte les numéros officiels (les commentaires précédents ici étaient faux)
+    # et le traitement des états jusque-là ignorés (5=ON_HOLD, 10=PAUSED) ou mal
+    # traités (3=CANCELED coupait les droits déjà payés, 6=IN_GRACE_PERIOD
+    # coupait l'accès d'un abonné dont le paiement était simplement en cours de
+    # nouvelle tentative).
+    action = action_for_notification(notif_type)
     try:
-        if notif_type in (1, 2, 4, 7):
+        if action is SubscriptionAction.ACTIVATE:
             await _handle_subscription_active(purchase_token, subscription_id)
-        elif notif_type in (3, 12, 13):
-            await _handle_subscription_inactive(purchase_token)
+        elif action is SubscriptionAction.KEEP_UNTIL_EXPIRY:
+            await _handle_subscription_canceled(purchase_token, subscription_id)
+        elif action is SubscriptionAction.DEACTIVATE:
+            await _handle_subscription_inactive(
+                purchase_token, reason=f"rtdn_{notif_type}"
+            )
+        else:
+            logger.info("RTDN sans effet sur les droits notificationType=%s", notif_type)
     except Exception as exc:
-        logger.error("RTDN processing error notificationType=%s: %s", notif_type, exc)
+        # Ne PAS avaler l'erreur (BUG-063) : un 5xx fait redélivrer le message
+        # par Pub/Sub, ce qui est exactement le mécanisme de reprise attendu.
+        # Les messages illisibles renvoient 200 plus haut, eux, car les rejouer
+        # ne changerait rien.
+        logger.exception("RTDN processing error notificationType=%s: %s", notif_type, exc)
+        raise HTTPException(status_code=500, detail="RTDN processing failed") from exc
 
     return {"ok": True}
 
@@ -2729,8 +2976,26 @@ async def get_stock(
 @api_router.post("/stock", response_model=StockItem)
 async def add_stock(
     item: StockItemCreate,
+    request: Request,
     current_user: Dict[str, Any] = Depends(_get_current_user),
 ):
+    # BUG-065 : déduplication d'un ajout rejoué. Le client envoie un identifiant
+    # stable par action (`X-Mutation-Id`) : si la réponse d'un premier POST se
+    # perd (réseau coupé juste après l'écriture), le rejeu doit retrouver
+    # l'article créé au lieu d'en créer un doublon. Sans en-tête, comportement
+    # inchangé.
+    client_mutation_id = (request.headers.get("X-Mutation-Id") or "").strip()[:64]
+    if client_mutation_id:
+        already = await stock_col.find_one({
+            "user_id": current_user["id"],
+            "client_mutation_id": client_mutation_id,
+        })
+        if already:
+            logger.info(
+                "STOCK add rejoué (mutation déjà appliquée) user=%s", current_user["id"]
+            )
+            return serialize_mongo(already)
+
     resolved_food_category = _resolve_stock_food_category(item)
     resolved_storage_zone = _resolve_stock_storage_zone(item, resolved_food_category)
     resolved_storage_zone, resolved_expiry_date = await _apply_food_defaults_fallback(
@@ -2748,8 +3013,32 @@ async def add_stock(
     doc["food_category"] = resolved_food_category
     doc["storageZone"] = resolved_storage_zone
     doc["expiry_date"] = resolved_expiry_date
+    # BUG-073 : tracer d'où vient la date. Une date fournie par le client garde
+    # la provenance qu'il déclare (DLC lue au scan, ou saisie manuelle) ; une
+    # date que le serveur a dû déduire d'une durée de conservation est marquée
+    # comme estimation, pour que l'app puisse le dire à l'utilisateur au lieu de
+    # présenter une supposition comme une certitude.
+    if item.expiry_date:
+        doc["expiry_source"] = item.expiry_source or "manual"
+    elif resolved_expiry_date:
+        doc["expiry_source"] = "estimated"
+    else:
+        doc["expiry_source"] = None
+    if client_mutation_id:
+        doc["client_mutation_id"] = client_mutation_id
 
-    res = await stock_col.insert_one(doc)
+    try:
+        res = await stock_col.insert_one(doc)
+    except DuplicateKeyError:
+        # Deux rejeux concurrents du même ajout : l'index unique a tranché,
+        # on renvoie l'article gagnant plutôt qu'une erreur (BUG-065).
+        existing = await stock_col.find_one({
+            "user_id": current_user["id"],
+            "client_mutation_id": client_mutation_id,
+        })
+        if existing:
+            return serialize_mongo(existing)
+        raise
     created = await stock_col.find_one({"_id": res.inserted_id})
     await track_business_event(
         business_events_col=business_events_col,
@@ -4292,11 +4581,17 @@ async def report_receipt_ticket(
     if len(image_b64) > _MAX_IMAGE_B64_LEN:
         raise HTTPException(status_code=413, detail="Image trop grande (max 4 MB)")
 
+    # BUG-069 : la photo d'un ticket signalé est bien conservée (c'est le but :
+    # permettre le diagnostic d'un OCR raté), contrairement à ce qu'affirmait la
+    # politique de confidentialité. On borne donc explicitement cette
+    # conservation par une date d'expiration réelle (champ BSON date, exploité
+    # par l'index TTL de `lifespan`) plutôt que de la laisser indéfinie.
     ticket_doc = {
         "user_id": current_user["id"],
         "user_email": current_user.get("email", ""),
         "image_b64": image_b64,
         "created_at": utc_now().isoformat(),
+        "expires_at": utc_now() + timedelta(days=_RECEIPT_TICKET_RETENTION_DAYS),
         "status": "pending",
         "note": "",
         "items_added": [],
@@ -4589,8 +4884,15 @@ _LEVELS = [
 ]
 
 
-async def _compute_streak(scope_ids: list[str]) -> int:
-    """Nombre de jours consécutifs depuis aujourd'hui sans aucun item jeté (1 seule requête DB)."""
+async def _compute_streak(scope_ids: list[str], first_activity_iso: str | None = None) -> int:
+    """Jours consécutifs sans aucun item jeté, plafonnés à l'ancienneté du compte.
+
+    BUG-071 : la mesure comptait les jours sans jet enregistré **sans tenir
+    compte de l'existence du compte**. Un compte créé le jour même, sans le
+    moindre produit, affichait donc « 60 jours sans gaspillage » — une absence
+    de saisie était comptée comme une absence de gaspillage. Le compteur démarre
+    désormais à la première activité connue.
+    """
     today = utc_now().date()
     since = (today - timedelta(days=59)).strftime("%Y-%m-%d")
     # Une seule agrégation pour récupérer toutes les dates de jets des 60 derniers jours
@@ -4602,8 +4904,18 @@ async def _compute_streak(scope_ids: list[str]) -> int:
     thrown_days: set[str] = set()
     async for doc in stock_col.aggregate(pipeline):
         thrown_days.add(doc["_id"])
+    # Nombre de jours observables : on ne peut pas affirmer « sans gaspillage »
+    # pour des journées antérieures à l'arrivée de l'utilisateur.
+    observable_days = 60
+    if first_activity_iso:
+        try:
+            first_day = datetime.fromisoformat(first_activity_iso).date()
+            observable_days = min(60, max(0, (today - first_day).days + 1))
+        except Exception:
+            observable_days = 60
+
     streak = 0
-    for i in range(60):
+    for i in range(observable_days):
         day_str = (today - timedelta(days=i)).strftime("%Y-%m-%d")
         if day_str in thrown_days:
             break
@@ -4622,7 +4934,11 @@ async def get_gamification(
         stock_col.count_documents({**_stock_scope_match(scope_ids), "status": "consumed"}),
         stock_col.count_documents({**_stock_scope_match(scope_ids), "status": "thrown"}),
     )
-    streak = await _compute_streak(scope_ids)
+    # Ancienneté du compte : borne la série « sans gaspillage » (BUG-071).
+    account_doc = await users_col.find_one(
+        {"_id": ObjectId(current_user["id"])}, {"created_at": 1}
+    )
+    streak = await _compute_streak(scope_ids, (account_doc or {}).get("created_at"))
 
     # Agrégation pour le calcul des économies : évite de charger N×10000 docs en mémoire
     total_saved = 0.0
@@ -5334,6 +5650,11 @@ async def admin_monitoring_dashboard(
             return {"total": 0, "recent": []}
         if block_name == "email_import_overview":
             return {"total": 0, "succeeded": 0, "by_outcome": {}}
+        if block_name == "premium_verification_overview":
+            return {
+                "started": 0, "succeeded": 0, "rejected": 0,
+                "unavailable": 0, "blocked_by_us": 0, "by_outcome": {},
+            }
         if block_name == "external_service_quotas":
             return {"generated_at": utc_now().isoformat(), "services": [], "comparison_chart": [], "notes": {}}
         return None
@@ -5412,6 +5733,18 @@ async def admin_monitoring_dashboard(
         email_import_overview = {}
 
     try:
+        premium_verification_overview = await build_premium_verification_overview(
+            business_events_col=business_events_col,
+            start_iso=start_iso,
+            end_iso=end_iso,
+        )
+    except Exception as exc:
+        logger.warning(
+            "admin_monitoring_dashboard source failed: premium_verification_overview (%s)", exc
+        )
+        premium_verification_overview = {}
+
+    try:
         external_service_quotas = await build_external_services_quota_snapshot(
             service_usage_logs_col=service_usage_logs_col,
             api_request_logs_col=api_request_logs_col,
@@ -5449,6 +5782,7 @@ async def admin_monitoring_dashboard(
     activation_funnel_safe = _safe_block("activation_funnel", lambda: _json_safe(activation_funnel) if isinstance(activation_funnel, dict) and activation_funnel else _block_fallback("activation_funnel"))
     crash_reports_safe = _safe_block("crash_reports", lambda: _json_safe(crash_reports) if isinstance(crash_reports, dict) and crash_reports else _block_fallback("crash_reports"))
     email_import_overview_safe = _safe_block("email_import_overview", lambda: _json_safe(email_import_overview) if isinstance(email_import_overview, dict) and email_import_overview else _block_fallback("email_import_overview"))
+    premium_verification_overview_safe = _safe_block("premium_verification_overview", lambda: _json_safe(premium_verification_overview) if isinstance(premium_verification_overview, dict) and premium_verification_overview else _block_fallback("premium_verification_overview"))
     critical_flows = _safe_block("critical_flows", lambda: _json_safe(overview.get("critical_flows")) if isinstance(overview.get("critical_flows"), dict) else {})
     top_incidents = _safe_block("top_api_issues", lambda: _json_safe(overview.get("top_incidents")) if isinstance(overview.get("top_incidents"), list) else [])
 
@@ -5507,6 +5841,7 @@ async def admin_monitoring_dashboard(
         "activation_funnel": activation_funnel_safe,
         "crash_reports": crash_reports_safe,
         "email_import_overview": email_import_overview_safe,
+        "premium_verification_overview": premium_verification_overview_safe,
         "cost_metrics": cost_metrics,
         "ocr_image_enrichment": ocr_image_enrichment,
         "external_service_quotas": external_service_quotas_safe,

@@ -52,3 +52,14 @@ test('le dashboard affiche le taux de conversion premium', () => {
   const src = readSource(SCREEN_PATH);
   assert.match(src, /premium_conversion_rate/);
 });
+
+test('le dashboard affiche les ventes premium bloquées par une vérification indisponible (BUG-062)', () => {
+  // Depuis que le serveur n'accorde plus Premium sans preuve d'achat, une
+  // vérification indisponible empêche une vente réelle : elle doit être
+  // visible côté admin, et distinguée d'un refus légitime de Google.
+  const src = readSource(SCREEN_PATH);
+  assert.match(src, /premium_verification_overview/);
+  assert.match(src, /unavailable/);
+  assert.match(src, /rejected/);
+  assert.match(src, /GOOGLE_PLAY_SERVICE_ACCOUNT_JSON/);
+});

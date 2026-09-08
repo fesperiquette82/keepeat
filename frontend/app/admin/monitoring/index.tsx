@@ -138,6 +138,29 @@ export default function AdminMonitoringDashboardScreen() {
             )}
           </AdminSectionCard>
 
+          <AdminSectionCard title="Vérification des achats premium">
+            {dashboard.premium_verification_overview && dashboard.premium_verification_overview.started > 0 ? (
+              <>
+                <Text>Achats démarrés: {dashboard.premium_verification_overview.started}</Text>
+                <Text>Activés: {dashboard.premium_verification_overview.succeeded}</Text>
+                <Text>Refusés par Google: {dashboard.premium_verification_overview.rejected}</Text>
+                {/* BUG-062 : depuis que le serveur n'accorde plus Premium sans preuve,
+                    une vérification indisponible bloque une vente réelle — à traiter
+                    comme une alerte, pas comme une statistique. */}
+                <Text style={dashboard.premium_verification_overview.unavailable > 0 ? styles.alertValue : undefined}>
+                  Ventes bloquées (vérification indisponible): {dashboard.premium_verification_overview.unavailable}
+                </Text>
+                {dashboard.premium_verification_overview.unavailable > 0 && (
+                  <Text style={styles.alertValue}>
+                    ⚠️ Vérifier GOOGLE_PLAY_SERVICE_ACCOUNT_JSON sur Render — des achats payés ne peuvent pas être activés.
+                  </Text>
+                )}
+              </>
+            ) : (
+              <EmptyState label="Aucun achat premium tenté sur cette période." />
+            )}
+          </AdminSectionCard>
+
           <AdminSectionCard title="Coûts & revenu">
             <Text>Coût OCR: {formatMoney(dashboard.cost_metrics?.ocr_cost_eur ?? 0)}</Text>
             <Text>Coût par utilisateur actif: {formatMoney(dashboard.cost_metrics?.cost_per_active_user_eur ?? 0)}</Text>
@@ -216,4 +239,5 @@ const styles = StyleSheet.create({
   quotaMeta: { fontSize: 12, color: '#374151' },
   progressTrack: { height: 8, borderRadius: 999, backgroundColor: '#E5E7EB', overflow: 'hidden', marginTop: 2, marginBottom: 4 },
   progressFill: { height: '100%', borderRadius: 999 },
+  alertValue: { color: '#B91C1C', fontWeight: '700' },
 });

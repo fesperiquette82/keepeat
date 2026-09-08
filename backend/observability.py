@@ -27,6 +27,8 @@ _EVENT_NAME_ALLOWED = {
     "premium_paywall_viewed",
     "premium_checkout_started",
     "premium_checkout_succeeded",
+    "premium_verification_unavailable",
+    "premium_verification_rejected",
     "premium_restored",
     "account_deleted",
     "email_import_sender_missing",
@@ -652,6 +654,59 @@ async def build_email_import_overview(
     return {
         "total": total,
         "succeeded": succeeded,
+        "by_outcome": by_outcome,
+    }
+
+
+async def build_premium_verification_overview(
+    *,
+    business_events_col,
+    start_iso: str,
+    end_iso: str,
+) -> dict[str, Any]:
+    """Résumé des vérifications d'achat premium (BUG-062) sur la période.
+
+    Depuis que le serveur refuse d'accorder Premium sans preuve, un échec de
+    vérification n'est plus invisible : il **bloque** une vente. Deux compteurs
+    demandent donc une action différente :
+      - `rejected` : Google refuse l'achat (jeton invalide) — cas normal isolé,
+        anormal s'il devient massif (fraude ou bug client) ;
+      - `unavailable` : nous n'avons pas pu vérifier (service account absent ou
+        cassé, panne réseau) — **chaque occurrence est une vente empêchée**, et
+        une série continue signale une configuration Render à réparer.
+    Sans ce bloc, ces refus n'apparaîtraient nulle part : le tunnel
+    d'activation ne compte que les succès (`premium_checkout_succeeded`).
+    """
+    pipeline = [
+        {
+            "$match": {
+                "created_at": {"$gte": start_iso, "$lte": end_iso},
+                "event_name": {
+                    "$in": [
+                        "premium_checkout_started",
+                        "premium_checkout_succeeded",
+                        "premium_verification_rejected",
+                        "premium_verification_unavailable",
+                    ]
+                },
+            }
+        },
+        {"$group": {"_id": "$event_name", "count": {"$sum": 1}}},
+    ]
+    rows = await business_events_col.aggregate(pipeline).to_list(length=20)
+    by_outcome = {str(row["_id"]): int(row["count"]) for row in rows if row.get("_id")}
+    started = by_outcome.get("premium_checkout_started", 0)
+    succeeded = by_outcome.get("premium_checkout_succeeded", 0)
+    rejected = by_outcome.get("premium_verification_rejected", 0)
+    unavailable = by_outcome.get("premium_verification_unavailable", 0)
+    return {
+        "started": started,
+        "succeeded": succeeded,
+        "rejected": rejected,
+        "unavailable": unavailable,
+        # Vente empêchée par notre propre indisponibilité : l'indicateur à
+        # surveiller, distinct d'un refus légitime de Google.
+        "blocked_by_us": unavailable,
         "by_outcome": by_outcome,
     }
 

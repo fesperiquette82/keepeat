@@ -108,16 +108,43 @@ function formatMonthlyLimit(limit: number | null): string {
   return String(limit);
 }
 
+/**
+ * Limites du plan **vendu**, pas du plan courant (BUG-071).
+ *
+ * L'argumentaire était construit à partir des droits de l'utilisateur : un
+ * compte gratuit voyait donc ses propres limites gratuites (8) présentées comme
+ * l'offre Premium (200). Les valeurs ci-dessous reflètent
+ * `backend/entitlements.py::PREMIUM_MONTHLY_LIMITS` et ne dépendent plus de
+ * l'état du compte qui regarde la page.
+ */
+export const PREMIUM_PLAN_MONTHLY_LIMITS = {
+  ocr_receipt: 200,
+  ai_recipes: 200,
+} as const;
+
 export function buildPremiumCopy(options: {
   entitlements: BillingEntitlements | null;
   usage: BillingUsage | null;
   variant?: PremiumCopyVariantKey;
 }) {
   const variant = VARIANTS_FR[options.variant ?? DEFAULT_VARIANT];
+  // BUG-071 : l'offre décrite est TOUJOURS celle du plan Premium. Les droits
+  // courants (`options.entitlements`) ne servent plus qu'à situer l'utilisateur,
+  // jamais à décrire ce qu'on lui vend — sinon un compte gratuit lisait
+  // « jusqu'à 8 scans par mois » dans l'argumentaire Premium.
   const ctx: CopyContext = {
-    ocrMonthlyLimit: options.entitlements?.features?.ocr_receipt?.monthly_limit ?? options.usage?.usage?.ocr_receipt?.limit ?? null,
-    aiMonthlyLimit: options.entitlements?.features?.ai_recipes?.monthly_limit ?? options.usage?.usage?.ai_recipes?.limit ?? null,
+    ocrMonthlyLimit: PREMIUM_PLAN_MONTHLY_LIMITS.ocr_receipt,
+    aiMonthlyLimit: PREMIUM_PLAN_MONTHLY_LIMITS.ai_recipes,
   };
+  const currentPlan = options.entitlements?.plan ?? 'free';
+  const currentOcrLimit =
+    options.entitlements?.features?.ocr_receipt?.monthly_limit ??
+    options.usage?.usage?.ocr_receipt?.limit ??
+    null;
+  const currentAiLimit =
+    options.entitlements?.features?.ai_recipes?.monthly_limit ??
+    options.usage?.usage?.ai_recipes?.limit ??
+    null;
 
   return {
     heroTitle: variant.heroTitle,
@@ -125,6 +152,15 @@ export function buildPremiumCopy(options: {
     ctaLabel: variant.ctaLabel,
     benefits: variant.benefits.map((benefit) => ({ id: benefit.id, text: benefit.resolve(ctx) })),
     genericPersonalization: variant.genericPersonalization,
+    // Plan actuel, présenté séparément de l'offre vendue.
+    currentPlan,
+    currentOcrLimit,
+    currentAiLimit,
+    // Le quota « recettes » couvre catalogue ET génération IA côté serveur
+    // (FEATURE_AI) : le dire explicitement évite de laisser croire que seules
+    // les recettes générées par IA le consomment.
+    quotaScopeNote:
+      'Le quota de recettes couvre toutes les suggestions affichées, qu’elles viennent du catalogue ou d’une génération IA.',
   };
 }
 

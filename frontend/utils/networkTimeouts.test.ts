@@ -35,7 +35,6 @@ const FETCH_TIMEOUT_FILES = [
   { file: 'utils/adminMonitoringApi.ts', importPath: './fetchWithTimeout' },
   { file: 'utils/billingService.ts', importPath: './fetchWithTimeout' },
   { file: 'utils/debugLogsBackendUpload.ts', importPath: './fetchWithTimeout' },
-  { file: 'utils/debugLogsGitHubSync.ts', importPath: './fetchWithTimeout' },
   { file: 'utils/notificationService.ts', importPath: './fetchWithTimeout' },
 ];
 

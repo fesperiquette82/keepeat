@@ -5,6 +5,7 @@ import { useRouter } from 'expo-router';
 import Ionicons from '@expo/vector-icons/Ionicons';
 import ReanimatedSwipeable, { type SwipeableMethods, SwipeDirection } from 'react-native-gesture-handler/ReanimatedSwipeable';
 import { useStockStore } from '../../store/stockStore';
+import { syncStateForItem } from '../../utils/pendingMutationQueue';
 import { ActionBanner } from '../../component/ActionBanner';
 import { getThemeColors, getThemeText } from '../../utils/theme';
 import { useAppSettingsStore } from '../../store/appSettingsStore';
@@ -50,7 +51,7 @@ function formatExpiryLabel(expiryDate?: string): string {
 export default function StockScreen() {
   const router = useRouter();
   const insets = useSafeAreaInsets();
-  const { items: storeItems, fetchStock } = useStockStore();
+  const { items: storeItems, fetchStock, pendingMutations, failedMutations } = useStockStore();
   const [activeFilter, setActiveFilter] = useState<StockFilter>('tous');
   const [activeSort, setActiveSort] = useState<StockSort>('expiry');
   const [searchQuery, setSearchQuery] = useState('');
@@ -395,11 +396,32 @@ export default function StockScreen() {
                     <View style={styles.cardText}>
                       <Text style={styles.name}>{item.name}</Text>
                       <Text style={styles.meta}>{storageZoneLabel(item.storageZone)} · {item.quantity ?? UI_LABELS.fr.unknownQuantity}</Text>
+                      {/* BUG-065 : une action non synchronisée — ou refusée par le
+                          serveur — ne doit plus être invisible pour l'utilisateur. */}
+                      {(() => {
+                        const syncState = syncStateForItem(item.id, pendingMutations, failedMutations);
+                        if (syncState === 'synced') return null;
+                        return (
+                          <Text
+                            style={[
+                              styles.syncBadge,
+                              syncState === 'failed' ? styles.syncBadgeFailed : styles.syncBadgePending,
+                            ]}
+                          >
+                            {syncState === 'failed' ? '⚠️ à corriger — non enregistré' : '⏳ en attente de synchronisation'}
+                          </Text>
+                        );
+                      })()}
                     </View>
                   </View>
                   <View style={styles.expiryBadge}>
                     <View style={[styles.expiryDot, { backgroundColor: expiryColor(daysUntil(item.expiry_date)) }]} />
-                    <Text style={[styles.expiry, { color: expiryColor(daysUntil(item.expiry_date)) }]}>{formatExpiryLabel(item.expiry_date)}</Text>
+                    <Text style={[styles.expiry, { color: expiryColor(daysUntil(item.expiry_date)) }]}>
+                      {formatExpiryLabel(item.expiry_date)}
+                      {/* BUG-073 : une date déduite d'une durée de conservation
+                          ne doit pas s'afficher comme une DLC lue. */}
+                      {item.expiry_source === 'estimated' ? ' (estimée)' : ''}
+                    </Text>
                   </View>
                 </TouchableOpacity>
               </ReanimatedSwipeable>
@@ -452,6 +474,9 @@ const createStyles = (C: ReturnType<typeof getThemeColors>, T: ReturnType<typeof
   thumbImage: { width: '100%', height: '100%' },
   name: { color: C.text, fontSize: 15, fontWeight: '700' },
   meta: { ...T.secondarySmall, marginTop: 2 },
+  syncBadge: { ...T.secondarySmall, marginTop: 2, fontWeight: '600' },
+  syncBadgePending: { color: C.textMid },
+  syncBadgeFailed: { color: '#B91C1C' },
   expiryBadge: { flexDirection: 'row', alignItems: 'center', gap: 5 },
   expiryDot: { width: 8, height: 8, borderRadius: 4 },
   expiry: { fontSize: 12, fontWeight: '700' },

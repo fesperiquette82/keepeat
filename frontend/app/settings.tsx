@@ -13,7 +13,6 @@ import { isAdminUser } from '../utils/adminAccess';
 import { logger } from '../utils/logger';
 import { resolvePremiumStatus } from '../utils/premiumStatus';
 import { buildLogoutConfirmationCopy } from '../utils/settingsLogout';
-import { shareDebugLogsToGitHub } from '../utils/debugLogsGitHubSync';
 import { uploadDebugLogsToBackend } from '../utils/debugLogsBackendUpload';
 import { exportAccountData } from '../utils/accountService';
 import { saveAndShareAccountExport } from '../utils/accountExportFile';
@@ -83,27 +82,6 @@ export default function SettingsScreen() {
     void forceRefreshReminderProducts();
   }, [forceRefreshReminderProducts]);
 
-  const onPressExportDebugLogs = useCallback(async () => {
-    setDebugLogsUploading(true);
-    try {
-      const result = await shareDebugLogsToGitHub();
-      if (result.success) {
-        Alert.alert('Debug Logs Uploaded', result.message, [
-          { text: 'OK', style: 'default' },
-          ...(result.url ? [{ text: 'Open Issue', onPress: () => {
-            // TODO: Open URL in browser
-            logger.info('[SETTINGS] Issue URL', { url: result.url });
-          } }] : []),
-        ]);
-      } else {
-        Alert.alert('Upload Failed', result.message);
-      }
-    } catch (error) {
-      Alert.alert('Error', `Failed to upload logs: ${error instanceof Error ? error.message : 'Unknown error'}`);
-    } finally {
-      setDebugLogsUploading(false);
-    }
-  }, []);
 
   const onPressUploadDebugLogsToBackend = useCallback(async () => {
     setDebugLogsUploading(true);
@@ -344,38 +322,33 @@ export default function SettingsScreen() {
           </View>
         )}
 
-        <View style={styles.card}>
-          <Text style={styles.sectionTitle}>Debug</Text>
-          <Text style={styles.systemInfo}>Export swipe gesture debug logs for troubleshooting</Text>
-          <TouchableOpacity
-            style={[styles.refreshButton, debugLogsUploading && styles.disabledButton]}
-            onPress={onPressUploadDebugLogsToBackend}
-            disabled={debugLogsUploading}
-          >
-            {debugLogsUploading ? (
-              <ActivityIndicator size="small" color="#FFFFFF" />
-            ) : (
-              <Ionicons name="cloud-upload-outline" size={16} color="#FFFFFF" />
-            )}
-            <Text style={styles.refreshButtonText}>
-              {debugLogsUploading ? 'Uploading...' : '📤 Upload Logs to Backend'}
-            </Text>
-          </TouchableOpacity>
-          <TouchableOpacity
-            style={[styles.refreshButton, debugLogsUploading && styles.disabledButton]}
-            onPress={onPressExportDebugLogs}
-            disabled={debugLogsUploading}
-          >
-            {debugLogsUploading ? (
-              <ActivityIndicator size="small" color="#FFFFFF" />
-            ) : (
-              <Ionicons name="logo-github" size={16} color="#FFFFFF" />
-            )}
-            <Text style={styles.refreshButtonText}>
-              {debugLogsUploading ? 'Uploading...' : '📤 Export to GitHub'}
-            </Text>
-          </TouchableOpacity>
-        </View>
+        {/* BUG-067 : le diagnostic était affiché à TOUS les utilisateurs, juste
+            après la section admin pourtant protégée. Il est désormais soumis au
+            même contrôle. L'export « to GitHub » a été supprimé : il lisait un
+            jeton depuis `EXPO_PUBLIC_GITHUB_TOKEN`, or toute valeur
+            `EXPO_PUBLIC_` est intégrée au bundle et lisible dans l'APK
+            distribué — un secret ne peut pas y vivre. L'envoi passe donc
+            uniquement par le backend, authentifié. */}
+        {canAccessAdmin && (
+          <View style={styles.card}>
+            <Text style={styles.sectionTitle}>Debug</Text>
+            <Text style={styles.systemInfo}>Envoi des journaux de diagnostic au backend (accès administrateur)</Text>
+            <TouchableOpacity
+              style={[styles.refreshButton, debugLogsUploading && styles.disabledButton]}
+              onPress={onPressUploadDebugLogsToBackend}
+              disabled={debugLogsUploading}
+            >
+              {debugLogsUploading ? (
+                <ActivityIndicator size="small" color="#FFFFFF" />
+              ) : (
+                <Ionicons name="cloud-upload-outline" size={16} color="#FFFFFF" />
+              )}
+              <Text style={styles.refreshButtonText}>
+                {debugLogsUploading ? 'Envoi…' : '📤 Envoyer les journaux au backend'}
+              </Text>
+            </TouchableOpacity>
+          </View>
+        )}
 
         <View style={styles.card}>
           <Text style={styles.sectionTitle}>{t('accountSection')}</Text>

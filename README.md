@@ -37,20 +37,38 @@ Créer un fichier `backend/.env` avec au minimum :
 
 ```env
 MONGO_URL=mongodb://localhost:27017/keepeat
-JWT_SECRET=change-me
+JWT_SECRET_KEY=change-me
 BACKEND_URL=http://localhost:8000
 ```
+
+> Le nom exact attendu par le code est `JWT_SECRET_KEY` (repli accepté :
+> `SECRET_KEY`) — cf. `backend/auth_utils.py`. Un `JWT_SECRET` seul, comme
+> l'indiquait une version antérieure de ce README, empêche le démarrage.
 
 Variables utiles supplémentaires selon les fonctionnalités activées :
 
 ```env
-SMTP_HOST=
-SMTP_PORT=587
-SMTP_USERNAME=
-SMTP_PASSWORD=
-SMTP_FROM=
-ADMIN_KEY=
-OPENAI_API_KEY=
+# Envoi d'e-mails (vérification de compte, réinitialisation) — via l'API Brevo,
+# pas de SMTP : cf. backend/server.py::_send_email
+BREVO_API_KEY=
+EMAIL_FROM=
+
+# Droits d'administration : liste d'e-mails, il n'existe aucune clé admin
+ADMIN_EMAILS=toi@exemple.com
+
+# IA (OCR de tickets et suggestions de recettes) — Gemini, pas OpenAI
+GEMINI_OCR_API_KEY=
+GEMINI_RECIPES_API_KEY=
+
+# Facturation Google Play (cf. AUDIT_BUGS.md BUG-062/063)
+GOOGLE_PLAY_SERVICE_ACCOUNT_JSON=
+GOOGLE_RTDN_TOKEN=
+
+# Import de tickets par email
+EMAIL_IMPORT_INBOX_ADDRESS=
+EMAIL_IMPORT_INBOX_APP_PASSWORD=
+EMAIL_IMPORT_CRON_TOKEN=
+
 OPENFOODFACTS_USER_AGENT=KeepEat/1.0 (dev@example.com)
 ```
 

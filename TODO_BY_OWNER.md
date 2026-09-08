@@ -18,6 +18,9 @@
   2. Repérer la section "validation des développeurs Android" / "Android Developer Verification" sur la page d'accueil.
   3. Enregistrer le nom de package KeepEat (`com.fesperiquette.keepeat`) et la clé de signature utilisée par le build EAS.
   4. Si tu n'as pas encore de compte Play Console, il faudra probablement en créer un (frais uniques ~25$) rien que pour cette étape d'enregistrement, même sans intention de publier sur le Store.
+- [ ] **Positionner `GOOGLE_RTDN_TOKEN` sur Render** (BUG-063) — le webhook d'abonnement Google Play (`/api/billing/google/rtdn`) exige désormais ce jeton : sans lui il répond 503 et **aucune notification n'est traitée** (renouvellements, résiliations, expirations). Auparavant son absence désactivait silencieusement l'authentification, ce qui laissait n'importe qui activer ou couper le Premium d'un abonné. Générer une valeur aléatoire longue, la poser sur Render, puis l'ajouter dans Play Console (Monétisation → Configuration → Notifications) sous forme `?token=<valeur>` ou via l'authentification Pub/Sub native.
+- [ ] **Positionner `GOOGLE_PLAY_SERVICE_ACCOUNT_JSON` sur Render** (BUG-062) — sans compte de service, le serveur ne peut plus vérifier un achat auprès de Google et répond désormais 503 au lieu d'offrir 30 jours de Premium. **Tant que cette variable est absente, aucun achat réel ne peut être activé.** Créer un compte de service dans Google Cloud (rôle Android Publisher), l'autoriser dans Play Console → Utilisateurs et autorisations, puis coller le JSON complet dans la variable.
+  ⚠️ Ne **jamais** positionner `ALLOW_UNVERIFIED_PURCHASES=true` en production : c'est l'interrupteur de développement qui rétablit l'ancien comportement (Premium accordé sans preuve d'achat).
 
 ## 🟢 Partager l'app à des amis + leur donner le premium gratuitement
 

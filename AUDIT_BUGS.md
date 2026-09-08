@@ -949,3 +949,172 @@ Deux points chauds identifiés par lecture de code :
 **Commandes exécutées :** `PYTHONPATH=backend python -m pytest backend/tests/test_email_import.py -q`
 **Résultat :** PASS (31/31, 8m08s — durée dominée par le déclenchement du lifespan FastAPI dans cet environnement de développement sans MongoDB local, sans rapport avec ce changement)
 **Risques restants :** aucun côté logique applicative. Le dossier `KeepEat/Traites` sera créé automatiquement par le code au prochain passage du cron sur la boîte réelle — aucune action manuelle requise côté propriétaire. Comme pour `mark_seen` avant lui, aucune adresse email n'est journalisée dans les logs ni les `business_events` (confidentialité), donc identifier après coup *quel* expéditeur a été rejeté nécessite toujours de consulter directement la boîte mail.
+
+## BUG-062 — Facturation : Premium accordé alors que la vérification de l'achat a échoué
+
+**Contexte :** revue externe du code (analyse du 08/09/2026), point bloquant n°1, reproduit par l'auteur de l'analyse : « Google Play répond HTTP 400, avec compte de service considéré comme configuré → le serveur accorde tout de même Premium pendant 30 jours ». Cause : `_verify_google_play_subscription` retournait `None` de façon indifférenciée dans **trois** situations très différentes — service account absent (dev), réponse Google négative (achat invalide), et panne réseau/credentials/5xx — et l'appelant traduisait ce `None` unique en abonnement actif de 30 jours. Le commentaire évoquait un « mode dev » mais rien ne restreignait cette branche à un environnement de développement : en production, une simple erreur réseau ou un HTTP 400 offrait un mois de Premium. Aucune contrainte d'unicité n'existait par ailleurs sur `store_purchase_token` : un même jeton pouvait créditer plusieurs comptes, et les RTDN ultérieurs (qui ciblent ce champ) frappaient alors un compte arbitraire parmi eux.
+
+| ID | Sévérité | Statut | Résumé |
+|---|---|---|---|
+| BUG-062 | 🔴 BLOQUANT (perte de revenus + droits accordés sans paiement) | `CORRIGÉ` | Nouveau module `backend/google_play_billing.py` (logique pure, sans I/O) distinguant 4 issues : `VERIFIED` (Google a répondu), `INVALID` (400/404/410 — Google refuse, refus définitif), `UNAVAILABLE` (401/403/429/5xx/timeout — réessayable, aucun droit) et `NOT_CONFIGURED`. `_verify_google_play_subscription` retourne désormais `(outcome, données)`. `verify_google_subscription` n'accorde Premium que sur `VERIFIED` + `paymentState ∈ {1,2}` ; répond 402 `PURCHASE_REJECTED` sur `INVALID`, 503 `VERIFICATION_UNAVAILABLE` (en mémorisant `pending_purchase_*` pour revérification) sur indisponibilité, et 409 `PURCHASE_TOKEN_ALREADY_LINKED` si le jeton appartient déjà à un autre compte. L'attribution sans preuve n'est possible qu'en test (`APP_ENV=test`) ou via l'interrupteur explicite `ALLOW_UNVERIFIED_PURCHASES=true`, absent par défaut — donc jamais en production. Côté mobile, `finishTransaction` n'acquitte plus l'achat auprès de Google dans un `finally` : la règle « acquitter seulement après activation confirmée » est extraite dans `purchaseAcknowledgement.ts` (testable sans modules natifs), si bien qu'une activation échouée laisse l'achat non confirmé et Google le represente au lancement suivant, rejouant l'activation au lieu de laisser un achat payé sans droits. |
+
+**Fichiers modifiés :** `backend/google_play_billing.py` (nouveau), `backend/server.py` (`_verify_google_play_subscription`, `verify_google_subscription`, `_handle_subscription_active`), `backend/observability.py` (2 événements ajoutés à l'allowlist), `frontend/utils/purchaseAcknowledgement.ts` (nouveau), `frontend/utils/purchaseVerificationError.ts` (nouveau), `frontend/utils/iapService.ts`, `frontend/app/premium.tsx`
+**Tests ajoutés/mis à jour :** `backend/tests/test_google_play_billing.py` (nouveau, 18 tests + 33 sous-tests) ; `tests/test_billing_api_v1.py` (7 nouveaux scénarios remplaçant `test_verify_sets_premium`, + `_FakeUsersCol` rendu fidèle aux filtres — il ignorait la requête et masquait donc tout filtre incorrect) ; `frontend/utils/purchaseAcknowledgement.test.ts` (4) ; `frontend/utils/purchaseVerificationError.test.ts` (6)
+**Commandes exécutées :** `PYTHONPATH=. python -m pytest backend/tests/test_google_play_billing.py -q` ; `PYTHONPATH=backend python -m pytest tests/test_billing_api_v1.py -q` ; `npm run lint` ; `npx tsc --noEmit` ; `npm run test:ci`
+**Résultat :** PASS (18+33 ; 10/10 ; frontend 327+6+2, 0 échec)
+**Risques restants :** `ALLOW_UNVERIFIED_PURCHASES` ne doit jamais être positionné sur Render — c'est le seul interrupteur qui rétablit l'ancien comportement, volontairement explicite et absent par défaut. Les comptes ayant obtenu un Premium via l'ancien fail-open conservent leurs droits jusqu'à leur échéance enregistrée : aucune purge rétroactive n'est faite ici (elle demanderait de distinguer les achats réels des artefacts, ce qui n'est pas déterminable côté serveur sans revérifier chaque jeton auprès de Google).
+
+## BUG-063 — Webhook RTDN : authentification facultative et droits mal recalculés
+
+**Contexte :** même revue externe, point bloquant n°2. Trois défauts indépendants sur `google_play_rtdn` : (1) `if rtdn_token:` — un `GOOGLE_RTDN_TOKEN` absent **désactivait silencieusement** tout contrôle, laissant quiconque connaissant l'URL activer ou couper le Premium d'un porteur de jeton ; (2) les numéros de notification étaient mal documentés (les commentaires annonçaient « 1=PURCHASED, 4=PURCHASED_WITH_DEFERRED, 12=EXPIRED, 13=ON_HOLD » alors que 1=RECOVERED, 4=PURCHASED, 12=REVOKED, 13=EXPIRED, 5=ON_HOLD), une résiliation (3) coupait immédiatement des droits **déjà payés**, une période de grâce (6) coupait l'accès d'un abonné dont le paiement était simplement en cours de nouvelle tentative, et les états 5 (ON_HOLD) et 10 (PAUSED) n'étaient pas traités du tout ; (3) les erreurs de traitement étaient avalées et la route renvoyait 200, faisant perdre l'événement sans reprise possible.
+
+| ID | Sévérité | Statut | Résumé |
+|---|---|---|---|
+| BUG-063 | 🔴 BLOQUANT (accès non authentifié + droits payés retirés) | `CORRIGÉ` | Authentification **obligatoire** : sans `GOOGLE_RTDN_TOKEN` la route répond 503 au lieu d'accepter anonymement (même convention que `run_alerts_cron`). Correspondance numéro → effet centralisée dans `google_play_billing.action_for_notification` avec les numéros officiels : `ACTIVATE` (1, 2, 4, 6, 7, 9 — période de grâce incluse, l'abonné garde l'accès), `KEEP_UNTIL_EXPIRY` (3 — nouveau `_handle_subscription_canceled` conserve `is_premium` et l'échéance, `resolve_plan` éteignant les droits d'eux-mêmes le jour venu ; désactivation seulement si aucune échéance n'est connue, sans quoi `expires_at is None` vaudrait « illimité »), `DEACTIVATE` (5, 10, 12, 13) et `IGNORE` (8, 11 et tout numéro inconnu — un futur type Google ne doit pas couper l'accès d'un abonné). Les erreurs de traitement remontent en 500 pour que Pub/Sub redélivre le message, tandis qu'un message illisible reste en 200 (le rejouer ne changerait rien). `_handle_subscription_active` ne fabrique plus une échéance de 30 jours quand la vérification échoue : il conserve l'échéance connue et marque `subscription_verified=false`. |
+
+**Fichiers modifiés :** `backend/server.py` (`google_play_rtdn`, `_handle_subscription_active`, `_handle_subscription_canceled` nouveau, `_handle_subscription_inactive`), `backend/google_play_billing.py`
+**Tests ajoutés/mis à jour :** `backend/tests/test_google_play_rtdn.py` (nouveau, 11 tests + 2 sous-tests : secret absent → 503 sans aucune écriture, mauvais token → 401, résiliation conservant les droits, résiliation sans échéance connue, période de grâce, ON_HOLD/PAUSED, expiration, type inconnu sans effet, aucune échéance inventée quand Google est injoignable, erreur de traitement remontée en 500, message illisible en 200) ; `backend/tests/test_google_play_billing.py` couvre la table de correspondance
+**Commandes exécutées :** `PYTHONPATH=. python -m pytest backend/tests/test_google_play_rtdn.py backend/tests/test_google_play_billing.py -q`
+**Résultat :** PASS (29 tests + 35 sous-tests)
+**Risques restants :** `GOOGLE_RTDN_TOKEN` doit être positionné sur Render **avant** que Google n'envoie des RTDN, sinon les notifications seront rejetées en 503 (et redélivrées par Pub/Sub jusqu'à configuration — pas de perte, mais pas de traitement non plus). Action propriétaire ajoutée à `TODO_BY_OWNER.md`. La réconciliation périodique avec l'état Google (recommandée par la revue) n'est pas implémentée ici : les droits restent pilotés par les RTDN et la vérification à l'achat.
+
+## BUG-064 — Aucune isolation entre comptes : stock et actions en attente partagés
+
+**Contexte :** revue externe du 08/09/2026, point bloquant n°3, deux scénarios reproduits par son auteur (« Synchronisation avec session pas encore chargée → la requête part sans authentification et l'erreur 401 fait perdre l'action en attente »). Trois causes cumulées : (1) le store stock persiste sous une clé **commune à tous les comptes** (`keepeat_stock`) ; (2) `logout()` supprimait les données d'authentification mais ne réinitialisait ni le stock, ni les mutations en attente ; (3) les mutations ne portaient aucune identité de propriétaire et utilisaient le jeton **courant** au moment de l'envoi (`authHeaders()` lit `useAuthStore.getState().token` à chaque appel). Conséquences : stock du compte précédent affiché après un changement d'utilisateur, action préparée par A envoyée sur le compte B, et synchronisation déclenchée par l'hydratation ou le réseau **avant** la fin de `loadAuth` — requête sans en-tête `Authorization`, 401, action perdue.
+
+| ID | Sévérité | Statut | Résumé |
+|---|---|---|---|
+| BUG-064 | 🔴 BLOQUANT (fuite de données entre comptes) | `CORRIGÉ` | Chaque mutation porte désormais `ownerId` (compte qui l'a créée) et `mutationsSendableBy()` n'envoie que celles du compte connecté — celles d'un autre compte **restent en file** jusqu'à sa reconnexion au lieu de partir avec le mauvais jeton ou d'être perdues. `flushPendingMutations` refuse de démarrer tant que `authStore.isLoaded` est faux ou qu'aucun jeton n'est disponible : plus aucune requête ne part sans authentification. Le state persisté porte un `ownerId` ; à la réhydratation, des données appartenant à un autre compte sont écartées via `resetForAccount()`. Nouveau `accountSessionBridge.ts` (registre neutre évitant le cycle d'import `stockStore` → `authStore`) : `login`, `loadAuth` et `logout` notifient le changement de compte, le store stock vide alors affichage, statistiques et actions du compte sortant. |
+
+**Fichiers modifiés :** `frontend/utils/accountSessionBridge.ts` (nouveau), `frontend/utils/pendingMutationQueue.ts` (nouveau — `ownerId`, `mutationsSendableBy`), `frontend/store/stockStore.ts` (`resetForAccount`, garde d'authentification, `ownerId` persisté, estampillage des mutations), `frontend/store/authStore.ts` (notifications login/loadAuth/logout), `frontend/utils/stockUpdateOffline.ts` (propriétaire sur la mutation UPDATE)
+**Tests ajoutés/mis à jour :** `frontend/utils/accountSessionBridge.test.ts` (4) ; `frontend/utils/pendingMutationQueue.test.ts` (isolation par compte, 401 conservé) ; `frontend/utils/stockUpdateOffline.test.ts` (2 nouveaux — propriétaire transmis, null par défaut)
+**Commandes exécutées :** `npm run lint` ; `npx tsc --noEmit` ; `npm run test:ci`
+**Résultat :** PASS (352 tests unitaires + 6 intégration + 2 smoke, 0 échec)
+**Risques restants :** les mutations créées **avant** ce correctif n'ont pas de `ownerId` (`null`) : elles restent envoyables par le compte connecté au moment du flush, comportement volontairement conservé pour ne pas les perdre — le risque résiduel ne concerne qu'un appareil ayant changé de compte entre l'ancienne et la nouvelle version. Le partage de foyer (BUG-049) reste géré côté serveur par `_resolve_stock_scope_ids` : `ownerId` identifie l'auteur de l'action, pas le périmètre de visibilité.
+
+## BUG-065 — File hors ligne : actions supprimées, écrasées, ou perdues silencieusement
+
+**Contexte :** revue externe du 08/09/2026, point bloquant n°4 — quatre défauts indépendants reproduits localement par son auteur sur le vrai store TypeScript.
+
+| ID | Sévérité | Statut | Résumé |
+|---|---|---|---|
+| BUG-065 | 🔴 BLOQUANT (perte de données utilisateur) | `CORRIGÉ` | **(1) Erreurs temporaires.** `isNetworkError` n'était vrai que sans réponse HTTP : un 503, un 500 ou un 401 tombaient dans la branche « mutation invalide, la supprimer ». Nouvelle `classifyMutationFailure()` : `retry-later` (pas de réponse, 5xx, 408, 429, statut inattendu), `wait-for-auth` (401/403), `give-up` **uniquement** sur un refus que le serveur redonnera à l'identique (400, 404, 409, 410, 422). **(2) Actions écrasées.** Le flush figeait un instantané de la file au départ puis réécrivait la file entière avec — une action ajoutée pendant la synchronisation disparaissait. Chaque `set` utilise désormais la forme fonctionnelle et ne retire que la mutation confirmée (`removeMutation`). **(3) Identifiants temporaires.** Après un ADD réussi, `remapTempId()` remplace le `temp_…` dans **toutes** les mutations dépendantes — un renommage enregistré juste après un ajout hors ligne ne part plus vers `/api/stock/temp_xxx` (404 → action supprimée). **(4) Disparition silencieuse.** Une action définitivement refusée rejoint `failedMutations` et s'affiche sur l'article concerné (« ⚠️ à corriger — non enregistré »), les actions en attente affichant « ⏳ en attente de synchronisation ». **(5) Doublons.** Le client envoie un identifiant stable par action (`X-Mutation-Id`) ; `POST /api/stock` renvoie l'article déjà créé au lieu d'en insérer un second, avec un index unique partiel `(user_id, client_mutation_id)` pour trancher les rejeux concurrents. |
+
+**Fichiers modifiés :** `frontend/utils/pendingMutationQueue.ts` (nouveau), `frontend/store/stockStore.ts` (`flushPendingMutations` réécrit, `failedMutations`, `clearFailedMutations`), `frontend/app/(tabs)/stock.tsx` (badges de synchronisation), `backend/server.py` (`add_stock` idempotent + index unique partiel)
+**Tests ajoutés/mis à jour :** `frontend/utils/pendingMutationQueue.test.ts` (nouveau, 18 tests couvrant les scénarios reproduits par la revue) ; `backend/tests/test_stock_mutation_idempotency.py` (nouveau, 5 tests : rejeu sans doublon, mutations distinctes, comportement inchangé sans en-tête, rejeu concurrent tranché par l'index, troncature de l'identifiant)
+**Commandes exécutées :** `PYTHONPATH=. python -m pytest backend/tests/test_stock_mutation_idempotency.py -q` ; `npm run test:ci`
+**Résultat :** PASS (5/5 backend ; 352 frontend)
+**Risques restants :** l'index unique partiel `(user_id, client_mutation_id)` est créé au démarrage du serveur ; sur une base existante, sa création est instantanée puisqu'aucun document ne porte encore ce champ. Les mutations CONSUME/THROW/UPDATE ne sont pas dédupliquées explicitement — elles sont naturellement idempotentes (repositionner un statut ou réappliquer une modification donne le même résultat), contrairement à l'ajout qui crée un document.
+
+## BUG-066 — Modification appliquée côté serveur mais écran resté sur l'ancienne valeur
+
+**Contexte :** revue externe du 08/09/2026, point n°5, reproduit : « Modification en ligne après un chargement datant de moins de 30 secondes → le serveur et la réponse portent le nouveau nom ; le store conserve l'ancien ». `updateItem` recevait la réponse du PUT mais ne l'appliquait jamais au store : il déléguait le rafraîchissement à `fetchStock()`, lequel refuse de recharger tant que le cache a moins de 30 secondes (`stockFetchPolicy`).
+
+| ID | Sévérité | Statut | Résumé |
+|---|---|---|---|
+| BUG-066 | 🟠 IMPORTANT (donnée fausse affichée après une action réussie) | `CORRIGÉ` | `updateItem` applique désormais la réponse du PUT directement à `items` et `priorityItems`, puis recalcule les associations recettes, avant de laisser les rafraîchissements secondaires suivre leur politique de fraîcheur habituelle. L'écran reflète donc immédiatement ce que le serveur a enregistré, sans dépendre du délai de 30 s. |
+
+**Fichiers modifiés :** `frontend/store/stockStore.ts` (`updateItem`)
+**Tests ajoutés/mis à jour :** couvert indirectement par `frontend/utils/stockUpdateOffline.test.ts` et les tests de file ; le comportement en ligne dépend du store réel (non testé unitairement dans ce dépôt, cf. convention « tests sur les fonctions pures »).
+**Commandes exécutées :** `npx tsc --noEmit` ; `npm run test:ci`
+**Résultat :** PASS
+**Risques restants :** le rafraîchissement de stock ne protège toujours pas explicitement contre l'écrasement d'une modification locale encore en attente par une réponse serveur plus ancienne — `_stockFetchSeq` couvre les réponses hors séquence, mais pas la fusion avec des mutations non synchronisées. Point signalé par la revue, non traité dans ce lot.
+
+## BUG-067 — Diagnostic accessible à tous et jeton GitHub embarqué dans l'app
+
+**Contexte :** revue externe du 08/09/2026, point n°6. Trois défauts : (1) la carte « Debug » de Réglages était rendue **sans aucun contrôle d'accès**, juste après la section admin pourtant protégée par `canAccessAdmin` — n'importe quel utilisateur pouvait exporter les journaux de l'app ; (2) `debugConfig.ts` activait `DEBUG_SWIPE_ACTIONS` et `DEBUG_LOG_TO_CONSOLE` par des constantes codées à `true`, donc actives dans les builds distribués ; (3) `debugLogsGitHubSync.ts` lisait un jeton GitHub depuis `EXPO_PUBLIC_GITHUB_TOKEN` — or toute valeur `EXPO_PUBLIC_` est intégrée au bundle et lisible dans l'APK ([documentation Expo](https://docs.expo.dev/guides/environment-variables/)), donc ce mécanisme ne peut structurellement pas contenir de secret.
+
+| ID | Sévérité | Statut | Résumé |
+|---|---|---|---|
+| BUG-067 | 🟠 IMPORTANT (surface de diagnostic exposée ; critique si un jeton avait été distribué) | `CORRIGÉ` | Carte Debug placée derrière `canAccessAdmin`, comme la section admin voisine. `debugLogsGitHubSync.ts` **supprimé** (avec son test) : l'envoi passe désormais uniquement par `uploadDebugLogsToBackend`, authentifié, où un éventuel relais GitHub pourrait vivre côté serveur avec un vrai secret. `debugConfig.ts` : flags désactivés par défaut, activables par `EXPO_PUBLIC_DEBUG_*` au build ou automatiquement sous `__DEV__`. |
+
+**Vérification côté dépôt :** aucun jeton GitHub n'est committé (`.env*`, `eas.json`, `app.json` inspectés) — le mécanisme était en place mais aucun secret n'a fuité par le dépôt. Reste à vérifier côté propriétaire qu'aucun build EAS n'a été produit avec cette variable définie ; si c'est le cas, révoquer le jeton.
+**Fichiers modifiés :** `frontend/app/settings.tsx`, `frontend/utils/debugConfig.ts`, `frontend/utils/networkTimeouts.test.ts` ; **supprimés :** `frontend/utils/debugLogsGitHubSync.ts`, `frontend/utils/debugLogsGitHubSync.test.ts`
+**Tests ajoutés/mis à jour :** `frontend/utils/debugSurfaceExposure.test.ts` (nouveau, 4 tests : carte Debug derrière le contrôle admin, aucune lecture de `process.env.EXPO_PUBLIC_GITHUB_TOKEN` dans `app/` et `utils/`, flags non activés en dur, envoi uniquement via le backend)
+**Commandes exécutées :** `npm run lint` ; `npx tsc --noEmit` ; `npm run test:ci`
+**Résultat :** PASS
+**Risques restants :** le test anti-secret ne couvre que `app/` et `utils/` ; un futur secret introduit ailleurs (composants, stores) ne serait pas détecté. La suppression des données personnelles dans les journaux de swipe (recommandée par la revue) n'a pas été traitée : `debugSwipeLogger` enregistre des identifiants d'articles, pas d'adresses e-mail, mais le contenu exact reste à auditer.
+
+## BUG-068 — Un jeton volé restait valable 30 jours après un changement de mot de passe
+
+**Contexte :** revue externe du 08/09/2026, point n°7. Les JWT durent 30 jours et ne portaient que `sub` et `exp` ; `reset_password` ne mettait à jour que `hashed_password`. Aucune version de session n'était vérifiée à l'authentification : un jeton déjà émis restait donc utilisable jusqu'à son expiration naturelle — précisément dans le scénario où l'utilisateur réinitialise son mot de passe **parce qu'il soupçonne une compromission**.
+
+| ID | Sévérité | Statut | Résumé |
+|---|---|---|---|
+| BUG-068 | 🟠 IMPORTANT (sécurité des comptes) | `CORRIGÉ` | Ajout d'une version de session : `create_token()` grave la version en vigueur dans le claim `sv`, `get_current_user()` la compare à `session_version` en base et répond 401 « Session revoked » si le jeton est antérieur. `reset_password` fait `$inc: {session_version: 1}`, ce qui invalide instantanément tous les jetons émis avant. Les jetons existants (sans claim `sv`) valent version 0 : la mise en production ne déconnecte personne, mais le premier changement de mot de passe les invalide comme attendu. Une valeur illisible en base est traitée comme 0 plutôt que de déconnecter tout le monde. |
+
+**Fichiers modifiés :** `backend/auth_utils.py` (`create_token`, `token_session_version_is_current`, `get_current_user`), `backend/server.py` (`reset_password`, émission des jetons avec la version courante)
+**Tests ajoutés/mis à jour :** `backend/tests/test_session_revocation.py` (nouveau, 7 tests)
+**Commandes exécutées :** `PYTHONPATH=. python -m pytest backend/tests/test_session_revocation.py -q`
+**Résultat :** PASS (7/7)
+**Risques restants :** la durée des jetons reste de 30 jours et il n'existe pas de mécanisme de rafraîchissement révocable — la revue recommandait des jetons d'accès courts avec renouvellement, changement d'architecture non traité ici. La biométrie continue de stocker le mot de passe dans SecureStore plutôt qu'un jeton révocable (également signalé, non traité). Aucun endpoint « déconnecter tous mes appareils » n'est exposé, bien que le mécanisme sous-jacent existe désormais.
+
+## BUG-069 — Politique de confidentialité contredite par le stockage réel, suppression de compte incomplète
+
+**Contexte :** revue externe du 08/09/2026, point n°8. (1) La politique affirmait « aucune photo n'est stockée durablement », alors que le signalement d'un ticket non reconnu enregistre `image_b64` **et** l'adresse e-mail en base, sans aucune durée de conservation (aucun index TTL sur `receipt_tickets_col`, contrairement à `user_alerts_col`/`products_cache_col`). (2) `delete_account` n'exécutait ni la logique de départ du foyer ni la révocation Gmail : un propriétaire supprimé laissait un foyer dont `owner_id` pointe vers un compte inexistant — or c'est ce champ que suit `resolve_billing_user_doc` pour l'abonnement partagé — et l'autorisation Google survivait au compte.
+
+| ID | Sévérité | Statut | Résumé |
+|---|---|---|---|
+| BUG-069 | 🟠 IMPORTANT (engagement de confidentialité non tenu + données orphelines) | `CORRIGÉ` | **Conservation bornée :** chaque ticket signalé porte désormais `expires_at` (vraie date BSON — un TTL sur `created_at`, chaîne ISO, n'aurait jamais rien supprimé) et un index TTL le purge automatiquement au terme de `RECEIPT_TICKET_RETENTION_DAYS` (90 par défaut). **Politique alignée :** le texte explique l'exception (signalement volontaire) et annonce la durée. **Suppression complète :** `_detach_user_from_household()` sort l'utilisateur de son foyer avant l'effacement — la propriété est **transférée** au plus ancien membre restant (préservant l'abonnement partagé) et le foyer n'est supprimé que s'il ne reste personne ; `_revoke_gmail_connection_best_effort()` révoque le jeton auprès de Google. Les deux sont best-effort : une base indisponible ne doit jamais empêcher un effacement, qui est un droit. |
+
+**Fichiers modifiés :** `backend/server.py` (`_RECEIPT_TICKET_RETENTION_DAYS`, index TTL, `report_receipt_ticket`, `_detach_user_from_household`, `_revoke_gmail_connection_best_effort`, `delete_account`, `_PRIVACY_POLICY_HTML`)
+**Tests ajoutés/mis à jour :** `backend/tests/test_account_deletion_completeness.py` (nouveau, 11 tests : transfert de propriété, retrait simple d'un membre, suppression du dernier membre, foyer introuvable, base en panne, utilisateur sans foyer, révocation Gmail présente/absente/indéchiffrable, durée de conservation bornée, politique documentant l'exception)
+**Commandes exécutées :** `PYTHONPATH=. python -m pytest backend/tests/test_account_deletion_completeness.py -q`
+**Résultat :** PASS (11/11)
+**Risques restants :** les tickets **déjà en base** n'ont pas de champ `expires_at` et ne seront donc jamais purgés par le TTL — une migration ponctuelle serait nécessaire pour les rattraper (non faite ici, elle supprimerait des données existantes sans validation du propriétaire). La purge des caches mobiles à la suppression de compte (mentionnée par la revue) est couverte indirectement par BUG-064 (`resetForAccount` au logout), pas par un effacement explicite déclenché par le serveur.
+
+## BUG-070 — Tests et contrôles qui ne prouvaient rien
+
+**Contexte :** revue externe du 08/09/2026, point n°9. Quatre défauts vérifiés : (1) quatre tests de `frontend/utils/authStore.test.ts` se réduisaient à `assert.ok(true)` — ils passaient quelle que soit l'implémentation, y compris supprimée ; (2) la CI n'exécutait que **7 fichiers backend choisis à la main**, si bien qu'un test de non-régression ajouté ailleurs ne tournait jamais alors que le job s'affichait vert ; (3) `scripts/lib/validate-python-fastapi.sh` annonçait une validation « complète » en ne lançant que `backend/tests/`, ignorant les 20+ fichiers de `tests/` (billing, entitlements, sécurité admin) ; (4) `scripts/lib/validate-e2e-maestro.sh` cherchait `.maestro/smoke.yaml` — inexistant, le scénario réel s'appelant `00-smoke-launch.yaml` — n'exécutait donc rien et sortait malgré tout avec « ✅ E2E (Maestro) validation PASSED », en appelant au passage un script npm `build:e2e` absent de `package.json`.
+
+| ID | Sévérité | Statut | Résumé |
+|---|---|---|---|
+| BUG-070 | 🟠 IMPORTANT (fausse assurance de couverture) | `CORRIGÉ` | Les 4 tests vides sont remplacés par de vraies vérifications des décisions de session, extraites dans `authSessionPolicy.ts` (`authStore.ts` importe SecureStore et n'est pas chargeable en test Node — d'où les placeholders d'origine). La CI exécute désormais `pytest tests backend/tests` en intégralité, en plus du gate rapide conservé pour un retour immédiat. Le script de validation backend couvre les deux répertoires et échoue si aucun n'existe. Le script E2E cible le scénario réellement présent et **échoue explicitement** quand rien ne peut être exécuté, au lieu d'annoncer un succès. |
+
+**Fichiers modifiés :** `.github/workflows/ci.yml`, `scripts/lib/validate-python-fastapi.sh`, `scripts/lib/validate-e2e-maestro.sh`, `frontend/utils/authStore.test.ts`, `frontend/utils/authSessionPolicy.ts` (nouveau)
+**Tests ajoutés/mis à jour :** `tests/test_ci_non_regression_policy.py` (4 nouveaux garde-fous : suite complète en CI, deux répertoires dans le script local, E2E échouant bruyamment, aucun `assert.ok(true)` dans le frontend) ; `frontend/utils/authStore.test.ts` (8 vrais tests)
+**Commandes exécutées :** `PYTHONPATH=backend python -m pytest tests/test_ci_non_regression_policy.py -q`
+**Résultat :** PASS (50/50)
+**Risques restants :** la suite backend complète est lente dans un environnement sans MongoDB (chaque test touchant le lifespan attend un timeout de connexion) — le job CI « Run complete backend suite » sera nettement plus long que l'ancien gate à 7 fichiers. Si cette durée devient gênante, la bonne réponse est de réduire le `serverSelectionTimeoutMS` en test, pas de re-restreindre la sélection de fichiers. `ruff` et `mypy` restent absents de `backend/requirements.txt` : les étapes correspondantes du script de validation continuent donc de s'annoncer « skipped », ce qui est désormais cohérent avec la réalité mais laisse les règles documentées non appliquées.
+
+## BUG-071 — Indicateurs et argumentaire commercial ne mesurant pas ce qu'ils annoncent
+
+**Contexte :** revue externe du 08/09/2026, section « Améliorations produit ». Trois écarts vérifiés : (1) `_compute_streak` comptait les jours sans jet enregistré **sans tenir compte de l'ancienneté du compte** — un compte créé le jour même, vide, affichait « 60 jours sans gaspillage », assimilant absence de saisie et absence de gaspillage ; (2) l'écran Statistiques annonçait « le % de produits consommés avant péremption » alors que la formule serveur est `consommés / (consommés + jetés)`, qui ne compare aucune date ; (3) `premiumPaywallCopy.ts` construisait l'argumentaire Premium à partir des droits **courants** de l'utilisateur, si bien qu'un compte gratuit lisait « jusqu'à 8 scans par mois » sur la page censée lui vendre les 200 du plan Premium.
+
+| ID | Sévérité | Statut | Résumé |
+|---|---|---|---|
+| BUG-071 | 🟡 MINEUR (information trompeuse, sans perte de données) | `CORRIGÉ` | `_compute_streak` plafonne la série à l'ancienneté du compte (`created_at`) : un compte neuf affiche 1 jour, pas 60 ; une date de création absente ou illisible conserve l'ancien comportement plutôt que d'afficher 0. Le libellé du score décrit la formule réelle (« consommés plutôt que jetés ») — corriger le texte plutôt que la mesure évite de modifier rétroactivement le score de tous les comptes. Le paywall annonce les limites du **plan vendu** (`PREMIUM_PLAN_MONTHLY_LIMITS`, miroir de `backend/entitlements.py`) indépendamment du compte qui consulte, tout en exposant séparément `currentPlan`/`currentOcrLimit`/`currentAiLimit`, et explicite que le quota recettes couvre catalogue **et** génération IA (le serveur les confond sous `FEATURE_AI`). |
+
+**Fichiers modifiés :** `backend/server.py` (`_compute_streak`, `get_gamification`), `frontend/app/(tabs)/stats.tsx`, `frontend/utils/premiumPaywallCopy.ts`
+**Tests ajoutés/mis à jour :** `backend/tests/test_stats_honesty.py` (nouveau, 6 tests) ; `frontend/utils/premiumPaywallCopy.test.ts` (nouveau, 6 tests)
+**Commandes exécutées :** `PYTHONPATH=. python -m pytest backend/tests/test_stats_honesty.py -q` ; `npm run test:ci`
+**Résultat :** PASS (6/6 backend ; 6/6 frontend)
+**Risques restants :** les économies affichées reposent toujours sur des montants forfaitaires par catégorie appliqués à tout produit marqué consommé — la revue note à juste titre qu'une consommation ordinaire ne prouve pas une économie *due à KeepEat*. Distinguer « consommé » de « sauvé de justesse » demanderait un changement de modèle, non traité ici.
+
+## BUG-072 — Cartes blanches en dur, illisibles en thème sombre
+
+**Contexte :** revue externe du 08/09/2026. L'écran d'accueil utilisait `backgroundColor: '#fff'` en dur sur quatre éléments (bouton réglages, cartes de résumé, cartes de section, carte recettes) tout en affichant du texte issu du thème actif. En mode sombre, `C.text` est quasi blanc : le contenu devenait illisible, texte très clair sur fond blanc.
+
+| ID | Sévérité | Statut | Résumé |
+|---|---|---|---|
+| BUG-072 | 🟡 MINEUR (lisibilité en thème sombre) | `CORRIGÉ` | Les quatre occurrences utilisent désormais le jeton `C.card`, déjà défini pour les deux thèmes (`#FFFFFF` en clair, `#111827` en sombre). |
+
+**Fichiers modifiés :** `frontend/app/(tabs)/index.tsx`
+**Tests ajoutés/mis à jour :** aucun test unitaire — le rendu visuel n'est pas testable dans ce dépôt (convention : tests sur les fonctions pures). Vérification par typecheck et lecture du diff.
+**Commandes exécutées :** `npx tsc --noEmit` ; `npm run lint`
+**Résultat :** PASS
+**Risques restants :** **vérification visuelle sur appareil non effectuée** (aucun accès matériel depuis cet environnement) — d'autres écrans peuvent présenter le même défaut. Test manuel recommandé au propriétaire : basculer en thème sombre et parcourir les onglets.
+
+## BUG-073 — Aucune distinction entre date lue, date saisie et date estimée
+
+**Contexte :** revue externe du 08/09/2026. `scan-receipt.tsx` affichait « DLC auto » pour le résultat de `computeReceiptItemExpiry`, qui repose soit sur une estimation, soit sur une durée de conservation par catégorie. Le modèle de stock n'enregistrait pas la provenance : une supposition était présentée avec la même autorité qu'une date réellement lue sur l'emballage.
+
+| ID | Sévérité | Statut | Résumé |
+|---|---|---|---|
+| BUG-073 | 🟡 MINEUR (information présentée comme plus fiable qu'elle ne l'est) | `CORRIGÉ` | Nouveau champ `expiry_source` (`"label"` lue / `"manual"` saisie / `"estimated"` déduite, `None` pour les données antérieures) sur `StockItemCreate`/`StockItemUpdate`. `add_stock` le renseigne : une date fournie par le client garde la provenance déclarée, une date que le serveur a dû déduire d'une durée de conservation est marquée comme estimation. Côté app, le scan de ticket annonce « Date estimée : … — à vérifier sur l'emballage » au lieu de « DLC auto », et la liste de stock suffixe « (estimée) » sur les articles concernés. |
+
+**Fichiers modifiés :** `backend/models.py`, `backend/server.py` (`add_stock`), `frontend/store/stockStore.ts` (type `StockItem`), `frontend/app/scan-receipt.tsx`, `frontend/app/(tabs)/stock.tsx`
+**Tests ajoutés/mis à jour :** couvert par le typecheck TypeScript et la validation Pydantic ; les articles existants restent valides (`expiry_source` optionnel).
+**Commandes exécutées :** `npx tsc --noEmit` ; `PYTHONPATH=backend python -m pytest tests backend/tests -q`
+**Résultat :** PASS
+**Risques restants :** le champ n'est pas encore renseigné par le pipeline OCR/email (`ocr_service.py` distingue pourtant déjà `estimated_expiration_date` d'une DLC lue) : les articles issus d'un ticket scanné arrivent donc sans provenance et n'affichent pas la mention « estimée ». La distinction DLC (date limite de consommation) / DDM (date de durabilité minimale) et l'état ouvert/congelé, également recommandés par la revue, ne sont pas traités. Le recalcul d'une estimation lors d'un changement de zone de stockage reste non implémenté : une `estimated_expiration_date` existante garde la priorité sur la zone choisie.

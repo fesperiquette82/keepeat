@@ -322,9 +322,13 @@ export default function StatsScreen() {
           <View style={styles.infoBox}>
             <Ionicons name="information-circle-outline" size={15} color={C.textLight} />
             <Text style={styles.infoText}>
+              {/* BUG-071 : le libellé annonçait « consommés avant péremption »
+                  alors que la formule serveur est consommés / (consommés +
+                  jetés) — elle ne compare aucune date. Le texte décrit
+                  désormais ce qui est réellement mesuré. */}
               {t(
-                'Le score représente le % de produits consommés avant péremption.',
-                'The score is the % of products consumed before expiry.',
+                'Le score représente le % de produits consommés plutôt que jetés.',
+                'The score is the % of products consumed rather than thrown away.',
               )}
             </Text>
           </View>

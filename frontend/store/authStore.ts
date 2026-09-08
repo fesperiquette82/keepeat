@@ -3,6 +3,7 @@ import * as SecureStore from 'expo-secure-store';
 import { unregisterPushToken } from '../utils/notificationService';
 import { buildApiUrl } from '../utils/config';
 import { fetchWithTimeout as fetch } from '../utils/fetchWithTimeout';
+import { notifyAccountChanged } from '../utils/accountSessionBridge';
 import {
   BIOMETRIC_CREDENTIALS_KEY,
   isBiometricAuthenticationCancellationError,
@@ -141,6 +142,10 @@ export const useAuthStore = create<AuthStore>((set) => ({
           hasBiometricCredentials,
           isBiometricSupported,
         });
+        // BUG-064 : la session restaurée fixe le compte propriétaire des
+        // données persistées ; un stock appartenant à quelqu'un d'autre est
+        // écarté par resetForAccount côté stockStore.
+        notifyAccountChanged(user.id ?? null);
       } else {
         set({ isLoaded: true, hasBiometricCredentials, isBiometricSupported });
       }
@@ -185,6 +190,9 @@ export const useAuthStore = create<AuthStore>((set) => ({
         hasBiometricCredentials,
         isBiometricSupported,
       });
+      // BUG-064 : signaler le compte entrant AVANT tout chargement de données,
+      // pour que le stock d'un éventuel compte précédent soit écarté.
+      notifyAccountChanged(user.id ?? null);
       console.log('[AUTH_STORE] refreshing entitlements and usage');
       await useAuthStore.getState().refreshEntitlements();
       await useAuthStore.getState().refreshUsage();
@@ -294,6 +302,9 @@ export const useAuthStore = create<AuthStore>((set) => ({
     await SecureStore.deleteItemAsync(TOKEN_KEY);
     await SecureStore.deleteItemAsync(USER_KEY);
     set({ token: null, user: null, error: null, plan: 'free', entitlements: null, usage: null });
+    // BUG-064 : le stock et les actions en attente du compte sortant ne doivent
+    // pas rester visibles (ni repartir avec le jeton du compte suivant).
+    notifyAccountChanged(null);
   },
 
   clearError: () => set({ error: null }),

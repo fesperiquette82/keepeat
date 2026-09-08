@@ -22,6 +22,18 @@ import { buildMarkActionRollback } from '../utils/stockRollback';
 import { buildUpdateItemOfflineState } from '../utils/stockUpdateOffline';
 import { resolveOnlineSyncAction } from '../utils/onlineSyncDecision';
 import { debugSwipeLogger } from '../utils/debugSwipeLogger';
+import {
+  classifyMutationFailure,
+  httpStatusOf,
+  markAttempted,
+  mutationsSendableBy,
+  remapTempId,
+  removeMutation,
+  toFailedMutation,
+  type FailedMutation,
+  type PendingMutation,
+} from '../utils/pendingMutationQueue';
+import { onAccountChanged } from '../utils/accountSessionBridge';
 
 const authHeaders = () => {
   const token = useAuthStore.getState().token;
@@ -62,6 +74,12 @@ export interface StockItem {
   storageZone?: 'frigo' | 'placard' | 'congelateur'; // zone de stockage — inférée ou choisie par l'user
   quantity?: string;
   expiry_date?: string;
+  /**
+   * Provenance de la date (BUG-073) : 'label' = lue sur l'emballage,
+   * 'manual' = saisie par l'utilisateur, 'estimated' = déduite d'une durée de
+   * conservation. Absent pour les articles antérieurs à ce champ.
+   */
+  expiry_source?: 'label' | 'manual' | 'estimated';
   added_date: string;
   status: string;
   consumed_date?: string;
@@ -86,16 +104,6 @@ export interface PriorityRefreshResult {
   reminders_enabled: boolean;
 }
 
-type MutationType = 'ADD' | 'CONSUME' | 'THROW' | 'UPDATE';
-
-interface PendingMutation {
-  id: string;       // UUID de la mutation
-  type: MutationType;
-  payload: any;
-  tempId?: string;  // ID local temporaire pour ADD offline
-  timestamp: number;
-}
-
 function normalizeStockItemImage(item: StockItem, fallbackItem?: Partial<StockItem>): StockItem {
   const image_url = resolveStockItemImageUrlWithFallback(item, fallbackItem);
   if (!image_url) return { ...item, image_url: undefined };
@@ -118,6 +126,13 @@ axios.interceptors.response.use(
   }
 );
 
+// BUG-064 : toute mutation mise en file porte le compte qui l'a créée, pour ne
+// jamais être envoyée avec le jeton d'un autre utilisateur après un changement
+// de session.
+function currentOwnerId(): string | null {
+  return useAuthStore.getState().user?.id ?? null;
+}
+
 // Cache barcode → résultat produit (session en mémoire, non persisté)
 const _barcodeCache: Record<string, any> = {};
 
@@ -138,6 +153,10 @@ interface StockStore {
   loadingCount: number;
   error: string | null;
   pendingMutations: PendingMutation[];
+  /** Actions définitivement refusées par le serveur, gardées visibles (BUG-065). */
+  failedMutations: FailedMutation[];
+  /** Compte auquel appartiennent les données actuellement en mémoire (BUG-064). */
+  ownerId: string | null;
   isOnline: boolean;
   isSyncing: boolean;
   isRefreshingPriorityItems: boolean;
@@ -159,6 +178,8 @@ interface StockStore {
   updateItem: (itemId: string, updates: Partial<StockItem>) => Promise<StockItem | null>;
   setOnline: (online: boolean) => void;
   flushPendingMutations: () => Promise<void>;
+  clearFailedMutations: () => void;
+  resetForAccount: (userId: string | null) => void;
 }
 
 function isNetworkError(err: any): boolean {
@@ -198,6 +219,8 @@ export const useStockStore = create<StockStore>()(
       loadingCount: 0,
       error: null,
       pendingMutations: [],
+      failedMutations: [],
+      ownerId: null,
       isOnline: true,
       isSyncing: false,
       isRefreshingPriorityItems: false,
@@ -227,39 +250,102 @@ export const useStockStore = create<StockStore>()(
         const { pendingMutations, isSyncing } = get();
         if (isSyncing || pendingMutations.length === 0) return;
 
-        set({ isSyncing: true });
-        const remaining = [...pendingMutations];
+        // BUG-064 : ne rien envoyer tant que l'authentification n'est pas
+        // chargée. Sinon la requête part sans en-tête Authorization, le 401
+        // faisait perdre l'action (et, une fois un autre compte connecté,
+        // l'aurait envoyée sur CE compte).
+        const auth = useAuthStore.getState();
+        if (!auth.isLoaded || !auth.token) {
+          logger.debug('[STOCK] flush différé : authentification pas encore disponible');
+          return;
+        }
+        const currentUserId = auth.user?.id ?? null;
+        const sendableIds = mutationsSendableBy(pendingMutations, currentUserId).map(m => m.id);
+        if (sendableIds.length === 0) return;
 
-        for (const mutation of [...pendingMutations]) {
+        set({ isSyncing: true });
+
+        // BUG-065 : chaque `set` travaille sur la file COURANTE (forme
+        // fonctionnelle) et non sur un instantané pris au départ — une action
+        // ajoutée pendant le flush n'est donc plus écrasée.
+        //
+        // On itère sur des IDENTIFIANTS, pas sur les objets mutation : ceux-ci
+        // sont relus depuis la file à chaque tour. Sans cela, le remplacement
+        // d'un identifiant temporaire (remapTempId, appliqué à la file du
+        // store) n'atteindrait pas les objets déjà capturés par la boucle, et
+        // l'UPDATE suivant partirait encore vers /api/stock/temp_… → 404.
+        for (const mutationId of sendableIds) {
+          const mutation = get().pendingMutations.find(m => m.id === mutationId);
+          if (!mutation) continue; // déjà traitée ou retirée entre-temps
           try {
+            const idempotency = { headers: { 'X-Mutation-Id': mutation.id } };
             if (mutation.type === 'ADD') {
-              const res = await axios.post(buildApiUrl('/api/stock'), mutation.payload, authRequestConfig());
+              const res = await axios.post(
+                buildApiUrl('/api/stock'),
+                mutation.payload,
+                { ...authRequestConfig(), headers: { ...authHeaders(), ...idempotency.headers } },
+              );
               const realItem: StockItem = normalizeStockItemImage(res.data as StockItem);
-              // Remplacer le tempId par le vrai ID dans le state local
               set(state => ({
-                items: state.items.map(i =>
-                  i.id === mutation.tempId ? { ...realItem } : i
+                items: state.items.map(i => (i.id === mutation.tempId ? { ...realItem } : i)),
+                // Les actions suivantes qui visaient l'ID temporaire doivent
+                // désormais viser l'ID réel (BUG-065).
+                pendingMutations: removeMutation(
+                  mutation.tempId
+                    ? remapTempId(state.pendingMutations, mutation.tempId, realItem.id)
+                    : state.pendingMutations,
+                  mutation.id,
                 ),
               }));
               scheduleExpiryNotification(realItem);
-            } else if (mutation.type === 'CONSUME') {
-              await axios.post(buildApiUrl(`/api/stock/${mutation.payload.itemId}/consume`), {}, authRequestConfig());
-            } else if (mutation.type === 'THROW') {
-              await axios.post(buildApiUrl(`/api/stock/${mutation.payload.itemId}/throw`), {}, authRequestConfig());
-            } else if (mutation.type === 'UPDATE') {
-              await axios.put(buildApiUrl(`/api/stock/${mutation.payload.itemId}`), mutation.payload.updates, authRequestConfig());
+              continue;
             }
-            // Mutation réussie : la retirer de la queue
-            remaining.splice(remaining.findIndex(m => m.id === mutation.id), 1);
-            set({ pendingMutations: [...remaining] });
+            if (mutation.type === 'CONSUME') {
+              await axios.post(
+                buildApiUrl(`/api/stock/${mutation.payload.itemId}/consume`),
+                {},
+                { ...authRequestConfig(), headers: { ...authHeaders(), ...idempotency.headers } },
+              );
+            } else if (mutation.type === 'THROW') {
+              await axios.post(
+                buildApiUrl(`/api/stock/${mutation.payload.itemId}/throw`),
+                {},
+                { ...authRequestConfig(), headers: { ...authHeaders(), ...idempotency.headers } },
+              );
+            } else if (mutation.type === 'UPDATE') {
+              await axios.put(
+                buildApiUrl(`/api/stock/${mutation.payload.itemId}`),
+                mutation.payload.updates,
+                { ...authRequestConfig(), headers: { ...authHeaders(), ...idempotency.headers } },
+              );
+            }
+            set(state => ({ pendingMutations: removeMutation(state.pendingMutations, mutation.id) }));
           } catch (err: any) {
-            if (isNetworkError(err)) {
-              // Réseau encore indisponible : arrêter et garder le reste
+            const handling = classifyMutationFailure(err);
+            if (handling === 'retry-later' || handling === 'wait-for-auth') {
+              // On CONSERVE l'action (BUG-065) : un 503, un 500 ou une session
+              // pas encore prête ne sont pas des refus définitifs.
+              logger.warn('[STOCK] mutation conservée pour réessai', {
+                type: mutation.type,
+                handling,
+                status: httpStatusOf(err),
+              });
+              set(state => ({ pendingMutations: markAttempted(state.pendingMutations, mutation.id) }));
               break;
             }
-            // Erreur API (4xx) : mutation invalide, la supprimer
-            remaining.splice(remaining.findIndex(m => m.id === mutation.id), 1);
-            set({ pendingMutations: [...remaining] });
+            // Refus définitif : on sort l'action de la file d'attente mais on
+            // la rend VISIBLE au lieu de la faire disparaître (BUG-065).
+            logger.error('[STOCK] mutation refusée définitivement', {
+              type: mutation.type,
+              status: httpStatusOf(err),
+            });
+            set(state => ({
+              pendingMutations: removeMutation(state.pendingMutations, mutation.id),
+              failedMutations: [
+                ...state.failedMutations,
+                toFailedMutation(mutation, err, Date.now()),
+              ],
+            }));
           }
         }
 
@@ -267,7 +353,33 @@ export const useStockStore = create<StockStore>()(
 
         // Resynchroniser le state avec le serveur après flush
         const s = get();
-        await Promise.all([s.fetchStock(), s.fetchPriorityItems(), s.fetchStats()]);
+        await Promise.all([s.fetchStock({ force: true, reason: 'after-flush' }), s.fetchPriorityItems(), s.fetchStats()]);
+      },
+
+      clearFailedMutations: () => set({ failedMutations: [] }),
+
+      resetForAccount: (userId: string | null) => {
+        // BUG-064 : au changement de compte, le stock affiché et les actions en
+        // attente du compte précédent ne doivent pas subsister. Les mutations
+        // d'un AUTRE compte sont conservées telles quelles (elles repartiront
+        // quand leur propriétaire se reconnectera), seules celles du compte
+        // sortant/entrant sont réinitialisées avec l'affichage.
+        set(state => ({
+          items: [],
+          priorityItems: [],
+          historyItems: [],
+          stats: { total_items: 0, expiring_soon: 0, expired: 0, consumed_this_week: 0, thrown_this_week: 0 },
+          lastStockFetchAt: null,
+          error: null,
+          // La file est CONSERVÉE intégralement : l'isolation est assurée à
+          // l'envoi par `mutationsSendableBy`, pas en supprimant du travail.
+          // Filtrer ici ferait perdre les actions en attente de l'utilisateur
+          // qui vient de se reconnecter — exactement la perte de données que
+          // BUG-065 corrige par ailleurs.
+          pendingMutations: state.pendingMutations,
+          failedMutations: [],
+          ownerId: userId,
+        }));
       },
 
       fetchStock: async (options) => {
@@ -464,7 +576,7 @@ export const useStockStore = create<StockStore>()(
           set(state => ({
             pendingMutations: [
               ...state.pendingMutations,
-              { id: uuid(), type: 'CONSUME', payload: { itemId }, timestamp: Date.now() },
+              { id: uuid(), type: 'CONSUME', payload: { itemId }, timestamp: Date.now(), ownerId: currentOwnerId() },
             ],
           }));
           debugSwipeLogger.info('stockStore.markConsumed', `Offline mode: mutation queued`, { itemId });
@@ -502,7 +614,7 @@ export const useStockStore = create<StockStore>()(
             set(state => ({
               pendingMutations: [
                 ...state.pendingMutations,
-                { id: uuid(), type: 'CONSUME', payload: { itemId }, timestamp: Date.now() },
+                { id: uuid(), type: 'CONSUME', payload: { itemId }, timestamp: Date.now(), ownerId: currentOwnerId() },
               ],
             }));
           } else {
@@ -584,7 +696,7 @@ export const useStockStore = create<StockStore>()(
           set(state => ({
             pendingMutations: [
               ...state.pendingMutations,
-              { id: uuid(), type: 'THROW', payload: { itemId }, timestamp: Date.now() },
+              { id: uuid(), type: 'THROW', payload: { itemId }, timestamp: Date.now(), ownerId: currentOwnerId() },
             ],
           }));
           debugSwipeLogger.info('stockStore.markThrown', `Offline mode: mutation queued`, { itemId });
@@ -617,7 +729,7 @@ export const useStockStore = create<StockStore>()(
             set(state => ({
               pendingMutations: [
                 ...state.pendingMutations,
-                { id: uuid(), type: 'THROW', payload: { itemId }, timestamp: Date.now() },
+                { id: uuid(), type: 'THROW', payload: { itemId }, timestamp: Date.now(), ownerId: currentOwnerId() },
               ],
             }));
           } else {
@@ -718,7 +830,7 @@ export const useStockStore = create<StockStore>()(
             items: [tempItem, ...state.items],
             pendingMutations: [
               ...state.pendingMutations,
-              { id: uuid(), type: 'ADD', payload: item, tempId, timestamp: Date.now() },
+              { id: uuid(), type: 'ADD', payload: item, tempId, timestamp: Date.now(), ownerId: currentOwnerId() },
             ],
           }));
           await useRecipesStore.getState().refreshRecipeAssociationsForStockMutation({
@@ -768,7 +880,7 @@ export const useStockStore = create<StockStore>()(
               items: [tempItem, ...state.items],
               pendingMutations: [
                 ...state.pendingMutations,
-                { id: uuid(), type: 'ADD', payload: item, tempId, timestamp: Date.now() },
+                { id: uuid(), type: 'ADD', payload: item, tempId, timestamp: Date.now(), ownerId: currentOwnerId() },
               ],
             }));
             await useRecipesStore.getState().refreshRecipeAssociationsForStockMutation({
@@ -795,6 +907,7 @@ export const useStockStore = create<StockStore>()(
             updates,
             uuid() as string,
             Date.now(),
+            currentOwnerId(),
           ));
           await useRecipesStore.getState().refreshRecipeAssociationsForStockMutation({
             source: 'stock.update',
@@ -815,9 +928,23 @@ export const useStockStore = create<StockStore>()(
         try {
           const res = await axios.put(buildApiUrl(`/api/stock/${itemId}`), updates, authRequestConfig());
           const updatedItem: StockItem = normalizeStockItemImage(res.data as StockItem, existingItem);
+          // BUG-066 : appliquer immédiatement la réponse du PUT au store. On se
+          // reposait auparavant sur fetchStock() pour rafraîchir l'affichage,
+          // or celui-ci refuse de recharger pendant 30 s (stockFetchPolicy) :
+          // le serveur avait le nouveau nom, l'écran gardait l'ancien.
+          set(state => ({
+            items: state.items.map(i => (i.id === itemId ? { ...i, ...updatedItem } : i)),
+            priorityItems: state.priorityItems.map(i =>
+              i.id === itemId ? { ...i, ...updatedItem } : i,
+            ),
+          }));
           cancelExpiryNotification(itemId);
           scheduleExpiryNotification(updatedItem);
           const s = get();
+          await useRecipesStore.getState().refreshRecipeAssociationsForStockMutation({
+            source: 'stock.update',
+            stockItems: get().items as DashboardStockItem[],
+          });
           await Promise.all([s.fetchStock(), s.fetchPriorityItems(), s.fetchStats()]);
           return updatedItem;
         } catch (err: any) {
@@ -838,15 +965,46 @@ export const useStockStore = create<StockStore>()(
         historyItems: state.historyItems,
         stats: state.stats,
         pendingMutations: state.pendingMutations,
+        failedMutations: state.failedMutations,
+        // BUG-064 : le stock persisté appartient à un compte précis. Sans cette
+        // marque, la clé de stockage étant commune, le stock du compte
+        // précédent restait affiché après un changement d'utilisateur.
+        ownerId: state.ownerId,
       }),
       // C4 : si l'hydratation depuis AsyncStorage se termine APRÈS le NetInfo.fetch()
       // initial (le store était alors vide → aucun flush), rejouer les mutations en
       // attente dès l'hydratation lorsqu'on est en ligne. Garde isSyncing dans flush.
+      //
+      // BUG-064 : avant tout flush, vérifier que les données rechargées
+      // appartiennent bien au compte connecté. La clé de stockage étant commune
+      // à tous les comptes, le stock du compte précédent restait sinon affiché
+      // après un changement d'utilisateur. `flushPendingMutations` attend par
+      // ailleurs que l'authentification soit chargée, donc un flush déclenché
+      // ici avant `loadAuth` ne part plus sans en-tête Authorization.
       onRehydrateStorage: () => (state) => {
-        if (state && state.isOnline && state.pendingMutations.length > 0) {
+        if (!state) return;
+        const auth = useAuthStore.getState();
+        const currentUserId = auth.user?.id ?? null;
+        if (auth.isLoaded && state.ownerId != null && state.ownerId !== currentUserId) {
+          logger.info('[STOCK] données persistées d’un autre compte — réinitialisation');
+          state.resetForAccount(currentUserId);
+          return;
+        }
+        if (state.isOnline && state.pendingMutations.length > 0) {
           state.flushPendingMutations();
         }
       },
     }
   )
 );
+
+// BUG-064 : à chaque changement de compte (connexion, déconnexion, session
+// restaurée), le stock affiché et les actions du compte sortant sont écartés.
+// Les actions appartenant à un AUTRE compte restent en file : elles repartiront
+// quand leur propriétaire se reconnectera, au lieu d'être envoyées avec le
+// mauvais jeton ou perdues.
+onAccountChanged((userId) => {
+  const state = useStockStore.getState();
+  if (state.ownerId === userId) return;
+  state.resetForAccount(userId);
+});

@@ -96,3 +96,31 @@ test('BUG-023 : item inconnu laisse la liste inchangée', () => {
   );
   assert.equal(result.items[0].quantity, item1.quantity);
 });
+
+test('[REGRESSION] BUG-064 — la mutation hors ligne porte le compte propriétaire', () => {
+  // Sans propriétaire, une modification préparée par A repartait avec le jeton
+  // de B après un changement de compte (la file est persistée globalement).
+  const state = buildUpdateItemOfflineState(
+    [{ id: 'i1', name: 'Lait', added_date: '2026-01-01', status: 'active' } as any],
+    [],
+    'i1',
+    { name: 'Lait demi-écrémé' },
+    'mut-1',
+    1234,
+    'userA',
+  );
+
+  assert.equal(state.pendingMutations[0].ownerId, 'userA');
+});
+
+test('sans propriétaire fourni, le champ reste null plutôt qu’absent', () => {
+  const state = buildUpdateItemOfflineState(
+    [{ id: 'i1', name: 'Lait', added_date: '2026-01-01', status: 'active' } as any],
+    [],
+    'i1',
+    { name: 'X' },
+    'mut-2',
+    1,
+  );
+  assert.equal(state.pendingMutations[0].ownerId, null);
+});
