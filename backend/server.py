@@ -2666,6 +2666,9 @@ async def _process_inbound_email_message(sender_email: str, subject: str, email_
         doc["thrown_date"] = None
         doc["food_category"] = resolved_food_category
         doc["storageZone"] = resolved_storage_zone
+        # BUG-073 : la date provient de `estimated_expiration_date`, une
+        # estimation du moteur OCR — jamais une DLC lue ni une saisie.
+        doc["expiry_source"] = "estimated" if doc.get("expiry_date") else None
         doc["source"] = "email_import"
         await stock_col.insert_one(doc)
         inserted += 1
@@ -4714,6 +4717,9 @@ async def process_receipt_ticket(
             "category": item.category,
             "food_category": food_cat,
             "expiry_date": item.expiry_date,
+            # BUG-073 : saisie à la main par l'admin depuis le ticket signalé ;
+            # sans date, on ne déclare pas de provenance.
+            "expiry_source": "manual" if item.expiry_date else None,
             "quantity": None,
             "barcode": None,
             "brand": None,

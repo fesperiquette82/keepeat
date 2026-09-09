@@ -1113,8 +1113,20 @@ Deux points chauds identifiés par lecture de code :
 |---|---|---|---|
 | BUG-073 | 🟡 MINEUR (information présentée comme plus fiable qu'elle ne l'est) | `CORRIGÉ` | Nouveau champ `expiry_source` (`"label"` lue / `"manual"` saisie / `"estimated"` déduite, `None` pour les données antérieures) sur `StockItemCreate`/`StockItemUpdate`. `add_stock` le renseigne : une date fournie par le client garde la provenance déclarée, une date que le serveur a dû déduire d'une durée de conservation est marquée comme estimation. Côté app, le scan de ticket annonce « Date estimée : … — à vérifier sur l'emballage » au lieu de « DLC auto », et la liste de stock suffixe « (estimée) » sur les articles concernés. |
 
-**Fichiers modifiés :** `backend/models.py`, `backend/server.py` (`add_stock`), `frontend/store/stockStore.ts` (type `StockItem`), `frontend/app/scan-receipt.tsx`, `frontend/app/(tabs)/stock.tsx`
-**Tests ajoutés/mis à jour :** couvert par le typecheck TypeScript et la validation Pydantic ; les articles existants restent valides (`expiry_source` optionnel).
-**Commandes exécutées :** `npx tsc --noEmit` ; `PYTHONPATH=backend python -m pytest tests backend/tests -q`
+### Complément du 09/09 — le champ n'était renseigné que sur un chemin d'écriture sur trois
+
+Une vérification demandée par le propriétaire (« as-tu tout bien intégré ? ») a montré que la correction ci-dessus s'arrêtait à `add_stock` et n'était couverte par **aucun test de non-régression**, contrairement à la règle absolue du projet. Les trois chemins qui écrivent réellement des dates estimées ont été complétés :
+
+| Chemin | Avant | Après |
+|---|---|---|
+| Scan de ticket (`scan-receipt.tsx` → `POST /api/stock`) | envoyait la date calculée **sans** `expiry_source` → le serveur la rangeait en `"manual"`, l'app la présentait donc comme une date saisie par l'utilisateur | déclare `"estimated"` via `receiptExpirySource()` (helper pur, testé), et rien quand aucune date n'a pu être calculée |
+| Import de tickets par email (`/api/internal/email-import/poll`) | insertion directe, `expiry_source` jamais écrit | `"estimated"` dès qu'une date est déduite de `estimated_expiration_date` |
+| Traitement admin d'un ticket signalé (`/api/admin/receipt-tickets/{id}/process`) | insertion en masse, champ absent | `"manual"` quand l'admin a saisi une date, `None` sinon |
+
+Le cas le plus visible était le premier : le chemin le plus utilisé étiquetait chaque estimation comme une saisie de l'utilisateur — l'inverse exact de ce que BUG-073 devait corriger.
+
+**Fichiers modifiés :** `backend/models.py`, `backend/server.py` (`add_stock`, import email, `process_receipt_ticket`), `frontend/store/stockStore.ts` (type `StockItem`), `frontend/utils/receiptExpiry.ts`, `frontend/app/scan-receipt.tsx`, `frontend/app/(tabs)/stock.tsx`
+**Tests ajoutés/mis à jour :** `backend/tests/test_expiry_source_provenance.py` (7 tests : les 5 branches de `add_stock`, les 2 du chemin admin), `backend/tests/test_email_import.py::test_imported_item_marks_its_date_as_an_estimate`, `frontend/utils/receiptExpiry.test.ts` (2 tests sur `receiptExpirySource`). Chaque test backend a été vérifié **probant** en annulant temporairement le correctif : il échoue sans lui.
+**Commandes exécutées :** `npx tsc --noEmit` ; `npm run lint` ; `npm run test:ci` ; `PYTHONPATH=backend python -m pytest tests backend/tests -q`
 **Résultat :** PASS
-**Risques restants :** le champ n'est pas encore renseigné par le pipeline OCR/email (`ocr_service.py` distingue pourtant déjà `estimated_expiration_date` d'une DLC lue) : les articles issus d'un ticket scanné arrivent donc sans provenance et n'affichent pas la mention « estimée ». La distinction DLC (date limite de consommation) / DDM (date de durabilité minimale) et l'état ouvert/congelé, également recommandés par la revue, ne sont pas traités. Le recalcul d'une estimation lors d'un changement de zone de stockage reste non implémenté : une `estimated_expiration_date` existante garde la priorité sur la zone choisie.
+**Risques restants :** la distinction DLC (date limite de consommation) / DDM (date de durabilité minimale) et l'état ouvert/congelé, également recommandés par la revue, ne sont pas traités. Le recalcul d'une estimation lors d'un changement de zone de stockage reste non implémenté : une `estimated_expiration_date` existante garde la priorité sur la zone choisie. Les articles **déjà en stock** n'ont pas de `expiry_source` et n'afficheront donc pas la mention « estimée » (aucune migration : la provenance d'une date passée n'est pas reconstituable).

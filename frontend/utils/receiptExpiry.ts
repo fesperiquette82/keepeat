@@ -65,3 +65,16 @@ export function computeReceiptItemExpiry(product: ReceiptExpiryProduct, zone: Re
   baseDate.setDate(baseDate.getDate() + chosenDays);
   return baseDate.toISOString().split('T')[0];
 }
+
+/**
+ * Provenance de la date rendue par `computeReceiptItemExpiry` (BUG-073).
+ *
+ * Toutes les branches de ce calcul dérivent d'une durée de conservation ou de
+ * l'estimation du moteur OCR — jamais d'une DLC lue sur l'emballage, jamais
+ * d'une saisie de l'utilisateur. Sans date, on ne déclare aucune provenance :
+ * le serveur retomberait sinon sur `"manual"`, présentant une supposition
+ * comme une valeur saisie par l'utilisateur.
+ */
+export function receiptExpirySource(expiryDate: string | undefined): 'estimated' | undefined {
+  return expiryDate ? 'estimated' : undefined;
+}
