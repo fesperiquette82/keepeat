@@ -288,6 +288,66 @@ def test_dashboard_survives_email_import_overview_exception_with_zeroed_fallback
     assert response.json().get("email_import_overview") == {"total": 0, "succeeded": 0, "by_outcome": {}}
 
 
+def test_dashboard_returns_premium_verification_overview_block(monkeypatch):
+    """BUG-062 : depuis que le serveur refuse d'accorder Premium sans preuve
+    d'achat, un échec de vérification bloque une vente réelle. Le dashboard doit
+    donc distinguer un refus légitime de Google d'une indisponibilité de notre
+    côté — sinon ces ventes empêchées n'apparaissent nulle part (le tunnel
+    d'activation ne compte que les succès)."""
+    _patch_dashboard_sources(monkeypatch)
+    _with_admin_override()
+
+    async def _fake_premium_verification_overview(**kwargs):
+        _ = kwargs
+        return {
+            "started": 10,
+            "succeeded": 6,
+            "rejected": 1,
+            "unavailable": 3,
+            "blocked_by_us": 3,
+            "by_outcome": {"premium_verification_unavailable": 3},
+        }
+
+    monkeypatch.setattr(
+        server, "build_premium_verification_overview", _fake_premium_verification_overview
+    )
+
+    response = asyncio.run(_request("/api/admin/monitoring/dashboard?days=7"))
+    server.app.dependency_overrides = {}
+
+    assert response.status_code == 200
+    overview = response.json().get("premium_verification_overview")
+    assert isinstance(overview, dict)
+    assert overview["started"] == 10
+    assert overview["rejected"] == 1
+    assert overview["unavailable"] == 3
+    assert overview["blocked_by_us"] == 3
+
+
+def test_dashboard_survives_premium_verification_exception_with_zeroed_fallback(monkeypatch):
+    _patch_dashboard_sources(monkeypatch)
+    _with_admin_override()
+
+    async def _failing(**kwargs):
+        _ = kwargs
+        raise RuntimeError("boom")
+
+    monkeypatch.setattr(server, "build_premium_verification_overview", _failing)
+
+    response = asyncio.run(_request("/api/admin/monitoring/dashboard?days=7"))
+    server.app.dependency_overrides = {}
+
+    assert response.status_code == 200
+    assert response.json().get("premium_verification_overview") == {
+        "started": 0,
+        "succeeded": 0,
+        "rejected": 0,
+        "unavailable": 0,
+        "blocked_by_us": 0,
+        "by_outcome": {},
+    }
+
+
 def test_dashboard_survives_activation_funnel_exception_with_zeroed_fallback(monkeypatch):
     _patch_dashboard_sources(monkeypatch)
     _with_admin_override()

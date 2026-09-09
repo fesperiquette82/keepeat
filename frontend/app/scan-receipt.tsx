@@ -22,7 +22,7 @@ import { C } from '../utils/theme';
 import { usePremiumUiStore } from '../store/premiumUiStore';
 import { resolveReceiptErrorAction } from '../utils/receiptScanFlow';
 import { getGalleryErrorMessage, pickImageFromGallery } from '../utils/galleryPicker';
-import { computeReceiptItemExpiry, defaultReceiptZone, type ReceiptExpiryProduct, type ReceiptStorageZone } from '../utils/receiptExpiry';
+import { computeReceiptItemExpiry, defaultReceiptZone, receiptExpirySource, type ReceiptExpiryProduct, type ReceiptStorageZone } from '../utils/receiptExpiry';
 
 // ─── Types ────────────────────────────────────────────────────────────────────
 
@@ -205,6 +205,7 @@ export default function ScanReceiptScreen() {
       await Promise.all(
         toAdd.map(p => {
           const zone = effectiveZone(p);
+          const expiryDate = computeReceiptItemExpiry(p, zone);
           return addItem({
             name:          p.name,
             brand:         p.brand ?? undefined,
@@ -212,7 +213,10 @@ export default function ScanReceiptScreen() {
             category:      p.category,
             food_category: p.food_category,
             quantity:      p.quantity != null ? String(p.quantity) : undefined,
-            expiry_date:   computeReceiptItemExpiry(p, zone),
+            expiry_date:   expiryDate,
+            // BUG-073 : sans provenance explicite, le serveur classerait cette
+            // estimation en « saisie manuelle ».
+            expiry_source: receiptExpirySource(expiryDate),
             storageZone:   zone === 'fridge' ? 'frigo' : zone === 'freezer' ? 'congelateur' : 'placard',
           }, { source: 'receipt_ocr' });
         }),
@@ -472,7 +476,16 @@ export default function ScanReceiptScreen() {
                   if (expiry) {
                     const d = new Date(expiry);
                     const label = d.toLocaleDateString(isFr ? 'fr-FR' : 'en-GB', { day: '2-digit', month: 'short', year: 'numeric' });
-                    return <Text style={styles.productHint}>{isFr ? `DLC auto : ${label}` : `Auto expiry: ${label}`}</Text>;
+                    // BUG-073 : « DLC auto » présentait une estimation avec la
+                    // même autorité qu'une date lue sur l'emballage. Le libellé
+                    // dit désormais qu'il s'agit d'une estimation à vérifier.
+                    return (
+                      <Text style={styles.productHint}>
+                        {isFr
+                          ? `Date estimée : ${label} — à vérifier sur l'emballage`
+                          : `Estimated date: ${label} — check the packaging`}
+                      </Text>
+                    );
                   }
                   return hint ? <Text style={styles.productHint}>{hint}</Text> : null;
                 })()}

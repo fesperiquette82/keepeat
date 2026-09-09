@@ -58,7 +58,12 @@ jobs:
       - name: Install dependencies
         run: pip install -r backend/requirements.txt pytest
 
-      - name: Run fast backend suites (policy + regressions + contracts)
+      # BUG-070 : cette étape ne lançait que 7 fichiers choisis à la main. Tout
+      # test ajouté ailleurs — y compris un test de non-régression écrit pour un
+      # bug bloquant — ne s'exécutait donc jamais en CI, alors que le job
+      # s'affichait vert. Les deux répertoires de tests sont désormais couverts
+      # intégralement (`tests/` à la racine ET `backend/tests/`).
+      - name: Run fast gate (policy + critical regressions)
         env:
           MONGODB_URI: "mongodb://localhost:27017/keepeat_test"
           JWT_SECRET: "test_secret_ci"
@@ -75,6 +80,20 @@ jobs:
           backend/tests/test_critical_bug_regressions.py
           backend/tests/test_recipe_suggestions_contract.py
           --tb=short -q
+
+      - name: Run complete backend suite
+        env:
+          MONGODB_URI: "mongodb://localhost:27017/keepeat_test"
+          JWT_SECRET: "test_secret_ci"
+          GEMINI_OCR_API_KEY: "dummy_for_tests"
+          GEMINI_RECIPES_API_KEY: "dummy_for_tests"
+          # `backend/` doit figurer dans PYTHONPATH : 12 fichiers de tests/
+          # importent des modules par leur nom nu (`from models import Recipe`,
+          # `from server import ...`) et non via le paquet `backend.`. L'ancienne
+          # sélection à 7 fichiers ne touchait aucun d'entre eux, ce qui masquait
+          # cette lacune de configuration.
+          PYTHONPATH: ${{ github.workspace }}:${{ github.workspace }}/backend
+        run: python -m pytest tests backend/tests --tb=short -q
 
   policy-pr-checks:
     name: Non-regression policy checks

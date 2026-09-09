@@ -102,52 +102,30 @@ else
 fi
 
 # Step 5: Tests (skip in --quick mode)
+#
+# BUG-070 : cette étape ne lançait que `backend/tests/` (depuis le répertoire
+# backend), en annonçant une validation « complète ». Les 20+ fichiers du
+# répertoire `tests/` à la racine — billing, entitlements, sécurité admin,
+# politique de non-régression — n'étaient jamais exécutés. Les deux
+# répertoires sont désormais couverts, et l'absence de l'un est signalée.
 if [ "$QUICK_MODE" != "--quick" ]; then
-  if [ -d "backend/tests" ] || [ -f "backend/tests.py" ]; then
-    echo "[step] Running pytest..."
+  PYTEST_PATHS=""
+  [ -d "backend/tests" ] && PYTEST_PATHS="$PYTEST_PATHS backend/tests"
+  [ -d "tests" ] && PYTEST_PATHS="$PYTEST_PATHS tests"
 
-    # Priority suites for CI speed (if defined)
-    if [ -f "backend/tests/test_critical_bug_regressions.py" ] || \
-       [ -f "backend/tests/test_recipe_suggestions_contract.py" ]; then
-      echo "  → Priority test suites..."
-      cd backend
-      $PYTHON -m pytest \
-        tests/test_critical_bug_regressions.py \
-        tests/test_recipe_suggestions_contract.py \
-        -v 2>&1 || {
-        cd ..
-        echo "❌ Priority pytest tests failed"
-        exit 1
-      }
-      cd ..
-      echo "  ✓ Priority test suites passed"
-
-      # Then run all tests
-      echo "  → All backend tests..."
-      cd backend
-      $PYTHON -m pytest tests/ -v 2>&1 || {
-        cd ..
-        echo "❌ Full pytest tests failed"
-        exit 1
-      }
-      cd ..
-      echo "  ✓ All backend tests passed"
-    else
-      # Run all tests
-      cd backend
-      $PYTHON -m pytest tests/ -v 2>&1 || {
-        cd ..
-        echo "❌ pytest tests failed"
-        exit 1
-      }
-      cd ..
-      echo "✓ pytest tests passed"
-    fi
-  else
-    echo "[skip] Tests: no tests directory found"
+  if [ -z "$PYTEST_PATHS" ]; then
+    echo "❌ Aucun répertoire de tests trouvé (backend/tests ni tests) — validation NON concluante"
+    exit 1
   fi
+
+  echo "[step] Running pytest sur :$PYTEST_PATHS"
+  PYTHONPATH="${PYTHONPATH:-}:$(pwd):$(pwd)/backend" $PYTHON -m pytest $PYTEST_PATHS -q || {
+    echo "❌ pytest tests failed"
+    exit 1
+  }
+  echo "✓ pytest tests passed ($PYTEST_PATHS)"
 else
-  echo "[skip] Tests (--quick mode)"
+  echo "[skip] Tests (--quick mode) — la validation n'est PAS complète"
 fi
 
 echo "✅ Python + FastAPI validation PASSED"

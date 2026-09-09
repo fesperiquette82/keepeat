@@ -76,9 +76,37 @@ class TestIsInvalidImageUrl:
 class TestScriptConfiguration:
     """Test script configuration and constants"""
 
-    def test_mongodb_uri_has_default(self):
-        """MONGODB_URI should have a sensible default"""
-        assert restore_script.MONGODB_URI == "mongodb://localhost:27017"
+    def test_mongodb_uri_resolves_from_env_like_db_name(self):
+        """[REGRESSION] BUG-070 — ce test codait en dur la valeur attendue.
+
+        Le script fait `os.getenv("MONGODB_URI", "mongodb://localhost:27017")` :
+        affirmer que la constante *vaut* le défaut ne tient que si la variable
+        d'environnement est absente. En CI, où `MONGODB_URI` est définie, le
+        test échouait — ce que personne ne voyait, ce fichier ne faisant pas
+        partie des 7 sélectionnés par l'ancienne CI. On vérifie désormais la
+        règle de résolution, comme le fait déjà `test_db_name_uses_env_or_default`.
+        """
+        import os
+
+        expected = os.getenv("MONGODB_URI", "mongodb://localhost:27017")
+        assert restore_script.MONGODB_URI == expected
+
+    def test_mongodb_uri_default_applies_when_env_is_absent(self):
+        """La valeur de repli elle-même reste testée — en rechargeant le module
+        sans la variable d'environnement, plutôt qu'en supposant son absence."""
+        import importlib.util
+        import os
+        from unittest.mock import patch
+
+        with patch.dict(os.environ, {}, clear=False):
+            os.environ.pop("MONGODB_URI", None)
+            spec_reload = importlib.util.spec_from_file_location(
+                "restore_script_default", script_path
+            )
+            module = importlib.util.module_from_spec(spec_reload)
+            spec_reload.loader.exec_module(module)
+
+        assert module.MONGODB_URI == "mongodb://localhost:27017"
 
     def test_db_name_uses_env_or_default(self):
         """DB_NAME should use environment variable or default to keepeat"""

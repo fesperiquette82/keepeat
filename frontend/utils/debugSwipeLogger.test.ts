@@ -2,6 +2,13 @@ import test from 'node:test';
 import assert from 'node:assert/strict';
 import { debugSwipeLogger } from './debugSwipeLogger';
 
+// BUG-067 : la journalisation de swipe est désormais DÉSACTIVÉE par défaut
+// (elle était activée en dur, y compris dans les builds distribués). Ces tests
+// dépendaient implicitement de cette activation ; ils l'exigent maintenant
+// explicitement, ce qui les rend indépendants de la valeur par défaut — et
+// vérifie au passage que l'interrupteur fonctionne.
+debugSwipeLogger.setEnabled(true);
+
 test('debugSwipeLogger exports logs as JSON', () => {
   debugSwipeLogger.info('test', 'test action', { detail: 'test' });
   const json = debugSwipeLogger.exportLogs();

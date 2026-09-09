@@ -201,25 +201,29 @@ export default function HomeDashboardScreen() {
   );
 }
 
+// BUG-072 : ces cartes utilisaient `#fff` en dur tout en affichant du texte
+// issu du thème actif. En mode sombre, `C.text` est quasi blanc : le contenu
+// devenait illisible (texte très clair sur fond blanc). On emploie les jetons
+// `C.card`/`C.bg` déjà définis pour les deux thèmes.
 const createStyles = (C: ReturnType<typeof getThemeColors>, T: ReturnType<typeof getThemeText>) => StyleSheet.create({
   bgImage: { flex: 1 },
   container: { flex: 1, backgroundColor: 'transparent' },
   scroll: { flex: 1 },
   content: { padding: 16, gap: 12, paddingBottom: 28 },
   headerRow: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center' },
-  settingsButton: { width: 36, height: 36, borderRadius: 18, backgroundColor: '#fff', alignItems: 'center', justifyContent: 'center' },
+  settingsButton: { width: 36, height: 36, borderRadius: 18, backgroundColor: C.card, alignItems: 'center', justifyContent: 'center' },
   title: { fontSize: 28, fontWeight: '800', color: C.text },
   subtitle: { marginTop: 4, ...T.secondary },
   mockText: { ...T.tertiary, opacity: 0.85 },
   summaryGrid: { flexDirection: 'row', gap: 8 },
-  summaryCard: { flex: 1, backgroundColor: '#fff', borderRadius: 12, padding: 12, gap: 6 },
+  summaryCard: { flex: 1, backgroundColor: C.card, borderRadius: 12, padding: 12, gap: 6 },
   summaryCardHeader: { flexDirection: 'row', alignItems: 'center', gap: 6 },
   summaryIconBadge: { width: 20, height: 20, borderRadius: 10, alignItems: 'center', justifyContent: 'center', backgroundColor: '#DCFCE7' },
   summaryLabel: { ...T.secondarySmall },
   summaryValue: { color: C.text, fontSize: 23, fontWeight: '800' },
   urgentValue: { color: '#15803d' },
-  sectionCard: { backgroundColor: '#fff', borderRadius: 14, padding: 13, gap: 8, ...shadowSm },
-  recipesCard: { backgroundColor: '#fff', borderRadius: 14, padding: 13, gap: 8 },
+  sectionCard: { backgroundColor: C.card, borderRadius: 14, padding: 13, gap: 8, ...shadowSm },
+  recipesCard: { backgroundColor: C.card, borderRadius: 14, padding: 13, gap: 8 },
   sectionHeader: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between' },
   sectionTitleRow: { flexDirection: 'row', alignItems: 'center', gap: 8 },
   sectionDot: { width: 10, height: 10, borderRadius: 5 },

@@ -421,6 +421,49 @@ class TestEmailImportPollEndpoint:
         assert tracked[0]["event_name"] == "email_import_succeeded"
         assert tracked[0]["user_id"] == PREMIUM_USER_ID
 
+    def test_imported_item_marks_its_date_as_an_estimate(self, monkeypatch):
+        """[REGRESSION] BUG-073 — l'import email n'a jamais de DLC lue sur
+        l'emballage : sa date vient de `estimated_expiration_date`, une
+        estimation du moteur OCR. Sans `expiry_source`, l'app la présentait
+        comme une donnée sûre au lieu d'afficher « (estimée) »."""
+        server = _load_server(monkeypatch)
+        monkeypatch.setenv("EMAIL_IMPORT_CRON_TOKEN", "cron-secret")
+        email, _users_col, stock_col, _app_state = self._setup(monkeypatch, server)
+        monkeypatch.setattr(
+            server.email_import_service, "fetch_unseen_emails",
+            lambda: [{"uid": b"1", "sender": email, "subject": "Ticket", "text": "Lait x1\nSel x1"}],
+        )
+        monkeypatch.setattr(server.email_import_service, "move_to_processed", lambda uid: None)
+        monkeypatch.setattr(
+            server, "parse_email_receipt_text",
+            AsyncMock(return_value={
+                "purchase_date": "2026-08-01", "merchant": "Carrefour", "currency": "EUR",
+                "items": [
+                    {
+                        "normalized_title": "Lait demi-écrémé", "category": "frais",
+                        "food_category": "frais", "quantity": 1,
+                        "estimated_expiration_date": "2026-08-08",
+                    },
+                    {
+                        "normalized_title": "Sel fin", "category": "epicerie",
+                        "food_category": "epicerie", "quantity": 1,
+                    },
+                ],
+                "ignored_items": [],
+            }),
+        )
+
+        from fastapi.testclient import TestClient
+        client = TestClient(server.app)
+        resp = client.post("/api/internal/email-import/poll", headers=self._headers())
+
+        assert resp.status_code == 200
+        by_name = {doc["name"]: doc for doc in stock_col.inserted}
+        assert by_name["Lait demi-écrémé"]["expiry_date"] == "2026-08-08"
+        assert by_name["Lait demi-écrémé"]["expiry_source"] == "estimated"
+        # Sans date, on ne déclare aucune provenance plutôt que d'en inventer une.
+        assert by_name["Sel fin"]["expiry_source"] is None
+
     def test_unknown_sender_is_ignored_but_still_marked_seen(self, monkeypatch):
         server = _load_server(monkeypatch)
         monkeypatch.setenv("EMAIL_IMPORT_CRON_TOKEN", "cron-secret")

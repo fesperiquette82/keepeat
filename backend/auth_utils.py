@@ -55,9 +55,44 @@ def validate_password(password: str) -> None:
         raise HTTPException(status_code=422, detail=f"WEAK_PASSWORD: {', '.join(errors)}")
 
 
-def create_token(user_id: str) -> str:
+# BUG-068 : version de session. Un JWT ne peut pas être révoqué en soi ; on y
+# grave donc la version de session du compte au moment de son émission, et on la
+# compare à celle stockée en base à chaque requête. Incrémenter la version en
+# base (changement de mot de passe, déconnexion de tous les appareils) invalide
+# instantanément tous les jetons émis avant. Sans cela, un jeton volé restait
+# utilisable 30 jours entiers, y compris après que la victime ait changé son mot
+# de passe.
+SESSION_VERSION_CLAIM = "sv"
+
+
+def create_token(user_id: str, session_version: int = 0) -> str:
     expire = utc_now() + timedelta(days=JWT_EXPIRE_DAYS)
-    return jwt.encode({"sub": user_id, "exp": expire}, get_jwt_secret_key(), algorithm=JWT_ALGORITHM)
+    return jwt.encode(
+        {"sub": user_id, "exp": expire, SESSION_VERSION_CLAIM: int(session_version or 0)},
+        get_jwt_secret_key(),
+        algorithm=JWT_ALGORITHM,
+    )
+
+
+def token_session_version_is_current(payload: dict[str, Any], user_doc: dict[str, Any]) -> bool:
+    """Le jeton porte-t-il encore la version de session en vigueur ?
+
+    Les jetons émis avant l'introduction du champ n'ont pas de claim `sv` : ils
+    sont considérés comme version 0, donc valides tant que le compte n'a pas vu
+    sa version incrémentée. Aucune déconnexion massive n'est provoquée par la
+    mise en production de ce correctif, mais le premier changement de mot de
+    passe les invalidera comme prévu."""
+    token_version = payload.get(SESSION_VERSION_CLAIM, 0)
+    try:
+        token_version = int(token_version)
+    except (TypeError, ValueError):
+        return False
+    current_version = user_doc.get("session_version", 0)
+    try:
+        current_version = int(current_version or 0)
+    except (TypeError, ValueError):
+        current_version = 0
+    return token_version >= current_version
 
 
 async def get_current_user(
@@ -80,4 +115,10 @@ async def get_current_user(
         doc = None
     if not doc:
         raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="User not found")
+    # BUG-068 : un jeton émis avant un changement de mot de passe ne doit plus
+    # ouvrir de session.
+    if not token_session_version_is_current(payload, doc):
+        raise HTTPException(
+            status_code=status.HTTP_401_UNAUTHORIZED, detail="Session revoked"
+        )
     return serialize_mongo(doc)

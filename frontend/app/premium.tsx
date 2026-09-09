@@ -8,6 +8,7 @@ import { useAuthStore } from '../store/authStore';
 import { verifyPremiumPurchase } from '../utils/billingService';
 import { buildApiUrl } from '../utils/config';
 import { buildPremiumCopy } from '../utils/premiumPaywallCopy';
+import { describePurchaseVerificationError } from '../utils/purchaseVerificationError';
 import { fetchWithTimeout as fetch } from '../utils/fetchWithTimeout';
 import {
   initIAP,
@@ -77,8 +78,14 @@ export default function PremiumScreen() {
         'Toutes les fonctionnalités premium sont maintenant activées.',
         [{ text: 'Super !', onPress: handleClose }],
       );
-    } catch {
-      Alert.alert('Erreur', "Impossible de vérifier l'achat. Contactez le support si le problème persiste.");
+    } catch (err) {
+      // BUG-062 : ne plus absorber l'erreur. La relancer permet à
+      // subscribeToPurchaseUpdates de NE PAS acquitter la transaction auprès de
+      // Google, donc de rejouer l'activation au prochain lancement plutôt que
+      // de laisser un achat payé sans droits.
+      Alert.alert('Erreur', describePurchaseVerificationError(err));
+      setIsPurchasing(false);
+      throw err;
     } finally {
       setIsPurchasing(false);
     }

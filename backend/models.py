@@ -111,6 +111,14 @@ class StockItemCreate(ProductBase):
     food_category: Optional[str] = None
     storageZone: Optional[str] = None
     expiry_date: Optional[str] = None
+    # BUG-073 : provenance de la date de péremption. Le modèle ne distinguait
+    # pas une DLC **lue sur l'emballage** d'une **estimation** calculée à partir
+    # d'une durée de conservation par catégorie — l'app affichait « DLC auto »
+    # dans les deux cas, présentant une supposition avec la même autorité qu'une
+    # date réelle. Valeurs : "label" (lue), "manual" (saisie par l'utilisateur),
+    # "estimated" (déduite d'une durée de conservation). None = inconnu (données
+    # antérieures à ce champ).
+    expiry_source: Optional[Literal["label", "manual", "estimated"]] = None
     notes: Optional[str] = None
 
 
@@ -132,6 +140,7 @@ class StockItemUpdate(BaseModel):
     storageZone: Optional[str] = None
     quantity: Optional[str] = None
     expiry_date: Optional[str] = None
+    expiry_source: Optional[Literal["label", "manual", "estimated"]] = None
     notes: Optional[str] = None
 
 

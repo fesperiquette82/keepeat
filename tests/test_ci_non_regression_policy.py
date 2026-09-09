@@ -23,6 +23,87 @@ def test_ci_executes_backend_non_regression_test_suites():
     assert "backend/tests/test_recipe_suggestions_contract.py" in workflow
 
 
+def test_ci_runs_the_complete_backend_suite_not_a_handpicked_subset():
+    """[REGRESSION] BUG-070 — la CI ne lançait que 7 fichiers choisis à la main.
+
+    Tout test ajouté ailleurs — y compris un test de non-régression écrit pour
+    un bug bloquant — ne s'exécutait jamais, alors que le job s'affichait vert.
+    """
+    workflow = Path(".github/workflows/ci.yml").read_text(encoding="utf-8")
+
+    assert "python -m pytest tests backend/tests" in workflow, (
+        "la CI doit exécuter l'intégralité des deux répertoires de tests"
+    )
+
+
+def test_ci_full_suite_has_backend_on_pythonpath():
+    """[REGRESSION] BUG-070 — la suite complète échouait à la COLLECTE en CI :
+    12 fichiers de `tests/` importent des modules par leur nom nu
+    (`from models import Recipe`), ce qui exige `backend/` dans PYTHONPATH.
+    L'ancienne sélection à 7 fichiers n'en touchait aucun, si bien que la
+    lacune est restée invisible jusqu'à l'élargissement de la suite."""
+    workflow = Path(".github/workflows/ci.yml").read_text(encoding="utf-8")
+
+    full_suite_step = workflow.split("Run complete backend suite", 1)
+    assert len(full_suite_step) == 2, "étape 'Run complete backend suite' introuvable"
+    step = full_suite_step[1]
+
+    assert "${{ github.workspace }}/backend" in step, (
+        "PYTHONPATH de la suite complète doit inclure backend/, sinon 12 fichiers "
+        "de tests/ échouent à l'import"
+    )
+
+
+def test_local_validation_covers_both_test_directories():
+    """[REGRESSION] BUG-070 — `validate-python-fastapi.sh` annonçait une
+    validation « complète » en n'exécutant que `backend/tests/`, laissant de
+    côté les 20+ fichiers de `tests/` (billing, entitlements, sécurité admin)."""
+    script = Path("scripts/lib/validate-python-fastapi.sh").read_text(encoding="utf-8")
+
+    assert 'PYTEST_PATHS="$PYTEST_PATHS backend/tests"' in script
+    assert 'PYTEST_PATHS="$PYTEST_PATHS tests"' in script
+
+
+def test_e2e_script_fails_loudly_when_nothing_can_run():
+    """[REGRESSION] BUG-070 — le script E2E cherchait `.maestro/smoke.yaml`
+    (inexistant), n'exécutait donc rien, et sortait malgré tout en succès avec
+    « ✅ E2E (Maestro) validation PASSED »."""
+    script = Path("scripts/lib/validate-e2e-maestro.sh").read_text(encoding="utf-8")
+
+    assert "00-smoke-launch.yaml" in script, "le scénario réellement présent doit être ciblé"
+    assert "validation E2E NON exécutée" in script, (
+        "l'absence de scénario doit être signalée comme un échec, pas comme un succès"
+    )
+    # On cherche un APPEL réel, pas la mention du problème en commentaire.
+    executable_lines = [
+        line for line in script.splitlines() if not line.lstrip().startswith("#")
+    ]
+    assert not any("npm run build:e2e" in line for line in executable_lines), (
+        "ce script npm n'existe pas dans frontend/package.json"
+    )
+
+
+def test_no_vacuous_frontend_tests():
+    """[REGRESSION] BUG-070 — quatre tests de `authStore.test.ts` se réduisaient
+    à `assert.ok(true)` : ils passaient quelle que soit l'implémentation, y
+    compris supprimée."""
+    offenders = []
+    for path in Path("frontend").rglob("*.test.ts"):
+        if "node_modules" in path.parts or ".test-dist" in path.parts:
+            continue
+        text = path.read_text(encoding="utf-8")
+        # On ignore les mentions en commentaire (lignes commençant par * ou //).
+        for line in text.splitlines():
+            stripped = line.strip()
+            if stripped.startswith("*") or stripped.startswith("//"):
+                continue
+            if "assert.ok(true)" in stripped:
+                offenders.append(str(path))
+                break
+
+    assert offenders == [], f"tests sans assertion réelle : {offenders}"
+
+
 def test_ci_defines_pr_check_layers():
     workflow = Path(".github/workflows/ci.yml").read_text(encoding="utf-8")
 

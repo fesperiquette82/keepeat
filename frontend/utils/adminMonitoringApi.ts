@@ -76,6 +76,16 @@ export interface MonitoringDashboardResponse {
     succeeded: number;
     by_outcome: Record<string, number>;
   };
+  premium_verification_overview?: {
+    started: number;
+    succeeded: number;
+    /** Google refuse l'achat (jeton invalide) — refus légitime. */
+    rejected: number;
+    /** Vérification impossible de notre côté — chaque occurrence est une vente empêchée (BUG-062). */
+    unavailable: number;
+    blocked_by_us: number;
+    by_outcome: Record<string, number>;
+  };
   external_service_quotas?: {
     generated_at?: string;
     services?: Array<{

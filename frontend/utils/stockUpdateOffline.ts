@@ -5,6 +5,7 @@ interface PendingUpdateMutation {
   type: 'UPDATE';
   payload: { itemId: string; updates: Partial<StockItem> };
   timestamp: number;
+  ownerId?: string | null;
 }
 
 interface OfflineUpdateState {
@@ -24,12 +25,17 @@ export function buildUpdateItemOfflineState(
   updates: Partial<StockItem>,
   mutationId: string,
   timestamp: number,
+  /**
+   * Compte propriétaire de l'action (BUG-064) — une modification préparée hors
+   * ligne par A ne doit jamais partir avec le jeton de B.
+   */
+  ownerId: string | null = null,
 ): OfflineUpdateState {
   return {
     items: items.map(i => (i.id === itemId ? { ...i, ...updates } : i)),
     pendingMutations: [
       ...pendingMutations,
-      { id: mutationId, type: 'UPDATE', payload: { itemId, updates }, timestamp },
+      { id: mutationId, type: 'UPDATE', payload: { itemId, updates }, timestamp, ownerId },
     ],
   };
 }

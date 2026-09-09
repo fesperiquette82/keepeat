@@ -1,7 +1,7 @@
 import assert from 'node:assert/strict';
 import test from 'node:test';
 
-import { computeReceiptItemExpiry, defaultReceiptZone } from './receiptExpiry';
+import { computeReceiptItemExpiry, defaultReceiptZone, receiptExpirySource } from './receiptExpiry';
 
 test('produit OCR sans date explicite calcule une date estimée via règle de catégorie', () => {
   const expiry = computeReceiptItemExpiry({
@@ -70,4 +70,25 @@ test('(régression BUG-058/scan-receipt) chaque produit du ticket garde sa propr
 
   assert.equal(expiryLait, '2026-04-08');
   assert.equal(expiryChips, '2026-09-28');
+});
+
+test('(régression BUG-073) une date calculée par le ticket est déclarée comme estimation', () => {
+  // Toutes les branches de computeReceiptItemExpiry dérivent d'une durée de
+  // conservation ou de l'estimation du moteur OCR. Sans provenance déclarée,
+  // le serveur retombe sur "manual" et l'app présente une supposition comme
+  // une date saisie par l'utilisateur.
+  const expiry = computeReceiptItemExpiry(
+    { name: 'Chips pomme de terre truffe', purchase_date: '2026-04-01', shelf_life_pantry: 180 },
+    'pantry',
+  );
+
+  assert.equal(expiry, '2026-09-28');
+  assert.equal(receiptExpirySource(expiry), 'estimated');
+});
+
+test('(régression BUG-073) sans date, aucune provenance n\'est déclarée', () => {
+  const expiry = computeReceiptItemExpiry({ name: 'Produit inconnu' }, 'pantry');
+
+  assert.equal(expiry, undefined);
+  assert.equal(receiptExpirySource(expiry), undefined);
 });
