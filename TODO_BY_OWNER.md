@@ -67,10 +67,95 @@ Simplifié le 23/08 (à ta demande) : plus de domaine à acheter ni de DNS à co
 - [ ] Créer un projet Google Cloud + client OAuth, faire vérifier le scope `gmail.readonly` par Google (audit de sécurité tiers CASA au-delà d'un certain volume d'utilisateurs), renseigner `GOOGLE_OAUTH_CLIENT_ID`/`GOOGLE_OAUTH_CLIENT_SECRET` + `GMAIL_TOKEN_ENCRYPTION_KEY`. Le code existe déjà (phase 1, `backend/gmail_oauth_service.py`), juste non lié depuis les réglages de l'app.
 - [ ] Une vraie DPIA (analyse d'impact) menée par une personne qualifiée (DPO ou conseil externe) si le projet va jusqu'à la phase 2 (lecture automatisée de boîtes mail).
 
+## 🎯 Feuille de route — publication publique sur le Play Store
+
+> Objectif déclaré le 17/09 : rendre KeepEat disponible au grand public via le
+> Play Store. Cette section rassemble ce qui reste, Google **et** hors Google.
+> Elle ne remplace pas les sections ci-dessus : elle les ordonne.
+
+### Le goulot d'étranglement : 12 testeurs × 14 jours
+
+Pour un compte développeur **personnel**, Google exige avant tout accès à la
+production : un **test fermé réunissant 12 testeurs inscrits en continu pendant
+14 jours**, puis une demande d'accès à la production, puis un examen. Compte
+**3 à 6 semaines minimum**, dont 14 jours d'attente incompressible.
+
+👉 Conséquence pratique : **démarrer le test fermé tôt**, même avec une app
+inachevée. Le chronomètre tourne pendant que le reste avance.
+
+### Ordre recommandé
+
+**Semaine 1 — débloquer l'abonnement (3 points d'un coup)**
+
+- [ ] Lancer une piste **Test interne** (jusqu'à 100 testeurs choisis par email ;
+      app ni publique ni cherchable — tu peux y être seul). Build :
+      `npx eas-cli@latest build --platform android --profile production` (AAB).
+- [ ] Créer l'abonnement **`premium_monthly`** dans Monétisation → Produits
+      (identifiant codé en dur dans `frontend/utils/iapService.ts`).
+- [ ] S'ajouter comme **testeur de licence** (achats gratuits et réversibles).
+- [ ] Poser **`GOOGLE_PLAY_SERVICE_ACCOUNT_JSON`** sur Render (cf. section
+      urgente ci-dessus) — sans lui l'achat répond 503 et n'active rien.
+- [ ] **Brancher les notifications RTDN** (cf. section urgente) — sans elles,
+      aucun renouvellement ni résiliation n'est traité.
+- [ ] **Faire un vrai achat de bout en bout** et vérifier que le Premium
+      s'active. C'est le test qui n'a jamais été fait.
+
+**En parallèle, dès que possible — le chronomètre**
+
+- [ ] Ouvrir la piste **Test fermé** et y inscrire **12 testeurs** (amis,
+      famille). Les 14 jours ne démarrent qu'une fois les 12 inscrits.
+
+**Pendant les 14 jours — ce qui ne dépend que de toi**
+
+- [ ] **Rédiger les CGU / mentions légales.** Vendre un abonnement à des
+      consommateurs dans l'UE impose d'identifier l'exploitant, les conditions
+      de facturation et le droit de rétractation. Obligation légale, pas une
+      formalité Google. Seul point qu'un agent ne peut pas rédiger seul.
+- [ ] **Passer Render sur un plan payant.** Le plan gratuit met ~36 s à
+      démarrer à froid (mesuré, BUG-057 — c'est pourquoi le health check est
+      réglé à 90 s). En public, cela signifie un écran vide pendant 36 s pour
+      le premier utilisateur après une période creuse.
+- [ ] **Décider d'un budget Gemini.** OCR de tickets et génération de recettes
+      sont facturés à l'usage. Des plafonds mensuels existent
+      (`backend/service_limits.py`, visibles dans le dashboard admin), mais ils
+      ont été calibrés pour un usage privé.
+- [ ] **Fiche Play Store** : icône 512×512, image de présentation 1024×500,
+      au moins 2 captures d'écran, description courte (80 car.), description
+      complète, catégorie, email de contact.
+- [ ] **Contenu de l'application** : formulaire *Sécurité des données* (à
+      remplir sérieusement — sont collectés : email, inventaire alimentaire,
+      **photos de tickets**, et du contenu est transmis à Gemini),
+      classification IARC, audience cible, déclaration publicités (aucune).
+
+**Avant d'ouvrir au public — qualité**
+
+- [ ] Réparer la suite **Maestro** (seul test de bout en bout, rouge depuis le
+      27/08).
+- [ ] **Épingler les dépendances backend** — à faire depuis un environnement
+      en Python 3.12 (celui de la CI/Render), pas depuis un poste en 3.11.
+- [ ] **Vérifier le thème sombre sur un vrai appareil** (jamais fait).
+
+### Déjà en place (ne pas refaire)
+
+- [x] **Politique de confidentialité** publique : `/privacy-policy` — URL à
+      donner à Google.
+- [x] **Page publique de suppression de compte** : `/account-deletion` — exigée
+      par Google pour toute app permettant la création d'un compte. C'est ce
+      qui fait recaler beaucoup de candidatures.
+- [x] **Validation des développeurs Android** (échéance 30/09) — faite le 17/09.
+
+### À savoir
+
+Publier sur le Store active la **signature par Google** (Play App Signing) :
+l'app téléchargée depuis le Store sera signée par une clé Google, pas par la
+clé EAS. Cela n'annule pas l'enregistrement du 17/09 — la clé EAS reste celle
+des APK partagés hors Store (QR code), et c'est bien elle qu'il fallait
+enregistrer pour le sideload.
+
 ## ⚪ Jamais traité dans cette session
 
 - [ ] **Point 03 — support iOS** : l'app est Android-only actuellement (`Platform.select` en dur dans le code d'achat premium). Décision du 21/08 : pas prioritaire pour le moment.
 
 ---
 
-*Dernière mise à jour : 2026-09-17 (jeton RTDN posé sur Render, procédure Pub/Sub corrigée — BUG-074). Mise à jour précédente : 2026-08-25, après activation de l'import de tickets par email (secret GitHub ajouté, test réel à refaire) et réparation des crons Alerts/Health Check (BUG-057, aucune action de ta part nécessaire sur ce point).*
+*Dernière mise à jour : 2026-09-17 (feuille de route publication Play Store ; validation des développeurs Android faite ; jeton RTDN posé sur Render, procédure Pub/Sub corrigée — BUG-074). Mise à jour précédente : 2026-08-25, après activation de l'import de tickets par email (secret GitHub ajouté, test réel à refaire) et réparation des crons Alerts/Health Check (BUG-057, aucune action de ta part nécessaire sur ce point).*
