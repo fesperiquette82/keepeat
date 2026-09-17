@@ -116,6 +116,7 @@ from backend.google_play_billing import (
     classify_verification_status,
     is_payment_received,
     may_grant_without_verification,
+    rtdn_request_is_authorized,
 )
 from backend.household_service import (
     MAX_HOUSEHOLD_MEMBERS,
@@ -2755,9 +2756,11 @@ async def google_play_rtdn(request: Request):
     Toujours retourner HTTP 200 pour éviter les re-livraisons exponentielles Pub/Sub.
 
     Configuration requise dans Google Play Console > Monétisation > Configuration > Notifications :
-      - URL de l'endpoint : https://keepeat-backend.onrender.com/api/billing/google/rtdn
-      - Définir GOOGLE_RTDN_TOKEN et ajouter ?token=<valeur> à l'URL OU configurer
-        l'authentification Pub/Sub native (recommandé).
+      - Définir GOOGLE_RTDN_TOKEN, puis créer la souscription push Pub/Sub vers
+        https://keepeat-backend.onrender.com/api/billing/google/rtdn?token=<valeur>
+        Pub/Sub ne peut pas envoyer d'en-tête personnalisé : le secret DOIT passer
+        par la query string. L'en-tête `Authorization: Bearer <valeur>` reste
+        accepté pour les tests manuels (curl).
 
     L'authentification est OBLIGATOIRE (BUG-063) : sans `GOOGLE_RTDN_TOKEN`, la
     route répond 503 au lieu d'accepter n'importe quelle requête. Auparavant un
@@ -2769,8 +2772,11 @@ async def google_play_rtdn(request: Request):
     if not rtdn_token:
         logger.error("RTDN reçu mais GOOGLE_RTDN_TOKEN non configuré — requête rejetée")
         raise HTTPException(status_code=503, detail="GOOGLE_RTDN_TOKEN not configured")
-    auth_header = request.headers.get("Authorization", "")
-    if auth_header != f"Bearer {rtdn_token}":
+    if not rtdn_request_is_authorized(
+        expected_token=rtdn_token,
+        auth_header=request.headers.get("Authorization", ""),
+        query_token=request.query_params.get("token", ""),
+    ):
         raise HTTPException(status_code=401, detail="Unauthorized")
 
     try:

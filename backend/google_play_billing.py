@@ -14,6 +14,7 @@ confondait ces trois cas dans un unique `None` et accordait 30 jours de Premium
 
 from __future__ import annotations
 
+import hmac
 from enum import Enum
 
 
@@ -148,3 +149,36 @@ def is_payment_received(payment_state: object) -> bool:
 
     Seuls 1 et 2 donnent droit à l'accès."""
     return payment_state in (1, 2)
+
+
+def rtdn_request_is_authorized(
+    *, expected_token: str, auth_header: str, query_token: str
+) -> bool:
+    """Le secret partagé du webhook RTDN peut arriver par deux canaux.
+
+    Google Cloud Pub/Sub ne sait PAS envoyer d'en-tête personnalisé sur une
+    souscription push : son seul mode d'authentification est un jeton OIDC signé
+    par Google, qui ne vaut pas notre secret. Le motif que Google documente pour
+    un secret partagé est donc la query string de l'URL de push
+    (`https://…/api/billing/google/rtdn?token=<valeur>`).
+
+    N'accepter que l'en-tête `Authorization` (état antérieur) rendait la route
+    **inconfigurable depuis Play Console** : chaque notification repartait en
+    401, Pub/Sub la rejouait indéfiniment, et aucun renouvellement ni aucune
+    résiliation n'était jamais traité — exactement la panne silencieuse que
+    l'authentification obligatoire devait faire cesser.
+
+    L'en-tête reste accepté : il sert aux tests manuels (curl) et à un éventuel
+    relais maison. La comparaison est à temps constant pour ne pas laisser la
+    durée de réponse révéler un préfixe correct.
+    """
+    if not expected_token:
+        return False
+
+    presented_header = (
+        auth_header[len("Bearer ") :] if auth_header.startswith("Bearer ") else ""
+    )
+    return any(
+        candidate and hmac.compare_digest(candidate, expected_token)
+        for candidate in (presented_header, query_token)
+    )

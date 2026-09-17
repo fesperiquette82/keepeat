@@ -28,6 +28,7 @@ from backend.google_play_billing import (
     classify_verification_status,
     is_payment_received,
     may_grant_without_verification,
+    rtdn_request_is_authorized,
 )
 
 
@@ -149,3 +150,42 @@ class IsPaymentReceivedTests(unittest.TestCase):
 
 if __name__ == "__main__":
     unittest.main()
+
+
+class RtdnAuthorizationTests(unittest.TestCase):
+    """Le webhook doit être configurable depuis Play Console (BUG-074)."""
+
+    TOKEN = "s3cr3t-rtdn"
+
+    def _authorized(self, *, auth_header="", query_token="", expected=None):
+        return rtdn_request_is_authorized(
+            expected_token=self.TOKEN if expected is None else expected,
+            auth_header=auth_header,
+            query_token=query_token,
+        )
+
+    def test_query_string_token_is_accepted(self):
+        """[REGRESSION] BUG-074 — seul l'en-tête `Authorization` était accepté,
+        or Pub/Sub ne sait pas en envoyer : toute notification repartait en 401
+        et aucun renouvellement n'était jamais traité."""
+        self.assertTrue(self._authorized(query_token=self.TOKEN))
+
+    def test_authorization_header_still_accepted_for_manual_calls(self):
+        self.assertTrue(self._authorized(auth_header=f"Bearer {self.TOKEN}"))
+
+    def test_wrong_values_are_refused_on_both_channels(self):
+        self.assertFalse(self._authorized(query_token="nope"))
+        self.assertFalse(self._authorized(auth_header="Bearer nope"))
+        self.assertFalse(self._authorized())
+
+    def test_header_without_bearer_prefix_is_refused(self):
+        """Le jeton nu ne doit pas passer : Pub/Sub enverrait un JWT Google
+        signé, jamais notre secret — accepter n'importe quel format brouillerait
+        la distinction."""
+        self.assertFalse(self._authorized(auth_header=self.TOKEN))
+
+    def test_missing_secret_refuses_everything(self):
+        """Sans secret configuré, aucune valeur présentée ne peut convenir —
+        y compris la chaîne vide, qui sinon « correspondrait »."""
+        self.assertFalse(self._authorized(query_token="", expected=""))
+        self.assertFalse(self._authorized(query_token="anything", expected=""))
