@@ -13,12 +13,23 @@
 - [ ] **CGU / mentions légales** — ce document-là, en revanche, n'existe vraiment pas. Contenu propre à ton activité (identité de l'exploitant, statut juridique, conditions de facturation, responsabilité) que je ne peux pas rédiger sans toi — dis-moi si tu veux qu'on s'y attelle.
 - [x] **Positionner `GEMINI_RECIPES_MODEL` et `GEMINI_OCR_MODEL` sur Render** — fait le 2026-08-21 (`gemini-3.5-flash-lite` sur les deux variables).
 - [ ] **Tester un vrai achat premium** — `startPurchase()` (point 01) est câblé et testé unitairement, mais jamais validé en conditions réelles (pas de build natif Android disponible dans l'environnement de développement). À tester sur un appareil/émulateur Android avec le SKU `premium_monthly` configuré sur Google Play Console.
-- [ ] **Enregistrement "Android Developer Verification"** (échéance Google : **30/09/2026**, donc dans les prochaines semaines) — Google impose désormais cet enregistrement même pour les apps distribuées hors Play Store ; sans lui, un APK non enregistré ne pourra plus être installé/mis à jour par sideload (QR code EAS, cf. section "Distribuer l'app" ci-dessous) sur un appareil Android certifié (quasi tous les téléphones avec Google Play Services) après cette date. Action 100% côté compte Google, je ne peux pas la faire à ta place :
+- [x] **Enregistrement "Android Developer Verification"** — **fait le 17/09/2026** : package `com.fesperiquette.keepeat` enregistré (état « Enregistrée ») et empreinte SHA-256 de la clé EAS ajoutée à la liste des clés de signature, sur le compte développeur `francisco44470`. Historique de l'exigence (échéance Google : **30/09/2026**) — Google impose désormais cet enregistrement même pour les apps distribuées hors Play Store ; sans lui, un APK non enregistré ne pourra plus être installé/mis à jour par sideload (QR code EAS, cf. section "Distribuer l'app" ci-dessous) sur un appareil Android certifié (quasi tous les téléphones avec Google Play Services) après cette date. Action 100% côté compte Google, je ne peux pas la faire à ta place :
   1. Ouvrir la Play Console (pas besoin de publier l'app sur le Store pour cette étape).
   2. Repérer la section "validation des développeurs Android" / "Android Developer Verification" sur la page d'accueil.
   3. Enregistrer le nom de package KeepEat (`com.fesperiquette.keepeat`) et la clé de signature utilisée par le build EAS.
+     **Clé générée le 17/09** via `npx eas-cli credentials` (profil `preview`, keystore « Build Credentials M7pQnnlBhl », stocké chez Expo — jamais dans ce dépôt). Empreinte à déclarer, publique et donc consignable ici :
+     ```
+     3A:A5:67:1D:F5:06:6E:03:31:13:91:BB:AF:75:B0:85:A3:3E:FB:B4:A2:33:22:64:59:B7:85:D1:06:83:B4:4E
+     ```
+     Consultable à tout moment sur https://expo.dev/accounts/fesperiquette/projects/keepeat/credentials
   4. Si tu n'as pas encore de compte Play Console, il faudra probablement en créer un (frais uniques ~25$) rien que pour cette étape d'enregistrement, même sans intention de publier sur le Store.
-- [ ] **Positionner `GOOGLE_RTDN_TOKEN` sur Render** (BUG-063) — le webhook d'abonnement Google Play (`/api/billing/google/rtdn`) exige désormais ce jeton : sans lui il répond 503 et **aucune notification n'est traitée** (renouvellements, résiliations, expirations). Auparavant son absence désactivait silencieusement l'authentification, ce qui laissait n'importe qui activer ou couper le Premium d'un abonné. Générer une valeur aléatoire longue, la poser sur Render, puis l'ajouter dans Play Console (Monétisation → Configuration → Notifications) sous forme `?token=<valeur>` ou via l'authentification Pub/Sub native.
+- [x] **Positionner `GOOGLE_RTDN_TOKEN` sur Render** (BUG-063) — fait le 17/09 : valeur aléatoire générée et posée sur le service `keepeat-backend` (redéploiement `dep-dam3ql0u01pc73bchglg`). Sans ce jeton le webhook répond 503 et **aucune notification n'est traitée** (renouvellements, résiliations, expirations) ; auparavant son absence désactivait silencieusement l'authentification, laissant n'importe qui activer ou couper le Premium d'un abonné.
+- [ ] **Brancher les notifications RTDN côté Google** (suite du point précédent) — la variable est posée, il reste à faire pointer Google vers l'endpoint :
+  1. Google Cloud Console → Pub/Sub → créer un **sujet** (ex. `keepeat-rtdn`).
+  2. Play Console → Monétisation → Configuration → **Notifications développeur en temps réel** → coller le nom complet du sujet, activer, puis « Envoyer un message test ».
+  3. Pub/Sub → créer une **souscription push** sur ce sujet, avec pour URL :
+     `https://keepeat-backend.onrender.com/api/billing/google/rtdn?token=<valeur_du_jeton>`
+  ⚠️ Le jeton **doit** passer par la query string : Pub/Sub ne sait pas envoyer d'en-tête personnalisé (BUG-074). L'en-tête `Authorization: Bearer <valeur>` reste accepté, mais uniquement pour un test manuel au curl.
 - [ ] **Positionner `GOOGLE_PLAY_SERVICE_ACCOUNT_JSON` sur Render** (BUG-062) — sans compte de service, le serveur ne peut plus vérifier un achat auprès de Google et répond désormais 503 au lieu d'offrir 30 jours de Premium. **Tant que cette variable est absente, aucun achat réel ne peut être activé.** Créer un compte de service dans Google Cloud (rôle Android Publisher), l'autoriser dans Play Console → Utilisateurs et autorisations, puis coller le JSON complet dans la variable.
   ⚠️ Ne **jamais** positionner `ALLOW_UNVERIFIED_PURCHASES=true` en production : c'est l'interrupteur de développement qui rétablit l'ancien comportement (Premium accordé sans preuve d'achat).
 
@@ -62,4 +73,4 @@ Simplifié le 23/08 (à ta demande) : plus de domaine à acheter ni de DNS à co
 
 ---
 
-*Dernière mise à jour : 2026-08-25, après activation de l'import de tickets par email (secret GitHub ajouté, test réel à refaire) et réparation des crons Alerts/Health Check (BUG-057, aucune action de ta part nécessaire sur ce point).*
+*Dernière mise à jour : 2026-09-17 (jeton RTDN posé sur Render, procédure Pub/Sub corrigée — BUG-074). Mise à jour précédente : 2026-08-25, après activation de l'import de tickets par email (secret GitHub ajouté, test réel à refaire) et réparation des crons Alerts/Health Check (BUG-057, aucune action de ta part nécessaire sur ce point).*

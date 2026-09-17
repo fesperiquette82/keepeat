@@ -57,9 +57,11 @@ class _FakeUsersCol:
 
 
 class _FakeRequest:
-    def __init__(self, payload, auth_header=""):
+    def __init__(self, payload, auth_header="", query_token=""):
         self._payload = payload
         self.headers = {"Authorization": auth_header} if auth_header else {}
+        # Starlette expose `query_params` comme un mapping ; seul `.get` est utilisé.
+        self.query_params = {"token": query_token} if query_token else {}
 
     async def json(self):
         return self._payload
@@ -79,7 +81,9 @@ def _rtdn_payload(notification_type, purchase_token="tok_rtdn"):
 _TOKEN = "rtdn-secret"
 
 
-def _run_rtdn(payload, *, users_col, auth=f"Bearer {_TOKEN}", token_env=_TOKEN, verify=None):
+def _run_rtdn(
+    payload, *, users_col, auth=f"Bearer {_TOKEN}", query_token="", token_env=_TOKEN, verify=None
+):
     async def _default_verify(purchase_token, subscription_id):
         _ = (purchase_token, subscription_id)
         return VerificationOutcome.VERIFIED, {"expiryTimeMillis": "1790000000000"}
@@ -92,7 +96,7 @@ def _run_rtdn(payload, *, users_col, auth=f"Bearer {_TOKEN}", token_env=_TOKEN, 
         ), patch.object(server, "_verify_google_play_subscription", verify or _default_verify):
             if token_env is None:
                 os.environ.pop("GOOGLE_RTDN_TOKEN", None)
-            return await server.google_play_rtdn(_FakeRequest(payload, auth))
+            return await server.google_play_rtdn(_FakeRequest(payload, auth, query_token))
 
     return asyncio.run(_run())
 
@@ -111,6 +115,24 @@ class RtdnAuthenticationTests(unittest.TestCase):
         users = _FakeUsersCol({"store_purchase_token": "tok_rtdn"})
         with self.assertRaises(HTTPException) as ctx:
             _run_rtdn(_rtdn_payload(13), users_col=users, auth="Bearer wrong")
+        self.assertEqual(ctx.exception.status_code, 401)
+        self.assertEqual(users.updates, [])
+
+
+    def test_token_in_query_string_is_accepted_as_pubsub_sends_it(self):
+        """[REGRESSION] BUG-074 — Pub/Sub ne peut pas envoyer d'en-tête
+        personnalisé : le secret passe par l'URL de push. La route ne lisait que
+        l'en-tête, donc renvoyait 401 à CHAQUE notification Google — le webhook
+        était inconfigurable et aucun événement d'abonnement n'était traité."""
+        users = _FakeUsersCol({"store_purchase_token": "tok_rtdn", "is_premium": True})
+        result = _run_rtdn(_rtdn_payload(13), users_col=users, auth="", query_token=_TOKEN)
+        self.assertEqual(result, {"ok": True})
+        self.assertFalse(users.updates[-1]["is_premium"])
+
+    def test_wrong_token_in_query_string_is_rejected(self):
+        users = _FakeUsersCol({"store_purchase_token": "tok_rtdn"})
+        with self.assertRaises(HTTPException) as ctx:
+            _run_rtdn(_rtdn_payload(13), users_col=users, auth="", query_token="wrong")
         self.assertEqual(ctx.exception.status_code, 401)
         self.assertEqual(users.updates, [])
 
