@@ -33,6 +33,17 @@
 - [ ] **Positionner `GOOGLE_PLAY_SERVICE_ACCOUNT_JSON` sur Render** (BUG-062) — sans compte de service, le serveur ne peut plus vérifier un achat auprès de Google et répond désormais 503 au lieu d'offrir 30 jours de Premium. **Tant que cette variable est absente, aucun achat réel ne peut être activé.** Créer un compte de service dans Google Cloud (rôle Android Publisher), l'autoriser dans Play Console → Utilisateurs et autorisations, puis coller le JSON complet dans la variable.
   ⚠️ Ne **jamais** positionner `ALLOW_UNVERIFIED_PURCHASES=true` en production : c'est l'interrupteur de développement qui rétablit l'ancien comportement (Premium accordé sans preuve d'achat).
 
+  **📍 Reprise au 17/09 au soir — 3 étapes sur 5 faites :**
+  - [x] API **Google Play Android Developer** activée (projet Google Cloud `keepeat-492021`, celui qui héberge déjà la clé Gemini)
+  - [x] Compte de service créé : `keepeat-billing@keepeat-492021.iam.gserviceaccount.com`
+  - [x] **Clé JSON générée et téléchargée** — elle est dans le dossier *Téléchargements* du PC Windows (`C:\Users\PACOP`), nom du type `keepeat-492021-xxxxx.json`. C'est un secret : ne jamais la committer.
+  - [ ] **Inviter le compte de service dans Play Console** → *Utilisateurs et autorisations* → inviter `keepeat-billing@keepeat-492021.iam.gserviceaccount.com`, puis dans l'onglet **Autorisations de l'application** : ajouter KeepEat et cocher « Afficher les données financières… » + « Gérer les commandes et les abonnements ». ⚠️ Le bouton d'invitation n'a pas été trouvé le 17/09 : le menu « Gérer les utilisateurs ▾ » ne propose que prolonger/supprimer. Essayer le menu **⋮** voisin, ou chercher sous le tableau.
+  - [ ] **Coller le JSON dans Render** → service `keepeat-backend` → Environment → `GOOGLE_PLAY_SERVICE_ACCOUNT_JSON` = contenu intégral du fichier. Redéploiement automatique.
+
+  ℹ️ Un second compte de service, `keepeat-google-play@keepeat-492021.iam.gserviceaccount.com`, existait déjà dans le projet (origine inconnue, antérieure). Laissé en place volontairement : ne pas le supprimer sans avoir vérifié ce qui l'utilise.
+
+  ℹ️ Les autorisations d'un compte de service peuvent mettre jusqu'à 24 h à se propager chez Google (souvent quelques minutes) : un premier achat test qui échoue n'est pas forcément un bug.
+
 ## 🟢 Partager l'app à des amis + leur donner le premium gratuitement
 
 - [ ] **Distribuer l'app** — depuis `frontend/`, lancer `eas build --platform android --profile preview` (profil déjà configuré dans `eas.json`). Ça génère un lien + QR code à partager directement — pas besoin du Play Store, pas de compte testeur à créer.
