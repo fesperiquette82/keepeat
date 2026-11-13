@@ -64,7 +64,7 @@ jobs:
           cache-dependency-path: backend/requirements.txt
 
       - name: Install dependencies
-        run: pip install -r backend/requirements.txt pytest
+        run: pip install -r backend/requirements-dev.txt
 
       - name: Run full pytest non-regression suites
         env:

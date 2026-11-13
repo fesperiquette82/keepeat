@@ -69,7 +69,12 @@ jobs:
           cache-dependency-path: backend/requirements.txt
 
       - name: Install dependencies
-        run: pip install -r backend/requirements.txt pytest
+        run: pip install -r backend/requirements-dev.txt
+
+      # BUG-081 : les dépendances sont épinglées ; toute vulnérabilité connue sur
+      # l'une d'elles bloque le PR jusqu'à la mise à jour correspondante.
+      - name: Audit dependencies (pip-audit)
+        run: pip-audit -r backend/requirements.txt --desc off
 
       # BUG-070 : cette étape ne lançait que 7 fichiers choisis à la main. Tout
       # test ajouté ailleurs — y compris un test de non-régression écrit pour un

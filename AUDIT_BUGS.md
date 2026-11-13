@@ -1228,3 +1228,17 @@ Le cas le plus visible était le premier : le chemin le plus utilisé étiquetai
 **Commandes exécutées :** `bash scripts/ai-validate.sh`
 **Résultat :** PASS
 **Risques restants :** l'historique git conserve les anciens blobs (25 Mo de `.git`) ; une réécriture d'historique n'est pas justifiée.
+
+## BUG-081 — Dépendances backend vulnérables, abandonnées et non épinglées
+
+**Contexte :** découvert le 12/11 par `pip-audit`. `pymongo==4.5.0` (2023) cumulait **7 avis de sécurité** (corrigés à partir de 4.18.3) ; `python-jose` est abandonné (un avis, et il entraîne `ecdsa`, lui aussi signalé) ; `passlib` est abandonné et incompatible avec `bcrypt >= 4.1` (lecture de version cassée — c'est la raison du `bcrypt==4.1.3` figé), ce qui bloquait toute mise à jour de bcrypt. Le reste était en `>=` non épinglé : chaque déploiement Render pouvait installer autre chose que ce qui avait été testé.
+
+| ID | Sévérité | Statut | Résumé |
+|---|---|---|---|
+| BUG-081 | 🟠 MAJEUR (sécurité de la chaîne de dépendances) | `CORRIGÉ` | `python-jose` → **PyJWT** (`auth_utils.py`, `gmail_oauth_service.py`, `observability.py`, `household_service.py` : même API `encode`/`decode`, exception `PyJWTError` sous le même nom local). `passlib` → **bcrypt direct** : même algorithme, même format `$2b$12$…`, troncature explicite à 72 octets conservée pour que les hachés existants — y compris ceux de mots de passe longs, que passlib tronquait en silence — se vérifient à l'identique. `pymongo` 4.19.0 et `motor` 3.7.1. **Toutes les versions épinglées** dans `requirements.txt` ; nouveau `requirements-dev.txt` (pytest, pytest-asyncio, pytest-xdist, pip-audit) utilisé par la CI et le script de validation. **`pip-audit -r backend/requirements.txt` ajouté au job CI** : une vulnérabilité connue bloque désormais le PR. |
+
+**Fichiers modifiés :** `backend/requirements.txt`, `backend/requirements-dev.txt` (nouveau), `backend/auth_utils.py`, `backend/gmail_oauth_service.py`, `backend/observability.py`, `backend/household_service.py`, `.github/workflows/ci.yml`, `.github/workflows/main-release-post-merge.yml`, `.github/workflows/admin-dashboard-monitoring.yml`, `scripts/lib/validate-python-fastapi.sh`, `README.md`
+**Tests ajoutés/mis à jour :** `backend/tests/test_password_hashing.py` (hachés passlib de référence figés, mot de passe > 72 octets, aller-retour, haché illisible, jetons PyJWT) ; `backend/tests/test_session_revocation.py` décode désormais avec PyJWT
+**Commandes exécutées :** `pip-audit -r backend/requirements.txt` (0 vulnérabilité), `bash scripts/ai-validate.sh`
+**Résultat :** PASS
+**Risques restants :** Motor est annoncé en fin de vie par MongoDB (dépréciation mai 2026, fin de support mai 2027) au profit du client asynchrone natif de PyMongo : migration à planifier avant cette échéance. Le job `pip-audit` échouera à la publication de tout nouvel avis sur une dépendance épinglée : c'est voulu, la réponse attendue est une mise à jour ciblée.

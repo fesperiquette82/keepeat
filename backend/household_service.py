@@ -6,7 +6,8 @@ from typing import Any
 
 from bson import ObjectId
 from fastapi import HTTPException
-from jose import JWTError, jwt
+import jwt
+from jwt import PyJWTError as JWTError
 
 from backend.app_core import serialize_mongo, utc_now
 from backend.auth_utils import get_jwt_secret_key

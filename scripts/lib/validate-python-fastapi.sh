@@ -32,9 +32,9 @@ echo "Using: $PYTHON $($PYTHON --version)"
 
 # Step 1: Install dependencies
 if [ ! -d "backend/.venv" ] && [ ! -d "venv" ]; then
-  echo "[step] Installing backend dependencies (pip install -r requirements.txt)..."
+  echo "[step] Installing backend dependencies (pip install -r requirements-dev.txt)..."
   cd backend
-  $PYTHON -m pip install -r requirements.txt --quiet 2>&1 || {
+  $PYTHON -m pip install -r requirements-dev.txt --quiet 2>&1 || {
     cd ..
     echo "❌ pip install failed"
     exit 1

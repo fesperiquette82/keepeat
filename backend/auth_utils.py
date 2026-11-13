@@ -8,8 +8,9 @@ from typing import Any
 from bson import ObjectId
 from fastapi import Depends, HTTPException, status
 from fastapi.security import HTTPAuthorizationCredentials, HTTPBearer
-from jose import JWTError, jwt
-from passlib.context import CryptContext
+import bcrypt
+import jwt
+from jwt import PyJWTError as JWTError
 
 from backend.app_core import serialize_mongo, utc_now
 
@@ -27,16 +28,34 @@ def get_jwt_secret_key() -> str:
 JWT_ALGORITHM = "HS256"
 JWT_EXPIRE_DAYS = 30
 
-pwd_context = CryptContext(schemes=["bcrypt"], deprecated="auto")
 http_bearer = HTTPBearer(auto_error=False)
+
+# BUG-081 : passlib (abandonné, incompatible avec bcrypt >= 4.1) est remplacé
+# par un appel direct à bcrypt. Les hachés existants (`$2b$12$…`, produits par
+# passlib) restent vérifiables à l'identique : même algorithme, même format.
+#
+# bcrypt ne regarde que les 72 premiers octets du secret. passlib tronquait en
+# silence ; bcrypt >= 4.1 lève une erreur au-delà. On conserve la troncature,
+# explicitement, pour qu'un mot de passe long haché hier se vérifie encore
+# aujourd'hui.
+_BCRYPT_MAX_SECRET_BYTES = 72
+_BCRYPT_ROUNDS = 12  # valeur par défaut de passlib, conservée
+
+
+def _bcrypt_secret(password: str) -> bytes:
+    return password.encode("utf-8")[:_BCRYPT_MAX_SECRET_BYTES]
 
 
 def hash_password(password: str) -> str:
-    return pwd_context.hash(password)
+    return bcrypt.hashpw(_bcrypt_secret(password), bcrypt.gensalt(rounds=_BCRYPT_ROUNDS)).decode("ascii")
 
 
 def verify_password(plain: str, hashed: str) -> bool:
-    return pwd_context.verify(plain, hashed)
+    try:
+        return bcrypt.checkpw(_bcrypt_secret(plain), hashed.encode("ascii"))
+    except (ValueError, TypeError):
+        # Haché illisible (champ corrompu, format inconnu) : refuser, ne pas planter.
+        return False
 
 
 def validate_password(password: str) -> None:

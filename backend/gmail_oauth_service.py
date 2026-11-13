@@ -7,7 +7,8 @@ from urllib.parse import urlencode
 
 import httpx
 from cryptography.fernet import Fernet, InvalidToken
-from jose import JWTError, jwt
+import jwt
+from jwt import PyJWTError as JWTError
 
 from backend.app_core import utc_now
 from backend.auth_utils import get_jwt_secret_key

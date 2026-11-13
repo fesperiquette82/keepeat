@@ -12,7 +12,7 @@ import unittest
 os.environ.setdefault("MONGO_URL", "mongodb://localhost:27017")
 os.environ.setdefault("JWT_SECRET_KEY", "test-secret")
 
-from jose import jwt
+import jwt
 
 from backend.auth_utils import (
     JWT_ALGORITHM,
