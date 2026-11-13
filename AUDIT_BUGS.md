@@ -1242,3 +1242,17 @@ Le cas le plus visible était le premier : le chemin le plus utilisé étiquetai
 **Commandes exécutées :** `pip-audit -r backend/requirements.txt` (0 vulnérabilité), `bash scripts/ai-validate.sh`
 **Résultat :** PASS
 **Risques restants :** Motor est annoncé en fin de vie par MongoDB (dépréciation mai 2026, fin de support mai 2027) au profit du client asynchrone natif de PyMongo : migration à planifier avant cette échéance. Le job `pip-audit` échouera à la publication de tout nouvel avis sur une dépendance épinglée : c'est voulu, la réponse attendue est une mise à jour ciblée.
+
+## BUG-082 — La connexion biométrique stockait le mot de passe en clair sur l'appareil
+
+**Contexte :** découvert le 12/11 lors de l'analyse générale. Pour permettre la connexion par empreinte, `authStore.login` sérialisait `{ email, password }` dans SecureStore et `loginWithBiometrics` rejouait un login classique avec ces valeurs. L'entrée est chiffrée par le Keystore et protégée par l'authentification de l'appareil, mais c'est le **vrai mot de passe** de l'utilisateur (souvent réutilisé ailleurs) qui dormait sur le téléphone, impossible à révoquer à distance : un appareil compromis ou une sauvegarde extraite l'exposait tel quel.
+
+| ID | Sévérité | Statut | Résumé |
+|---|---|---|---|
+| BUG-082 | 🟠 MAJEUR (sécurité, donnée d'authentification persistée) | `CORRIGÉ` | Derrière l'empreinte ne dort plus qu'un **jeton de session** (`serializeBiometricSession(email, access_token)`). `loginWithBiometrics` soumet ce jeton à `GET /api/auth/me` : le serveur reste seul juge (expiration à 30 jours, révocation par `session_version`, BUG-068). Un 401 efface la session biométrique et renvoie l'utilisateur au mot de passe (message dédié) ; un réseau indisponible la conserve. Au démarrage, seul un **marqueur non protégé** dit si une session existe (plus de lecture de la charge utile protégée hors usage) ; sans marqueur, tout reste de l'ancienne version — donc tout mot de passe stocké — est **effacé**, et la prochaine connexion au mot de passe réenregistre un jeton. Une charge utile portant une clé `password` n'est jamais acceptée comme session, même accompagnée d'un jeton. |
+
+**Fichiers modifiés :** `frontend/utils/biometricAuth.ts`, `frontend/store/authStore.ts`, `frontend/app/login.tsx`
+**Tests ajoutés/mis à jour :** `frontend/utils/biometricAuth.test.ts` (sérialisation sans mot de passe, rejet des charges héritées, décision 200/401/réseau), `frontend/utils/auditBugsSourceChecks.test.ts` (le store ne sérialise jamais le mot de passe et ne rejoue jamais un login)
+**Commandes exécutées :** `cd frontend && npx eslint . && npm run typecheck && npm run test:ci`
+**Résultat :** PASS
+**Risques restants :** à vérifier sur un appareil réel (jamais possible depuis cet environnement) : l'invite d'authentification à la lecture de la charge utile, puis l'ouverture de session après `/api/auth/me`. Changement de comportement assumé : après 30 jours sans connexion au mot de passe, l'empreinte ne suffit plus (le jeton a expiré) — c'est le prix de la révocabilité. Comme avant, la session biométrique survit à une déconnexion explicite ; la rendre caduque à la déconnexion serait une décision produit à prendre séparément.

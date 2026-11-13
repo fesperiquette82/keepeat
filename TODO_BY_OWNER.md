@@ -142,9 +142,22 @@ inachevée. Le chronomètre tourne pendant que le reste avance.
 
 - [ ] Réparer la suite **Maestro** (seul test de bout en bout, rouge depuis le
       27/08).
-- [ ] **Épingler les dépendances backend** — à faire depuis un environnement
-      en Python 3.12 (celui de la CI/Render), pas depuis un poste en 3.11.
+- [x] **Épingler les dépendances backend** — fait le 12/11 (BUG-081, PR #173) :
+      `requirements.txt` épinglé, `pip-audit` en CI.
 - [ ] **Vérifier le thème sombre sur un vrai appareil** (jamais fait).
+- [ ] **Vérifier la connexion biométrique sur un vrai appareil** après le PR #173
+      (BUG-082) : l'empreinte ouvre désormais une session par jeton, plus par
+      mot de passe rejoué. Scénario : connexion au mot de passe → fermer l'app →
+      bouton empreinte → session ouverte sans mot de passe. Un ancien
+      enregistrement (mot de passe) est effacé au premier lancement : une
+      connexion au mot de passe est nécessaire une fois pour réactiver l'empreinte.
+- [ ] **Décider du sort de l'auto-merge** (`auto-merge-pr.yml`) : il attend un
+      check nommé « Mobile E2E / Not required (changes filter) » qui n'existe
+      plus (le job s'appelle « …/ Not required or missing required APK »), il
+      n'a donc jamais fusionné un PR. Soit corriger le nom, soit supprimer le
+      workflow — recommandation : supprimer, tu merges à la main et un
+      auto-merge couplé à l'auto-fix Codex ferait atterrir du code sur `main`
+      sans regard humain.
 
 ### Déjà en place (ne pas refaire)
 

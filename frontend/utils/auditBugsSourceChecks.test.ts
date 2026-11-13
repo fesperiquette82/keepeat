@@ -87,3 +87,21 @@ test('régression BUG-035 : recipes/[id].tsx affiche un bouton retour pendant le
   assert.match(loadingBranchBody, /onPress=\{handleBack\}/);
   assert.match(loadingBranchBody, /TouchableOpacity/);
 });
+
+// ---------------------------------------------------------------------------
+// BUG-082 — authStore.ts : la connexion biométrique conserve un jeton de
+// session, jamais le mot de passe, et ne rejoue jamais un login.
+// ---------------------------------------------------------------------------
+
+test('régression BUG-082 : aucun mot de passe derrière l’empreinte, aucun login rejoué', () => {
+  const src = readSource('store/authStore.ts');
+
+  assert.doesNotMatch(src, /serializeBiometricCredentials|parseBiometricCredentials/);
+  assert.match(src, /serializeBiometricSession\(email, access_token\)/);
+
+  const start = src.indexOf('loginWithBiometrics: async');
+  assert.ok(start !== -1);
+  const body = src.slice(start, src.indexOf('refreshEntitlements: async', start));
+  assert.doesNotMatch(body, /\.login\(/);
+  assert.match(body, /\/api\/auth\/me/);
+});

@@ -106,6 +106,9 @@ export default function LoginScreen() {
       } else
       if (err?.message === 'BIOMETRIC_CREDENTIALS_NOT_FOUND') {
         setLocalError(fr ? 'Aucun identifiant biométrique enregistré.' : 'No biometric credential is saved yet.');
+      } else
+      if (err?.message === 'BIOMETRIC_SESSION_EXPIRED') {
+        setLocalError(fr ? 'Session biométrique expirée : connectez-vous avec votre mot de passe.' : 'Biometric session expired: sign in with your password.');
       } else {
         setLocalError(fr ? 'Connexion biométrique échouée.' : 'Biometric sign-in failed.');
       }

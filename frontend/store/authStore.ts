@@ -7,9 +7,12 @@ import { fetchWithTimeout as fetch } from '../utils/fetchWithTimeout';
 import { notifyAccountChanged } from '../utils/accountSessionBridge';
 import {
   BIOMETRIC_CREDENTIALS_KEY,
+  BIOMETRIC_SESSION_MARKER_KEY,
+  BIOMETRIC_SESSION_MARKER_VALUE,
+  decideBiometricSessionOutcome,
   isBiometricAuthenticationCancellationError,
-  parseBiometricCredentials,
-  serializeBiometricCredentials,
+  parseBiometricSession,
+  serializeBiometricSession,
 } from '../utils/biometricAuth';
 
 const TOKEN_KEY = 'keepeat_token';
@@ -116,8 +119,23 @@ export const useAuthStore = create<AuthStore>((set) => ({
       const isBiometricSupported = SecureStore.canUseBiometricAuthentication();
       const token = await SecureStore.getItemAsync(TOKEN_KEY);
       const userJson = await SecureStore.getItemAsync(USER_KEY);
-      const biometricPayload = await SecureStore.getItemAsync(BIOMETRIC_CREDENTIALS_KEY);
-      const hasBiometricCredentials = isBiometricSupported && parseBiometricCredentials(biometricPayload) !== null;
+      // BUG-082 : la charge utile biométrique est protégée par l'authentification
+      // de l'appareil ; on ne la lit qu'au moment de s'en servir. Au démarrage,
+      // seul le marqueur non protégé dit si une session existe. Sans marqueur,
+      // tout reste d'une ancienne version (qui stockait le mot de passe) est effacé.
+      let hasBiometricCredentials = false;
+      try {
+        const marker = await SecureStore.getItemAsync(BIOMETRIC_SESSION_MARKER_KEY);
+        if (marker === BIOMETRIC_SESSION_MARKER_VALUE) {
+          hasBiometricCredentials = isBiometricSupported;
+        } else {
+          await SecureStore.deleteItemAsync(BIOMETRIC_CREDENTIALS_KEY);
+        }
+      } catch (biometricError) {
+        logger.warn('[AUTH_STORE] biometric marker unreadable, continuing without biometric', {
+          message: biometricError instanceof Error ? biometricError.message : String(biometricError),
+        });
+      }
       if (token && userJson) {
         // Vérifier l'expiry du JWT sans appel réseau (décodage de la payload Base64)
         try {
@@ -170,11 +188,13 @@ export const useAuthStore = create<AuthStore>((set) => ({
       let hasBiometricCredentials = false;
       if (isBiometricSupported) {
         try {
+          // BUG-082 : derrière l'empreinte, le jeton de session — pas le mot de passe.
           await SecureStore.setItemAsync(
             BIOMETRIC_CREDENTIALS_KEY,
-            serializeBiometricCredentials(email, password),
+            serializeBiometricSession(email, access_token),
             { requireAuthentication: true }
           );
+          await SecureStore.setItemAsync(BIOMETRIC_SESSION_MARKER_KEY, BIOMETRIC_SESSION_MARKER_VALUE);
           hasBiometricCredentials = true;
         } catch (biometricError) {
           if (!isBiometricAuthenticationCancellationError(biometricError)) {
@@ -209,6 +229,11 @@ export const useAuthStore = create<AuthStore>((set) => ({
 
   loginWithBiometrics: async () => {
     set({ error: null });
+    const forgetBiometricSession = async () => {
+      await SecureStore.deleteItemAsync(BIOMETRIC_CREDENTIALS_KEY);
+      await SecureStore.deleteItemAsync(BIOMETRIC_SESSION_MARKER_KEY);
+      set({ hasBiometricCredentials: false });
+    };
     try {
       if (!SecureStore.canUseBiometricAuthentication()) {
         throw new Error('BIOMETRIC_NOT_SUPPORTED');
@@ -217,11 +242,48 @@ export const useAuthStore = create<AuthStore>((set) => ({
         requireAuthentication: true,
         authenticationPrompt: 'Authentifiez-vous pour vous connecter à KeepEat',
       });
-      const credentials = parseBiometricCredentials(payload);
-      if (!credentials) {
+      const session = parseBiometricSession(payload);
+      if (!session) {
+        // Charge utile absente, illisible ou héritée (mot de passe) : on repart de zéro.
+        await forgetBiometricSession();
         throw new Error('BIOMETRIC_CREDENTIALS_NOT_FOUND');
       }
-      await useAuthStore.getState().login(credentials.email, credentials.password);
+
+      // BUG-082 : le jeton stocké est soumis au serveur, qui reste seul juge de
+      // sa validité (expiration, révocation par session_version).
+      let response: Response;
+      try {
+        response = await fetch(buildApiUrl('/api/auth/me'), {
+          headers: { Authorization: `Bearer ${session.token}` },
+        });
+      } catch (networkError) {
+        logger.errorFromException('[AUTH_STORE] biometric session check unreachable', networkError);
+        throw new Error('BIOMETRIC_UNAVAILABLE');
+      }
+      const outcome = decideBiometricSessionOutcome({ status: response.status, ok: response.ok });
+      if (outcome === 'expired') {
+        await forgetBiometricSession();
+        throw new Error('BIOMETRIC_SESSION_EXPIRED');
+      }
+      if (outcome === 'unavailable') {
+        throw new Error('BIOMETRIC_UNAVAILABLE');
+      }
+
+      const user = (await response.json()) as AuthUser;
+      await SecureStore.setItemAsync(TOKEN_KEY, session.token);
+      await SecureStore.setItemAsync(USER_KEY, JSON.stringify(user));
+      set({
+        token: session.token,
+        user,
+        plan: user.is_premium ? 'premium' : 'free',
+        hasBiometricCredentials: true,
+        isBiometricSupported: true,
+      });
+      // BUG-064 : signaler le compte entrant avant tout chargement de données.
+      notifyAccountChanged(user.id ?? null);
+      await useAuthStore.getState().refreshEntitlements();
+      await useAuthStore.getState().refreshUsage();
+      logger.debug('[AUTH_STORE] biometric login complete');
     } catch (err: any) {
       if (err?.message === 'BIOMETRIC_NOT_SUPPORTED') {
         set({ error: 'Biométrie non disponible sur cet appareil', isBiometricSupported: false });
@@ -229,6 +291,10 @@ export const useAuthStore = create<AuthStore>((set) => ({
       }
       if (err?.message === 'BIOMETRIC_CREDENTIALS_NOT_FOUND') {
         set({ error: 'Connexion biométrique indisponible' });
+        throw err;
+      }
+      if (err?.message === 'BIOMETRIC_SESSION_EXPIRED') {
+        set({ error: 'Session biométrique expirée, reconnectez-vous avec votre mot de passe' });
         throw err;
       }
       set({ error: err?.message || 'Échec de la connexion biométrique' });
