@@ -95,6 +95,7 @@ from backend.models import (
     UserResponse,
     VerifyEmailBody,
 )
+from backend.mongo_settings import mongo_client_kwargs
 from backend.entitlements import (
     FEATURE_AI,
     FEATURE_OCR,
@@ -185,7 +186,7 @@ if not MONGO_URL:
     raise RuntimeError("MONGO_URL is required. Set it in Render > Environment Variables.")
 
 DB_NAME = os.getenv("DB_NAME", "keepeat_db")
-client = AsyncIOMotorClient(MONGO_URL)
+client = AsyncIOMotorClient(MONGO_URL, **mongo_client_kwargs(os.environ))
 db = client[DB_NAME]
 stock_col = db["stock"]
 users_col = db["users"]
