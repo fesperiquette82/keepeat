@@ -320,14 +320,14 @@ maestro test .maestro/ --device emulator-pixel-5
 
 ### Regression Test Locations
 
-- **Frontend logic**: `frontend/__tests__/utils/` (e.g., `dateHelpers.test.ts`)
+- **Frontend logic**: `frontend/utils/*.test.ts` (e.g., `dateParser.test.ts`)
 - **Backend logic**: `backend/tests/test_critical_bug_regressions.py`
 - **E2E regression**: `.maestro/regressions.yaml`
 
 ### Example Regression Test (Bug: Recipes not expiring)
 
 ```typescript
-// frontend/__tests__/utils/expiration.test.ts
+// frontend/utils/expiration.test.ts
 test('recipe expires after shelf life elapses', () => {
   // Arrange: Today is May 15, 2026
   vi.setSystemTime(new Date('2026-05-15'));
