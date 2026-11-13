@@ -26,8 +26,9 @@ test('régression BUG-022 : markConsumed/markThrown utilisent get() et non useSt
 
   assert.doesNotMatch(markConsumedBody, /useStockStore\.getState\(\)/);
   assert.doesNotMatch(markThrownBody, /useStockStore\.getState\(\)/);
-  assert.match(markConsumedBody, /const \{ items, priorityItems, stats \} = get\(\);/);
-  assert.match(markThrownBody, /const \{ items, priorityItems, stats \} = get\(\);/);
+  // BUG-076 : `stats` était capturé sans être utilisé ; seul le recours à get() importe ici.
+  assert.match(markConsumedBody, /const \{ items, priorityItems \} = get\(\);/);
+  assert.match(markThrownBody, /const \{ items, priorityItems \} = get\(\);/);
 });
 
 // ---------------------------------------------------------------------------

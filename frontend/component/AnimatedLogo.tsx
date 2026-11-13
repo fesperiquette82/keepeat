@@ -51,7 +51,7 @@ export default function AnimatedLogo({ children, delay = 100 }: Props) {
 
     // Nettoyage si le composant est démonté avant la fin du timer
     return () => clearTimeout(timer);
-  }, []); // [] → une seule fois au montage
+  }, [delay, opacity, scale]); // refs stables + prop : en pratique une seule fois au montage
 
   return (
     <Animated.View style={{ opacity, transform: [{ scale }] }}>

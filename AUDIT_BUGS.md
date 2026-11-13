@@ -1158,3 +1158,73 @@ Le cas le plus visible était le premier : le chemin le plus utilisé étiquetai
 **Commandes exécutées :** `bash scripts/ai-validate.sh` (voir résultat CI du PR pour la durée réelle du job)
 **Résultat :** PASS en local ; durée CI à confirmer sur le PR
 **Risques restants :** avec un MongoDB réel, des tests qui « passaient » en avalant des erreurs exercent maintenant la base pour de vrai : des dépendances d'état entre tests peuvent apparaître (données laissées par un test précédent). La base `keepeat_test` du service CI est neuve à chaque job, ce qui limite le risque à l'intérieur d'un même run. Le reste de la lenteur (hors Mongo) sera à profiler avec `--durations` une fois le service en place.
+
+## BUG-076 — Le lint frontend ne couvrait qu'un quart du code (et laissait passer des journaux avec l'adresse e-mail)
+
+**Contexte :** découvert le 12/11. `npm run lint` lançait `expo lint` sans argument, qui ne lint que `src/`, `app/` et `components/`. Le code de KeepEat vit aussi dans `component/` (singulier), `store/`, `utils/`, `data/`, `integration/` et `smoke/` : tout cela échappait au lint, en local comme en CI, alors que le job « Frontend regression tests » s'affichait vert. ESLint lancé directement remontait **31 erreurs** et 50 avertissements, dont 14 `console.log` dans `store/authStore.ts` qui court-circuitaient le logger central et, à la connexion, **journalisaient l'adresse e-mail de l'utilisateur** (`login called with email:`). La règle `no-console: error` existait dans `eslint.config.js` ; elle n'était simplement jamais appliquée là où ça comptait.
+
+| ID | Sévérité | Statut | Résumé |
+|---|---|---|---|
+| BUG-076 | 🟠 MAJEUR (garde-fou aveugle, donnée personnelle dans les journaux) | `CORRIGÉ` | `"lint": "eslint ."` avec les répertoires générés en `ignores` (`.test-dist`, `.expo`, `dist`, `android`) et une exception explicite pour `scripts/**` (sortie console normale d'un script de build). Toutes les erreurs corrigées : `authStore.ts` passe par `logger` et ne journalise plus l'e-mail ; `logger.ts` est le seul fichier autorisé à appeler `console` (désactivation locale commentée) ; `require()` de secours pour l'environnement de test Node explicitement assumés ; imports réordonnés, variables mortes supprimées (`authHeaders`, `stats`, mocks inutilisés de `login.test.ts`), `isAxiosError` importé nommément, dépendances d'effet explicites dans `AnimatedLogo`. Les 28 avertissements `array-type` corrigés automatiquement. **0 erreur, 0 avertissement** sur l'ensemble du projet. |
+
+**Fichiers modifiés :** `frontend/package.json`, `frontend/eslint.config.js`, `frontend/store/authStore.ts`, `frontend/store/appSettingsStore.ts`, `frontend/store/stockStore.ts`, `frontend/utils/logger.ts`, `frontend/utils/debugSwipeLogger.ts`, `frontend/utils/accountExportFile.ts`, `frontend/utils/iapService.ts`, `frontend/utils/useOcrDatePicker.ts`, `frontend/utils/login.test.ts`, `frontend/utils/appConfig.test.ts`, `frontend/component/AnimatedLogo.tsx`, plus les fichiers touchés par `eslint --fix`
+**Tests ajoutés/mis à jour :** la CI elle-même (le job lint couvre désormais tout le code : toute régression `no-console` bloque le PR) ; `frontend/utils/staticEnvAccess.test.ts` (voir BUG-077)
+**Commandes exécutées :** `cd frontend && npx eslint . && npm run typecheck && npm run test:ci`
+**Résultat :** PASS
+**Risques restants :** les `catch (e: any)` (~40) et `router.push('…' as any)` restent tolérés par la configuration ESLint d'Expo ; ils relèvent d'un chantier de typage séparé (point n° 10 de `docs/ANALYSE_2026-11-12.md`).
+
+## BUG-077 — Les variables `EXPO_PUBLIC_*` lues dynamiquement ne pouvaient jamais agir dans un build publié
+
+**Contexte :** révélé par BUG-076 (règle `expo/no-dynamic-env-var`). Expo n'inline dans le bundle que les accès **statiques** à `process.env.EXPO_PUBLIC_*` ; un accès par clé calculée vaut toujours `undefined` dans un build publié. Deux endroits y recouraient : `utils/debugConfig.ts` (`process.env[name]`) — les flags de diagnostic promis par BUG-067 (« activer ponctuellement un diagnostic sur un build de test ») ne pouvaient donc **jamais** s'allumer hors développement — et `utils/config.ts` (``process.env[`EXPO_PUBLIC_BACKEND_URL_${env}`]``) — la surcharge d'URL backend par environnement n'a jamais fonctionné dans un build.
+
+| ID | Sévérité | Statut | Résumé |
+|---|---|---|---|
+| BUG-077 | 🟡 MINEUR (fonctionnalités de configuration silencieusement inopérantes) | `CORRIGÉ` | Accès statiques : `envFlag(process.env.EXPO_PUBLIC_DEBUG_SWIPE_ACTIONS)` et `envFlag(process.env.EXPO_PUBLIC_DEBUG_LOG_TO_CONSOLE)` dans `debugConfig.ts` ; table `PER_ENV_BACKEND_URL` à trois entrées statiques dans `config.ts`. |
+
+**Fichiers modifiés :** `frontend/utils/debugConfig.ts`, `frontend/utils/config.ts`
+**Tests ajoutés/mis à jour :** `frontend/utils/staticEnvAccess.test.ts` — interdit tout `process.env[...]` dynamique dans `app/`, `component/`, `store/`, `utils/`, `data/`
+**Commandes exécutées :** `cd frontend && npm run test:ci`
+**Résultat :** PASS
+**Risques restants :** aucun.
+
+## BUG-078 — Permissions d'alarme exacte déclarées sans usage (risque de rejet Play Store)
+
+**Contexte :** découvert le 12/11 en relisant `app.json` dans la perspective de la publication. `SCHEDULE_EXACT_ALARM` et `USE_EXACT_ALARM` étaient déclarées alors qu'aucune alarme exacte n'est programmée : les rappels de péremption utilisent les déclencheurs `DATE` et `TIME_INTERVAL` d'`expo-notifications`, qui n'en ont pas besoin (vérifié : le module n'injecte pas ces permissions lui-même). Google Play réserve `USE_EXACT_ALARM` aux réveils, minuteurs et calendriers ; une déclaration injustifiée expose la fiche à un rejet ou à une demande de justification bloquante lors de la revue.
+
+| ID | Sévérité | Statut | Résumé |
+|---|---|---|---|
+| BUG-078 | 🟠 MAJEUR (bloquant potentiel pour la publication) | `CORRIGÉ` | Les deux permissions retirées de `app.json`. Les permissions réellement utilisées (caméra, notifications, facturation, médias, démarrage) restent déclarées. |
+
+**Fichiers modifiés :** `frontend/app.json`
+**Tests ajoutés/mis à jour :** `frontend/smoke/androidPermissions.smoke.test.ts` (interdit le retour des deux permissions, vérifie que les permissions utiles restent présentes)
+**Commandes exécutées :** `cd frontend && npm run test:smoke`
+**Résultat :** PASS
+**Risques restants :** à vérifier sur appareil au prochain build : les rappels J-1 arrivent toujours (déclencheurs inexacts, tolérance de quelques minutes acceptable pour ce cas d'usage).
+
+## BUG-079 — La validation canonique ne démarrait pas telle que documentée, et le backend n'avait ni lint ni typage
+
+**Contexte :** découvert le 12/11. `./scripts/ai-validate.sh` — la commande que `CLAUDE.md`, `AGENTS.md` et `.ai/core-rules.md` imposent avant tout commit — répondait « Permission denied » : les scripts étaient versionnés en mode `100644`. Par ailleurs `scripts/lib/validate-python-fastapi.sh` saute ruff, black et mypy dès qu'ils ne figurent pas dans `requirements.txt`, ce qui est le cas : le backend n'a **aucun** lint ni contrôle de typage, alors que `.ai/core-rules.md` promet « mypy strict mode (backend) » (mesuré : 115 erreurs en mode normal, 1 603 en strict). Enfin la validation exécutait pytest dans l'ordre `backend/tests tests`, différent de la CI, ce qui révélait un échec dépendant de l'ordre (client Motor lié à une boucle asyncio fermée, cf. BUG-075).
+
+| ID | Sévérité | Statut | Résumé |
+|---|---|---|---|
+| BUG-079 | 🟡 MINEUR (processus) | `PARTIELLEMENT CORRIGÉ` | Scripts repassés en `100755` (`git update-index --chmod=+x`). Dépendance à l'ordre d'exécution supprimée par la fixture de reliaison Motor dans les deux `conftest.py` : la suite passe quel que soit l'ordre. **Reste à faire :** `requirements-dev.txt` avec ruff + mypy et leur branchement dans le script et la CI (mypy en mode normal d'abord, 115 erreurs à résorber), et la mise en cohérence de `.ai/core-rules.md` avec ce qui est réellement contrôlé. |
+
+**Fichiers modifiés :** `scripts/ai-validate.sh`, `scripts/lib/*.sh` (mode), `tests/conftest.py`, `backend/tests/conftest.py`
+**Tests ajoutés/mis à jour :** la suite backend exécutée dans les deux ordres (`tests backend/tests` et `backend/tests tests`)
+**Commandes exécutées :** `bash scripts/ai-validate.sh`
+**Résultat :** PASS
+**Risques restants :** tant que ruff/mypy ne sont pas branchés, les règles `.ai` surestiment ce que la CI garantit côté backend.
+
+## BUG-080 — 7 330 fichiers de cache Metro et l'index d'un outil de bureau étaient versionnés
+
+**Contexte :** découvert le 12/11. `frontend/.metro-cache/` (7 330 fichiers, 12,8 Mo) était suivi par git malgré la ligne `.metro-cache/` de `.gitignore`, ajoutée après coup sans `git rm --cached`. `.project_assistant/memory.json` (4,3 Mo) est l'index d'un assistant de bureau Windows, avec le chemin local de la machine en clair. Les deux alourdissent chaque clone et chaque checkout CI, polluent les recherches et les diffs, et le second expose une information personnelle.
+
+| ID | Sévérité | Statut | Résumé |
+|---|---|---|---|
+| BUG-080 | 🟡 MINEUR (hygiène du dépôt) | `CORRIGÉ` | `git rm -r --cached` sur les deux répertoires ; `.project_assistant/` ajouté à `.gitignore`. Les fichiers restent sur le poste de travail du propriétaire, seul le suivi git cesse. Dans le même mouvement : suppression de la configuration Jest morte (`jest.config.js`, `setupTests.ts`, `test-setup.js` — les tests tournent sous `node --test`, Jest n'était même pas installé), du script Expo d'exemple `reset-project.js`, d'un fichier `New Document texte.txt` oublié ; `eas-cli` retiré des `devDependencies` (installation très lourde, `npx eas-cli` suffit) et `@expo/ngrok` déplacé vers les `devDependencies` ; 9 documents d'analyse figés depuis juin archivés dans `docs/archive/`, 4 notes de debug frontend regroupées dans `docs/frontend/` ; `CLAUDE.md` et les règles `.ai` corrigés : ils décrivaient `frontend/__tests__/`, qui n'a jamais existé (les tests sont co-localisés). |
+
+**Fichiers modifiés :** `.gitignore`, `frontend/package.json`, `frontend/package-lock.json`, `CLAUDE.md`, `.ai/core-rules.md`, `.ai/test-policy.md`, `.ai/stacks/react-native-expo.md`, déplacements vers `docs/archive/` et `docs/frontend/`, ajout de `docs/ANALYSE_2026-11-12.md`
+**Tests ajoutés/mis à jour :** aucun (hygiène du dépôt, sans logique) — raison technique documentée ici
+**Commandes exécutées :** `bash scripts/ai-validate.sh`
+**Résultat :** PASS
+**Risques restants :** l'historique git conserve les anciens blobs (25 Mo de `.git`) ; une réécriture d'historique n'est pas justifiée.

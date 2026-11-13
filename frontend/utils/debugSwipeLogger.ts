@@ -1,4 +1,5 @@
 import { DEBUG_SWIPE_ACTIONS, DEBUG_LOG_BUFFER_SIZE, DEBUG_LOG_TO_CONSOLE } from './debugConfig';
+import { logger } from './logger';
 
 // Conditional imports for Node.js test compatibility
 class FallbackFile implements FileInterface {
@@ -30,6 +31,7 @@ let Sharing: SharingInterface;
 let Platform: PlatformInterface;
 
 try {
+  // eslint-disable-next-line @typescript-eslint/no-require-imports -- repli volontaire pour l'environnement de test Node
   const expoFS = require('expo-file-system');
   File = expoFS.File;
   Paths = expoFS.Paths;
@@ -40,6 +42,7 @@ try {
 }
 
 try {
+  // eslint-disable-next-line @typescript-eslint/no-require-imports -- repli volontaire pour l'environnement de test Node
   Sharing = require('expo-sharing');
 } catch {
   // Fallback for Node.js test environment
@@ -50,6 +53,7 @@ try {
 }
 
 try {
+  // eslint-disable-next-line @typescript-eslint/no-require-imports -- repli volontaire pour l'environnement de test Node
   Platform = require('react-native').Platform;
 } catch {
   // Fallback for Node.js test environment
@@ -106,7 +110,7 @@ class DebugSwipeLogger {
           `KeepEat Debug Logs - Session started ${new Date().toISOString()}\n${'='.repeat(80)}\n\n`,
         );
         this.fileInitialized = true;
-        console.log('[DebugSwipeLogger] Log file created in Download folder:', this.logFile!.uri);
+        logger.info('[DebugSwipeLogger] Log file created in Download folder', { uri: this.logFile!.uri });
         return;
       } catch (err) {
         console.warn('[DebugSwipeLogger] Could not write to Download folder, using app documents folder as fallback:', err);
@@ -120,7 +124,7 @@ class DebugSwipeLogger {
         `KeepEat Debug Logs - Session started ${new Date().toISOString()}\n${'='.repeat(80)}\n\n`,
       );
       this.fileInitialized = true;
-      console.log('[DebugSwipeLogger] Log file created in app documents folder:', this.logFile!.uri);
+      logger.info('[DebugSwipeLogger] Log file created in app documents folder', { uri: this.logFile!.uri });
     } catch (err) {
       console.error('[DebugSwipeLogger] Failed to initialize log file:', err);
       this.fileInitialized = false;
@@ -176,7 +180,7 @@ class DebugSwipeLogger {
     if (DEBUG_LOG_TO_CONSOLE) {
       const prefix = `[${entry.level}] [${entry.module}] ${entry.action}`;
       const logData = entry.details ? JSON.stringify(entry.details, null, 2) : '';
-      console.log(`${prefix} ${entry.timestamp}`, logData);
+      logger.info(`${prefix} ${entry.timestamp}`, logData);
     }
   }
 

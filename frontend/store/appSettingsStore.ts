@@ -1,5 +1,5 @@
 import AsyncStorage from '@react-native-async-storage/async-storage';
-import axios from 'axios';
+import { isAxiosError } from 'axios';
 import { create } from 'zustand';
 import { logger } from '../utils/logger';
 import { APP_CONFIG } from '../utils/appConfig';
@@ -70,20 +70,15 @@ function buildReminderRefreshError(language: Language): string {
 }
 
 interface PriorityRefreshResponse {
-  items: Array<{ id: string }>;
+  items: { id: string }[];
   last_refresh_at: string;
   count: number;
   lead_days_used: ReminderLeadDays;
   reminders_enabled: boolean;
 }
 
-function authHeaders(): Record<string, string> {
-  const token = useAuthStore.getState().token;
-  return token ? { Authorization: `Bearer ${token}` } : {};
-}
-
 function parseRefreshErrorMessage(language: Language, error: unknown): string {
-  if (axios.isAxiosError(error)) {
+  if (isAxiosError(error)) {
     const detail = error.response?.data?.detail;
     if (typeof detail === 'string' && detail.trim()) return detail;
     if (detail && typeof detail === 'object' && typeof detail.message === 'string' && detail.message.trim()) {
@@ -243,8 +238,8 @@ export const useAppSettingsStore = create<AppSettingsStore>((set, get) => ({
     } catch (error) {
       const endpoint = '/api/stock/priority/refresh';
       const url = buildApiUrl(endpoint);
-      const status = axios.isAxiosError(error) ? (error.response?.status ?? null) : null;
-      const responseBody = axios.isAxiosError(error) ? (error.response?.data ?? null) : null;
+      const status = isAxiosError(error) ? (error.response?.status ?? null) : null;
+      const responseBody = isAxiosError(error) ? (error.response?.data ?? null) : null;
       const message = parseRefreshErrorMessage(get().language, error);
       logger.warn('[SettingsStore] force refresh priority items failed', {
         method: 'POST',

@@ -8,7 +8,7 @@ export function getRecipeAvailableIngredients(recipe: any): string[] {
   return [];
 }
 
-export function buildTargetIngredientNames(targetItems: Array<{ name?: string | null }>): Set<string> {
+export function buildTargetIngredientNames(targetItems: { name?: string | null }[]): Set<string> {
   return new Set(targetItems.map((item) => normalizeIngredientName(item.name ?? '')).filter(Boolean));
 }
 

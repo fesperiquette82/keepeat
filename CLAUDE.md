@@ -64,7 +64,7 @@ Une tâche est considérée comme **INCOMPLÈTE** tant que :
 | Périmètre | Répertoire | Commande |
 |---|---|---|
 | Backend Python | `tests/` (pytest) | `cd backend && pytest` |
-| Frontend TypeScript | `frontend/__tests__/` (node --test) | `cd frontend && npm run test` |
+| Frontend TypeScript | co-localisés `frontend/utils/*.test.ts`, `frontend/data/*.test.ts` (unitaires) ; `frontend/integration/`, `frontend/smoke/` (node --test) | `cd frontend && npm run test` |
 
 ### Quoi tester
 

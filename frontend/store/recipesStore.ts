@@ -24,7 +24,7 @@ export interface BackendRecipeSuggestion {
   image?: string;
   usedIngredients?: string[];
   missedIngredients?: string[];
-  ingredients?: Array<{
+  ingredients?: {
     name: string;
     quantity: number | null;
     unit: string | null;
@@ -35,7 +35,7 @@ export interface BackendRecipeSuggestion {
     matched_stock_item_ids?: string[];
     missing_quantity?: number | null;
     is_estimated?: boolean;
-  }>;
+  }[];
   instructions_summary?: string;
   prep_time_min?: number | null;
   cook_time_min?: number | null;

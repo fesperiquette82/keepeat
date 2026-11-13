@@ -542,7 +542,7 @@ export const useStockStore = create<StockStore>()(
         const { isOnline } = get();
 
         // Capturer le snapshot AVANT la mise à jour optimiste pour pouvoir rollback
-        const { items, priorityItems, stats } = get();
+        const { items, priorityItems } = get();
 
         debugSwipeLogger.info('stockStore.markConsumed', `Captured snapshot`, {
           itemId,
@@ -662,7 +662,7 @@ export const useStockStore = create<StockStore>()(
         const { isOnline } = get();
 
         // Capturer le snapshot AVANT la mise à jour optimiste pour pouvoir rollback
-        const { items, priorityItems, stats } = get();
+        const { items, priorityItems } = get();
 
         debugSwipeLogger.info('stockStore.markThrown', `Captured snapshot`, {
           itemId,

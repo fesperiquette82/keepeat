@@ -2,6 +2,7 @@ import { create } from 'zustand';
 import * as SecureStore from 'expo-secure-store';
 import { unregisterPushToken } from '../utils/notificationService';
 import { buildApiUrl } from '../utils/config';
+import { logger } from '../utils/logger';
 import { fetchWithTimeout as fetch } from '../utils/fetchWithTimeout';
 import { notifyAccountChanged } from '../utils/accountSessionBridge';
 import {
@@ -75,7 +76,7 @@ interface AuthStore {
 
 async function apiPost(endpoint: string, body: object): Promise<any> {
   const url = buildApiUrl(`/api/auth/${endpoint}`);
-  console.log('[AUTH_API] POST request to:', url);
+  logger.debug('[AUTH_API] POST request', { url });
   try {
     const response = await fetch(url, {
       method: 'POST',
@@ -83,18 +84,18 @@ async function apiPost(endpoint: string, body: object): Promise<any> {
       body: JSON.stringify(body),
     });
 
-    console.log('[AUTH_API] response status:', response.status, 'ok:', response.ok);
+    logger.debug('[AUTH_API] response status', { status: response.status, ok: response.ok });
     const data = await response.json();
-    console.log('[AUTH_API] response data received');
+    logger.debug('[AUTH_API] response data received');
 
     if (!response.ok) {
-      console.error('[AUTH_API] response not ok, detail:', data.detail);
+      logger.error('[AUTH_API] response not ok', { detail: data.detail });
       throw new Error(data.detail || `Error ${response.status}`);
     }
 
     return data;
   } catch (err: any) {
-    console.error('[AUTH_API] fetch failed:', err);
+    logger.errorFromException('[AUTH_API] fetch failed', err);
     throw err;
   }
 }
@@ -155,14 +156,14 @@ export const useAuthStore = create<AuthStore>((set) => ({
   },
 
   login: async (email, password) => {
-    console.log('[AUTH_STORE] login called with email:', email);
+    logger.debug('[AUTH_STORE] login called');
     set({ error: null });
     try {
-      console.log('[AUTH_STORE] calling apiPost to /api/auth/login');
+      logger.debug('[AUTH_STORE] calling apiPost to /api/auth/login');
       const data = await apiPost('login', { email, password });
-      console.log('[AUTH_STORE] apiPost succeeded, received response:', { has_token: !!data.access_token, has_user: !!data.user });
+      logger.debug('[AUTH_STORE] apiPost succeeded', { has_token: !!data.access_token, has_user: !!data.user });
       const { access_token, user } = data as { access_token: string; user: AuthUser };
-      console.log('[AUTH_STORE] saving token and user to SecureStore');
+      logger.debug('[AUTH_STORE] saving token and user to SecureStore');
       await SecureStore.setItemAsync(TOKEN_KEY, access_token);
       await SecureStore.setItemAsync(USER_KEY, JSON.stringify(user));
       const isBiometricSupported = SecureStore.canUseBiometricAuthentication();
@@ -177,12 +178,14 @@ export const useAuthStore = create<AuthStore>((set) => ({
           hasBiometricCredentials = true;
         } catch (biometricError) {
           if (!isBiometricAuthenticationCancellationError(biometricError)) {
-            console.warn('[AUTH_STORE] biometric save failed (non-cancellation), continuing without biometric', biometricError);
+            logger.warn('[AUTH_STORE] biometric save failed (non-cancellation), continuing without biometric', {
+              message: biometricError instanceof Error ? biometricError.message : String(biometricError),
+            });
             hasBiometricCredentials = false;
           }
         }
       }
-      console.log('[AUTH_STORE] updating Zustand state with token and user');
+      logger.debug('[AUTH_STORE] updating Zustand state with token and user');
       set({
         token: access_token,
         user,
@@ -193,12 +196,12 @@ export const useAuthStore = create<AuthStore>((set) => ({
       // BUG-064 : signaler le compte entrant AVANT tout chargement de données,
       // pour que le stock d'un éventuel compte précédent soit écarté.
       notifyAccountChanged(user.id ?? null);
-      console.log('[AUTH_STORE] refreshing entitlements and usage');
+      logger.debug('[AUTH_STORE] refreshing entitlements and usage');
       await useAuthStore.getState().refreshEntitlements();
       await useAuthStore.getState().refreshUsage();
-      console.log('[AUTH_STORE] login complete');
+      logger.debug('[AUTH_STORE] login complete');
     } catch (err: any) {
-      console.error('[AUTH_STORE] login failed:', err);
+      logger.errorFromException('[AUTH_STORE] login failed', err);
       set({ error: err.message || 'Erreur de connexion' });
       throw err;
     }
@@ -312,7 +315,7 @@ export const useAuthStore = create<AuthStore>((set) => ({
   refreshEntitlements: async () => {
     const token = useAuthStore.getState().token;
     if (!token) {
-      console.log('[AUTH_STORE] refreshEntitlements skipped: no token');
+      logger.debug('[AUTH_STORE] refreshEntitlements skipped: no token');
       return;
     }
     try {
@@ -320,7 +323,7 @@ export const useAuthStore = create<AuthStore>((set) => ({
         headers: { Authorization: `Bearer ${token}` },
       });
       if (response.status === 401) {
-        console.warn('[AUTH_STORE] refreshEntitlements: 401 Unauthorized, logging out');
+        logger.warn('[AUTH_STORE] refreshEntitlements: 401 Unauthorized, logging out');
         await useAuthStore.getState().logout();
         return;
       }
@@ -329,7 +332,7 @@ export const useAuthStore = create<AuthStore>((set) => ({
         throw new Error(data?.detail || `Error ${response.status}`);
       }
       const entitlements = data as BillingEntitlements;
-      console.log('[AUTH_STORE] refreshEntitlements succeeded', { plan: entitlements.plan });
+      logger.debug('[AUTH_STORE] refreshEntitlements succeeded', { plan: entitlements.plan });
       set((state) => ({
         entitlements,
         plan: entitlements.plan,
@@ -342,7 +345,7 @@ export const useAuthStore = create<AuthStore>((set) => ({
         await SecureStore.setItemAsync(USER_KEY, JSON.stringify(nextUser));
       }
     } catch (err: any) {
-      console.error('[AUTH_STORE] refreshEntitlements failed', { message: err.message });
+      logger.error('[AUTH_STORE] refreshEntitlements failed', { message: err.message });
       set({ error: err.message || 'Erreur de synchronisation premium' });
     }
   },
@@ -350,7 +353,7 @@ export const useAuthStore = create<AuthStore>((set) => ({
   refreshUsage: async () => {
     const token = useAuthStore.getState().token;
     if (!token) {
-      console.log('[AUTH_STORE] refreshUsage skipped: no token');
+      logger.debug('[AUTH_STORE] refreshUsage skipped: no token');
       return;
     }
     try {
@@ -358,7 +361,7 @@ export const useAuthStore = create<AuthStore>((set) => ({
         headers: { Authorization: `Bearer ${token}` },
       });
       if (response.status === 401) {
-        console.warn('[AUTH_STORE] refreshUsage: 401 Unauthorized, logging out');
+        logger.warn('[AUTH_STORE] refreshUsage: 401 Unauthorized, logging out');
         await useAuthStore.getState().logout();
         return;
       }
@@ -366,10 +369,10 @@ export const useAuthStore = create<AuthStore>((set) => ({
       if (!response.ok) {
         throw new Error(data?.detail || `Error ${response.status}`);
       }
-      console.log('[AUTH_STORE] refreshUsage succeeded');
+      logger.debug('[AUTH_STORE] refreshUsage succeeded');
       set({ usage: data as BillingUsage });
     } catch (err: any) {
-      console.error('[AUTH_STORE] refreshUsage failed', { message: err.message });
+      logger.error('[AUTH_STORE] refreshUsage failed', { message: err.message });
       set({ error: err.message || 'Erreur de synchronisation quota' });
     }
   },

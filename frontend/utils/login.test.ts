@@ -1,25 +1,6 @@
 import assert from 'node:assert/strict';
 import test from 'node:test';
 
-const mockAuthStore = {
-  login: async () => {},
-  loginWithBiometrics: async () => {},
-  resendVerification: async () => {},
-  error: null,
-  clearError: () => {},
-  hasBiometricCredentials: false,
-  isBiometricSupported: false,
-};
-
-const mockLanguageStore = {
-  language: 'en',
-};
-
-const mockRouter = {
-  push: (path: string) => {},
-  replace: (path: string) => {},
-};
-
 test('LoginScreen: email not verified message displayed without duplicate error', () => {
   const localError = null;
   const storeError = null;
@@ -82,7 +63,6 @@ test('LoginScreen: handles biometric login error messages correctly', async () =
 
 test('LoginScreen: login form validation prevents empty email submission', () => {
   const email = '';
-  const password = 'password';
 
   if (!email.trim()) {
     const error = 'Please enter your email.';
@@ -93,7 +73,6 @@ test('LoginScreen: login form validation prevents empty email submission', () =>
 });
 
 test('LoginScreen: login form validation prevents empty password submission', () => {
-  const email = 'test@example.com';
   const password = '';
 
   if (!password) {

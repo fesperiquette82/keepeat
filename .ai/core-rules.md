@@ -8,7 +8,7 @@
 1. **Every bug fix → regression test (mandatory)**
    - Test must fail before fix is applied
    - Test must verify the bug is actually fixed
-   - Place test in `backend/tests/` or `frontend/__tests__/`
+   - Place test in `backend/tests/` (or `tests/`), or next to the frontend module (`frontend/utils/*.test.ts`), in `frontend/integration/` or `frontend/smoke/`
 
 2. **Every new feature → acceptance test (mandatory)**
    - Test describes intended behavior (not implementation)
