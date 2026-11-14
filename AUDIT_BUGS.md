@@ -1370,3 +1370,17 @@ Le cas le plus visible était le premier : le chemin le plus utilisé étiquetai
 **Commandes exécutées :** `npm run test:ci`, `pytest tests/test_ci_non_regression_policy.py`, `bash scripts/ai-validate.sh`
 **Résultat :** PASS
 **Risques restants :** la cause est établie par lecture du code et cohérente avec l'absence totale de requêtes ; le verdict appartient au prochain run Maestro, dont le condensé montrera l'écran réellement affiché si un autre obstacle subsiste. Une modification du seul workflow ne force pas la reconstruction de l'APK (choix figé par un test de politique existant) : après un changement de variable `EXPO_PUBLIC_*` dans le workflow, lancer le job avec `force_mobile_apk_build`.
+
+## BUG-091 — L'émulateur E2E tournait sans accélération matérielle
+
+**Contexte :** 14/11, run E2E du correctif BUG-090. Grâce aux journaux MongoDB bornés, le journal complet du job est enfin lisible. Le diagnostic KVM du workflow affiche « /dev/kvm exists » mais « not readable/writable » : l'émulateur tourne en émulation logicielle. Le démarrage a pris 468 s, puis le réglage des animations a échoué sur une coupure adb (`Broken pipe`) et l'action d'émulateur a avorté avant de lancer le moindre scénario. Les runs précédents montraient la même lenteur : 7 à 15 minutes par scénario.
+
+| ID | Sévérité | Statut | Résumé |
+|---|---|---|---|
+| BUG-091 | 🟠 MAJEUR (E2E instable et très lent) | `CORRIGÉ` (à confirmer par le run CI) | Étape « Enable KVM hardware acceleration » avant l'émulateur dans les deux workflows E2E : règle udev qui ouvre `/dev/kvm` au job, méthode documentée par `reactivecircus/android-emulator-runner`. Le diagnostic KVM existant, placé après, confirmera l'accès à chaque run. |
+
+**Fichiers modifiés :** `.github/workflows/mobile-e2e.yml`, `.github/workflows/mobile-e2e-nightly.yml`
+**Tests ajoutés/mis à jour :** `tests/test_ci_non_regression_policy.py::test_e2e_emulator_gets_kvm_acceleration` (règle présente dans les deux workflows, avant le démarrage de l'émulateur), vérifié probant.
+**Commandes exécutées :** `pytest tests/test_ci_non_regression_policy.py`, `bash scripts/ai-validate.sh`
+**Résultat :** PASS
+**Risques restants :** l'effet réel (démarrage en une à deux minutes) ne se vérifie que sur le runner ; le diagnostic KVM du job l'affichera.

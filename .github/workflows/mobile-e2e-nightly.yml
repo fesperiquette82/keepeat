@@ -152,6 +152,16 @@ jobs:
       - name: Install Maestro CLI
         run: curl -Ls "https://get.maestro.mobile.dev" | bash
 
+      - name: Enable KVM hardware acceleration
+        # BUG-091 : /dev/kvm existe sur les runners Linux de GitHub mais n'est pas
+        # accessible au job : l'émulateur retombait en émulation logicielle
+        # (démarrage en 8 min, scénarios de 7 à 15 min, coupures adb). Règle udev
+        # documentée par reactivecircus/android-emulator-runner.
+        run: |
+          echo 'KERNEL=="kvm", GROUP="kvm", MODE="0666", OPTIONS+="static_node=kvm"' | sudo tee /etc/udev/rules.d/99-kvm4all.rules
+          sudo udevadm control --reload-rules
+          sudo udevadm trigger --name-match=kvm
+
       - name: Run nightly full Maestro suite
         uses: reactivecircus/android-emulator-runner@v2
         env:

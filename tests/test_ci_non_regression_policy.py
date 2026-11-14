@@ -1871,6 +1871,19 @@ def test_e2e_bundle_targets_the_test_backend():
             assert "EXPO_PUBLIC_BACKEND_URL: http://10.0.2.2:8000" in block, f"{path} / {step}"
 
 
+def test_e2e_emulator_gets_kvm_acceleration():
+    """BUG-091 : /dev/kvm existe sur les runners Linux de GitHub mais n'est pas
+    accessible au job sans règle udev. L'émulateur retombait en émulation
+    logicielle : démarrage en 8 min, scénarios de 7 à 15 min, et un run du 14/11
+    a avorté sur une coupure adb avant même de lancer Maestro. Les deux
+    workflows ouvrent /dev/kvm avant de démarrer l'émulateur."""
+    for path in (".github/workflows/mobile-e2e.yml", ".github/workflows/mobile-e2e-nightly.yml"):
+        workflow = Path(path).read_text(encoding="utf-8")
+        rule = 'KERNEL=="kvm", GROUP="kvm", MODE="0666"'
+        assert rule in workflow, path
+        assert "udevadm trigger --name-match=kvm" in workflow, path
+        assert workflow.index(rule) < workflow.index("uses: reactivecircus/android-emulator-runner@v2"), path
+
 def test_maestro_failures_are_diagnosable_from_the_job_log():
     """BUG-090 : l'API ne rend que les dernières lignes du journal d'un job, et
     les artefacts ne sont pas toujours accessibles. Les journaux du conteneur
