@@ -141,7 +141,11 @@ inachevée. Le chronomètre tourne pendant que le reste avance.
 **Avant d'ouvrir au public — qualité**
 
 - [ ] Réparer la suite **Maestro** (seul test de bout en bout, rouge depuis le
-      27/08).
+      27/08). **Cause racine corrigée le 13/11 (BUG-083, PR #173)** : l'APK debug
+      construit en CI n'embarquait aucun bundle JS, l'app n'avait rien à exécuter.
+      Reste à **confirmer sur le run CI** (job « PR smoke Maestro suite » du PR,
+      puis nightly) ; si d'autres scénarios échouent ensuite, ce seront de vrais
+      défauts de scénario, à traiter un par un.
 - [x] **Épingler les dépendances backend** — fait le 12/11 (BUG-081, PR #173) :
       `requirements.txt` épinglé, `pip-audit` en CI.
 - [ ] **Vérifier le thème sombre sur un vrai appareil** (jamais fait).

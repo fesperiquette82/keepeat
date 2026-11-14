@@ -1256,3 +1256,17 @@ Le cas le plus visible était le premier : le chemin le plus utilisé étiquetai
 **Commandes exécutées :** `cd frontend && npx eslint . && npm run typecheck && npm run test:ci`
 **Résultat :** PASS
 **Risques restants :** à vérifier sur un appareil réel (jamais possible depuis cet environnement) : l'invite d'authentification à la lecture de la charge utile, puis l'ouverture de session après `/api/auth/me`. Changement de comportement assumé : après 30 jours sans connexion au mot de passe, l'empreinte ne suffit plus (le jeton a expiré) — c'est le prix de la révocabilité. Comme avant, la session biométrique survit à une déconnexion explicite ; la rendre caduque à la déconnexion serait une décision produit à prendre séparément.
+
+## BUG-083 — L'APK E2E n'embarquait aucun bundle JavaScript : Maestro échouait avant l'écran de connexion
+
+**Contexte :** découvert le 13/11 en analysant les journaux du job « Mobile E2E / PR smoke Maestro suite » du PR #173 et du nightly sur `main` (rouge chaque nuit, « depuis le 27/08 » selon `TODO_BY_OWNER.md`). Les scénarios `01-auth-session` et `02-navigation-main-tabs` échouaient sur `Assertion is false: id: tab-home is visible`, et le backend de test ne recevait **aucune** requête `POST /api/auth/login` : l'application n'atteignait jamais l'écran de connexion. Le journal de construction de l'APK le confirme : aucune tâche `createBundleDebugJsAndAssets`, aucun `export:embed`, aucun `index.android.bundle`. Le plugin Gradle de React Native ne bundle pas la variante debug (`debuggableVariants = ["debug"]`, défaut repris par le template Expo) : l'app attend un serveur Metro, qui n'existe pas en CI. Le scénario `00-smoke-launch` « passait » parce que ses deux assertions étaient `optional: true`.
+
+| ID | Sévérité | Statut | Résumé |
+|---|---|---|---|
+| BUG-083 | 🟠 MAJEUR (seul test de bout en bout inopérant) | `CORRIGÉ` (à confirmer par le run CI) | `app.config.js` : plugin de configuration `withAppBuildGradle` qui ajoute `debuggableVariants = []` au bloc `react {}` quand `EXPO_E2E_EMBED_BUNDLE=1` (idempotent, échoue bruyamment si le bloc est introuvable ; Metro reste utilisé en développement local). Les deux workflows E2E posent le flag au prebuild **et** au build (le bundle est produit par Gradle, les `EXPO_PUBLIC_*` doivent y être présentes), puis vérifient la présence d'`assets/index.android.bundle` dans l'APK, sinon le job échoue avec un message explicite. `00-smoke-launch.yaml` exige désormais l'écran de connexion ou l'onglet accueil. |
+
+**Fichiers modifiés :** `frontend/app.config.js`, `.github/workflows/mobile-e2e.yml`, `.github/workflows/mobile-e2e-nightly.yml`, `.maestro/00-smoke-launch.yaml`, `TODO_BY_OWNER.md`
+**Tests ajoutés/mis à jour :** `frontend/smoke/appConfigE2eBundle.smoke.test.ts` (flag, réécriture Gradle idempotente, échec bruyant, plugin attaché seulement en E2E), `tests/test_ci_non_regression_policy.py::test_e2e_debug_apk_embeds_js_bundle` et `::test_smoke_launch_flow_is_not_vacuous`
+**Commandes exécutées :** `bash scripts/ai-validate.sh`
+**Résultat :** PASS en local ; **le verdict appartient au run CI** (job Maestro du PR #173, puis nightly) — impossible d'exécuter un émulateur depuis cet environnement.
+**Risques restants :** une fois l'application réellement exécutée en CI, des scénarios peuvent révéler de vrais défauts (lenteur de l'émulateur sans KVM, `testID` manquants) : ce seront des bugs distincts à traiter un par un. Le bundle debug est produit avec `--dev true` (non minifié), ce qui allonge un peu la construction.

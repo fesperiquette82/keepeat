@@ -1843,3 +1843,27 @@ def test_production_health_check_tolerates_render_free_tier_cold_start():
         "Le timeout du health-check doit largement dépasser la durée de cold-start mesurée (~36s) pour ne pas confondre un redémarrage à froid normal avec une vraie panne"
 
 
+
+
+def test_e2e_debug_apk_embeds_js_bundle():
+    """BUG-083 : l'APK debug E2E doit embarquer le bundle JS.
+
+    Le plugin Gradle de React Native ne bundle pas la variante debug (Metro est
+    attendu) ; sans Metro en CI, l'application n'avait rien à exécuter et chaque
+    scénario Maestro échouait avant l'écran de connexion. Les deux workflows qui
+    construisent l'APK doivent activer le bundling (prebuild ET build, le bundle
+    étant produit par Gradle) et vérifier sa présence dans l'APK.
+    """
+    for path in (".github/workflows/mobile-e2e.yml", ".github/workflows/mobile-e2e-nightly.yml"):
+        workflow = Path(path).read_text(encoding="utf-8")
+        assert workflow.count('EXPO_E2E_EMBED_BUNDLE: "1"') >= 2, f"{path} : flag absent du prebuild ou du build"
+        assert "assets/index.android.bundle" in workflow, f"{path} : aucune vérification du bundle dans l'APK"
+
+
+def test_smoke_launch_flow_is_not_vacuous():
+    """BUG-083 : 00-smoke-launch passait quoi qu'affiche l'application (deux
+    assertions `optional: true`). Il doit exiger l'écran de connexion ou, à
+    défaut, l'onglet accueil."""
+    flow = Path(".maestro/00-smoke-launch.yaml").read_text(encoding="utf-8")
+    assert "runFlow" in flow and "tab-home" in flow and "login-email-input" in flow
+    assert flow.count("optional: true") == 1, "seule l'attente initiale peut être optionnelle"

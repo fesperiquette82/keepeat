@@ -1,9 +1,19 @@
 appId: com.fesperiquette.keepeat
 ---
+# BUG-083 : les deux assertions étaient facultatives — le scénario passait
+# même quand l'application affichait l'écran d'erreur « impossible de charger le
+# code ». Il exige désormais qu'un des deux écrans attendus soit réellement là :
+# l'écran de connexion, ou l'onglet accueil si une session est déjà ouverte.
 - launchApp
-- assertVisible:
-    id: login-email-input
+- extendedWaitUntil:
+    visible:
+      id: login-email-input
+    timeout: 120000
     optional: true
-- assertVisible:
-    id: tab-home
-    optional: true
+- runFlow:
+    when:
+      notVisible:
+        id: login-email-input
+    commands:
+      - assertVisible:
+          id: tab-home
