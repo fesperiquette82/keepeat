@@ -126,8 +126,8 @@ async def get_current_user(
         user_id = payload.get("sub")
         if not isinstance(user_id, str) or not user_id:
             raise ValueError("missing sub")
-    except (JWTError, ValueError):
-        raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="Invalid or expired token")
+    except (JWTError, ValueError) as exc:
+        raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="Invalid or expired token") from exc
 
     try:
         doc = await users_col.find_one({"_id": ObjectId(user_id)})

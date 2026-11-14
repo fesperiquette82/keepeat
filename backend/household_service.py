@@ -34,8 +34,8 @@ def decode_invite_token(token: str) -> str:
     """Retourne le household_id encodé dans le token, ou lève HTTPException(400)."""
     try:
         payload = jwt.decode(token, get_jwt_secret_key(), algorithms=[JWT_ALGORITHM])
-    except JWTError:
-        raise HTTPException(status_code=400, detail={"code": "INVALID_INVITE_TOKEN"})
+    except JWTError as exc:
+        raise HTTPException(status_code=400, detail={"code": "INVALID_INVITE_TOKEN"}) from exc
     if payload.get("type") != INVITE_TOKEN_TYPE:
         raise HTTPException(status_code=400, detail={"code": "INVALID_INVITE_TOKEN"})
     household_id = payload.get("household_id")

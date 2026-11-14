@@ -370,8 +370,8 @@ def _parse_receipt_json(text: str) -> tuple[str | None, str | None, str | None, 
 
     try:
         parsed = json.loads(text)
-    except Exception:
-        raise OcrApiError("Réponse OCR invalide (JSON inattendu)", http_status=502)
+    except Exception as exc:
+        raise OcrApiError("Réponse OCR invalide (JSON inattendu)", http_status=502) from exc
 
     # Format v2 : objet avec "items"
     if isinstance(parsed, dict):
@@ -803,7 +803,7 @@ async def _call_gemini_receipt_parser(
     # ── Parse du JSON ticket ───────────────────────────────────────────────────
     try:
         purchase_date, merchant, currency, raw_items, ignored_items = _parse_receipt_json(text)
-    except OcrApiError:
+    except OcrApiError as exc_1:
         logger.warning(
             "OCR receipt: JSON parse failed — user=%s raw=%s",
             current_user["id"], text[:200],
@@ -815,7 +815,7 @@ async def _call_gemini_receipt_parser(
             mime_type=mime_type,
             image_b64_len=image_b64_len,
             cause="invalid_model_json",
-        )
+        ) from exc_1
 
     if not raw_items:
         logger.info(

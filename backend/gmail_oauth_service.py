@@ -87,8 +87,8 @@ def decode_state_token(state: str) -> str:
     """Retourne le user_id encodé dans le state, ou lève ValueError."""
     try:
         payload = jwt.decode(state, get_jwt_secret_key(), algorithms=[JWT_ALGORITHM])
-    except JWTError:
-        raise ValueError("invalid_state")
+    except JWTError as exc:
+        raise ValueError("invalid_state") from exc
     if payload.get("type") != STATE_TOKEN_TYPE:
         raise ValueError("invalid_state")
     user_id = payload.get("user_id")

@@ -1342,3 +1342,17 @@ Le cas le plus visible était le premier : le chemin le plus utilisé étiquetai
 **Commandes exécutées :** `mypy backend tests` (0 erreur, 103 fichiers), `ruff check backend tests`, `bash scripts/ai-validate.sh`
 **Résultat :** PASS
 **Risques restants :** `server.py` reste en mode normal (124 erreurs strictes) ; il passera en strict avec le découpage de ses routes. Les jetons concernés sont signés par le backend lui-même : les défauts (1) et (2) n'étaient pas exploitables sans la clé, la correction est défensive.
+
+## BUG-089 — ruff : règles flake8-bugbear activées
+
+**Contexte :** 14/11, deuxième palier du lint backend (BUG-084). Les règles de base ne couvraient ni les arguments par défaut mutables, ni les variables de boucle capturées par une fermeture, ni les exceptions relancées sans cause. Mesure : 105 constats, dont 74 sur l'idiome FastAPI `Depends(...)` en valeur par défaut, voulu.
+
+| ID | Sévérité | Statut | Résumé |
+|---|---|---|---|
+| BUG-089 | 🟡 MINEUR (processus + diagnostic) | `CORRIGÉ` | Règles `B` ajoutées à `ruff.toml` ; marqueurs déclaratifs de FastAPI et `typing.cast` déclarés immuables. **27 exceptions chaînées** (`raise … from exc`) dans un bloc `except` : les réponses HTTP sont inchangées, mais les traces Sentry et les journaux montrent désormais la cause d'origine au lieu de « pendant le traitement d'une autre exception ». Le script de chaînage s'appuie sur l'arbre syntaxique et n'a pas réutilisé un nom `exc` déjà présent dans la fonction (le `del` implicite de fin de bloc l'aurait effacé). `rstrip("```")` remplacé par `rstrip("`")` (comportement identique, `rstrip` retire des caractères, pas une chaîne). `zip(..., strict=True)` sur les identifiants insérés par `insert_many`. Aucun défaut réel trouvé par ce palier. |
+
+**Fichiers modifiés :** `ruff.toml`, `backend/auth_utils.py`, `backend/gmail_oauth_service.py`, `backend/household_service.py`, `backend/ocr_service.py`, `backend/recipes_service.py`, `backend/server.py`, `tests/test_alerts_preferences.py`
+**Tests ajoutés/mis à jour :** `tests/test_ci_non_regression_policy.py::test_backend_lint_includes_bugbear` (règles `B` actives, liste des appels admis en valeur par défaut figée, aucune exclusion `B` par fichier)
+**Commandes exécutées :** `ruff check backend tests`, `mypy backend tests`, `bash scripts/ai-validate.sh`
+**Résultat :** PASS
+**Risques restants :** aucun.

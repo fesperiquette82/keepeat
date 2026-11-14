@@ -1143,8 +1143,8 @@ def _parse_date_param(date_str: str | None, *, default_days_ago: int) -> str:
         return (utc_now() - timedelta(days=default_days_ago)).isoformat()
     try:
         parsed = datetime.fromisoformat(date_str)
-    except ValueError:
-        raise HTTPException(status_code=422, detail=f"Invalid ISO date: {date_str}")
+    except ValueError as exc:
+        raise HTTPException(status_code=422, detail=f"Invalid ISO date: {date_str}") from exc
     if parsed.tzinfo is None:
         parsed = parsed.replace(tzinfo=timezone.utc)
     return parsed.isoformat()
@@ -1385,8 +1385,8 @@ async def register(request: Request, body: UserCreate):
     }
     try:
         await users_col.insert_one(doc)
-    except DuplicateKeyError:
-        raise HTTPException(status_code=409, detail="Email already registered")
+    except DuplicateKeyError as exc:
+        raise HTTPException(status_code=409, detail="Email already registered") from exc
     created_user = await users_col.find_one({"email": body.email.lower()}, {"_id": 1})
     await track_business_event(
         business_events_col=business_events_col,
@@ -1807,8 +1807,8 @@ async def _get_google_play_access_token(credentials_json: str) -> str | None:
             )
             creds.refresh(_greq.Request())
             return creds.token  # type: ignore[return-value]
-        except ImportError:
-            raise RuntimeError("google-auth non installé — ajouter google-auth aux requirements")
+        except ImportError as exc:
+            raise RuntimeError("google-auth non installé — ajouter google-auth aux requirements") from exc
 
     try:
         return await asyncio.to_thread(_sync_refresh)
@@ -2316,8 +2316,8 @@ async def connect_gmail(
         raise HTTPException(status_code=503, detail={"code": "GMAIL_OAUTH_NOT_CONFIGURED"})
     try:
         state_user_id = gmail_oauth_service.decode_state_token(body.state)
-    except ValueError:
-        raise HTTPException(status_code=400, detail={"code": "INVALID_OAUTH_STATE"})
+    except ValueError as exc_1:
+        raise HTTPException(status_code=400, detail={"code": "INVALID_OAUTH_STATE"}) from exc_1
     if state_user_id != current_user["id"]:
         raise HTTPException(status_code=400, detail={"code": "INVALID_OAUTH_STATE"})
 
@@ -2325,9 +2325,9 @@ async def connect_gmail(
         tokens = await gmail_oauth_service.exchange_code_for_tokens(code=body.code)
     except httpx.HTTPStatusError as exc:
         logger.warning("GMAIL_OAUTH échange de code échoué user=%s status=%s", current_user["id"], exc.response.status_code)
-        raise HTTPException(status_code=400, detail={"code": "OAUTH_EXCHANGE_FAILED"})
-    except gmail_oauth_service.GmailOAuthNotConfigured:
-        raise HTTPException(status_code=503, detail={"code": "GMAIL_OAUTH_NOT_CONFIGURED"})
+        raise HTTPException(status_code=400, detail={"code": "OAUTH_EXCHANGE_FAILED"}) from exc
+    except gmail_oauth_service.GmailOAuthNotConfigured as exc_1:
+        raise HTTPException(status_code=503, detail={"code": "GMAIL_OAUTH_NOT_CONFIGURED"}) from exc_1
 
     refresh_token = tokens.get("refresh_token")
     if not refresh_token:
@@ -2963,8 +2963,8 @@ async def update_stock(
 ):
     try:
         oid = ObjectId(item_id)
-    except Exception:
-        raise HTTPException(status_code=400, detail="Invalid item id")
+    except Exception as exc:
+        raise HTTPException(status_code=400, detail="Invalid item id") from exc
 
     scope_ids = await _resolve_stock_scope_ids(current_user)
     update_data = item.model_dump(exclude_unset=True)
@@ -2999,8 +2999,8 @@ async def consume_item(
 ):
     try:
         oid = ObjectId(item_id)
-    except Exception:
-        raise HTTPException(status_code=400, detail="Invalid item id")
+    except Exception as exc:
+        raise HTTPException(status_code=400, detail="Invalid item id") from exc
 
     scope_ids = await _resolve_stock_scope_ids(current_user)
     res = await stock_col.update_one(
@@ -3030,8 +3030,8 @@ async def throw_item(
 ):
     try:
         oid = ObjectId(item_id)
-    except Exception:
-        raise HTTPException(status_code=400, detail="Invalid item id")
+    except Exception as exc:
+        raise HTTPException(status_code=400, detail="Invalid item id") from exc
 
     scope_ids = await _resolve_stock_scope_ids(current_user)
     res = await stock_col.update_one(
@@ -3054,8 +3054,8 @@ async def restore_item(
 ):
     try:
         oid = ObjectId(item_id)
-    except Exception:
-        raise HTTPException(status_code=400, detail="Invalid item id")
+    except Exception as exc:
+        raise HTTPException(status_code=400, detail="Invalid item id") from exc
 
     scope_ids = await _resolve_stock_scope_ids(current_user)
     res = await stock_col.update_one(
@@ -3182,7 +3182,7 @@ async def refresh_priority_items(
             str(request.url.path),
             body.model_dump(),
         )
-        raise HTTPException(status_code=500, detail={"message": "Impossible de mettre à jour les produits prioritaires.", "reason": str(exc)})
+        raise HTTPException(status_code=500, detail={"message": "Impossible de mettre à jour les produits prioritaires.", "reason": str(exc)}) from exc
 
 
 @api_router.get("/stock/history")
@@ -3473,7 +3473,7 @@ async def refresh_recalls(
                 "lastSuccessfulRefreshAt": previous_success,
                 "reason": str(exc),
             },
-        )
+        ) from exc
 
 
 @api_router.get("/alerts/preferences", response_model=AlertPreferences)
@@ -4411,7 +4411,7 @@ async def ocr_receipt_route(
                     "failure_cause": getattr(exc, "cause", None),
                 },
             )
-            raise HTTPException(status_code=exc.http_status, detail=str(exc))
+            raise HTTPException(status_code=exc.http_status, detail=str(exc)) from exc
         except Exception as exc:
             await _refund_feature_quota(user_id=current_user["id"], feature=FEATURE_OCR, quota_context=quota_context)
             logger.exception("OCR receipt unexpected failure user=%s", current_user["id"])
@@ -4534,8 +4534,8 @@ async def get_receipt_ticket(
     """Récupère un ticket de caisse avec son image (admin uniquement)."""
     try:
         oid = ObjectId(ticket_id)
-    except Exception:
-        raise HTTPException(status_code=400, detail="ID invalide")
+    except Exception as exc:
+        raise HTTPException(status_code=400, detail="ID invalide") from exc
     doc = await receipt_tickets_col.find_one({"_id": oid})
     if not doc:
         raise HTTPException(status_code=404, detail="Ticket non trouvé")
@@ -4563,8 +4563,8 @@ async def process_receipt_ticket(
     """Ajoute manuellement des produits au stock de l'utilisateur et clôture le ticket (admin uniquement)."""
     try:
         oid = ObjectId(ticket_id)
-    except Exception:
-        raise HTTPException(status_code=400, detail="ID invalide")
+    except Exception as exc_1:
+        raise HTTPException(status_code=400, detail="ID invalide") from exc_1
     doc = await receipt_tickets_col.find_one({"_id": oid})
     if not doc:
         raise HTTPException(status_code=404, detail="Ticket non trouvé")
@@ -4627,7 +4627,7 @@ async def process_receipt_ticket(
         res = await stock_col.insert_many(stock_docs)
         added_items = [
             {"id": str(inserted_id), "name": item.name}
-            for inserted_id, item in zip(res.inserted_ids, body.items)
+            for inserted_id, item in zip(res.inserted_ids, body.items, strict=True)
         ]
 
     await receipt_tickets_col.update_one(
@@ -4656,8 +4656,8 @@ async def dismiss_receipt_ticket(
     """Marque un ticket comme ignoré (admin uniquement)."""
     try:
         oid = ObjectId(ticket_id)
-    except Exception:
-        raise HTTPException(status_code=400, detail="ID invalide")
+    except Exception as exc:
+        raise HTTPException(status_code=400, detail="ID invalide") from exc
     res = await receipt_tickets_col.update_one(
         {"_id": oid},
         {"$set": {"status": "dismissed", "dismissed_at": utc_now().isoformat(), "dismissed_by": _admin_user.get("email", "admin")}},
@@ -4675,8 +4675,8 @@ async def reopen_receipt_ticket(
     """Remet un ticket en attente (annule traitement ou ignoré)."""
     try:
         oid = ObjectId(ticket_id)
-    except Exception:
-        raise HTTPException(status_code=400, detail="ID invalide")
+    except Exception as exc:
+        raise HTTPException(status_code=400, detail="ID invalide") from exc
     res = await receipt_tickets_col.update_one(
         {"_id": oid},
         {"$set": {"status": "pending"}, "$unset": {"processed_at": "", "dismissed_at": "", "items_added": ""}},
@@ -4921,7 +4921,7 @@ async def _ai_gap_fill(stock_names: list[str], gemini_key: str) -> dict | None:
         text = parts[1] if len(parts) > 1 else parts[0]
         if text.startswith("json"):
             text = text[4:]
-        text = text.strip().rstrip("```").strip()
+        text = text.strip().rstrip("`").strip()
 
     try:
         recipes = json.loads(text)
@@ -5281,7 +5281,7 @@ async def get_ai_recipes(
     except Exception as exc:
         await _refund_feature_quota(user_id=uid, feature=FEATURE_AI, quota_context=quota_context)
         logger.warning("Gemini recipes/ai request failed: %s", exc)
-        raise HTTPException(status_code=502, detail="Erreur réseau IA")
+        raise HTTPException(status_code=502, detail="Erreur réseau IA") from exc
 
     # Nettoyage du bloc markdown éventuel
     if "```" in text:
@@ -5289,14 +5289,14 @@ async def get_ai_recipes(
         text = parts[1] if len(parts) > 1 else parts[0]
         if text.startswith("json"):
             text = text[4:]
-        text = text.strip().rstrip("```").strip()
+        text = text.strip().rstrip("`").strip()
 
     try:
         recipes = json.loads(text)
-    except Exception:
+    except Exception as exc_1:
         await _refund_feature_quota(user_id=uid, feature=FEATURE_AI, quota_context=quota_context)
         logger.warning("Gemini recipes/ai invalid JSON: %s", text[:200])
-        raise HTTPException(status_code=502, detail="Réponse IA invalide")
+        raise HTTPException(status_code=502, detail="Réponse IA invalide") from exc_1
 
     for recipe in recipes:
         recipe["is_ai"] = True
@@ -6036,8 +6036,8 @@ async def admin_add_recipe(
     }
     try:
         await recipes_col.insert_one(mongo_doc)
-    except DuplicateKeyError:
-        raise HTTPException(status_code=409, detail="Une recette avec cet identifiant existe déjà.")
+    except DuplicateKeyError as exc:
+        raise HTTPException(status_code=409, detail="Une recette avec cet identifiant existe déjà.") from exc
 
     await _mark_coverable_gaps_after_recipe_insert(mongo_doc)
     logger.info(
@@ -6197,7 +6197,7 @@ async def upload_debug_logs(
         raise
     except Exception as e:
         logger.error(f"Failed to upload debug logs: {e}", exc_info=True)
-        raise HTTPException(status_code=500, detail=f"Failed to upload logs: {str(e)}")
+        raise HTTPException(status_code=500, detail=f"Failed to upload logs: {str(e)}") from e
 
 
 # ── Endpoint public : crash reporting frontend ────────────────────────────────

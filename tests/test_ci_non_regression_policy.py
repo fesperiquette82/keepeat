@@ -1875,6 +1875,31 @@ def test_backend_is_linted_with_ruff():
     assert "[skip] ruff: not installed" not in script
 
 
+def test_backend_lint_includes_bugbear():
+    """BUG-089 : flake8-bugbear (règles B) est actif sur le backend et les
+    tests. Seuls les marqueurs déclaratifs de FastAPI et typing.cast sont
+    admis en valeur par défaut : une liste ou un dict partagé entre appels
+    reste interdit."""
+    import tomllib
+
+    config = tomllib.loads(Path("ruff.toml").read_text(encoding="utf-8"))
+    assert "B" in config["lint"]["select"]
+    immutable = set(config["lint"]["flake8-bugbear"]["extend-immutable-calls"])
+    assert immutable <= {
+        "fastapi.Body",
+        "fastapi.Depends",
+        "fastapi.File",
+        "fastapi.Form",
+        "fastapi.Header",
+        "fastapi.Path",
+        "fastapi.Query",
+        "fastapi.Security",
+        "typing.cast",
+    }
+    ignored = {code for codes in config["lint"].get("per-file-ignores", {}).values() for code in codes}
+    assert not any(code.startswith("B") for code in ignored)
+
+
 def test_backend_is_type_checked_with_mypy():
     """BUG-079 : le script de validation sautait mypy faute de le trouver dans
     requirements.txt — aucun contrôle de type, alors que les règles .ai le

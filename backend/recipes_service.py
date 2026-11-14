@@ -291,7 +291,7 @@ async def _generate_ai_recipe(stock_names: list[str], gemini_key: str) -> dict[s
         text = parts[1] if len(parts) > 1 else parts[0]
         if text.startswith("json"):
             text = text[4:]
-        text = text.strip().rstrip("```").strip()
+        text = text.strip().rstrip("`").strip()
 
     try:
         data = json.loads(text)
