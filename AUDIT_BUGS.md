@@ -1207,7 +1207,7 @@ Le cas le plus visible était le premier : le chemin le plus utilisé étiquetai
 
 | ID | Sévérité | Statut | Résumé |
 |---|---|---|---|
-| BUG-079 | 🟡 MINEUR (processus) | `PARTIELLEMENT CORRIGÉ` (ruff branché le 14/11, mypy restant) | Scripts repassés en `100755` (`git update-index --chmod=+x`). Dépendance à l'ordre d'exécution supprimée par la fixture de reliaison Motor dans les deux `conftest.py` : la suite passe quel que soit l'ordre. **Reste à faire :** `requirements-dev.txt` avec ruff + mypy et leur branchement dans le script et la CI (mypy en mode normal d'abord, 115 erreurs à résorber), et la mise en cohérence de `.ai/core-rules.md` avec ce qui est réellement contrôlé. |
+| BUG-079 | 🟡 MINEUR (processus) | `CORRIGÉ` (ruff branché le 14/11 — BUG-084 ; mypy branché le 14/11 — BUG-086) | Scripts repassés en `100755` (`git update-index --chmod=+x`). Dépendance à l'ordre d'exécution supprimée par la fixture de reliaison Motor dans les deux `conftest.py` : la suite passe quel que soit l'ordre. **Reste à faire :** `requirements-dev.txt` avec ruff + mypy et leur branchement dans le script et la CI (mypy en mode normal d'abord, 115 erreurs à résorber), et la mise en cohérence de `.ai/core-rules.md` avec ce qui est réellement contrôlé. |
 
 **Fichiers modifiés :** `scripts/ai-validate.sh`, `scripts/lib/*.sh` (mode), `tests/conftest.py`, `backend/tests/conftest.py`
 **Tests ajoutés/mis à jour :** la suite backend exécutée dans les deux ordres (`tests backend/tests` et `backend/tests tests`)
@@ -1299,3 +1299,18 @@ Le cas le plus visible était le premier : le chemin le plus utilisé étiquetai
 **Commandes exécutées :** `cd frontend && npx tsc --noEmit && npx eslint . && npm run test:ci`, `bash scripts/ai-validate.sh`
 **Résultat :** PASS
 **Risques restants :** changement purement défensif — pour une `Error` ou une erreur axios, les valeurs lues sont identiques à avant. Seul écart : une chaîne levée telle quelle est désormais lue comme message au lieu de donner `undefined`.
+
+
+## BUG-086 — mypy branché sur le backend : trois défauts réels révélés
+
+**Contexte :** 14/11, suite de BUG-079. Le backend n'avait aucun contrôle de type (115 erreurs mypy mesurées le 12/11, alors que `.ai/core-rules.md` promettait « mypy strict »). La mise à zéro a surtout demandé de préciser des signatures — mais trois erreurs signalaient de vrais défauts.
+
+| ID | Sévérité | Statut | Résumé |
+|---|---|---|---|
+| BUG-086 | 🟡 MINEUR (robustesse + processus) | `CORRIGÉ` | **Défauts réels :** (1) `email_import_service._decode_part` appelait `.decode` sur le résultat de `get_payload(decode=True)`, qui n'est pas toujours des octets : `AttributeError` non rattrapée, l'e-mail entier échouait au lieu d'ignorer la partie ; (2) `join_household` relisait le foyer après l'ajout du membre sans vérifier qu'il existait encore : `AttributeError` (HTTP 500) en cas de suppression concurrente, désormais 404 `HOUSEHOLD_NOT_FOUND` ; (3) les commandes IMAP recevaient l'UID en octets là où imaplib est typé en texte (commande envoyée identique, imaplib encode lui-même). **Signatures précisées :** surcharges de `serialize_mongo` et `resolve_billing_user_doc` (dict → dict, None → None), `Protocol` pour `send_push` (appelé avec des arguments nommés), noms de plan en `Literal` (`PlanName`, constantes `Final`), modèles `BillingFeatureAccess` / `BillingFeatureUsage` construits explicitement, pipelines d'agrégation annotés, `RecipeMatchStatus` explicite, chemin du catalogue normalisé avant le cache `lru_cache`, `_dict_or_empty` pour les blocs du dashboard. **Outillage :** `mypy.ini` (mode normal, `backend/` et `tests/`), `mypy==2.4.1` dans `requirements-dev.txt`, étape « Type check (mypy) » en CI, script de validation qui échoue si l'outil manque. Règles `.ai` et `CLAUDE.md` alignées : mode normal exécuté, strict en cible, module par module. |
+
+**Fichiers modifiés :** `mypy.ini` (nouveau), `backend/app_core.py`, `backend/auth_utils.py`, `backend/alerts.py`, `backend/entitlements.py`, `backend/household_service.py`, `backend/google_play_billing.py`, `backend/email_import_service.py`, `backend/recipes_service.py`, `backend/server.py`, `backend/scripts/*.py`, `backend/migrations/20260331_observability_collections.py`, `backend/requirements-dev.txt`, `.github/workflows/ci.yml`, `scripts/lib/validate-python-fastapi.sh`, `.ai/core-rules.md`, `.ai/stacks/python-fastapi.md`, `CLAUDE.md`
+**Tests ajoutés/mis à jour :** `backend/tests/test_email_import.py::test_decode_part_ignores_non_bytes_payload` (+ UID attendu en texte dans le test IMAP existant), `backend/tests/test_household_sharing.py::test_join_returns_404_when_household_vanishes_during_join`, `tests/test_ci_non_regression_policy.py::test_backend_is_type_checked_with_mypy`. Les deux tests de comportement vérifiés probants : ils échouent sans les correctifs.
+**Commandes exécutées :** `mypy backend tests` (0 erreur, 99 fichiers), `ruff check backend tests`, `bash scripts/ai-validate.sh`
+**Résultat :** PASS
+**Risques restants :** mode normal seulement — les fonctions non annotées ne sont pas vérifiées (notes `annotation-unchecked`). Le passage en strict se fera module par module (`[mypy-backend.xxx]` dans `mypy.ini`), en commençant par les modules purs (`google_play_billing`, `entitlements`, `mongo_settings`).

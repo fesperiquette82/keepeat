@@ -1,7 +1,7 @@
 from __future__ import annotations
 
 from datetime import timedelta
-from typing import Any
+from typing import Any, overload
 
 from bson import ObjectId
 from fastapi import HTTPException
@@ -58,6 +58,14 @@ def household_response(household_doc: dict[str, Any], *, members_docs: list[dict
     return out
 
 
+@overload
+async def resolve_billing_user_doc(
+    user_doc: dict[str, Any], *, users_col: Any, households_col: Any
+) -> dict[str, Any]: ...
+@overload
+async def resolve_billing_user_doc(
+    user_doc: dict[str, Any] | None, *, users_col: Any, households_col: Any
+) -> dict[str, Any] | None: ...
 async def resolve_billing_user_doc(
     user_doc: dict[str, Any] | None,
     *,

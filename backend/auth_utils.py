@@ -122,8 +122,8 @@ async def get_current_user(
         raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="Not authenticated")
     try:
         payload = jwt.decode(credentials.credentials, get_jwt_secret_key(), algorithms=[JWT_ALGORITHM])
-        user_id: str = payload.get("sub")
-        if not user_id:
+        user_id = payload.get("sub")
+        if not isinstance(user_id, str) or not user_id:
             raise ValueError("missing sub")
     except (JWTError, ValueError):
         raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="Invalid or expired token")

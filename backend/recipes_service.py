@@ -8,7 +8,7 @@ import re
 import threading
 import unicodedata as _ud
 from dataclasses import dataclass
-from functools import lru_cache
+from functools import lru_cache, partial
 from pathlib import Path
 from typing import Any, Iterable, Literal
 
@@ -16,7 +16,7 @@ import httpx
 from pydantic import ValidationError
 
 from backend.app_core import logger
-from backend.models import Recipe, RecipeDifficulty, RecipeGroupedSuggestion, RecipeMealType, RecipeSuggestion, RecipeSuggestionIngredient
+from backend.models import Recipe, RecipeDifficulty, RecipeGroupedSuggestion, RecipeMatchStatus, RecipeMealType, RecipeSuggestion, RecipeSuggestionIngredient
 
 _FRIGO_CATS = ["frais", "proteines", "legumes", "boissons"]
 _PLACARD_CATS = ["feculents", "desserts", "epicerie", "autres"]
@@ -182,7 +182,7 @@ def _autocorrect_recipe_text(value: str) -> str:
         return replacement
 
     for pattern, replacement in _FRENCH_TEXT_REPLACEMENTS:
-        corrected = pattern.sub(lambda m, r=replacement: _replace(m, r), corrected)
+        corrected = pattern.sub(partial(_replace, replacement=replacement), corrected)
     return corrected
 
 
@@ -378,7 +378,8 @@ def append_recipe_to_catalog(recipe_dict: dict, catalog_path: str | os.PathLike[
 
 def load_recipe_catalog(catalog_path: str | os.PathLike[str] | None = None) -> list[Recipe]:
     """Service function for loading the local recipe catalog."""
-    return list(load_local_recipes(catalog_path))
+    # Le cache lru exige une clé hachable : on normalise le chemin en texte.
+    return list(load_local_recipes(os.fspath(catalog_path) if catalog_path is not None else None))
 
 
 def get_recipes_catalog(
@@ -1036,7 +1037,7 @@ def recipe_match_to_grouped_suggestion(match: RecipeMatch) -> RecipeGroupedSugge
         meal_type=recipe.meal_type,
         cuisine=recipe.cuisine,
         servings=recipe.servings,
-        match_status=status,
+        match_status=RecipeMatchStatus(status),
         matched_required_count=len(match.used_required),
         missing_required_count=len(match.missing_required),
     )

@@ -9,7 +9,7 @@
 - **ORM**: SQLAlchemy (implied from models.py)
 - **Database**: MongoDB (test: local, prod: cloud)
 - **Testing**: pytest
-- **Type Checking**: mypy (strict mode)
+- **Type Checking**: mypy — mode normal exécuté en CI (`mypy.ini` à la racine) ; strict en cible, module par module
 - **Linting**: ruff (check) + black (format)
 
 ---

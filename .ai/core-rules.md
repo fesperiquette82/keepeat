@@ -56,7 +56,7 @@
 
 8. **Code quality**
    - TypeScript strict mode (frontend)
-   - mypy strict mode (backend)
+   - mypy (backend) — mode normal exécuté en CI (`mypy.ini`) ; le mode strict est la cible, à atteindre module par module
    - ESLint clean (frontend)
    - No type: ignore, no any (unless genuinely unavoidable + commented)
 

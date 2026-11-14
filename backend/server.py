@@ -18,7 +18,7 @@ import unicodedata
 from contextlib import asynccontextmanager
 from datetime import datetime, timedelta, timezone
 from decimal import Decimal
-from typing import Any, Dict, List, Optional
+from typing import Any, Dict, List, Optional, cast
 
 import httpx
 import sentry_sdk
@@ -52,6 +52,8 @@ from backend.models import (
     AccountDeletionBody,
     AccountDeletionResponse,
     BillingEntitlementsResponse,
+    BillingFeatureAccess,
+    BillingFeatureUsage,
     BillingRestoreResponse,
     BillingUsageResponse,
     BillingVerifyRequest,
@@ -996,7 +998,8 @@ async def lifespan(app: FastAPI):
 app = FastAPI(title="KeepEat Backend", version="1.0.0", lifespan=lifespan)
 limiter = Limiter(key_func=get_remote_address)
 app.state.limiter = limiter
-app.add_exception_handler(RateLimitExceeded, _rate_limit_exceeded_handler)
+# slowapi type son handler pour RateLimitExceeded, Starlette attend Exception : écart de typage seulement.
+app.add_exception_handler(RateLimitExceeded, cast(Any, _rate_limit_exceeded_handler))
 
 
 @app.exception_handler(RequestValidationError)
@@ -1227,6 +1230,11 @@ app.add_middleware(
 
 async def _get_current_user(credentials=Depends(http_bearer)):
     return await get_current_user(users_col, credentials)
+
+
+def _dict_or_empty(value: Any) -> dict[str, Any]:
+    """Le dictionnaire tel quel, ou {} si la valeur n'en est pas un."""
+    return value if isinstance(value, dict) else {}
 
 
 def _is_admin_user(user_doc: dict[str, Any] | None) -> bool:
@@ -1871,10 +1879,10 @@ async def get_billing_entitlements(
             subscription_status="active" if is_premium else "inactive",
             subscription_expires_at=(utc_now() + timedelta(days=30)).isoformat() if is_premium else None,
             features={
-                FEATURE_OCR: {"allowed": True, "monthly_limit": None},
-                FEATURE_AI: {"allowed": True, "monthly_limit": None},
-                FEATURE_PREDICTIONS: {"allowed": True, "monthly_limit": None},
-                FEATURE_STATS_ADVANCED: {"allowed": is_premium, "monthly_limit": None},
+                FEATURE_OCR: BillingFeatureAccess(allowed=True, monthly_limit=None),
+                FEATURE_AI: BillingFeatureAccess(allowed=True, monthly_limit=None),
+                FEATURE_PREDICTIONS: BillingFeatureAccess(allowed=True, monthly_limit=None),
+                FEATURE_STATS_ADVANCED: BillingFeatureAccess(allowed=is_premium, monthly_limit=None),
             },
             server_time=utc_now().isoformat(),
         )
@@ -1900,8 +1908,8 @@ async def get_billing_usage(
         return BillingUsageResponse(
             period=_current_period_key(),
             usage={
-                FEATURE_OCR: {"used": 0, "limit": None, "remaining": 0},
-                FEATURE_AI: {"used": 0, "limit": None, "remaining": 0},
+                FEATURE_OCR: BillingFeatureUsage(used=0, limit=None, remaining=0),
+                FEATURE_AI: BillingFeatureUsage(used=0, limit=None, remaining=0),
             },
         )
     user_doc = await users_col.find_one({"_id": ObjectId(current_user["id"])}) or current_user
@@ -1909,7 +1917,10 @@ async def get_billing_usage(
     plan = resolve_plan(billing_doc)
     period = _current_period_key()
     usage = await _get_usage_snapshot(user_id=current_user["id"], plan=plan, period=period)
-    return BillingUsageResponse(period=period, usage=usage)
+    return BillingUsageResponse(
+        period=period,
+        usage={feature: BillingFeatureUsage.model_validate(values) for feature, values in usage.items()},
+    )
 
 
 async def _get_google_play_access_token(credentials_json: str) -> str | None:
@@ -2369,6 +2380,10 @@ async def join_household(
         {"$set": {"household_id": household_id}},
     )
     doc = await households_col.find_one({"_id": ObjectId(household_id)})
+    if not doc:
+        # Supprimé entre l'ajout du membre et la relecture : réponse explicite
+        # plutôt qu'une AttributeError sur None.
+        raise HTTPException(status_code=404, detail={"code": "HOUSEHOLD_NOT_FOUND"})
     members = await _get_household_members(doc)
     logger.info("HOUSEHOLD_JOIN user=%s household=%s", current_user["id"], household_id)
     return HouseholdResponse(**household_response(doc, members_docs=members))
@@ -3346,7 +3361,7 @@ async def get_stats(current_user: Dict[str, Any] = Depends(_get_current_user)):
     week_ago = (utc_now() - timedelta(days=7)).isoformat()
 
     # Agrégation unique côté MongoDB — aucun document rapatrié en RAM
-    pipeline = [
+    pipeline: list[dict[str, Any]] = [
         {"$match": {**_stock_scope_match(scope_ids), "status": "active"}},
         {
             "$group": {
@@ -4078,7 +4093,7 @@ async def _upsert_recipe_gap(
 
 @api_router.get("/recipes/suggestions")
 async def get_recipe_suggestions(
-    response: Response = None,
+    response: Response = cast(Response, None),
     recipe_filter: str = Query("urgent", alias="filter"),
     include_meta: bool = Query(False, alias="include_meta"),
     suggestion_style: str = Query("classique", alias="suggestion_style"),
@@ -4147,11 +4162,11 @@ async def get_recipe_suggestions(
     if not relevant:
         gemini_key = _get_recipes_ai_api_key()
         if is_test_env() and mock_ai_enabled() and stock_names:
-            ai_raw = {
+            mock_ai_raw: dict[str, Any] = {
                 **TEST_FIXTURES["ai_recipe"],
                 "id": "mock-ai-recipe",
             }
-            ai_scored = await _save_ai_recipe_to_stores(ai_raw, stock_names=stock_names)
+            ai_scored = await _save_ai_recipe_to_stores(mock_ai_raw, stock_names=stock_names)
             relevant = [ai_scored]
             logger.info("TEST_MODE AI recipe fixture used user=%s", uid)
         elif gemini_key and stock_names:
@@ -4273,7 +4288,7 @@ async def get_recipe_suggestions(
 
 @api_router.get("/recipes/suggestions-grouped", response_model=RecipeSuggestionGroupsResponse)
 async def get_recipe_suggestions_grouped(
-    response: Response = None,
+    response: Response = cast(Response, None),
     recipe_filter: str = Query("urgent", alias="filter"),
     suggestion_style: str = Query("classique", alias="suggestion_style"),
     per_group_limit: int = Query(5, ge=1, le=20),
@@ -4303,7 +4318,7 @@ async def get_recipe_suggestions_grouped(
     elif recipe_filter == "placard":
         match["food_category"] = {"$in": _PLACARD_CATS}
 
-    pipeline = [
+    pipeline: list[dict[str, Any]] = [
         {"$match": match},
         {"$addFields": {"_no_expiry": {"$cond": [{"$or": [{"$eq": ["$expiry_date", None]}, {"$eq": ["$expiry_date", ""]}]}, 1, 0]}}},
         {"$sort": {"_no_expiry": 1, "expiry_date": 1}},
@@ -4416,7 +4431,7 @@ async def admin_resolve_recipe_gap(
     if status_value not in {"pending", "partially_resolved", "resolved", "ignored"}:
         raise HTTPException(status_code=400, detail="Invalid status")
     recipe_ids = body.get("resolved_by_recipe_ids") or []
-    update_doc = {
+    update_doc: dict[str, Any] = {
         "status": status_value,
         "resolved_at": utc_now().isoformat() if status_value in {"partially_resolved", "resolved"} else None,
     }
@@ -4836,14 +4851,14 @@ async def get_monthly_stats(
         month_list.append(f"{total // 12:04d}-{total % 12 + 1:02d}")
 
     # Agrégation consommés par mois (+ catégorie pour estimer les économies)
-    consumed_pipeline = [
+    consumed_pipeline: list[dict[str, Any]] = [
         {"$match": {**_stock_scope_match(scope_ids), "status": "consumed", "consumed_date": {"$nin": [None, ""]}}},
         {"$group": {
             "_id": {"month": {"$substr": ["$consumed_date", 0, 7]}, "cat": "$food_category"},
             "count": {"$sum": 1},
         }},
     ]
-    thrown_pipeline = [
+    thrown_pipeline: list[dict[str, Any]] = [
         {"$match": {**_stock_scope_match(scope_ids), "status": "thrown", "thrown_date": {"$nin": [None, ""]}}},
         {"$group": {"_id": {"$substr": ["$thrown_date", 0, 7]}, "count": {"$sum": 1}}},
     ]
@@ -4904,7 +4919,7 @@ async def _compute_streak(scope_ids: list[str], first_activity_iso: str | None =
     today = utc_now().date()
     since = (today - timedelta(days=59)).strftime("%Y-%m-%d")
     # Une seule agrégation pour récupérer toutes les dates de jets des 60 derniers jours
-    pipeline = [
+    pipeline: list[dict[str, Any]] = [
         {"$match": {**_stock_scope_match(scope_ids), "status": "thrown", "thrown_date": {"$gte": since}}},
         {"$project": {"day": {"$substr": ["$thrown_date", 0, 10]}}},
         {"$group": {"_id": "$day"}},
@@ -5101,7 +5116,7 @@ async def _save_ai_recipe_to_stores(ai_recipe: dict, *, stock_names: list[str]) 
     except Exception as exc:
         logger.warning("AI gap fill: marquage gaps échoué: %s", exc)
 
-    structured_ingredients = [
+    structured_ingredients: list[dict[str, Any]] = [
         {
             "name": ingredient,
             "quantity": None,
@@ -5278,7 +5293,7 @@ def _extract_ai_recipe_payload_text(payload: dict[str, Any]) -> str:
 
 @api_router.get("/recipes/ai")
 async def get_ai_recipes(
-    response: Response = None,
+    response: Response = cast(Response, None),
     include_meta: bool = Query(False, alias="include_meta"),
     suggestion_style: str = Query("classique", alias="suggestion_style"),
     current_user: Dict[str, Any] = Depends(_get_current_user),
@@ -5502,7 +5517,7 @@ async def get_predictions(
     uid = current_user["id"]
     scope_ids = await _resolve_stock_scope_ids(current_user)
 
-    pipeline = [
+    pipeline: list[dict[str, Any]] = [
         {"$match": {**_stock_scope_match(scope_ids), "status": {"$in": ["consumed", "thrown"]}}},
         {"$group": {
             "_id": "$food_category",
@@ -5784,8 +5799,8 @@ async def admin_monitoring_dashboard(
 
     users = _safe_block("users", lambda: _json_safe(kpis.get("users")) if isinstance(kpis.get("users"), dict) else {})
     subscriptions = _safe_block("subscriptions", lambda: _json_safe(kpis.get("subscriptions")) if isinstance(kpis.get("subscriptions"), dict) else {})
-    services = kpis.get("services") if isinstance(kpis.get("services"), dict) else {}
-    cost_breakdown = overview.get("cost_breakdown") if isinstance(overview.get("cost_breakdown"), dict) else {}
+    services = _dict_or_empty(kpis.get("services"))
+    cost_breakdown = _dict_or_empty(overview.get("cost_breakdown"))
     product_funnel = _safe_block("product_funnel", lambda: _json_safe(overview.get("product_funnel")) if isinstance(overview.get("product_funnel"), dict) else {})
     activation_funnel_safe = _safe_block("activation_funnel", lambda: _json_safe(activation_funnel) if isinstance(activation_funnel, dict) and activation_funnel else _block_fallback("activation_funnel"))
     crash_reports_safe = _safe_block("crash_reports", lambda: _json_safe(crash_reports) if isinstance(crash_reports, dict) and crash_reports else _block_fallback("crash_reports"))
@@ -6016,7 +6031,7 @@ async def admin_monitoring_trends(
     max_points = days + 1
 
     # DAU quotidiens (utilisateurs distincts par jour)
-    dau_pipeline = [
+    dau_pipeline: list[dict[str, Any]] = [
         {"$match": {"created_at": {"$gte": iso_start}, "user_id": {"$nin": [None, ""]}}},
         {"$group": {"_id": {"$substr": ["$created_at", 0, 10]}, "users": {"$addToSet": "$user_id"}}},
         {"$project": {"date": "$_id", "count": {"$size": "$users"}}},
@@ -6025,7 +6040,7 @@ async def admin_monitoring_trends(
     dau_rows = await api_request_logs_col.aggregate(dau_pipeline).to_list(length=max_points)
 
     # Nouveaux utilisateurs par jour
-    new_users_pipeline = [
+    new_users_pipeline: list[dict[str, Any]] = [
         {"$match": {"created_at": {"$gte": iso_start}}},
         {"$group": {"_id": {"$substr": ["$created_at", 0, 10]}, "count": {"$sum": 1}}},
         {"$sort": {"_id": 1}},
@@ -6033,7 +6048,7 @@ async def admin_monitoring_trends(
     new_users_rows = await users_col.aggregate(new_users_pipeline).to_list(length=max_points)
 
     # Erreurs API par jour
-    errors_pipeline = [
+    errors_pipeline: list[dict[str, Any]] = [
         {"$match": {"created_at": {"$gte": iso_start}, "status_code": {"$gte": 400}}},
         {"$group": {"_id": {"$substr": ["$created_at", 0, 10]}, "count": {"$sum": 1}}},
         {"$sort": {"_id": 1}},
@@ -6041,7 +6056,7 @@ async def admin_monitoring_trends(
     errors_rows = await api_request_logs_col.aggregate(errors_pipeline).to_list(length=max_points)
 
     # Coûts services par jour
-    costs_pipeline = [
+    costs_pipeline: list[dict[str, Any]] = [
         {"$match": {"created_at": {"$gte": iso_start}}},
         {"$group": {"_id": {"$substr": ["$created_at", 0, 10]}, "cost": {"$sum": "$estimated_cost"}}},
         {"$sort": {"_id": 1}},
@@ -6068,7 +6083,7 @@ async def admin_monitoring_api_drill(
     start_iso = (utc_now() - timedelta(days=days)).isoformat()
     match = {"endpoint_key": endpoint_key, "created_at": {"$gte": start_iso}}
 
-    status_pipeline = [
+    status_pipeline: list[dict[str, Any]] = [
         {"$match": match},
         {"$group": {
             "_id": "$status_code",
@@ -6233,7 +6248,7 @@ async def admin_dedup_recipes(
     si disponible) et supprime les autres.
     Retourne le nombre de recettes supprimées et le nombre de groupes concernés.
     """
-    pipeline = [
+    pipeline: list[dict[str, Any]] = [
         {"$group": {
             "_id": {"$toLower": "$title"},
             "count": {"$sum": 1},

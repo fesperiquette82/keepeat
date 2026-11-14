@@ -84,22 +84,21 @@ else
 fi
 
 # Step 4: mypy (type check)
-if grep -q "mypy" backend/requirements.txt 2>/dev/null || grep -q "mypy" backend/pyproject.toml 2>/dev/null; then
+# BUG-079 : configuration dans mypy.ini à la racine, sur backend/ ET tests/.
+if [ -f "mypy.ini" ]; then
   if command -v mypy &> /dev/null; then
-    echo "[step] Running mypy type check..."
-    cd backend
-    mypy . 2>&1 || {
-      cd ..
+    echo "[step] Running mypy type check (backend + tests)..."
+    mypy backend tests 2>&1 || {
       echo "❌ mypy type check failed"
       exit 1
     }
-    cd ..
     echo "✓ mypy type check passed"
   else
-    echo "[skip] mypy: not installed"
+    echo "❌ mypy introuvable : pip install -r backend/requirements-dev.txt"
+    exit 1
   fi
 else
-  echo "[skip] mypy: not in requirements"
+  echo "[skip] mypy: mypy.ini absent"
 fi
 
 # Step 5: Tests (skip in --quick mode)

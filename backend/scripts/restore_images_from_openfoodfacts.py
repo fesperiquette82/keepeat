@@ -17,7 +17,7 @@ Options:
 import asyncio
 import os
 import sys
-from typing import Optional
+from typing import Any, Optional
 
 import httpx
 from motor.motor_asyncio import AsyncIOMotorClient
@@ -107,7 +107,7 @@ async def restore_images(dry_run: bool = False):
         dry_run: Si True, affiche ce qui serait fait sans modifier la base.
     """
     print("🔍 Connexion à MongoDB...")
-    client = AsyncIOMotorClient(MONGODB_URI)
+    client: AsyncIOMotorClient[dict[str, Any]] = AsyncIOMotorClient(MONGODB_URI)
     db = client[DB_NAME]
     stock_col = db["stock"]
 

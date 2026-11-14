@@ -1873,3 +1873,17 @@ def test_backend_is_linted_with_ruff():
     script = Path("scripts/lib/validate-python-fastapi.sh").read_text(encoding="utf-8")
     assert "ruff check backend tests" in script
     assert "[skip] ruff: not installed" not in script
+
+
+def test_backend_is_type_checked_with_mypy():
+    """BUG-079 : le script de validation sautait mypy faute de le trouver dans
+    requirements.txt — aucun contrôle de type, alors que les règles .ai le
+    promettaient. mypy est configuré (mypy.ini), installé par
+    requirements-dev.txt et exécuté en CI sur backend/ et tests/."""
+    assert Path("mypy.ini").exists()
+    workflow = Path(".github/workflows/ci.yml").read_text(encoding="utf-8")
+    assert "mypy backend tests" in workflow
+    assert "mypy==" in Path("backend/requirements-dev.txt").read_text(encoding="utf-8")
+    script = Path("scripts/lib/validate-python-fastapi.sh").read_text(encoding="utf-8")
+    assert "mypy backend tests" in script
+    assert "[skip] mypy: not installed" not in script

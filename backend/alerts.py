@@ -3,7 +3,7 @@ from __future__ import annotations
 import os
 from dataclasses import dataclass
 from datetime import datetime, timedelta, timezone
-from typing import Any, Callable
+from typing import Any, Awaitable, Callable, Protocol
 
 import httpx
 from bson import ObjectId
@@ -23,6 +23,15 @@ def _resolve_alert_prefs(user_doc: dict[str, Any]) -> dict[str, bool]:
     }
 
 
+class SendPush(Protocol):
+    """Signature de `send_expo_push`, appelée avec des arguments nommés.
+
+    Un `Callable[[...], Any]` n'admet que des arguments positionnels : mypy
+    rejetait les appels `send_push(tokens, title=..., body=..., data=...)`."""
+
+    def __call__(self, tokens: list[str], title: str, body: str, data: dict | None = None) -> Awaitable[None]: ...
+
+
 @dataclass(frozen=True)
 class AlertDependencies:
     users_col: Any
@@ -31,7 +40,7 @@ class AlertDependencies:
     app_state_col: Any
     products_cache_col: Any
     community_recipes_col: Any
-    send_push: Callable[[list[str], str, str, dict | None], Any]
+    send_push: SendPush
     fr_to_en_ingredient: Callable[[str, str], str]
     households_col: Any = None
 

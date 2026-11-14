@@ -80,6 +80,10 @@ jobs:
       - name: Lint (ruff)
         run: ruff check backend tests
 
+      # BUG-079 : typage (mode normal, voir mypy.ini) sur backend/ et tests/.
+      - name: Type check (mypy)
+        run: mypy backend tests
+
       # BUG-070 : cette étape ne lançait que 7 fichiers choisis à la main. Tout
       # test ajouté ailleurs — y compris un test de non-régression écrit pour un
       # bug bloquant — ne s'exécutait donc jamais en CI, alors que le job

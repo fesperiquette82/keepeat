@@ -4,7 +4,7 @@ import html as _html
 import json as _json
 import logging
 from datetime import datetime, timezone
-from typing import Any
+from typing import Any, overload
 
 logging.basicConfig(
     level=logging.INFO,
@@ -17,6 +17,12 @@ def utc_now() -> datetime:
     return datetime.now(timezone.utc)
 
 
+@overload
+def serialize_mongo(doc: dict[str, Any]) -> dict[str, Any]: ...
+@overload
+def serialize_mongo(doc: None) -> None: ...
+@overload
+def serialize_mongo(doc: dict[str, Any] | None) -> dict[str, Any] | None: ...
 def serialize_mongo(doc: dict[str, Any] | None) -> dict[str, Any] | None:
     """Convert Mongo _id to string id and remove internal fields."""
     if not doc:

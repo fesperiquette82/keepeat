@@ -202,6 +202,36 @@ class TestInviteAndJoin:
         assert users_col.docs[MEMBER_ID]["household_id"] == str(household_oid)
         server.app.dependency_overrides.clear()
 
+    def test_join_returns_404_when_household_vanishes_during_join(self, monkeypatch):
+        """BUG-086 : le foyer relu après l'ajout du membre pouvait avoir disparu
+        (suppression concurrente) ; `household_response(None)` levait alors une
+        AttributeError (HTTP 500) au lieu d'un 404 explicite."""
+        server = _load_server(monkeypatch)
+        household_oid, households_col, users_col = self._setup_household(monkeypatch, server)
+        owner_user = {"id": OWNER_ID, "household_id": str(household_oid)}
+        server.app.dependency_overrides[server._get_current_user] = lambda: owner_user
+
+        from fastapi.testclient import TestClient
+        client = TestClient(server.app)
+        token = client.post("/api/household/invite").json()["token"]
+
+        original_find_one = households_col.find_one
+        calls = {"n": 0}
+
+        async def _find_one_then_vanish(flt, projection=None):
+            calls["n"] += 1
+            if calls["n"] >= 2:
+                return None  # supprimé entre la vérification et la relecture
+            return await original_find_one(flt, projection)
+
+        monkeypatch.setattr(households_col, "find_one", _find_one_then_vanish)
+        server.app.dependency_overrides[server._get_current_user] = lambda: {"id": MEMBER_ID}
+        resp = client.post("/api/household/join", json={"token": token})
+
+        assert resp.status_code == 404
+        assert resp.json()["detail"]["code"] == "HOUSEHOLD_NOT_FOUND"
+        server.app.dependency_overrides.clear()
+
     def test_join_rejects_invalid_token(self, monkeypatch):
         server = _load_server(monkeypatch)
         self._setup_household(monkeypatch, server)
