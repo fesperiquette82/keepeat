@@ -16,6 +16,7 @@ from __future__ import annotations
 
 import hmac
 from enum import Enum
+from typing import Any, cast
 
 
 class VerificationOutcome(str, Enum):
@@ -138,7 +139,7 @@ def action_for_notification(notification_type: object) -> SubscriptionAction:
     laisser les droits en l'état et le voir dans les logs que couper l'accès
     d'un abonné sur un message qu'on ne sait pas lire."""
     try:
-        key = int(notification_type)  # type: ignore[arg-type]
+        key = int(cast(Any, notification_type))
     except (TypeError, ValueError):
         return SubscriptionAction.IGNORE
     return _ACTION_BY_NOTIFICATION.get(key, SubscriptionAction.IGNORE)

@@ -4,6 +4,7 @@ import { AdminMonitoringNav } from '../../../component/admin/AdminMonitoringNav'
 import { AdminScaffold, AdminSectionCard, EmptyState, ErrorState, formatDate, LoadingState } from '../../../component/admin/AdminUi';
 import { buildPeriodParams, getMonitoringEvents, MonitoringEventsResponse } from '../../../utils/adminMonitoringApi';
 import { useAuthStore } from '../../../store/authStore';
+import { getErrorMessage } from '../../../utils/errorDetails';
 
 export default function AdminMonitoringEventsScreen() {
   const [period, setPeriod] = useState<'24h' | '7d' | '30d'>('7d');
@@ -29,8 +30,8 @@ export default function AdminMonitoringEventsScreen() {
           controller.signal,
         );
         setData(response);
-      } catch (e: any) {
-        setError(e?.message || 'Chargement impossible');
+      } catch (e: unknown) {
+        setError(getErrorMessage(e) || 'Chargement impossible');
       } finally {
         setLoading(false);
       }

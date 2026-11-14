@@ -7,9 +7,13 @@ export interface PremiumErrorDetail {
   reset_at?: string;
 }
 
-export function extractPremiumErrorDetail(error: any): PremiumErrorDetail | null {
-  const detail = error?.response?.data?.detail;
-  if (!detail || typeof detail !== 'object') return null;
+function asRecord(value: unknown): Record<string, unknown> | null {
+  return value !== null && typeof value === 'object' ? (value as Record<string, unknown>) : null;
+}
+
+export function extractPremiumErrorDetail(error: unknown): PremiumErrorDetail | null {
+  const detail = asRecord(asRecord(asRecord(asRecord(error)?.response)?.data)?.detail);
+  if (!detail) return null;
   if (detail.code === 'PREMIUM_REQUIRED' || detail.code === 'QUOTA_EXCEEDED') {
     return {
       code: detail.code,

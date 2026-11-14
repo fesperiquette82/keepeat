@@ -41,6 +41,17 @@ jobs:
     name: Main/release post-merge / Backend suite complète
     runs-on: ubuntu-latest
 
+    services:
+      mongo:
+        image: mongo:7
+        ports:
+          - 27017:27017
+        options: >-
+          --health-cmd "mongosh --quiet --eval 'db.runCommand({ ping: 1 })'"
+          --health-interval 5s
+          --health-timeout 5s
+          --health-retries 12
+
     steps:
       - name: Checkout
         uses: actions/checkout@v5
@@ -53,12 +64,13 @@ jobs:
           cache-dependency-path: backend/requirements.txt
 
       - name: Install dependencies
-        run: pip install -r backend/requirements.txt pytest
+        run: pip install -r backend/requirements-dev.txt
 
       - name: Run full pytest non-regression suites
         env:
-          MONGODB_URI: "mongodb://localhost:27017/keepeat_test"
-          JWT_SECRET: "test_secret_ci"
+          MONGO_URL: "mongodb://localhost:27017"
+          DB_NAME: "keepeat_test"
+          JWT_SECRET_KEY: "test_secret_ci"
           GEMINI_OCR_API_KEY: "dummy_for_tests"
           GEMINI_RECIPES_API_KEY: "dummy_for_tests"
           PYTHONPATH: ${{ github.workspace }}/backend

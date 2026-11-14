@@ -32,8 +32,8 @@ class _AsyncCursor:
     async def __anext__(self):
         try:
             return next(self._iter)
-        except StopIteration:
-            raise StopAsyncIteration
+        except StopIteration as exc:
+            raise StopAsyncIteration from exc
 
 
 class _UsersCol:

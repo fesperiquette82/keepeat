@@ -32,7 +32,7 @@ A bug is **user-visible** if the user perceives incorrect behavior:
 
 | Level | Focus | Example Files | Why |
 |-------|-------|----------------|-----|
-| **1. Unit** | Smallest logic | `frontend/__tests__/utils/` or `backend/tests/test_*.py` | Catch logic errors early, fast feedback |
+| **1. Unit** | Smallest logic | `frontend/utils/*.test.ts` or `backend/tests/test_*.py` | Catch logic errors early, fast feedback |
 | **2. Integration** | Data boundary | `frontend/integration/` or `backend/tests/test_*_contract.py` | Verify data flows correctly through layers |
 | **3. UI/E2E** | Visible behavior | `frontend/smoke/` or `.maestro/*.yaml` | Confirm user actually sees the fix |
 
@@ -50,7 +50,7 @@ A bug is **user-visible** if the user perceives incorrect behavior:
 
 #### Level 1: Unit Test
 ```typescript
-// frontend/__tests__/utils/swipeHandling.test.ts
+// frontend/utils/swipeHandling.test.ts
 test('direction left means left panel opened (swipe right)', () => {
   const result = mapDirectionToAction('left');
   assert.equal(result, 'used');  // Left panel = "Utilisé"
@@ -142,7 +142,7 @@ tests:
 - No component rendering
 - No API calls (all mocked)
 - Fast (< 100ms)
-- File: `__tests__/utils/*.test.ts` or `backend/tests/test_*.py`
+- File: `frontend/utils/*.test.ts` or `backend/tests/test_*.py`
 
 ### Integration Test Indicators
 - Tests component + state interaction
@@ -200,7 +200,7 @@ Solution: Local dev uses mock, CI uses test service account
 ⚠️  Missing test levels for user-visible bug: integration, UI/E2E
 
 Test files detected:
-  • frontend/__tests__/utils/expiration.test.ts
+  • frontend/utils/expiration.test.ts
 
 Guidance:
   • Add integration test (frontend/integration/ or backend/tests/)

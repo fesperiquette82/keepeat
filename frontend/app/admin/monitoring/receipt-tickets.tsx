@@ -17,6 +17,7 @@ import { useAuthStore } from '../../../store/authStore';
 import { buildApiUrl } from '../../../utils/config';
 import { C, shadowSm } from '../../../utils/theme';
 import axios from 'axios';
+import { getApiErrorDetail, getErrorMessage } from '../../../utils/errorDetails';
 
 // ─── Types ────────────────────────────────────────────────────────────────────
 
@@ -84,8 +85,8 @@ export default function AdminReceiptTicketsScreen() {
       });
       setTickets(res.data.tickets);
       setTotal(res.data.total);
-    } catch (e: any) {
-      setError(e?.response?.data?.detail || e?.message || 'Chargement impossible');
+    } catch (e: unknown) {
+      setError(getApiErrorDetail(e) || getErrorMessage(e) || 'Chargement impossible');
     } finally {
       setLoading(false);
     }
@@ -103,8 +104,8 @@ export default function AdminReceiptTicketsScreen() {
         headers: authHeaders(),
       });
       setSelectedTicket(res.data);
-    } catch (e: any) {
-      Alert.alert('Erreur', e?.response?.data?.detail || 'Impossible de charger le ticket');
+    } catch (e: unknown) {
+      Alert.alert('Erreur', getApiErrorDetail(e) || 'Impossible de charger le ticket');
     } finally {
       setDetailLoading(false);
     }
@@ -145,8 +146,8 @@ export default function AdminReceiptTicketsScreen() {
       );
       setSelectedTicket(null);
       loadTickets();
-    } catch (e: any) {
-      Alert.alert('Erreur', e?.response?.data?.detail || 'Impossible de traiter le ticket');
+    } catch (e: unknown) {
+      Alert.alert('Erreur', getApiErrorDetail(e) || 'Impossible de traiter le ticket');
     } finally {
       setProcessing(false);
     }
@@ -171,8 +172,8 @@ export default function AdminReceiptTicketsScreen() {
               );
               setSelectedTicket(null);
               loadTickets();
-            } catch (e: any) {
-              Alert.alert('Erreur', e?.response?.data?.detail || 'Erreur');
+            } catch (e: unknown) {
+              Alert.alert('Erreur', getApiErrorDetail(e) || 'Erreur');
             }
           },
         },

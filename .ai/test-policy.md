@@ -24,40 +24,38 @@
 
 ### Test Framework: Node.js `--test` (NOT Jest)
 
-KeepEat frontend uses native Node.js `--test` framework. Jest configuration exists but is **unused**.
+KeepEat frontend uses native Node.js `--test` framework. There is no Jest configuration (the unused one was removed on 2026-11-12).
 
 ### Test Structure
 
+Les tests unitaires sont **co-localisés** avec le module testé (`utils/x.ts` → `utils/x.test.ts`).
+Il n'existe pas de répertoire `__tests__/`.
+
 ```
 frontend/
-├── __tests__/
-│   ├── utils/
-│   │   ├── dateHelpers.test.ts
-│   │   ├── recipeFiltering.test.ts
-│   │   └── ingredientMatching.test.ts
-│   ├── components/
-│   │   ├── RecipeCard.test.ts
-│   │   ├── ShoppingList.test.ts
-│   │   └── ...
-│   └── screens/
-│       ├── NavigationFlow.test.ts
-│       └── ...
+├── utils/
+│   ├── dateParser.ts
+│   ├── dateParser.test.ts          # unitaire, à côté du module
+│   ├── ingredientMatching.ts
+│   └── ingredientMatching.test.ts
+├── data/
+│   └── mockDashboardData.test.ts
 ├── integration/
 │   ├── recipesPresentation.integration.test.ts
-│   ├── stockManagement.integration.test.ts
 │   └── ...
 ├── smoke/
-│   ├── appBootstrap.smoke.test.ts
-│   ├── criticalPath.smoke.test.ts
+│   ├── appConfig.smoke.test.ts
 │   └── ...
-└── [source files: app/, utils/, store/, components/]
+└── [source files: app/, utils/, store/, component/]
 ```
+
+Les tests sont compilés par `tsconfig.test.json` vers `.test-dist/` puis exécutés avec `node --test`.
 
 ### Test Suites
 
 | Suite | Command | Purpose | Scope |
 |-------|---------|---------|-------|
-| **Unit** | `npm run test:unit` | Individual functions, hooks, utilities | `__tests__/utils/`, co-located `.test.ts` |
+| **Unit** | `npm run test:unit` | Individual functions, hooks, utilities | co-located `utils/*.test.ts`, `data/*.test.ts` |
 | **Integration** | `npm run test:integration` | Multi-component flows, state management | `frontend/integration/` |
 | **Smoke** | `npm run test:smoke` | Critical paths, app bootstrap | `frontend/smoke/` |
 | **CI** | `npm run test:ci` | All three (unit + integration + smoke) | All suites |
@@ -239,14 +237,12 @@ def test_recipe_upsert(db_session):
 ### Type Checking (mypy)
 
 ```bash
-# Check types
-mypy backend/
-
-# With strict mode
-mypy --strict backend/
+mypy backend tests
 ```
 
-All backend code must pass `mypy` (no `type: ignore` except with comment).
+Strict on every application module of `backend/` (configured in `mypy.ini`);
+`server.py`, `backend/scripts/` and the tests run in normal mode. All backend
+code must pass (no `type: ignore` except with comment).
 
 ---
 
@@ -322,14 +318,14 @@ maestro test .maestro/ --device emulator-pixel-5
 
 ### Regression Test Locations
 
-- **Frontend logic**: `frontend/__tests__/utils/` (e.g., `dateHelpers.test.ts`)
+- **Frontend logic**: `frontend/utils/*.test.ts` (e.g., `dateParser.test.ts`)
 - **Backend logic**: `backend/tests/test_critical_bug_regressions.py`
 - **E2E regression**: `.maestro/regressions.yaml`
 
 ### Example Regression Test (Bug: Recipes not expiring)
 
 ```typescript
-// frontend/__tests__/utils/expiration.test.ts
+// frontend/utils/expiration.test.ts
 test('recipe expires after shelf life elapses', () => {
   // Arrange: Today is May 15, 2026
   vi.setSystemTime(new Date('2026-05-15'));

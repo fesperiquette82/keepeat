@@ -3,8 +3,13 @@
 import os
 import glob
 import pytest
+from bson import ObjectId
 from fastapi.testclient import TestClient
-from backend.server import app
+
+from backend import server
+from backend.auth_utils import create_token
+
+app = server.app
 
 
 @pytest.fixture(autouse=True)
@@ -28,22 +33,46 @@ def cleanup_test_logs():
 
 
 def test_upload_debug_logs_requires_auth():
-    """Endpoint requires authentication when no valid token."""
+    """Sans jeton : 401. Le 422 toléré auparavant masquait BUG-088 (la route
+    exigeait un paramètre de requête `users_col`)."""
     client = TestClient(app)
     response = client.post(
         "/api/debug/logs/upload",
         json={"content": "test logs", "filename": "test.txt"},
     )
-    # FastAPI returns 422 when auth dependency fails on request validation
-    assert response.status_code in (401, 422)
+    assert response.status_code == 401
+
+
+def test_upload_debug_logs_authenticates_with_real_bearer_token(monkeypatch):
+    """[REGRESSION] BUG-088 — la route dépendait directement de
+    `auth_utils.get_current_user(users_col, credentials)` au lieu de
+    l'enveloppe `_get_current_user` : FastAPI faisait de `users_col` un
+    paramètre de requête obligatoire et rejetait en 422 tout envoi réel de
+    l'application. Aucun remplacement de dépendance ici : vrai jeton, vraie
+    chaîne d'authentification."""
+    user_id = str(ObjectId())
+
+    class _Users:
+        async def find_one(self, query, *args, **kwargs):
+            if query == {"_id": ObjectId(user_id)}:
+                return {"_id": ObjectId(user_id), "email": "real@example.com"}
+            return None
+
+    monkeypatch.setattr(server, "users_col", _Users())
+    client = TestClient(app)
+    response = client.post(
+        "/api/debug/logs/upload",
+        json={"content": "[INFO] envoi réel", "filename": "keepeat_swipe_logs_real.txt"},
+        headers={"Authorization": f"Bearer {create_token(user_id)}"},
+    )
+    assert response.status_code == 200, response.text
+    assert response.json()["ok"] is True
 
 
 def test_upload_debug_logs_success(monkeypatch):
     """Successfully upload debug logs with mocked auth."""
-    from backend.auth_utils import get_current_user
-
     client = TestClient(app)
-    app.dependency_overrides[get_current_user] = lambda: {"id": "u-1", "email": "test@example.com"}
+    app.dependency_overrides[server._get_current_user] = lambda: {"id": "u-1", "email": "test@example.com"}
 
     response = client.post(
         "/api/debug/logs/upload",
@@ -63,10 +92,8 @@ def test_upload_debug_logs_success(monkeypatch):
 
 def test_upload_debug_logs_invalid_filename_path_traversal():
     """Reject filenames with path traversal attempts."""
-    from backend.auth_utils import get_current_user
-
     client = TestClient(app)
-    app.dependency_overrides[get_current_user] = lambda: {"id": "u-1", "email": "test@example.com"}
+    app.dependency_overrides[server._get_current_user] = lambda: {"id": "u-1", "email": "test@example.com"}
 
     response = client.post(
         "/api/debug/logs/upload",
@@ -79,10 +106,8 @@ def test_upload_debug_logs_invalid_filename_path_traversal():
 
 def test_upload_debug_logs_invalid_filename_backslash():
     """Reject filenames with backslashes."""
-    from backend.auth_utils import get_current_user
-
     client = TestClient(app)
-    app.dependency_overrides[get_current_user] = lambda: {"id": "u-1", "email": "test@example.com"}
+    app.dependency_overrides[server._get_current_user] = lambda: {"id": "u-1", "email": "test@example.com"}
 
     response = client.post(
         "/api/debug/logs/upload",
@@ -95,10 +120,8 @@ def test_upload_debug_logs_invalid_filename_backslash():
 
 def test_upload_debug_logs_missing_content():
     """Reject request with missing content."""
-    from backend.auth_utils import get_current_user
-
     client = TestClient(app)
-    app.dependency_overrides[get_current_user] = lambda: {"id": "u-1", "email": "test@example.com"}
+    app.dependency_overrides[server._get_current_user] = lambda: {"id": "u-1", "email": "test@example.com"}
 
     response = client.post(
         "/api/debug/logs/upload",
@@ -111,10 +134,8 @@ def test_upload_debug_logs_missing_content():
 
 def test_upload_debug_logs_missing_filename():
     """Reject request with missing filename."""
-    from backend.auth_utils import get_current_user
-
     client = TestClient(app)
-    app.dependency_overrides[get_current_user] = lambda: {"id": "u-1", "email": "test@example.com"}
+    app.dependency_overrides[server._get_current_user] = lambda: {"id": "u-1", "email": "test@example.com"}
 
     response = client.post(
         "/api/debug/logs/upload",
@@ -127,10 +148,8 @@ def test_upload_debug_logs_missing_filename():
 
 def test_upload_debug_logs_empty_content():
     """Allow empty content (edge case)."""
-    from backend.auth_utils import get_current_user
-
     client = TestClient(app)
-    app.dependency_overrides[get_current_user] = lambda: {"id": "u-1", "email": "test@example.com"}
+    app.dependency_overrides[server._get_current_user] = lambda: {"id": "u-1", "email": "test@example.com"}
 
     response = client.post(
         "/api/debug/logs/upload",
@@ -145,10 +164,8 @@ def test_upload_debug_logs_empty_content():
 
 def test_upload_debug_logs_response_includes_filename():
     """Response includes the stored filename with timestamp and email."""
-    from backend.auth_utils import get_current_user
-
     client = TestClient(app)
-    app.dependency_overrides[get_current_user] = lambda: {"id": "u-1", "email": "test@example.com"}
+    app.dependency_overrides[server._get_current_user] = lambda: {"id": "u-1", "email": "test@example.com"}
 
     response = client.post(
         "/api/debug/logs/upload",

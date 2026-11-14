@@ -168,7 +168,7 @@ frontend/
 │   └── [...]
 ├── data/                        # Constants & data
 │   └── mockData.ts
-├── __tests__/                   # Unit + integration tests
+├── utils/*.test.ts              # Unit tests, co-located with the module
 ├── integration/                 # Integration tests
 ├── smoke/                       # Smoke tests (critical paths)
 └── assets/                      # Images, fonts, etc.

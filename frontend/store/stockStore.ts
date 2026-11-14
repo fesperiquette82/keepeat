@@ -34,6 +34,7 @@ import {
   type PendingMutation,
 } from '../utils/pendingMutationQueue';
 import { onAccountChanged } from '../utils/accountSessionBridge';
+import { getErrorMessage, getHttpResponseData, getHttpStatus } from '../utils/errorDetails';
 
 const authHeaders = () => {
   const token = useAuthStore.getState().token;
@@ -182,16 +183,19 @@ interface StockStore {
   resetForAccount: (userId: string | null) => void;
 }
 
-function isNetworkError(err: any): boolean {
+function isNetworkError(err: unknown): boolean {
+  // BUG-085 : `err.response` levait TypeError quand la valeur interceptée
+  // n'était pas un objet (null, chaîne…), masquant l'erreur d'origine.
+  const record = err !== null && typeof err === 'object' ? (err as { response?: unknown; code?: unknown }) : null;
   return (
-    !err.response ||
-    err.code === 'ECONNABORTED' ||
-    err.code === 'ERR_NETWORK' ||
-    err.message === 'Network Error'
+    !record?.response ||
+    record.code === 'ECONNABORTED' ||
+    record.code === 'ERR_NETWORK' ||
+    getErrorMessage(err) === 'Network Error'
   );
 }
 
-function handlePremiumOrQuotaError(err: any): boolean {
+function handlePremiumOrQuotaError(err: unknown): boolean {
   const premiumError = extractPremiumErrorDetail(err);
   if (!premiumError) return false;
   usePremiumUiStore.getState().openPaywall(premiumError);
@@ -320,7 +324,7 @@ export const useStockStore = create<StockStore>()(
               );
             }
             set(state => ({ pendingMutations: removeMutation(state.pendingMutations, mutation.id) }));
-          } catch (err: any) {
+          } catch (err: unknown) {
             const handling = classifyMutationFailure(err);
             if (handling === 'retry-later' || handling === 'wait-for-auth') {
               // On CONSERVE l'action (BUG-065) : un 503, un 500 ou une session
@@ -421,12 +425,12 @@ export const useStockStore = create<StockStore>()(
           set({ items, lastStockFetchAt: Date.now() });
           useRecipesStore.getState().recomputeRecipeAssociationsFromCache(items as DashboardStockItem[]);
           rescheduleAllNotifications(items);
-        } catch (err: any) {
+        } catch (err: unknown) {
           if (handlePremiumOrQuotaError(err)) {
             throw err;
           }
           if (!isNetworkError(err)) {
-            set({ error: err.message });
+            set({ error: getErrorMessage(err) });
           }
           // Si erreur réseau : on garde le cache local (ne pas écraser)
         } finally {
@@ -484,17 +488,17 @@ export const useStockStore = create<StockStore>()(
             last_refresh_at: res.data.last_refresh_at,
           });
           return res.data;
-        } catch (err: any) {
+        } catch (err: unknown) {
           if (handlePremiumOrQuotaError(err)) {
             throw err;
           }
           logger.warn('[STOCK] priority refresh failed', {
-            status: err?.response?.status ?? null,
-            responseBody: err?.response?.data ?? null,
-            errorMessage: err?.message ?? String(err),
+            status: getHttpStatus(err) ?? null,
+            responseBody: getHttpResponseData(err),
+            errorMessage: getErrorMessage(err) ?? String(err),
           });
           if (!isNetworkError(err)) {
-            set({ error: err.message });
+            set({ error: getErrorMessage(err) });
           }
           throw err;
         } finally {
@@ -542,7 +546,7 @@ export const useStockStore = create<StockStore>()(
         const { isOnline } = get();
 
         // Capturer le snapshot AVANT la mise à jour optimiste pour pouvoir rollback
-        const { items, priorityItems, stats } = get();
+        const { items, priorityItems } = get();
 
         debugSwipeLogger.info('stockStore.markConsumed', `Captured snapshot`, {
           itemId,
@@ -601,9 +605,9 @@ export const useStockStore = create<StockStore>()(
           void Promise.all([s.fetchPriorityItems(), s.fetchStats()])
             .then(() => debugSwipeLogger.info('stockStore.markConsumed', `Secondary fetches completed`, { itemId }))
             .catch((e) => debugSwipeLogger.warn('stockStore.markConsumed', `Secondary fetches failed`, { itemId, error: e instanceof Error ? e.message : String(e) }));
-        } catch (err: any) {
-          const errMsg = err?.message ?? String(err);
-          const errStatus = err?.response?.status ?? null;
+        } catch (err: unknown) {
+          const errMsg = getErrorMessage(err) ?? String(err);
+          const errStatus = getHttpStatus(err) ?? null;
 
           if (isNetworkError(err)) {
             debugSwipeLogger.warn('stockStore.markConsumed', `Network error, queuing mutation`, {
@@ -640,7 +644,7 @@ export const useStockStore = create<StockStore>()(
                 wasPriority,
                 action: 'consume',
               }),
-              error: err.message,
+              error: getErrorMessage(err),
             }));
             await useRecipesStore.getState().refreshRecipeAssociationsForStockMutation({
               source: 'stock.consume',
@@ -662,7 +666,7 @@ export const useStockStore = create<StockStore>()(
         const { isOnline } = get();
 
         // Capturer le snapshot AVANT la mise à jour optimiste pour pouvoir rollback
-        const { items, priorityItems, stats } = get();
+        const { items, priorityItems } = get();
 
         debugSwipeLogger.info('stockStore.markThrown', `Captured snapshot`, {
           itemId,
@@ -716,9 +720,9 @@ export const useStockStore = create<StockStore>()(
           void Promise.all([s.fetchPriorityItems(), s.fetchStats()])
             .then(() => debugSwipeLogger.info('stockStore.markThrown', `Secondary fetches completed`, { itemId }))
             .catch((e) => debugSwipeLogger.warn('stockStore.markThrown', `Secondary fetches failed`, { itemId, error: e instanceof Error ? e.message : String(e) }));
-        } catch (err: any) {
-          const errMsg = err?.message ?? String(err);
-          const errStatus = err?.response?.status ?? null;
+        } catch (err: unknown) {
+          const errMsg = getErrorMessage(err) ?? String(err);
+          const errStatus = getHttpStatus(err) ?? null;
 
           if (isNetworkError(err)) {
             debugSwipeLogger.warn('stockStore.markThrown', `Network error, queuing mutation`, {
@@ -754,7 +758,7 @@ export const useStockStore = create<StockStore>()(
                 wasPriority,
                 action: 'throw',
               }),
-              error: err.message,
+              error: getErrorMessage(err),
             }));
             await useRecipesStore.getState().refreshRecipeAssociationsForStockMutation({
               source: 'stock.throw',
@@ -780,9 +784,9 @@ export const useStockStore = create<StockStore>()(
           const s = get();
           await Promise.all([s.fetchPriorityItems(), s.fetchStats(), s.fetchHistory()]);
           return true;
-        } catch (err: any) {
+        } catch (err: unknown) {
           if (!isNetworkError(err)) {
-            set({ error: err.message });
+            set({ error: getErrorMessage(err) });
           }
           return false;
         }
@@ -857,7 +861,7 @@ export const useStockStore = create<StockStore>()(
           const s = get();
           await Promise.all([s.fetchPriorityItems(), s.fetchStats()]);
           return newItem;
-        } catch (err: any) {
+        } catch (err: unknown) {
           if (isNetworkError(err)) {
             // Fallback offline si le réseau coupe juste après le check (sans récursion)
             set({ isOnline: false });
@@ -890,7 +894,7 @@ export const useStockStore = create<StockStore>()(
             scheduleExpiryNotification(tempItem);
             return tempItem;
           }
-          logger.error("[Stock] addItem failed", { message: err instanceof Error ? err.message : String(err) });
+          logger.error("[Stock] addItem failed", { message: err instanceof Error ? getErrorMessage(err) : String(err) });
           return null;
         }
       },
@@ -947,11 +951,11 @@ export const useStockStore = create<StockStore>()(
           });
           await Promise.all([s.fetchStock(), s.fetchPriorityItems(), s.fetchStats()]);
           return updatedItem;
-        } catch (err: any) {
+        } catch (err: unknown) {
           if (isNetworkError(err)) {
             return applyOfflineUpdate();
           }
-          set({ error: err.message });
+          set({ error: getErrorMessage(err) });
           return null;
         }
       },

@@ -77,3 +77,9 @@ Exceptions acceptées (sans test additionnel) :
 2. Vérifier qu’il échoue sans correctif (ou à minima qu’il aurait échoué sur l’ancienne logique).
 3. Appliquer le correctif minimal.
 4. Relancer les suites pertinentes (`test:ci` / pytest rapide).
+
+## Backend : MongoDB et délai de sélection (BUG-075)
+
+- En CI, les jobs qui lancent pytest déclarent un service `mongo:7` : les tests qui touchent la base l'exercent réellement.
+- En local, sans MongoDB, les deux `conftest.py` fixent `MONGO_SERVER_SELECTION_TIMEOUT_MS=500` : une opération échoue en 0,5 s au lieu d'attendre le défaut du pilote (30 s). La suite complète tient en quelques minutes dans les deux cas.
+- Installer les outils de test avec `pip install -r backend/requirements-dev.txt` (inclut `pip-audit`, exécuté en CI sur `requirements.txt`).

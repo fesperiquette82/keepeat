@@ -5,6 +5,7 @@ import { useRouter } from 'expo-router';
 import * as WebBrowser from 'expo-web-browser';
 import { useAuthStore } from '../store/authStore';
 import { connectGmail, disconnectGmail, fetchGmailAuthUrl, fetchGmailStatus, type GmailConnectionStatus } from '../utils/gmailApi';
+import { getErrorMessage } from '../utils/errorDetails';
 
 export default function GmailConnectScreen() {
   const router = useRouter();
@@ -47,8 +48,8 @@ export default function GmailConnectScreen() {
       }
       const connected = await connectGmail(token, code, returnedState);
       setStatus(connected);
-    } catch (error: any) {
-      if (error?.message === 'gmail_auth_url_failed_503') {
+    } catch (error: unknown) {
+      if (getErrorMessage(error) === 'gmail_auth_url_failed_503') {
         Alert.alert('Indisponible', "L'import mail n'est pas encore configuré pour cette version de l'app.");
       } else {
         Alert.alert('Erreur', "Impossible de connecter Gmail. Réessayez plus tard.");

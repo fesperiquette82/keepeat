@@ -91,6 +91,20 @@ class TestEmailImportServiceUnit:
         msg = EmailMessage()
         assert svc.extract_email_text(msg) == ""
 
+    def test_decode_part_ignores_non_bytes_payload(self):
+        """BUG-086 : get_payload(decode=True) peut renvoyer autre chose que des
+        octets ; `.decode` levait alors AttributeError, non rattrapée, et faisait
+        échouer tout l'email au lieu d'ignorer la partie."""
+        from backend import email_import_service as svc
+
+        part = MagicMock()
+        part.get_content_charset.return_value = "utf-8"
+        for payload in (["sous-partie"], "texte déjà décodé", None):
+            part.get_payload.return_value = payload
+            assert svc._decode_part(part) == ""
+        part.get_payload.return_value = "Lait 1L".encode("utf-8")
+        assert svc._decode_part(part) == "Lait 1L"
+
     def test_fetch_unseen_emails_returns_empty_when_not_configured(self, monkeypatch):
         monkeypatch.delenv("EMAIL_IMPORT_INBOX_ADDRESS", raising=False)
         monkeypatch.delenv("EMAIL_IMPORT_INBOX_APP_PASSWORD", raising=False)
@@ -117,8 +131,10 @@ class TestEmailImportServiceUnit:
         conn.login.assert_called_once_with("keepeatfe@gmail.com", "app-password")
         conn.select.assert_called_once_with("INBOX")
         conn.create.assert_called_once_with(svc._PROCESSED_MAILBOX)
-        assert conn.uid.call_args_list[0].args == ("copy", b"42", svc._PROCESSED_MAILBOX)
-        assert conn.uid.call_args_list[1].args == ("store", b"42", "+FLAGS", "(\\Deleted)")
+        # BUG-086 : l'UID reçu en octets est transmis en texte, comme le type
+        # d'imaplib l'exige (imaplib encode lui-même le texte : commande identique).
+        assert conn.uid.call_args_list[0].args == ("copy", "42", svc._PROCESSED_MAILBOX)
+        assert conn.uid.call_args_list[1].args == ("store", "42", "+FLAGS", "(\\Deleted)")
         conn.expunge.assert_called_once()
         conn.logout.assert_called_once()
 

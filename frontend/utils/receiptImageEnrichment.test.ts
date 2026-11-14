@@ -10,7 +10,7 @@ function readSource(relativePath: string): string {
 }
 
 // ---------------------------------------------------------------------------
-// TODO.md — implémentation end-to-end des images pour les articles issus de
+// docs/archive/TODO.md — implémentation end-to-end des images pour les articles issus de
 // l'OCR ticket de caisse. Ces tests verrouillent le câblage frontend (le
 // backend a sa propre couverture dans backend/tests/test_receipt_ocr_image_enrichment.py).
 // ---------------------------------------------------------------------------

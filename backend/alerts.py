@@ -3,7 +3,7 @@ from __future__ import annotations
 import os
 from dataclasses import dataclass
 from datetime import datetime, timedelta, timezone
-from typing import Any, Callable
+from typing import Any, Awaitable, Callable, Protocol
 
 import httpx
 from bson import ObjectId
@@ -11,6 +11,7 @@ from fastapi import HTTPException
 
 from backend.app_core import logger, utc_now
 from backend.auth_utils import hash_password, validate_password
+from backend.mongo_types import MongoCollection
 
 
 def _resolve_alert_prefs(user_doc: dict[str, Any]) -> dict[str, bool]:
@@ -23,20 +24,29 @@ def _resolve_alert_prefs(user_doc: dict[str, Any]) -> dict[str, bool]:
     }
 
 
+class SendPush(Protocol):
+    """Signature de `send_expo_push`, appelée avec des arguments nommés.
+
+    Un `Callable[[...], Any]` n'admet que des arguments positionnels : mypy
+    rejetait les appels `send_push(tokens, title=..., body=..., data=...)`."""
+
+    def __call__(self, tokens: list[str], title: str, body: str, data: dict[str, Any] | None = None) -> Awaitable[None]: ...
+
+
 @dataclass(frozen=True)
 class AlertDependencies:
-    users_col: Any
-    stock_col: Any
-    user_alerts_col: Any
-    app_state_col: Any
-    products_cache_col: Any
-    community_recipes_col: Any
-    send_push: Callable[[list[str], str, str, dict | None], Any]
+    users_col: MongoCollection
+    stock_col: MongoCollection
+    user_alerts_col: MongoCollection
+    app_state_col: MongoCollection
+    products_cache_col: MongoCollection
+    community_recipes_col: MongoCollection
+    send_push: SendPush
     fr_to_en_ingredient: Callable[[str, str], str]
-    households_col: Any = None
+    households_col: MongoCollection | None = None
 
 
-async def _resolve_alert_stock_match(user_doc: dict[str, Any], households_col: Any) -> dict[str, Any]:
+async def _resolve_alert_stock_match(user_doc: dict[str, Any], households_col: MongoCollection | None) -> dict[str, Any]:
     """Filtre Mongo `user_id` pour les alertes (BUG-049 phase 3) : le stock partagé
     d'un foyer déclenche une alerte pour CHAQUE membre (préférences et dédoublonnage
     individuels via user_alerts_col, déjà gérés par la boucle par utilisateur
@@ -56,7 +66,7 @@ async def _resolve_alert_stock_match(user_doc: dict[str, Any], households_col: A
     return {"user_id": {"$in": member_ids}} if len(member_ids) > 1 else {"user_id": member_ids[0]}
 
 
-async def send_expo_push(tokens: list[str], title: str, body: str, data: dict | None = None) -> None:
+async def send_expo_push(tokens: list[str], title: str, body: str, data: dict[str, Any] | None = None) -> None:
     valid = [t for t in tokens if t.startswith(("ExponentPushToken[", "ExpoPushToken["))]
     if not valid:
         return
@@ -72,7 +82,7 @@ async def send_expo_push(tokens: list[str], title: str, body: str, data: dict | 
         logger.warning("Expo push failed: %s", exc)
 
 
-async def fetch_recent_recalls(*, fail_on_error: bool = False) -> list[dict]:
+async def fetch_recent_recalls(*, fail_on_error: bool = False) -> list[dict[str, Any]]:
     since = (utc_now() - timedelta(days=30)).strftime("%Y-%m-%d")
     url = "https://data.economie.gouv.fr/api/explore/v2.1/catalog/datasets/rappelconso0/records"
     params: dict[str, Any] = {
@@ -90,7 +100,7 @@ async def fetch_recent_recalls(*, fail_on_error: bool = False) -> list[dict]:
     # comportement (toujours 100 résultats, limit ignoré...). 50 pages × 100 = 5000 rappels,
     # très au-delà du volume réel sur 30 jours (cf. E3).
     _MAX_PAGES = 50
-    results: list[dict] = []
+    results: list[dict[str, Any]] = []
     try:
         async with httpx.AsyncClient(timeout=30) as client_http:
             for _page in range(_MAX_PAGES):
@@ -338,7 +348,7 @@ async def check_daily_expiry_alert(deps: AlertDependencies) -> None:
         logger.info("Daily expiry alert sent — user=%s items=%d recipe=%s", user_id, count, bool(recipe_hint))
 
 
-async def seed_default_user(users_col) -> None:
+async def seed_default_user(users_col: MongoCollection) -> None:
     default_email = os.getenv("SEED_EMAIL", "").strip().lower()
     default_password = os.getenv("SEED_PASSWORD", "")
     if not default_email or not default_password:

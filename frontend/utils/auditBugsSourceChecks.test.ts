@@ -26,8 +26,9 @@ test('régression BUG-022 : markConsumed/markThrown utilisent get() et non useSt
 
   assert.doesNotMatch(markConsumedBody, /useStockStore\.getState\(\)/);
   assert.doesNotMatch(markThrownBody, /useStockStore\.getState\(\)/);
-  assert.match(markConsumedBody, /const \{ items, priorityItems, stats \} = get\(\);/);
-  assert.match(markThrownBody, /const \{ items, priorityItems, stats \} = get\(\);/);
+  // BUG-076 : `stats` était capturé sans être utilisé ; seul le recours à get() importe ici.
+  assert.match(markConsumedBody, /const \{ items, priorityItems \} = get\(\);/);
+  assert.match(markThrownBody, /const \{ items, priorityItems \} = get\(\);/);
 });
 
 // ---------------------------------------------------------------------------
@@ -85,4 +86,22 @@ test('régression BUG-035 : recipes/[id].tsx affiche un bouton retour pendant le
   // handleBack (comme les écrans d'erreur et de succès), pas juste un texte statique.
   assert.match(loadingBranchBody, /onPress=\{handleBack\}/);
   assert.match(loadingBranchBody, /TouchableOpacity/);
+});
+
+// ---------------------------------------------------------------------------
+// BUG-082 — authStore.ts : la connexion biométrique conserve un jeton de
+// session, jamais le mot de passe, et ne rejoue jamais un login.
+// ---------------------------------------------------------------------------
+
+test('régression BUG-082 : aucun mot de passe derrière l’empreinte, aucun login rejoué', () => {
+  const src = readSource('store/authStore.ts');
+
+  assert.doesNotMatch(src, /serializeBiometricCredentials|parseBiometricCredentials/);
+  assert.match(src, /serializeBiometricSession\(email, access_token\)/);
+
+  const start = src.indexOf('loginWithBiometrics: async');
+  assert.ok(start !== -1);
+  const body = src.slice(start, src.indexOf('refreshEntitlements: async', start));
+  assert.doesNotMatch(body, /\.login\(/);
+  assert.match(body, /\/api\/auth\/me/);
 });

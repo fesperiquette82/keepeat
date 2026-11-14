@@ -1,3 +1,4 @@
+/* eslint-disable no-console -- puits de journalisation officiel : le seul endroit où console est autorisé (core-rules, règle 7) */
 import { APP_CONFIG } from './appConfig';
 
 type LogLevel = 'debug' | 'info' | 'warn' | 'error';

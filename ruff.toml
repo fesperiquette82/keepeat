@@ -1,0 +1,33 @@
+# Lint Python : règles de base de ruff (BUG-079 : erreurs de syntaxe, noms
+# indéfinis, imports et variables inutilisés, clés de dictionnaire en double…)
+# et flake8-bugbear (BUG-089 : arguments par défaut mutables, variables de
+# boucle capturées, exceptions non chaînées…).
+target-version = "py311"
+extend-exclude = ["frontend", "docs", ".maestro"]
+
+[lint]
+select = ["E4", "E7", "E9", "F", "B"]
+
+[lint.per-file-ignores]
+# load_dotenv() doit précéder les imports qui lisent l'environnement au chargement.
+"backend/server.py" = ["E402"]
+"backend/asgi.py" = ["E402"]
+# Les tests posent leurs variables d'environnement avant d'importer le serveur.
+"backend/tests/**" = ["E402"]
+"tests/**" = ["E402"]
+
+[lint.flake8-bugbear]
+# Idiome FastAPI : Depends(), Query()… en valeur par défaut sont des
+# marqueurs déclaratifs évalués une fois, pas des valeurs partagées.
+# typing.cast rend son argument tel quel (paramètres Response injectés).
+extend-immutable-calls = [
+    "fastapi.Body",
+    "fastapi.Depends",
+    "fastapi.File",
+    "fastapi.Form",
+    "fastapi.Header",
+    "fastapi.Path",
+    "fastapi.Query",
+    "fastapi.Security",
+    "typing.cast",
+]

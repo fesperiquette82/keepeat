@@ -47,7 +47,7 @@ def test_server_blocks_external_services_in_test_mode():
 def test_test_mode_fixtures_define_deterministic_e2e_free_account():
     content = (REPO_ROOT / "backend" / "test_mode.py").read_text(encoding="utf-8")
 
-    assert '"email": "e2e.free@keepeat.test"' in content
+    assert '"email": "e2e.free@example.com"' in content
     assert '"password": "TestPassword123!"' in content
     assert '"is_premium": False' in content
     assert '"subscription_status": "inactive"' in content
@@ -61,3 +61,17 @@ def test_test_seed_route_upserts_verified_test_users():
     # jamais `password_hash` (sinon le login des comptes seedés plante en 500/KeyError).
     assert '{"$set": {"email": free_fixture["email"], "hashed_password": free_password_hash, "is_premium": False, "subscription_status": "inactive", "email_verified": True}}' in content
     assert '"password_hash"' not in content
+
+
+def test_e2e_fixture_accounts_pass_login_validation():
+    """[REGRESSION] BUG-093 — les comptes E2E étaient en `@keepeat.test`.
+    Le seed les écrit directement en base, mais `/api/auth/login` valide
+    l'e-mail (EmailStr) et email-validator refuse les domaines réservés
+    (`.test`, `.local`…) : chaque connexion Maestro recevait un 422. Chaque
+    compte du jeu de test doit passer la validation de l'endpoint de connexion."""
+    from backend.models import UserLogin
+    from backend.test_mode import FIXTURES
+
+    for name, user in FIXTURES["users"].items():
+        login = UserLogin(email=user["email"], password=user["password"])
+        assert login.email == user["email"], name

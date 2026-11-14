@@ -26,11 +26,13 @@ test("verify-email.tsx redirige vers '/' une fois le compte vérifié (au lieu d
   assert.match(effectSlice, /router\.replace\('\/'\)/);
 });
 
-test("index.tsx décide de la destination post-connexion via resolvePostLoginDestination (onboarding vs tabs)", () => {
+test("index.tsx décide de la destination post-connexion via decidePostLoginDestination (onboarding vs tabs)", () => {
   const src = readSource('app/index.tsx');
-  assert.match(src, /import \{ resolvePostLoginDestination \} from '\.\.\/utils\/postLoginDestination';/);
+  assert.match(src, /import \{ decidePostLoginDestination \} from '\.\.\/utils\/postLoginDestination';/);
   assert.match(src, /import \{ hasSeenOnboarding, markOnboardingSeen \} from '\.\.\/utils\/onboardingStorage';/);
-  assert.match(src, /resolvePostLoginDestination\(\{\s*hasSeenOnboarding:\s*seen,\s*hasStockItems\s*\}\)/);
+  assert.match(src, /await decidePostLoginDestination\(\{\s*hasSeenOnboarding:\s*seen,/);
+  // BUG-095 : le stock du serveur est consulté avant d'imposer l'onboarding.
+  assert.match(src, /loadRemoteStock:\s*\(\)\s*=>\s*useStockStore\.getState\(\)\.fetchStock\(/);
 });
 
 test('onboarding.tsx existe et propose scan produit / scan ticket / passer', () => {

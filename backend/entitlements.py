@@ -1,13 +1,17 @@
 from __future__ import annotations
 
 from datetime import datetime, timezone
-from typing import Any
+from typing import Any, Final, Literal
 
 from fastapi import HTTPException
 from pymongo import ReturnDocument
 
-FREE_PLAN = "free"
-PREMIUM_PLAN = "premium"
+from backend.mongo_types import MongoCollection
+
+PlanName = Literal["free", "premium"]
+
+FREE_PLAN: Final = "free"
+PREMIUM_PLAN: Final = "premium"
 PREMIUM_PRODUCT_ID = "premium_monthly"
 
 FEATURE_OCR = "ocr_receipt"
@@ -42,7 +46,7 @@ def _parse_iso_datetime(value: Any) -> datetime | None:
         return None
 
 
-def resolve_plan(user_doc: dict[str, Any] | None) -> str:
+def resolve_plan(user_doc: dict[str, Any] | None) -> PlanName:
     if not user_doc:
         return FREE_PLAN
 
@@ -99,7 +103,7 @@ def check_access_or_raise(*, plan: str, feature: str) -> dict[str, Any]:
 
 async def consume_quota_or_raise(
     *,
-    app_state_col,
+    app_state_col: MongoCollection,
     user_id: str,
     feature: str,
     monthly_limit: int | None,
@@ -149,7 +153,7 @@ async def consume_quota_or_raise(
 
 async def refund_quota(
     *,
-    app_state_col,
+    app_state_col: MongoCollection,
     user_id: str,
     feature: str,
     period: str,

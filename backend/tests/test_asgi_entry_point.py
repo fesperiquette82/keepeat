@@ -1,6 +1,5 @@
 """Tests for ASGI entry point to ensure proper initialization."""
 
-import sys
 from pathlib import Path
 
 

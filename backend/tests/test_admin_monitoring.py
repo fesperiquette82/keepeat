@@ -100,7 +100,7 @@ class TestAdminDashboardRouteRegistered:
 
     def test_dashboard_embedded_script_is_resilient_to_partial_failures(self, monkeypatch):
         server = self._load(monkeypatch)
-        html = server._ADMIN_DASHBOARD_HTML
+        html = server.ADMIN_DASHBOARD_HTML
         assert "Promise.allSettled" in html, "Le chargement dashboard doit tolérer les échecs partiels"
         assert "setBlockError('health-content'" in html, "Le bloc santé doit afficher une erreur dédiée"
         assert "setBlockError('users-content'" in html, "Le bloc utilisateurs doit afficher une erreur dédiée"
@@ -108,12 +108,12 @@ class TestAdminDashboardRouteRegistered:
 
     def test_dashboard_embedded_script_rejects_invalid_days(self, monkeypatch):
         server = self._load(monkeypatch)
-        html = server._ADMIN_DASHBOARD_HTML
+        html = server.ADMIN_DASHBOARD_HTML
         assert "const allowedDays = new Set([1, 7, 30, 90]);" in html, "La période doit être validée côté client"
 
     def test_dashboard_embedded_quotas_block_hooks_exist(self, monkeypatch):
         server = self._load(monkeypatch)
-        html = server._ADMIN_DASHBOARD_HTML
+        html = server.ADMIN_DASHBOARD_HTML
         assert "Services externes & limites" in html, "Le bloc quotas doit être visible dans /admin/dashboard"
         assert "id=\"quotas-content\"" in html, "Le conteneur quotas doit exister"
         assert "renderExternalServiceQuotas(dash.external_service_quotas || null);" in html, "Le dashboard doit brancher la payload quotas"
@@ -121,7 +121,7 @@ class TestAdminDashboardRouteRegistered:
 
     def test_dashboard_embedded_quotas_renderer_is_resilient(self, monkeypatch):
         server = self._load(monkeypatch)
-        html = server._ADMIN_DASHBOARD_HTML
+        html = server.ADMIN_DASHBOARD_HTML
         assert "Aucune donnée de quota disponible." in html, "Le fallback visuel quotas doit être explicite"
         assert "Array.isArray(payload.services)" in html, "Le renderer quotas doit tolérer payload partielle"
         assert "quotaStatusClass(service.status)" in html, "Le status quotas doit être normalisé"
@@ -142,7 +142,7 @@ class TestHighestErrorRatePipeline:
         ]
         for r in simulated_results:
             assert r["volume"] >= 2, f"volume < 2 pour {r['endpoint_key']} : incohérent"
-            assert r["error_rate"] > 0, f"error_rate = 0 ne devrait pas figurer dans la liste"
+            assert r["error_rate"] > 0, "error_rate = 0 ne devrait pas figurer dans la liste"
             # error_rate doit être calculable depuis volume (pas de division par 0)
             inferred_errors = round(r["error_rate"] * r["volume"])
             assert inferred_errors >= 1, f"Incohérence : {r['error_rate']} * {r['volume']} < 1"

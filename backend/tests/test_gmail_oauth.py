@@ -3,13 +3,11 @@
 Phase 1 : connexion/déconnexion OAuth Gmail uniquement (consentement,
 stockage chiffré du refresh_token). Aucune recherche ni parsing d'email.
 """
-import asyncio
 import importlib
 import sys
 from pathlib import Path
-from unittest.mock import AsyncMock, MagicMock
+from unittest.mock import AsyncMock
 
-import httpx
 import pytest
 from bson import ObjectId
 from cryptography.fernet import Fernet
@@ -96,6 +94,56 @@ class TestGmailOAuthService:
         monkeypatch.setenv("JWT_SECRET_KEY", "test-secret")
         with pytest.raises(ValueError):
             gmail_oauth_service.decode_state_token("not-a-jwt")
+
+    def test_state_token_rejects_non_string_user_id(self, monkeypatch):
+        """[REGRESSION] BUG-088 — un state signé dont `user_id` n'est pas une
+        chaîne (entier, liste, objet) était renvoyé tel quel au lieu d'être
+        rejeté, comme le fait déjà `auth_utils` pour les jetons de session."""
+        import jwt
+
+        from backend import gmail_oauth_service
+        monkeypatch.setenv("JWT_SECRET_KEY", "test-secret")
+        for bad_user_id in (123, ["u"], {"id": "u"}):
+            state = jwt.encode(
+                {"user_id": bad_user_id, "type": gmail_oauth_service.STATE_TOKEN_TYPE},
+                "test-secret",
+                algorithm=gmail_oauth_service.JWT_ALGORITHM,
+            )
+            with pytest.raises(ValueError):
+                gmail_oauth_service.decode_state_token(state)
+
+    def test_exchange_rejects_non_object_token_response(self, monkeypatch):
+        """[REGRESSION] BUG-088 — une réponse JSON qui n'est pas un objet était
+        renvoyée telle quelle ; l'appelant plantait plus loin sur `.get`."""
+        import asyncio
+
+        from backend import gmail_oauth_service
+        monkeypatch.setenv("GOOGLE_OAUTH_CLIENT_ID", "cid")
+        monkeypatch.setenv("GOOGLE_OAUTH_CLIENT_SECRET", "csecret")
+
+        class _Resp:
+            def raise_for_status(self):
+                return None
+
+            def json(self):
+                return ["réponse", "inattendue"]
+
+        class _Client:
+            def __init__(self, *args, **kwargs):
+                pass
+
+            async def __aenter__(self):
+                return self
+
+            async def __aexit__(self, *args):
+                return False
+
+            async def post(self, url, data=None):
+                return _Resp()
+
+        monkeypatch.setattr(gmail_oauth_service.httpx, "AsyncClient", _Client)
+        with pytest.raises(ValueError):
+            asyncio.run(gmail_oauth_service.exchange_code_for_tokens(code="code"))
 
     def test_encrypt_decrypt_refresh_token_roundtrip(self, monkeypatch):
         from backend import gmail_oauth_service

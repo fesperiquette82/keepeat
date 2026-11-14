@@ -235,7 +235,7 @@ def test_maestro_e2e_is_fully_runnable_in_github_actions():
     assert "DB_NAME: keepeat_e2e_test" in workflow
     assert "APP_ENV: test" in workflow
     assert 'DISABLE_EXTERNAL_SERVICES: "true"' in workflow
-    assert "JWT_SECRET: test-secret" in workflow
+    assert "JWT_SECRET_KEY:" in workflow  # BUG-094 : nom lu par le backend
     assert "PYTHONPATH: ${{ github.workspace }}" in workflow
     assert "pip install -r backend/requirements.txt" in workflow
     assert "Waiting for MongoDB test service..." in workflow
@@ -321,13 +321,13 @@ def test_smoke_flows_use_seeded_e2e_account_and_are_independent():
     assert "extendedWaitUntil:\n    visible:\n      id: tab-home" in auth_flow
     assert "takeScreenshot: 01-auth-session-login-still-visible-after-submit" in auth_flow
     assert "takeScreenshot: 01-auth-session-login-still-visible-after-retry" in auth_flow
-    assert 'inputText: e2e.free@keepeat.test' in auth_flow
+    assert 'inputText: e2e.free@example.com' in auth_flow
     assert 'inputText: TestPassword123!' in auth_flow
     assert "hideKeyboard" in auth_flow
 
     assert 'id: login-email-input' in tabs_flow
     assert 'runFlow:' in tabs_flow
-    assert 'inputText: e2e.free@keepeat.test' in tabs_flow
+    assert 'inputText: e2e.free@example.com' in tabs_flow
     assert 'inputText: TestPassword123!' in tabs_flow
     assert 'id: tab-home' in tabs_flow
     assert 'id: tab-stock' in tabs_flow
@@ -1087,8 +1087,6 @@ def test_maestro_runner_no_early_exit_on_failure():
         f"Loop must not call 'exit 1' (found {exit_count} occurrences)"
 
     # Verify that on failure, code appends to array instead of exiting
-    failure_section = loop_section.split("then")[1].split("else")[0] if "else" in loop_section else loop_section.split("if ~/.maestro/bin/maestro test")[1].split("fi")[0]
-
     # After maestro test in if block, should have PASSED append
     assert "FLOW_RESULTS+=" in loop_section, \
         "Script must append to FLOW_RESULTS array (both success and failure cases)"
@@ -1173,7 +1171,6 @@ def test_navigation_flow_ensures_auth_before_nav_tests():
         "02-navigation-main-tabs must handle login-email-input if visible"
 
     # Verify hideKeyboard is used before submit (keyboard can cover button)
-    login_section = nav_flow.split("login-email-input")[0] if "login-email-input" in nav_flow else ""
     submit_section = nav_flow.split("login-submit-button")[0]
     assert "hideKeyboard" in submit_section, \
         "Flow must hide keyboard before tapping submit button"
@@ -1189,7 +1186,6 @@ def test_navigation_flow_ensures_auth_before_nav_tests():
     # Verify the order: login (if needed) → assert home → then test tabs
     # Find position after login section where home is asserted
     home_assert_section = nav_flow.split("Final assertion: Home must be visible before testing navigation")[1]
-    stock_tap_section = nav_flow.split("Test navigation to stock tab")[0]
 
     # The home assert should come before stock tap section
     assert "assertVisible:" in home_assert_section and "id: tab-home" in home_assert_section, \
@@ -1210,10 +1206,6 @@ def test_maestro_runner_sets_up_backend_forwarding():
     # Verify forward_backend_to_emulator function exists
     assert "forward_backend_to_emulator()" in runner_script, \
         "scripts/run-maestro-e2e.sh must define forward_backend_to_emulator() function"
-
-    # Extract function body
-    forward_section = runner_script.split("forward_backend_to_emulator()")[1].split("^}")[0] \
-        if "forward_backend_to_emulator()" in runner_script else ""
 
     # Verify adb reverse is called
     assert "adb reverse tcp:8000 tcp:8000" in runner_script, \
@@ -1639,7 +1631,7 @@ def test_maestro_runner_clears_app_data_between_flows():
     # Look specifically for force-stop targeting the E2E app AFTER pm clear
     pm_clear_section = stabilize_section[pm_clear_pos:]
 
-    app_id_force_stop_in_pm_clear_section = f"force-stop" in pm_clear_section and "$E2E_ANDROID_APP_ID" in pm_clear_section
+    app_id_force_stop_in_pm_clear_section = "force-stop" in pm_clear_section and "$E2E_ANDROID_APP_ID" in pm_clear_section
     assert app_id_force_stop_in_pm_clear_section, \
         "stabilize_between_flows must call 'adb shell am force-stop $E2E_ANDROID_APP_ID' AFTER pm clear to ensure app is fully stopped (pm clear can auto-restart)"
 
@@ -1843,3 +1835,191 @@ def test_production_health_check_tolerates_render_free_tier_cold_start():
         "Le timeout du health-check doit largement dépasser la durée de cold-start mesurée (~36s) pour ne pas confondre un redémarrage à froid normal avec une vraie panne"
 
 
+
+
+def test_e2e_debug_apk_embeds_js_bundle():
+    """BUG-083 : l'APK debug E2E doit embarquer le bundle JS.
+
+    Le plugin Gradle de React Native ne bundle pas la variante debug (Metro est
+    attendu) ; sans Metro en CI, l'application n'avait rien à exécuter et chaque
+    scénario Maestro échouait avant l'écran de connexion. Les deux workflows qui
+    construisent l'APK doivent activer le bundling (prebuild ET build, le bundle
+    étant produit par Gradle) et vérifier sa présence dans l'APK.
+    """
+    for path in (".github/workflows/mobile-e2e.yml", ".github/workflows/mobile-e2e-nightly.yml"):
+        workflow = Path(path).read_text(encoding="utf-8")
+        assert workflow.count('EXPO_E2E_EMBED_BUNDLE: "1"') >= 2, f"{path} : flag absent du prebuild ou du build"
+        assert "assets/index.android.bundle" in workflow, f"{path} : aucune vérification du bundle dans l'APK"
+
+
+
+def _workflow_step_block(workflow: str, step_name: str) -> str:
+    return workflow.split(f"- name: {step_name}")[1].split("- name:")[0]
+
+
+def test_e2e_bundle_targets_the_test_backend():
+    """BUG-090 : le bundle embarqué (BUG-083) est compilé en mode production :
+    __DEV__ faux et NODE_ENV inliné à « production ». Sans environnement
+    explicite, le garde-fou de config.ts rejetait l'URL du backend de test et
+    l'application E2E visait le backend de PRODUCTION. Le prebuild et le build
+    doivent déclarer EXPO_PUBLIC_APP_ENV=development."""
+    for path in (".github/workflows/mobile-e2e.yml", ".github/workflows/mobile-e2e-nightly.yml"):
+        workflow = Path(path).read_text(encoding="utf-8")
+        for step in ("Prebuild Android app", "Build debug APK"):
+            block = _workflow_step_block(workflow, step)
+            assert "EXPO_PUBLIC_APP_ENV: development" in block, f"{path} / {step}"
+            assert "EXPO_PUBLIC_BACKEND_URL: http://10.0.2.2:8000" in block, f"{path} / {step}"
+
+
+def test_e2e_emulator_gets_kvm_acceleration():
+    """BUG-091 : /dev/kvm existe sur les runners Linux de GitHub mais n'est pas
+    accessible au job sans règle udev. L'émulateur retombait en émulation
+    logicielle : démarrage en 8 min, scénarios de 7 à 15 min, et un run du 14/11
+    a avorté sur une coupure adb avant même de lancer Maestro. Les deux
+    workflows ouvrent /dev/kvm avant de démarrer l'émulateur."""
+    for path in (".github/workflows/mobile-e2e.yml", ".github/workflows/mobile-e2e-nightly.yml"):
+        workflow = Path(path).read_text(encoding="utf-8")
+        rule = 'KERNEL=="kvm", GROUP="kvm", MODE="0666"'
+        assert rule in workflow, path
+        assert "udevadm trigger --name-match=kvm" in workflow, path
+        assert workflow.index(rule) < workflow.index("uses: reactivecircus/android-emulator-runner@v2"), path
+
+def test_maestro_login_hides_keyboard_before_password_field():
+    """BUG-092 : sur l'émulateur CI (petit écran, application en bord à bord),
+    le clavier ouvert par la saisie de l'e-mail recouvre le champ mot de passe :
+    Maestro échouait sur « Element not found: login-password-input ». Chaque
+    séquence de connexion ferme le clavier entre l'e-mail et le mot de passe."""
+    for flow in sorted(Path(".maestro").rglob("*.yaml")):
+        text = flow.read_text(encoding="utf-8")
+        position = 0
+        while True:
+            email = text.find("inputText: e2e.free@example.com", position)
+            if email == -1:
+                break
+            password = text.find("login-password-input", email)
+            assert password != -1, f"{flow} : saisie d'e-mail sans champ mot de passe ensuite"
+            assert "hideKeyboard" in text[email:password], f"{flow} : clavier non fermé avant le mot de passe"
+            position = password
+
+def test_workflows_give_the_backend_its_jwt_secret_under_the_name_it_reads():
+    """BUG-094 : le backend lit JWT_SECRET_KEY (repli SECRET_KEY,
+    backend/auth_utils.py). Les workflows E2E le démarraient avec JWT_SECRET :
+    toute connexion Maestro finissait en 500 (« JWT_SECRET_KEY is required »).
+    Aucun workflow ne doit utiliser l'ancien nom, et chaque workflow qui démarre
+    ou teste le backend fournit JWT_SECRET_KEY."""
+    auth_utils = Path("backend/auth_utils.py").read_text(encoding="utf-8")
+    assert "JWT_SECRET_KEY" in auth_utils
+    for path in sorted(Path(".github/workflows").glob("*.yml")):
+        workflow = path.read_text(encoding="utf-8")
+        assert not re.search(r"^\s*JWT_SECRET\s*:", workflow, re.M), f"{path} : ancien nom JWT_SECRET"
+    for path in (".github/workflows/mobile-e2e.yml", ".github/workflows/mobile-e2e-nightly.yml"):
+        block = Path(path).read_text(encoding="utf-8").split("- name: Start backend in test mode")[1].split("- name:")[0]
+        assert "JWT_SECRET_KEY:" in block, path
+
+def test_maestro_failures_are_diagnosable_from_the_job_log():
+    """BUG-090 : l'API ne rend que les dernières lignes du journal d'un job, et
+    les artefacts ne sont pas toujours accessibles. Les journaux du conteneur
+    MongoDB, vidés en fin de job, repoussaient tout le diagnostic Maestro hors
+    de cette fenêtre. Ils sont bornés, et un condensé (écran affiché, message
+    d'échec, journal Android filtré) précède le résumé de la suite."""
+    for path in (".github/workflows/mobile-e2e.yml", ".github/workflows/mobile-e2e-nightly.yml"):
+        workflow = Path(path).read_text(encoding="utf-8")
+        assert "--log-opt max-size=" in workflow, path
+        assert "--log-opt max-file=1" in workflow, path
+    script = Path("scripts/run-maestro-e2e.sh").read_text(encoding="utf-8")
+    assert "print_failure_digest()" in script
+    digest_call = script.index("print_failure_digest || true")
+    assert digest_call < script.index('echo "Maestro E2E Suite Summary')
+    for marker in ("uiautomator dump", "message=", "ReactNativeJS", "ENV_GUARDRAIL"):
+        assert marker in script, marker
+
+def test_smoke_launch_flow_is_not_vacuous():
+    """BUG-083 : 00-smoke-launch passait quoi qu'affiche l'application (deux
+    assertions `optional: true`). Il doit exiger l'écran de connexion ou, à
+    défaut, l'onglet accueil."""
+    flow = Path(".maestro/00-smoke-launch.yaml").read_text(encoding="utf-8")
+    assert "runFlow" in flow and "tab-home" in flow and "login-email-input" in flow
+    assert flow.count("optional: true") == 1, "seule l'attente initiale peut être optionnelle"
+
+
+def test_backend_is_linted_with_ruff():
+    """BUG-079 : le script de validation sautait ruff faute de le trouver dans
+    requirements.txt — le backend n'avait aucun lint. ruff est désormais
+    configuré (ruff.toml), installé par requirements-dev.txt et exécuté en CI ;
+    l'absence de l'outil fait échouer la validation au lieu de la sauter."""
+    assert Path("ruff.toml").exists()
+    workflow = Path(".github/workflows/ci.yml").read_text(encoding="utf-8")
+    assert "ruff check backend tests" in workflow
+    assert "ruff==" in Path("backend/requirements-dev.txt").read_text(encoding="utf-8")
+    script = Path("scripts/lib/validate-python-fastapi.sh").read_text(encoding="utf-8")
+    assert "ruff check backend tests" in script
+    assert "[skip] ruff: not installed" not in script
+
+
+def test_backend_lint_includes_bugbear():
+    """BUG-089 : flake8-bugbear (règles B) est actif sur le backend et les
+    tests. Seuls les marqueurs déclaratifs de FastAPI et typing.cast sont
+    admis en valeur par défaut : une liste ou un dict partagé entre appels
+    reste interdit."""
+    import tomllib
+
+    config = tomllib.loads(Path("ruff.toml").read_text(encoding="utf-8"))
+    assert "B" in config["lint"]["select"]
+    immutable = set(config["lint"]["flake8-bugbear"]["extend-immutable-calls"])
+    assert immutable <= {
+        "fastapi.Body",
+        "fastapi.Depends",
+        "fastapi.File",
+        "fastapi.Form",
+        "fastapi.Header",
+        "fastapi.Path",
+        "fastapi.Query",
+        "fastapi.Security",
+        "typing.cast",
+    }
+    ignored = {code for codes in config["lint"].get("per-file-ignores", {}).values() for code in codes}
+    assert not any(code.startswith("B") for code in ignored)
+
+
+def test_backend_is_type_checked_with_mypy():
+    """BUG-079 : le script de validation sautait mypy faute de le trouver dans
+    requirements.txt — aucun contrôle de type, alors que les règles .ai le
+    promettaient. mypy est configuré (mypy.ini), installé par
+    requirements-dev.txt et exécuté en CI sur backend/ et tests/."""
+    assert Path("mypy.ini").exists()
+    workflow = Path(".github/workflows/ci.yml").read_text(encoding="utf-8")
+    assert "mypy backend tests" in workflow
+    assert "mypy==" in Path("backend/requirements-dev.txt").read_text(encoding="utf-8")
+    script = Path("scripts/lib/validate-python-fastapi.sh").read_text(encoding="utf-8")
+    assert "mypy backend tests" in script
+    assert "[skip] mypy: not installed" not in script
+
+
+def test_backend_application_modules_are_strictly_typed():
+    """BUG-088 : tous les modules applicatifs de backend/ sont vérifiés par
+    mypy en strict (équivalent par module de --strict). Les seules exceptions
+    sont server.py, les scripts ponctuels et les tests : en ajouter une doit
+    être une décision visible, pas une ligne glissée dans mypy.ini."""
+    import configparser
+
+    config = configparser.ConfigParser()
+    config.read("mypy.ini", encoding="utf-8")
+    strict = config["mypy-backend.*"]
+    for flag in (
+        "disallow_any_generics",
+        "disallow_subclassing_any",
+        "disallow_untyped_calls",
+        "disallow_untyped_defs",
+        "disallow_incomplete_defs",
+        "check_untyped_defs",
+        "disallow_untyped_decorators",
+        "warn_unused_ignores",
+        "warn_return_any",
+        "strict_equality",
+        "extra_checks",
+    ):
+        assert strict.getboolean(flag) is True, flag
+    assert strict.getboolean("implicit_reexport") is False
+    assert config["mypy"].getboolean("warn_redundant_casts") is True
+    relaxed = [name for name in config.sections() if name not in ("mypy", "mypy-backend.*")]
+    assert relaxed == ["mypy-backend.server,backend.scripts.*,backend.tests.*"]

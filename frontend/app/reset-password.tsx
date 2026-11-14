@@ -15,6 +15,7 @@ import { useRouter, useLocalSearchParams } from 'expo-router';
 import Ionicons from '@expo/vector-icons/Ionicons';
 import { useAuthStore } from '../store/authStore';
 import { useLanguageStore } from '../store/languageStore';
+import { getErrorMessage } from '../utils/errorDetails';
 
 function checkPassword(password: string) {
   return {
@@ -69,8 +70,8 @@ export default function ResetPasswordScreen() {
     try {
       await resetPassword(token as string, password);
       setSuccess(true);
-    } catch (err: any) {
-      const msg = err?.message ?? '';
+    } catch (err: unknown) {
+      const msg = getErrorMessage(err) ?? '';
       if (msg === 'TOKEN_EXPIRED') {
         setTokenExpired(true);
       } else if (msg === 'TOKEN_INVALID') {

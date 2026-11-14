@@ -52,7 +52,9 @@ def _decode_part(part: Message) -> str:
         payload = part.get_payload(decode=True)
     except Exception:
         return ""
-    if not payload:
+    # get_payload(decode=True) peut renvoyer autre chose que des octets (partie
+    # multipart) : `.decode` lèverait alors AttributeError, non rattrapée.
+    if not isinstance(payload, (bytes, bytearray)) or not payload:
         return ""
     charset = part.get_content_charset() or "utf-8"
     try:
@@ -133,7 +135,9 @@ def fetch_unseen_emails(*, limit: int = 20) -> list[dict[str, Any]]:
     try:
         conn.login(config["address"], config["password"])
         conn.select("INBOX")
-        status, data = conn.uid("search", None, "UNSEEN")
+        # imaplib ignore les arguments None : sans jeu de caractères, la commande
+        # envoyée est identique (`UID SEARCH UNSEEN`).
+        status, data = conn.uid("search", "UNSEEN")
         if status != "OK" or not data or not data[0]:
             return []
         uids = data[0].split()[:limit]
@@ -188,10 +192,11 @@ def move_to_processed(uid: bytes) -> None:
         conn.login(config["address"], config["password"])
         conn.select("INBOX")
         _ensure_processed_mailbox(conn)
-        copy_status, copy_data = conn.uid("copy", uid, _PROCESSED_MAILBOX)
+        uid_text = uid.decode("ascii")
+        copy_status, copy_data = conn.uid("copy", uid_text, _PROCESSED_MAILBOX)
         if copy_status != "OK":
             raise RuntimeError(f"IMAP COPY vers {_PROCESSED_MAILBOX} échoué (uid={uid!r}, status={copy_status}, data={copy_data!r})")
-        conn.uid("store", uid, "+FLAGS", "(\\Deleted)")
+        conn.uid("store", uid_text, "+FLAGS", "(\\Deleted)")
         conn.expunge()
     finally:
         try:

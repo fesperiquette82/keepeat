@@ -1,0 +1,8 @@
+# Outils de développement et de CI (jamais installés sur Render)
+-r requirements.txt
+pytest==9.2.0
+pytest-asyncio==1.4.1.post1
+pytest-xdist==3.8.0
+pip-audit==2.10.1
+ruff==0.17.5
+mypy==2.4.1

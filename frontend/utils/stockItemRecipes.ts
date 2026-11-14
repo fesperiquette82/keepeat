@@ -26,7 +26,7 @@ export interface RecipeCandidate {
   availableIngredients?: string[];
   usedIngredients?: string[];
   used_ingredients?: string[];
-  ingredients?: Array<{ name?: string | null }>;
+  ingredients?: { name?: string | null }[];
   missing_ingredients?: string[];
   missingIngredients?: string[];
 }

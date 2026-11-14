@@ -5,10 +5,8 @@ These tests verify the core logic for image URL validation used for
 recovering images from the Open Food Facts API.
 """
 
-import sys
 from pathlib import Path
 
-import pytest
 
 # Import the script functions
 script_path = Path(__file__).parent.parent / "scripts" / "restore_images_from_openfoodfacts.py"

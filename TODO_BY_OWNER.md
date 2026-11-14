@@ -140,11 +140,34 @@ inachevée. Le chronomètre tourne pendant que le reste avance.
 
 **Avant d'ouvrir au public — qualité**
 
-- [ ] Réparer la suite **Maestro** (seul test de bout en bout, rouge depuis le
-      27/08).
-- [ ] **Épingler les dépendances backend** — à faire depuis un environnement
-      en Python 3.12 (celui de la CI/Render), pas depuis un poste en 3.11.
+- [x] Réparer la suite **Maestro** (seul test de bout en bout, rouge depuis le
+      27/08) — **fait le 14/11 (PR #173)** : suite de fumée verte, 3 scénarios
+      sur 3, après huit correctifs en chaîne (BUG-083, BUG-090 à BUG-096, voir le
+      bilan en fin d'`AUDIT_BUGS.md`). Trois étaient de vrais défauts de l'app
+      (erreurs « [object Object] », onboarding imposé sur un nouvel appareil,
+      onglet Statistiques inutilisable en gratuit). Rien à faire de votre côté ;
+      la suite complète nocturne tournera après la fusion de la PR.
+- [x] **Épingler les dépendances backend** — fait le 12/11 (BUG-081, PR #173) :
+      `requirements.txt` épinglé, `pip-audit` en CI.
 - [ ] **Vérifier le thème sombre sur un vrai appareil** (jamais fait).
+- [ ] **Vérifier la connexion biométrique sur un vrai appareil** après le PR #173
+      (BUG-082) : l'empreinte ouvre désormais une session par jeton, plus par
+      mot de passe rejoué. Scénario : connexion au mot de passe → fermer l'app →
+      bouton empreinte → session ouverte sans mot de passe. Un ancien
+      enregistrement (mot de passe) est effacé au premier lancement : une
+      connexion au mot de passe est nécessaire une fois pour réactiver l'empreinte.
+- [ ] **Vérifier l'écran de connexion clavier ouvert sur un petit téléphone
+      Android** (BUG-092) : après avoir tapé l'e-mail, le champ mot de passe
+      reste-t-il visible, ou le clavier le recouvre-t-il ? Les tests E2E
+      suggèrent qu'il est recouvert sur un petit écran. Me dire ce que vous
+      voyez : si c'est confirmé, je corrige la mise en page.
+- [ ] **Décider du sort de l'auto-merge** (`auto-merge-pr.yml`) : il attend un
+      check nommé « Mobile E2E / Not required (changes filter) » qui n'existe
+      plus (le job s'appelle « …/ Not required or missing required APK »), il
+      n'a donc jamais fusionné un PR. Soit corriger le nom, soit supprimer le
+      workflow — recommandation : supprimer, tu merges à la main et un
+      auto-merge couplé à l'auto-fix Codex ferait atterrir du code sur `main`
+      sans regard humain.
 
 ### Déjà en place (ne pas refaire)
 

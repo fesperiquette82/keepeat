@@ -4,6 +4,7 @@ import assert from 'node:assert/strict';
 function loadAppConfigModule() {
   const modulePath = require.resolve('./appConfig');
   delete require.cache[modulePath];
+  // eslint-disable-next-line @typescript-eslint/no-require-imports -- rechargement volontaire du module entre deux jeux de variables d'environnement
   return require('./appConfig') as typeof import('./appConfig');
 }
 

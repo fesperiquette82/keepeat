@@ -35,7 +35,7 @@ const UNIT_LABELS: Record<IngredientUnit, UnitLabels> = {
   slice: { singular: 'tranche', plural: 'tranches' },
 };
 
-const INGREDIENT_OVERRIDES: Array<{ keywords: string[]; unit: IngredientUnit; quantityPerServing: number }> = [
+const INGREDIENT_OVERRIDES: { keywords: string[]; unit: IngredientUnit; quantityPerServing: number }[] = [
   { keywords: ['oeuf', 'œuf'], unit: 'piece', quantityPerServing: 0.5 },
   { keywords: ['riz'], unit: 'g', quantityPerServing: 75 },
   { keywords: ['pâte', 'pates', 'pâtes', 'semoule', 'quinoa'], unit: 'g', quantityPerServing: 80 },

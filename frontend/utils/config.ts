@@ -20,6 +20,16 @@ const ENV_API_URLS: Record<AppEnv, string> = {
   production: 'https://keepeat-backend.onrender.com',
 };
 
+// BUG-077 : Expo n'inline que les accès STATIQUES à `process.env.EXPO_PUBLIC_*`.
+// L'ancien accès par clé calculée (`process.env[\`EXPO_PUBLIC_BACKEND_URL_${env}\`]`)
+// valait toujours `undefined` dans un build publié : la surcharge par
+// environnement n'a jamais pu fonctionner hors développement.
+const PER_ENV_BACKEND_URL: Record<AppEnv, string | undefined> = {
+  development: process.env.EXPO_PUBLIC_BACKEND_URL_DEVELOPMENT,
+  staging: process.env.EXPO_PUBLIC_BACKEND_URL_STAGING,
+  production: process.env.EXPO_PUBLIC_BACKEND_URL_PRODUCTION,
+};
+
 function normalizeBaseUrl(url: string): string {
   return url.trim().replace(/\/$/, '');
 }
@@ -49,7 +59,7 @@ function resolveApiUrl(): {
   const appEnv = resolveAppEnv();
   const defaultUrl = ENV_API_URLS[appEnv];
   const explicitUrl = process.env.EXPO_PUBLIC_BACKEND_URL?.trim();
-  const perEnvUrl = process.env[`EXPO_PUBLIC_BACKEND_URL_${appEnv.toUpperCase()}`]?.trim();
+  const perEnvUrl = PER_ENV_BACKEND_URL[appEnv]?.trim();
 
   if (appEnv === 'production') {
     const allowedProdUrls = parseAllowedProdUrls(defaultUrl);

@@ -29,7 +29,7 @@
    - **Bug fix**: Test fails on current main (reproduces bug), passes after fix
    - **Feature**: Test describes intended behavior, fails initially (red)
    - **Test location**:
-     - Frontend: `frontend/__tests__/` or co-located `.test.ts`
+     - Frontend: co-located `frontend/utils/*.test.ts` (or `integration/`, `smoke/`)
      - Backend: `backend/tests/` with appropriate suite
 
 5. **Verify test fails (red phase)**

@@ -57,13 +57,13 @@ def ensure_external_allowed(service_name: str) -> None:
 FIXTURES: dict[str, Any] = {
     "users": {
         "free": {
-            "email": "e2e.free@keepeat.test",
+            "email": "e2e.free@example.com",
             "password": "TestPassword123!",
             "is_premium": False,
             "subscription_status": "inactive",
         },
         "premium": {
-            "email": "premium-user@keepeat.test",
+            "email": "premium-user@example.com",
             "password": "Password123!",
             "is_premium": True,
             "subscription_status": "active",

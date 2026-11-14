@@ -8,10 +8,12 @@ from typing import Any
 from bson import ObjectId
 from fastapi import Depends, HTTPException, status
 from fastapi.security import HTTPAuthorizationCredentials, HTTPBearer
-from jose import JWTError, jwt
-from passlib.context import CryptContext
+import bcrypt
+import jwt
+from jwt import PyJWTError as JWTError
 
 from backend.app_core import serialize_mongo, utc_now
+from backend.mongo_types import MongoCollection
 
 
 def get_jwt_secret_key() -> str:
@@ -27,16 +29,34 @@ def get_jwt_secret_key() -> str:
 JWT_ALGORITHM = "HS256"
 JWT_EXPIRE_DAYS = 30
 
-pwd_context = CryptContext(schemes=["bcrypt"], deprecated="auto")
 http_bearer = HTTPBearer(auto_error=False)
+
+# BUG-081 : passlib (abandonné, incompatible avec bcrypt >= 4.1) est remplacé
+# par un appel direct à bcrypt. Les hachés existants (`$2b$12$…`, produits par
+# passlib) restent vérifiables à l'identique : même algorithme, même format.
+#
+# bcrypt ne regarde que les 72 premiers octets du secret. passlib tronquait en
+# silence ; bcrypt >= 4.1 lève une erreur au-delà. On conserve la troncature,
+# explicitement, pour qu'un mot de passe long haché hier se vérifie encore
+# aujourd'hui.
+_BCRYPT_MAX_SECRET_BYTES = 72
+_BCRYPT_ROUNDS = 12  # valeur par défaut de passlib, conservée
+
+
+def _bcrypt_secret(password: str) -> bytes:
+    return password.encode("utf-8")[:_BCRYPT_MAX_SECRET_BYTES]
 
 
 def hash_password(password: str) -> str:
-    return pwd_context.hash(password)
+    return bcrypt.hashpw(_bcrypt_secret(password), bcrypt.gensalt(rounds=_BCRYPT_ROUNDS)).decode("ascii")
 
 
 def verify_password(plain: str, hashed: str) -> bool:
-    return pwd_context.verify(plain, hashed)
+    try:
+        return bcrypt.checkpw(_bcrypt_secret(plain), hashed.encode("ascii"))
+    except (ValueError, TypeError):
+        # Haché illisible (champ corrompu, format inconnu) : refuser, ne pas planter.
+        return False
 
 
 def validate_password(password: str) -> None:
@@ -96,18 +116,18 @@ def token_session_version_is_current(payload: dict[str, Any], user_doc: dict[str
 
 
 async def get_current_user(
-    users_col,
+    users_col: MongoCollection,
     credentials: HTTPAuthorizationCredentials | None = Depends(http_bearer),
 ) -> dict[str, Any]:
     if not credentials or not credentials.credentials:
         raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="Not authenticated")
     try:
         payload = jwt.decode(credentials.credentials, get_jwt_secret_key(), algorithms=[JWT_ALGORITHM])
-        user_id: str = payload.get("sub")
-        if not user_id:
+        user_id = payload.get("sub")
+        if not isinstance(user_id, str) or not user_id:
             raise ValueError("missing sub")
-    except (JWTError, ValueError):
-        raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="Invalid or expired token")
+    except (JWTError, ValueError) as exc:
+        raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="Invalid or expired token") from exc
 
     try:
         doc = await users_col.find_one({"_id": ObjectId(user_id)})

@@ -117,7 +117,7 @@ export function useOcrDatePicker(
             uriToScan = cropped.uri;
           }
         }
-      } catch (_e) {
+      } catch {
         // crop échoué → on utilise l'image complète
       }
 

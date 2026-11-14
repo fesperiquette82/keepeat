@@ -10,6 +10,7 @@ import {
   MonitoringApisResponse,
 } from '../../../utils/adminMonitoringApi';
 import { useAuthStore } from '../../../store/authStore';
+import { getErrorMessage } from '../../../utils/errorDetails';
 
 const PERIODS: ('24h' | '7d' | '30d')[] = ['24h', '7d', '30d'];
 
@@ -26,8 +27,8 @@ function ApiDrillDown({ endpointKey, token }: { endpointKey: string; token: stri
         setError(null);
         const response = await getMonitoringApiDrill(token, { endpoint_key: endpointKey, days: 7 }, controller.signal);
         setDrill(response);
-      } catch (e: any) {
-        setError(e?.message || 'Chargement impossible');
+      } catch (e: unknown) {
+        setError(getErrorMessage(e) || 'Chargement impossible');
       } finally {
         setLoading(false);
       }
@@ -72,8 +73,8 @@ export default function AdminMonitoringApisScreen() {
         const params = buildPeriodParams(period);
         const response = await getMonitoringApis(token, { ...params, limit: 25 }, controller.signal);
         setData(response);
-      } catch (e: any) {
-        setError(e?.message || 'Chargement impossible');
+      } catch (e: unknown) {
+        setError(getErrorMessage(e) || 'Chargement impossible');
       } finally {
         setLoading(false);
       }

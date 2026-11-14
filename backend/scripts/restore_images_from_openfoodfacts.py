@@ -17,7 +17,7 @@ Options:
 import asyncio
 import os
 import sys
-from typing import Optional
+from typing import Any, Optional
 
 import httpx
 from motor.motor_asyncio import AsyncIOMotorClient
@@ -107,11 +107,11 @@ async def restore_images(dry_run: bool = False):
         dry_run: Si True, affiche ce qui serait fait sans modifier la base.
     """
     print("🔍 Connexion à MongoDB...")
-    client = AsyncIOMotorClient(MONGODB_URI)
+    client: AsyncIOMotorClient[dict[str, Any]] = AsyncIOMotorClient(MONGODB_URI)
     db = client[DB_NAME]
     stock_col = db["stock"]
 
-    print(f"📊 Analyse de la collection stock...")
+    print("📊 Analyse de la collection stock...")
 
     # Trouver tous les items avec status active
     cursor = stock_col.find({"status": "active"})
@@ -149,7 +149,6 @@ async def restore_images(dry_run: bool = False):
 
     # Traiter chaque item
     for i, item in enumerate(items_needing_image, 1):
-        item_id = str(item["_id"])
         barcode = item["barcode"].strip()
         name = item.get("name", "Sans nom")
 
@@ -171,12 +170,12 @@ async def restore_images(dry_run: bool = False):
 
                 if result.modified_count > 0:
                     stats["images_updated"] += 1
-                    print(f"  + Image mise a jour dans MongoDB")
+                    print("  + Image mise a jour dans MongoDB")
                 else:
-                    print(f"  ! Echec de mise a jour MongoDB")
+                    print("  ! Echec de mise a jour MongoDB")
         else:
             stats["images_not_found"] += 1
-            print(f"  - Aucune image disponible sur Open Food Facts")
+            print("  - Aucune image disponible sur Open Food Facts")
 
         # Petite pause pour ne pas surcharger l'API
         await asyncio.sleep(0.5)
@@ -207,7 +206,6 @@ async def restore_images(dry_run: bool = False):
 def main():
     """Point d'entrée du script."""
     import argparse
-    import sys
 
     # Force UTF-8 encoding for Windows console
     if sys.platform == "win32":

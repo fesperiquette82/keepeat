@@ -400,7 +400,7 @@ Le `catch` de `updateItem` vérifie désormais `isNetworkError(err)` et déclenc
 |---|---|---|
 | `storageZone` absent du formulaire tickets | `CORRIGÉ` | Sélecteur zones (frigo/placard/congélo) ajouté dans `buildItemRow()` + `selectZone()` + `collectItems()`. |
 | `reopenTicket` non implémenté | `CORRIGÉ` | Endpoint `POST /admin/receipt-tickets/{id}/reopen` ajouté + JS dans la page. |
-| Page `/admin/dashboard` (Vue d'ensemble) | `IMPLÉMENTÉ` | HTML inline `_ADMIN_DASHBOARD_HTML` + route `GET /admin/dashboard`. Appels aux endpoints monitoring/health et monitoring/dashboard. Auto-refresh 60s. |
+| Page `/admin/dashboard` (Vue d'ensemble) | `IMPLÉMENTÉ` | HTML `ADMIN_DASHBOARD_HTML` (dans `backend/admin_pages.py` depuis BUG-087) + route `GET /admin/dashboard`. Appels aux endpoints monitoring/health et monitoring/dashboard. Auto-refresh 60s. |
 | Navigation inter-pages admin | `IMPLÉMENTÉ` | Lien Dashboard ajouté dans nav de `/admin/tickets`. Liens Dashboard + Tickets ajoutés dans `/admin/recipes`. |
 | Tests `test_admin_monitoring.py` (14 tests) | `AJOUTÉ` | `normalize_endpoint_key`, `classify_error_type`, `test_dashboard_route_exists`. |
 
@@ -1144,3 +1144,330 @@ Le cas le plus visible était le premier : le chemin le plus utilisé étiquetai
 **Commandes exécutées :** `PYTHONPATH=backend python -m pytest tests backend/tests -q`
 **Résultat :** PASS
 **Risques restants :** l'authentification reste un **secret partagé**, pas une vérification du jeton OIDC signé par Google — quiconque connaît l'URL complète (jeton inclus) peut poster une notification. C'est le motif que Google documente pour ce cas et il vaut ce que vaut la confidentialité de l'URL : ne jamais la journaliser ni la partager. Vérifier la signature OIDC serait plus robuste et reste une amélioration possible. Par ailleurs la configuration côté Google (sujet Pub/Sub, souscription push) n'a pas pu être testée depuis cet environnement : elle relève du compte Google du propriétaire, et le premier message test envoyé depuis Play Console fera foi.
+
+## BUG-075 — La suite backend mettait 58 minutes en CI faute de MongoDB
+
+**Contexte :** découvert le 12/11 lors de l'analyse générale du projet. Jusqu'au 09/09 la CI ne lançait que 7 fichiers de tests choisis à la main (BUG-070) et durait 2 min ; depuis que la suite complète tourne, le job « Backend regression tests » dure **58 min** à chaque run. Cause : aucun service MongoDB n'est déclaré dans les jobs CI, le client Motor pointe sur `localhost:27017`, et chaque opération attend le délai de sélection de serveur du pilote — **30 secondes** — avant que le code appelant n'avale l'erreur. Exemple typique : `tests/test_billing_api_v1.py` remplace `users_col` par un faux mais pas `business_events_col` ; le handler appelle `track_business_event`, qui attend 30 s, ignore l'erreur, et le test passe. Le même schéma se répète dans des dizaines de tests : ils **passaient sans tester la base**. S'y ajoutaient des variables CI que le code ne lit pas (`MONGODB_URI`, `JWT_SECRET` — le code lit `MONGO_URL`, `JWT_SECRET_KEY`), masquant le fait que la CI ne configurait rien.
+
+| ID | Sévérité | Statut | Résumé |
+|---|---|---|---|
+| BUG-075 | 🟠 MAJEUR (CI inutilisable au quotidien, tests non probants) | `CORRIGÉ` | (1) Service `mongo:7` déclaré dans les trois jobs qui lancent pytest (`ci.yml`, `main-release-post-merge.yml`, `admin-dashboard-monitoring.yml`) : les tests touchant la base le font désormais vraiment. (2) Nouveau `backend/mongo_settings.py` : le délai de sélection devient réglable par `MONGO_SERVER_SELECTION_TIMEOUT_MS` (borné, défaut du pilote si absent ou illisible), et les deux `conftest.py` le fixent à 500 ms avec les autres valeurs d'environnement de test — un poste de dev sans Mongo échoue vite au lieu d'attendre. (3) Variables CI renommées vers celles que le code lit, `DB_NAME=keepeat_test` explicite. |
+
+**Fichiers modifiés :** `backend/server.py` (construction du client), `backend/mongo_settings.py` (nouveau), `tests/conftest.py`, `backend/tests/conftest.py`, `.github/workflows/ci.yml`, `.github/workflows/main-release-post-merge.yml`, `.github/workflows/admin-dashboard-monitoring.yml`
+**Tests ajoutés/mis à jour :** `backend/tests/test_mongo_settings.py` (helper borné, conftest réglés, workflows avec service Mongo et bonnes variables)
+**Commandes exécutées :** `bash scripts/ai-validate.sh` (voir résultat CI du PR pour la durée réelle du job)
+**Résultat :** PASS en local ; durée CI à confirmer sur le PR
+**Risques restants :** avec un MongoDB réel, des tests qui « passaient » en avalant des erreurs exercent maintenant la base pour de vrai : des dépendances d'état entre tests peuvent apparaître (données laissées par un test précédent). La base `keepeat_test` du service CI est neuve à chaque job, ce qui limite le risque à l'intérieur d'un même run. Le reste de la lenteur (hors Mongo) sera à profiler avec `--durations` une fois le service en place.
+
+## BUG-076 — Le lint frontend ne couvrait qu'un quart du code (et laissait passer des journaux avec l'adresse e-mail)
+
+**Contexte :** découvert le 12/11. `npm run lint` lançait `expo lint` sans argument, qui ne lint que `src/`, `app/` et `components/`. Le code de KeepEat vit aussi dans `component/` (singulier), `store/`, `utils/`, `data/`, `integration/` et `smoke/` : tout cela échappait au lint, en local comme en CI, alors que le job « Frontend regression tests » s'affichait vert. ESLint lancé directement remontait **31 erreurs** et 50 avertissements, dont 14 `console.log` dans `store/authStore.ts` qui court-circuitaient le logger central et, à la connexion, **journalisaient l'adresse e-mail de l'utilisateur** (`login called with email:`). La règle `no-console: error` existait dans `eslint.config.js` ; elle n'était simplement jamais appliquée là où ça comptait.
+
+| ID | Sévérité | Statut | Résumé |
+|---|---|---|---|
+| BUG-076 | 🟠 MAJEUR (garde-fou aveugle, donnée personnelle dans les journaux) | `CORRIGÉ` | `"lint": "eslint ."` avec les répertoires générés en `ignores` (`.test-dist`, `.expo`, `dist`, `android`) et une exception explicite pour `scripts/**` (sortie console normale d'un script de build). Toutes les erreurs corrigées : `authStore.ts` passe par `logger` et ne journalise plus l'e-mail ; `logger.ts` est le seul fichier autorisé à appeler `console` (désactivation locale commentée) ; `require()` de secours pour l'environnement de test Node explicitement assumés ; imports réordonnés, variables mortes supprimées (`authHeaders`, `stats`, mocks inutilisés de `login.test.ts`), `isAxiosError` importé nommément, dépendances d'effet explicites dans `AnimatedLogo`. Les 28 avertissements `array-type` corrigés automatiquement. **0 erreur, 0 avertissement** sur l'ensemble du projet. |
+
+**Fichiers modifiés :** `frontend/package.json`, `frontend/eslint.config.js`, `frontend/store/authStore.ts`, `frontend/store/appSettingsStore.ts`, `frontend/store/stockStore.ts`, `frontend/utils/logger.ts`, `frontend/utils/debugSwipeLogger.ts`, `frontend/utils/accountExportFile.ts`, `frontend/utils/iapService.ts`, `frontend/utils/useOcrDatePicker.ts`, `frontend/utils/login.test.ts`, `frontend/utils/appConfig.test.ts`, `frontend/component/AnimatedLogo.tsx`, plus les fichiers touchés par `eslint --fix`
+**Tests ajoutés/mis à jour :** la CI elle-même (le job lint couvre désormais tout le code : toute régression `no-console` bloque le PR) ; `frontend/utils/staticEnvAccess.test.ts` (voir BUG-077)
+**Commandes exécutées :** `cd frontend && npx eslint . && npm run typecheck && npm run test:ci`
+**Résultat :** PASS
+**Risques restants :** les `catch (e: any)` (~40) et `router.push('…' as any)` restent tolérés par la configuration ESLint d'Expo ; ils relèvent d'un chantier de typage séparé (point n° 10 de `docs/ANALYSE_2026-11-12.md`).
+
+## BUG-077 — Les variables `EXPO_PUBLIC_*` lues dynamiquement ne pouvaient jamais agir dans un build publié
+
+**Contexte :** révélé par BUG-076 (règle `expo/no-dynamic-env-var`). Expo n'inline dans le bundle que les accès **statiques** à `process.env.EXPO_PUBLIC_*` ; un accès par clé calculée vaut toujours `undefined` dans un build publié. Deux endroits y recouraient : `utils/debugConfig.ts` (`process.env[name]`) — les flags de diagnostic promis par BUG-067 (« activer ponctuellement un diagnostic sur un build de test ») ne pouvaient donc **jamais** s'allumer hors développement — et `utils/config.ts` (``process.env[`EXPO_PUBLIC_BACKEND_URL_${env}`]``) — la surcharge d'URL backend par environnement n'a jamais fonctionné dans un build.
+
+| ID | Sévérité | Statut | Résumé |
+|---|---|---|---|
+| BUG-077 | 🟡 MINEUR (fonctionnalités de configuration silencieusement inopérantes) | `CORRIGÉ` | Accès statiques : `envFlag(process.env.EXPO_PUBLIC_DEBUG_SWIPE_ACTIONS)` et `envFlag(process.env.EXPO_PUBLIC_DEBUG_LOG_TO_CONSOLE)` dans `debugConfig.ts` ; table `PER_ENV_BACKEND_URL` à trois entrées statiques dans `config.ts`. |
+
+**Fichiers modifiés :** `frontend/utils/debugConfig.ts`, `frontend/utils/config.ts`
+**Tests ajoutés/mis à jour :** `frontend/utils/staticEnvAccess.test.ts` — interdit tout `process.env[...]` dynamique dans `app/`, `component/`, `store/`, `utils/`, `data/`
+**Commandes exécutées :** `cd frontend && npm run test:ci`
+**Résultat :** PASS
+**Risques restants :** aucun.
+
+## BUG-078 — Permissions d'alarme exacte déclarées sans usage (risque de rejet Play Store)
+
+**Contexte :** découvert le 12/11 en relisant `app.json` dans la perspective de la publication. `SCHEDULE_EXACT_ALARM` et `USE_EXACT_ALARM` étaient déclarées alors qu'aucune alarme exacte n'est programmée : les rappels de péremption utilisent les déclencheurs `DATE` et `TIME_INTERVAL` d'`expo-notifications`, qui n'en ont pas besoin (vérifié : le module n'injecte pas ces permissions lui-même). Google Play réserve `USE_EXACT_ALARM` aux réveils, minuteurs et calendriers ; une déclaration injustifiée expose la fiche à un rejet ou à une demande de justification bloquante lors de la revue.
+
+| ID | Sévérité | Statut | Résumé |
+|---|---|---|---|
+| BUG-078 | 🟠 MAJEUR (bloquant potentiel pour la publication) | `CORRIGÉ` | Les deux permissions retirées de `app.json`. Les permissions réellement utilisées (caméra, notifications, facturation, médias, démarrage) restent déclarées. |
+
+**Fichiers modifiés :** `frontend/app.json`
+**Tests ajoutés/mis à jour :** `frontend/smoke/androidPermissions.smoke.test.ts` (interdit le retour des deux permissions, vérifie que les permissions utiles restent présentes)
+**Commandes exécutées :** `cd frontend && npm run test:smoke`
+**Résultat :** PASS
+**Risques restants :** à vérifier sur appareil au prochain build : les rappels J-1 arrivent toujours (déclencheurs inexacts, tolérance de quelques minutes acceptable pour ce cas d'usage).
+
+## BUG-079 — La validation canonique ne démarrait pas telle que documentée, et le backend n'avait ni lint ni typage
+
+**Contexte :** découvert le 12/11. `./scripts/ai-validate.sh` — la commande que `CLAUDE.md`, `AGENTS.md` et `.ai/core-rules.md` imposent avant tout commit — répondait « Permission denied » : les scripts étaient versionnés en mode `100644`. Par ailleurs `scripts/lib/validate-python-fastapi.sh` saute ruff, black et mypy dès qu'ils ne figurent pas dans `requirements.txt`, ce qui est le cas : le backend n'a **aucun** lint ni contrôle de typage, alors que `.ai/core-rules.md` promet « mypy strict mode (backend) » (mesuré : 115 erreurs en mode normal, 1 603 en strict). Enfin la validation exécutait pytest dans l'ordre `backend/tests tests`, différent de la CI, ce qui révélait un échec dépendant de l'ordre (client Motor lié à une boucle asyncio fermée, cf. BUG-075).
+
+| ID | Sévérité | Statut | Résumé |
+|---|---|---|---|
+| BUG-079 | 🟡 MINEUR (processus) | `CORRIGÉ` (ruff branché le 14/11 — BUG-084 ; mypy branché le 14/11 — BUG-086) | Scripts repassés en `100755` (`git update-index --chmod=+x`). Dépendance à l'ordre d'exécution supprimée par la fixture de reliaison Motor dans les deux `conftest.py` : la suite passe quel que soit l'ordre. **Reste à faire :** `requirements-dev.txt` avec ruff + mypy et leur branchement dans le script et la CI (mypy en mode normal d'abord, 115 erreurs à résorber), et la mise en cohérence de `.ai/core-rules.md` avec ce qui est réellement contrôlé. |
+
+**Fichiers modifiés :** `scripts/ai-validate.sh`, `scripts/lib/*.sh` (mode), `tests/conftest.py`, `backend/tests/conftest.py`
+**Tests ajoutés/mis à jour :** la suite backend exécutée dans les deux ordres (`tests backend/tests` et `backend/tests tests`)
+**Commandes exécutées :** `bash scripts/ai-validate.sh`
+**Résultat :** PASS
+**Risques restants :** tant que ruff/mypy ne sont pas branchés, les règles `.ai` surestiment ce que la CI garantit côté backend.
+
+## BUG-080 — 7 330 fichiers de cache Metro et l'index d'un outil de bureau étaient versionnés
+
+**Contexte :** découvert le 12/11. `frontend/.metro-cache/` (7 330 fichiers, 12,8 Mo) était suivi par git malgré la ligne `.metro-cache/` de `.gitignore`, ajoutée après coup sans `git rm --cached`. `.project_assistant/memory.json` (4,3 Mo) est l'index d'un assistant de bureau Windows, avec le chemin local de la machine en clair. Les deux alourdissent chaque clone et chaque checkout CI, polluent les recherches et les diffs, et le second expose une information personnelle.
+
+| ID | Sévérité | Statut | Résumé |
+|---|---|---|---|
+| BUG-080 | 🟡 MINEUR (hygiène du dépôt) | `CORRIGÉ` | `git rm -r --cached` sur les deux répertoires ; `.project_assistant/` ajouté à `.gitignore`. Les fichiers restent sur le poste de travail du propriétaire, seul le suivi git cesse. Dans le même mouvement : suppression de la configuration Jest morte (`jest.config.js`, `setupTests.ts`, `test-setup.js` — les tests tournent sous `node --test`, Jest n'était même pas installé), du script Expo d'exemple `reset-project.js`, d'un fichier `New Document texte.txt` oublié ; `eas-cli` retiré des `devDependencies` (installation très lourde, `npx eas-cli` suffit) et `@expo/ngrok` déplacé vers les `devDependencies` ; 9 documents d'analyse figés depuis juin archivés dans `docs/archive/`, 4 notes de debug frontend regroupées dans `docs/frontend/` ; `CLAUDE.md` et les règles `.ai` corrigés : ils décrivaient `frontend/__tests__/`, qui n'a jamais existé (les tests sont co-localisés). |
+
+**Fichiers modifiés :** `.gitignore`, `frontend/package.json`, `frontend/package-lock.json`, `CLAUDE.md`, `.ai/core-rules.md`, `.ai/test-policy.md`, `.ai/stacks/react-native-expo.md`, déplacements vers `docs/archive/` et `docs/frontend/`, ajout de `docs/ANALYSE_2026-11-12.md`
+**Tests ajoutés/mis à jour :** aucun (hygiène du dépôt, sans logique) — raison technique documentée ici
+**Commandes exécutées :** `bash scripts/ai-validate.sh`
+**Résultat :** PASS
+**Risques restants :** l'historique git conserve les anciens blobs (25 Mo de `.git`) ; une réécriture d'historique n'est pas justifiée.
+
+## BUG-081 — Dépendances backend vulnérables, abandonnées et non épinglées
+
+**Contexte :** découvert le 12/11 par `pip-audit`. `pymongo==4.5.0` (2023) cumulait **7 avis de sécurité** (corrigés à partir de 4.18.3) ; `python-jose` est abandonné (un avis, et il entraîne `ecdsa`, lui aussi signalé) ; `passlib` est abandonné et incompatible avec `bcrypt >= 4.1` (lecture de version cassée — c'est la raison du `bcrypt==4.1.3` figé), ce qui bloquait toute mise à jour de bcrypt. Le reste était en `>=` non épinglé : chaque déploiement Render pouvait installer autre chose que ce qui avait été testé.
+
+| ID | Sévérité | Statut | Résumé |
+|---|---|---|---|
+| BUG-081 | 🟠 MAJEUR (sécurité de la chaîne de dépendances) | `CORRIGÉ` | `python-jose` → **PyJWT** (`auth_utils.py`, `gmail_oauth_service.py`, `observability.py`, `household_service.py` : même API `encode`/`decode`, exception `PyJWTError` sous le même nom local). `passlib` → **bcrypt direct** : même algorithme, même format `$2b$12$…`, troncature explicite à 72 octets conservée pour que les hachés existants — y compris ceux de mots de passe longs, que passlib tronquait en silence — se vérifient à l'identique. `pymongo` 4.19.0 et `motor` 3.7.1. **Toutes les versions épinglées** dans `requirements.txt` ; nouveau `requirements-dev.txt` (pytest, pytest-asyncio, pytest-xdist, pip-audit) utilisé par la CI et le script de validation. **`pip-audit -r backend/requirements.txt` ajouté au job CI** : une vulnérabilité connue bloque désormais le PR. |
+
+**Fichiers modifiés :** `backend/requirements.txt`, `backend/requirements-dev.txt` (nouveau), `backend/auth_utils.py`, `backend/gmail_oauth_service.py`, `backend/observability.py`, `backend/household_service.py`, `.github/workflows/ci.yml`, `.github/workflows/main-release-post-merge.yml`, `.github/workflows/admin-dashboard-monitoring.yml`, `scripts/lib/validate-python-fastapi.sh`, `README.md`
+**Tests ajoutés/mis à jour :** `backend/tests/test_password_hashing.py` (hachés passlib de référence figés, mot de passe > 72 octets, aller-retour, haché illisible, jetons PyJWT) ; `backend/tests/test_session_revocation.py` décode désormais avec PyJWT
+**Commandes exécutées :** `pip-audit -r backend/requirements.txt` (0 vulnérabilité), `bash scripts/ai-validate.sh`
+**Résultat :** PASS
+**Risques restants :** Motor est annoncé en fin de vie par MongoDB (dépréciation mai 2026, fin de support mai 2027) au profit du client asynchrone natif de PyMongo : migration à planifier avant cette échéance. Le job `pip-audit` échouera à la publication de tout nouvel avis sur une dépendance épinglée : c'est voulu, la réponse attendue est une mise à jour ciblée.
+
+## BUG-082 — La connexion biométrique stockait le mot de passe en clair sur l'appareil
+
+**Contexte :** découvert le 12/11 lors de l'analyse générale. Pour permettre la connexion par empreinte, `authStore.login` sérialisait `{ email, password }` dans SecureStore et `loginWithBiometrics` rejouait un login classique avec ces valeurs. L'entrée est chiffrée par le Keystore et protégée par l'authentification de l'appareil, mais c'est le **vrai mot de passe** de l'utilisateur (souvent réutilisé ailleurs) qui dormait sur le téléphone, impossible à révoquer à distance : un appareil compromis ou une sauvegarde extraite l'exposait tel quel.
+
+| ID | Sévérité | Statut | Résumé |
+|---|---|---|---|
+| BUG-082 | 🟠 MAJEUR (sécurité, donnée d'authentification persistée) | `CORRIGÉ` | Derrière l'empreinte ne dort plus qu'un **jeton de session** (`serializeBiometricSession(email, access_token)`). `loginWithBiometrics` soumet ce jeton à `GET /api/auth/me` : le serveur reste seul juge (expiration à 30 jours, révocation par `session_version`, BUG-068). Un 401 efface la session biométrique et renvoie l'utilisateur au mot de passe (message dédié) ; un réseau indisponible la conserve. Au démarrage, seul un **marqueur non protégé** dit si une session existe (plus de lecture de la charge utile protégée hors usage) ; sans marqueur, tout reste de l'ancienne version — donc tout mot de passe stocké — est **effacé**, et la prochaine connexion au mot de passe réenregistre un jeton. Une charge utile portant une clé `password` n'est jamais acceptée comme session, même accompagnée d'un jeton. |
+
+**Fichiers modifiés :** `frontend/utils/biometricAuth.ts`, `frontend/store/authStore.ts`, `frontend/app/login.tsx`
+**Tests ajoutés/mis à jour :** `frontend/utils/biometricAuth.test.ts` (sérialisation sans mot de passe, rejet des charges héritées, décision 200/401/réseau), `frontend/utils/auditBugsSourceChecks.test.ts` (le store ne sérialise jamais le mot de passe et ne rejoue jamais un login)
+**Commandes exécutées :** `cd frontend && npx eslint . && npm run typecheck && npm run test:ci`
+**Résultat :** PASS
+**Risques restants :** à vérifier sur un appareil réel (jamais possible depuis cet environnement) : l'invite d'authentification à la lecture de la charge utile, puis l'ouverture de session après `/api/auth/me`. Changement de comportement assumé : après 30 jours sans connexion au mot de passe, l'empreinte ne suffit plus (le jeton a expiré) — c'est le prix de la révocabilité. Comme avant, la session biométrique survit à une déconnexion explicite ; la rendre caduque à la déconnexion serait une décision produit à prendre séparément.
+
+## BUG-083 — L'APK E2E n'embarquait aucun bundle JavaScript : Maestro échouait avant l'écran de connexion
+
+**Contexte :** découvert le 13/11 en analysant les journaux du job « Mobile E2E / PR smoke Maestro suite » du PR #173 et du nightly sur `main` (rouge chaque nuit, « depuis le 27/08 » selon `TODO_BY_OWNER.md`). Les scénarios `01-auth-session` et `02-navigation-main-tabs` échouaient sur `Assertion is false: id: tab-home is visible`, et le backend de test ne recevait **aucune** requête `POST /api/auth/login` : l'application n'atteignait jamais l'écran de connexion. Le journal de construction de l'APK le confirme : aucune tâche `createBundleDebugJsAndAssets`, aucun `export:embed`, aucun `index.android.bundle`. Le plugin Gradle de React Native ne bundle pas la variante debug (`debuggableVariants = ["debug"]`, défaut repris par le template Expo) : l'app attend un serveur Metro, qui n'existe pas en CI. Le scénario `00-smoke-launch` « passait » parce que ses deux assertions étaient `optional: true`.
+
+| ID | Sévérité | Statut | Résumé |
+|---|---|---|---|
+| BUG-083 | 🟠 MAJEUR (seul test de bout en bout inopérant) | `CORRIGÉ` (confirmé le 14/11 : suite Maestro de la PR verte, 3 scénarios sur 3, après les correctifs en chaîne BUG-090 à BUG-096) | `app.config.js` : plugin de configuration `withAppBuildGradle` qui ajoute `debuggableVariants = []` au bloc `react {}` quand `EXPO_E2E_EMBED_BUNDLE=1` (idempotent, échoue bruyamment si le bloc est introuvable ; Metro reste utilisé en développement local). Les deux workflows E2E posent le flag au prebuild **et** au build (le bundle est produit par Gradle, les `EXPO_PUBLIC_*` doivent y être présentes), puis vérifient la présence d'`assets/index.android.bundle` dans l'APK, sinon le job échoue avec un message explicite. `00-smoke-launch.yaml` exige désormais l'écran de connexion ou l'onglet accueil. |
+
+**Fichiers modifiés :** `frontend/app.config.js`, `.github/workflows/mobile-e2e.yml`, `.github/workflows/mobile-e2e-nightly.yml`, `.maestro/00-smoke-launch.yaml`, `TODO_BY_OWNER.md`
+**Tests ajoutés/mis à jour :** `frontend/smoke/appConfigE2eBundle.smoke.test.ts` (flag, réécriture Gradle idempotente, échec bruyant, plugin attaché seulement en E2E), `tests/test_ci_non_regression_policy.py::test_e2e_debug_apk_embeds_js_bundle` et `::test_smoke_launch_flow_is_not_vacuous`
+**Commandes exécutées :** `bash scripts/ai-validate.sh`
+**Résultat :** PASS en local ; **le verdict appartient au run CI** (job Maestro du PR #173, puis nightly) — impossible d'exécuter un émulateur depuis cet environnement.
+**Risques restants :** une fois l'application réellement exécutée en CI, des scénarios peuvent révéler de vrais défauts (lenteur de l'émulateur sans KVM, `testID` manquants) : ce seront des bugs distincts à traiter un par un. Correction du 14/11 : le bundle est produit en mode production (`devEnabled=false` pour une variante non débogable dans le plugin Gradle de React Native), ce qui a causé BUG-090.
+
+
+## BUG-084 — Un test du dashboard admin passait grâce à une NameError absorbée ; ruff branché sur le backend
+
+**Contexte :** révélé le 14/11 en branchant ruff (suite de BUG-079), règle `F821` (nom indéfini). Dans `backend/tests/test_admin_monitoring_dashboard_api.py::test_dashboard_survives_kpis_source_exception_with_block_fallbacks`, le faux de la source « quotas » avait été copié depuis `_patch_dashboard_sources` et référençait une variable `quotas` qui n'existe pas dans ce test. Chaque appel levait `NameError`, que le dashboard absorbe en repli de bloc : le test passait sans jamais exercer le bloc quotas nominal qu'il prétend préserver quand seule la source KPI tombe.
+
+| ID | Sévérité | Statut | Résumé |
+|---|---|---|---|
+| BUG-084 | 🟡 MINEUR (test non probant) | `CORRIGÉ` | Le faux renvoie la fixture nominale, et une assertion vérifie désormais que le bloc `external_service_quotas` reste intact quand la source KPI échoue. Vérifié probant : avec l'ancien faux, le test échoue. Dans le même mouvement, **ruff branché sur le backend** : `ruff.toml` (règles de base E4/E7/E9/F, `E402` toléré là où l'environnement doit être posé avant les imports), `ruff==0.17.5` dans `requirements-dev.txt`, étape « Lint (ruff) » en CI, script de validation qui échoue si l'outil manque au lieu de sauter. 37 findings résorbés : imports et variables inutilisés (dont `required_ingredients`, calcul mort dans `server.py`), f-strings sans paramètre, 4 calculs morts dans le test de politique CI, réponse non vérifiée dans `test_recipe_gap_upsert.py` (assertion de statut ajoutée). `backend/utils/constants.py` supprimé : jamais importé, brouillon inachevé (« copier-coller depuis server.py ») dont les 11 clés de mois en double étaient signalées. `aiosmtplib` retiré des dépendances : plus aucun import (les e-mails passent par l'API HTTP de Brevo). |
+
+**Fichiers modifiés :** `ruff.toml` (nouveau), `backend/requirements.txt`, `backend/requirements-dev.txt`, `.github/workflows/ci.yml`, `scripts/lib/validate-python-fastapi.sh`, `backend/server.py`, `backend/household_service.py`, `backend/scripts/*.py`, 11 fichiers de tests ; suppression de `backend/utils/constants.py`
+**Tests ajoutés/mis à jour :** `test_dashboard_survives_kpis_source_exception_with_block_fallbacks` (assertion sur le bloc quotas), `tests/test_ci_non_regression_policy.py::test_backend_is_linted_with_ruff`
+**Commandes exécutées :** `ruff check backend tests`, `pip-audit -r backend/requirements.txt`, `bash scripts/ai-validate.sh`
+**Résultat :** PASS — 0 finding ruff, 0 vulnérabilité
+**Risques restants :** règles volontairement minimales ; les familles `B` (bugbear) et `UP` (modernisation) totalisent ~330 findings à traiter par paliers. mypy reste à brancher (115 erreurs en mode normal).
+
+## BUG-085 — 46 `catch (e: any)` lisaient l'erreur sans aucune vérification
+
+**Contexte :** découvert le 12/11 lors de l'analyse générale (point n° 10), traité le 14/11. Le frontend interceptait les erreurs en `catch (e: any)` puis lisait `e.message`, `e.response.data.detail` ou `e.response.status` directement : `any` désactivait toute vérification. Un `throw` de chaîne ou de `null` donnait `undefined` en silence, et `isNetworkError` (`stockStore.ts`) levait même une `TypeError` (`err.response` sur `null`) qui masquait l'erreur d'origine.
+
+| ID | Sévérité | Statut | Résumé |
+|---|---|---|---|
+| BUG-085 | 🟡 MINEUR (robustesse, dette de typage) | `CORRIGÉ` | Nouveau `frontend/utils/errorDetails.ts` : `getErrorMessage`, `getHttpStatus`, `getApiErrorDetail`, `getHttpResponseData` — lecture typée d'une valeur `unknown`, sans jamais lever. Les **46** blocs `catch (x: any)` de 20 fichiers passent en `catch (x: unknown)` et lisent l'erreur par ces helpers (conversion outillée, limitée au corps de chaque `catch`, vérifiée par `tsc`). `isNetworkError`, `handlePremiumOrQuotaError`, `extractPremiumErrorDetail` et le `.catch` de `verify-email.tsx` reçoivent `unknown` ; `ErrorBoundary` est typé (`Props`, `React.ErrorInfo`). Les `any` restants (63) sont des frontières avec l'API (réponses non modélisées), des replis pour l'environnement de test Node et des chemins Expo Router dynamiques : chantier séparé. |
+
+**Fichiers modifiés :** `frontend/utils/errorDetails.ts` (nouveau), `frontend/utils/premiumErrors.ts`, `frontend/component/ErrorBoundary.tsx`, `frontend/store/{authStore,stockStore,recipesStore,householdStore}.ts`, 16 écrans de `frontend/app/`
+**Tests ajoutés/mis à jour :** `frontend/utils/errorDetails.test.ts` (formes usuelles et inattendues pour chaque helper, garde-fou qui interdit le retour de `catch (x: any)` dans le code applicatif)
+**Commandes exécutées :** `cd frontend && npx tsc --noEmit && npx eslint . && npm run test:ci`, `bash scripts/ai-validate.sh`
+**Résultat :** PASS
+**Risques restants :** changement purement défensif — pour une `Error` ou une erreur axios, les valeurs lues sont identiques à avant. Seul écart : une chaîne levée telle quelle est désormais lue comme message au lieu de donner `undefined`.
+
+
+## BUG-086 — mypy branché sur le backend : trois défauts réels révélés
+
+**Contexte :** 14/11, suite de BUG-079. Le backend n'avait aucun contrôle de type (115 erreurs mypy mesurées le 12/11, alors que `.ai/core-rules.md` promettait « mypy strict »). La mise à zéro a surtout demandé de préciser des signatures — mais trois erreurs signalaient de vrais défauts.
+
+| ID | Sévérité | Statut | Résumé |
+|---|---|---|---|
+| BUG-086 | 🟡 MINEUR (robustesse + processus) | `CORRIGÉ` | **Défauts réels :** (1) `email_import_service._decode_part` appelait `.decode` sur le résultat de `get_payload(decode=True)`, qui n'est pas toujours des octets : `AttributeError` non rattrapée, l'e-mail entier échouait au lieu d'ignorer la partie ; (2) `join_household` relisait le foyer après l'ajout du membre sans vérifier qu'il existait encore : `AttributeError` (HTTP 500) en cas de suppression concurrente, désormais 404 `HOUSEHOLD_NOT_FOUND` ; (3) les commandes IMAP recevaient l'UID en octets là où imaplib est typé en texte (commande envoyée identique, imaplib encode lui-même). **Signatures précisées :** surcharges de `serialize_mongo` et `resolve_billing_user_doc` (dict → dict, None → None), `Protocol` pour `send_push` (appelé avec des arguments nommés), noms de plan en `Literal` (`PlanName`, constantes `Final`), modèles `BillingFeatureAccess` / `BillingFeatureUsage` construits explicitement, pipelines d'agrégation annotés, `RecipeMatchStatus` explicite, chemin du catalogue normalisé avant le cache `lru_cache`, `_dict_or_empty` pour les blocs du dashboard. **Outillage :** `mypy.ini` (mode normal, `backend/` et `tests/`), `mypy==2.4.1` dans `requirements-dev.txt`, étape « Type check (mypy) » en CI, script de validation qui échoue si l'outil manque. Règles `.ai` et `CLAUDE.md` alignées : mode normal exécuté, strict en cible, module par module. |
+
+**Fichiers modifiés :** `mypy.ini` (nouveau), `backend/app_core.py`, `backend/auth_utils.py`, `backend/alerts.py`, `backend/entitlements.py`, `backend/household_service.py`, `backend/google_play_billing.py`, `backend/email_import_service.py`, `backend/recipes_service.py`, `backend/server.py`, `backend/scripts/*.py`, `backend/migrations/20260331_observability_collections.py`, `backend/requirements-dev.txt`, `.github/workflows/ci.yml`, `scripts/lib/validate-python-fastapi.sh`, `.ai/core-rules.md`, `.ai/stacks/python-fastapi.md`, `CLAUDE.md`
+**Tests ajoutés/mis à jour :** `backend/tests/test_email_import.py::test_decode_part_ignores_non_bytes_payload` (+ UID attendu en texte dans le test IMAP existant), `backend/tests/test_household_sharing.py::test_join_returns_404_when_household_vanishes_during_join`, `tests/test_ci_non_regression_policy.py::test_backend_is_type_checked_with_mypy`. Les deux tests de comportement vérifiés probants : ils échouent sans les correctifs.
+**Commandes exécutées :** `mypy backend tests` (0 erreur, 99 fichiers), `ruff check backend tests`, `bash scripts/ai-validate.sh`
+**Résultat :** PASS
+**Risques restants :** mode normal seulement — les fonctions non annotées ne sont pas vérifiées (notes `annotation-unchecked`). Le passage en strict se fera module par module (`[mypy-backend.xxx]` dans `mypy.ini`), en commençant par les modules purs (`google_play_billing`, `entitlements`, `mongo_settings`).
+
+## BUG-087 — `server.py` portait 1 600 lignes de HTML en ligne
+
+**Contexte :** 14/11, premier lot du découpage de `server.py` (7 966 lignes). Un cinquième du fichier était du HTML et du JavaScript statiques : politique de confidentialité, page de suppression de compte et trois pages admin (recettes, tickets, dashboard). Ces blocs noyaient la logique, gonflaient chaque diff et rendaient les recherches dans le backend bruyantes.
+
+| ID | Sévérité | Statut | Résumé |
+|---|---|---|---|
+| BUG-087 | 🟡 MINEUR (maintenabilité) | `CORRIGÉ` | Pages déplacées à l'identique, au caractère près (vérifié par comparaison des valeurs avant et après) : `backend/legal_pages.py` (`PRIVACY_POLICY_HTML`, `ACCOUNT_DELETION_HTML`) et `backend/admin_pages.py` (`ADMIN_RECIPES_HTML`, `ADMIN_TICKETS_HTML`, `ADMIN_DASHBOARD_HTML`). `server.py` les importe et les sert par les mêmes routes ; il passe de 7 966 à 6 332 lignes. **Ce qui reste dans `server.py`, et pourquoi :** les routes. Les tests remplacent les collections directement sur le module (`monkeypatch.setattr(server, "users_col", …)`) ; une route déplacée dans un autre module lirait sa propre référence et ignorerait ce remplacement sans erreur. Le découpage des routes demande d'abord d'injecter les collections (dépendance FastAPI ou objet de contexte) et d'adapter les tests en conséquence. |
+
+**Fichiers modifiés :** `backend/server.py`, `backend/legal_pages.py` (nouveau), `backend/admin_pages.py` (nouveau), `backend/tests/test_admin_monitoring.py` et `backend/tests/test_account_deletion_completeness.py` (nouveaux noms des constantes)
+**Tests ajoutés/mis à jour :** `backend/tests/test_static_pages_modules.py` (chaque route sert exactement le contenu de son module en `text/html` ; aucune page HTML complète en ligne dans `server.py`). Vérifié probant : 6 échecs sur l'ancien code.
+**Commandes exécutées :** `ruff check backend tests`, `mypy backend tests`, `bash scripts/ai-validate.sh`
+**Résultat :** PASS
+**Risques restants :** aucun sur le contenu servi (valeurs identiques). Le découpage des routes reste à faire, conditionné à l'injection des collections.
+
+## BUG-088 — mypy strict sur tous les modules applicatifs du backend
+
+**Contexte :** 14/11, suite de BUG-086. mypy tournait en mode normal : les fonctions non annotées n'étaient pas vérifiées, et toutes les collections MongoDB passées aux modules de service étaient non typées (`Any`), donc aucun accès n'était contrôlé. Mesure du jour en strict : 47 erreurs hors `server.py`, 124 dans `server.py`.
+
+| ID | Sévérité | Statut | Résumé |
+|---|---|---|---|
+| BUG-088 | 🟠 MAJEUR (fonction cassée en production) | `CORRIGÉ` | **Défauts réels :** (0) **l'envoi des logs de debug depuis l'application n'a jamais fonctionné** : la route `/api/debug/logs/upload` dépendait directement de `auth_utils.get_current_user(users_col, credentials)` au lieu de l'enveloppe `_get_current_user`, et FastAPI faisait de `users_col` (non annoté) un paramètre de requête obligatoire : 422 sur chaque envoi réel. Les tests le masquaient, car ils remplaçaient cette dépendance, et le test « sans jeton » acceptait 422. Révélé par l'annotation du paramètre, que FastAPI a refusée au démarrage ; (1) `household_service.decode_invite_token` et (2) `gmail_oauth_service.decode_state_token` renvoyaient l'identifiant lu dans un jeton signé sans vérifier que c'était une chaîne (même défaut que celui corrigé dans `auth_utils` le 12/11) : désormais rejeté (400 `INVALID_INVITE_TOKEN`, `ValueError("invalid_state")`) ; (3) `exchange_code_for_tokens` renvoyait la réponse JSON de Google sans vérifier que c'était un objet, l'appelant plantait plus loin sur `.get` : erreur explicite à la source. **Typage :** nouveau `backend/mongo_types.py` (`MongoCollection`, `MongoDatabase`, alias des types Motor, qui est typé) ; 57 paramètres de collection annotés, dont ceux qui valent `None` par défaut en `MongoCollection \| None`. Le typage précis a vérifié que chaque collection optionnelle est testée avant usage (`ocr_service`, `alerts`) : signatures corrigées, aucun accès non protégé. `dict` et `list` nus paramétrés, pipelines d'agrégation annotés, garde explicite dans `build_operational_overview`, réponse Gemini vérifiée comme objet avant lecture. **Configuration :** `mypy.ini` applique l'équivalent par module de `--strict` à `backend.*` (un nouveau module est strict par défaut) ; restent en mode normal `server.py`, `backend/scripts/` et les tests. Règles `.ai`, `CLAUDE.md` et `AGENTS.md` alignées. |
+
+**Fichiers modifiés :** `mypy.ini`, `backend/mongo_types.py` (nouveau), `backend/server.py` (dépendance de la route d'envoi des logs), `backend/admin_service_control.py`, `backend/alerts.py`, `backend/auth_utils.py`, `backend/entitlements.py`, `backend/food_defaults_service.py`, `backend/gmail_oauth_service.py`, `backend/household_service.py`, `backend/observability.py`, `backend/ocr_service.py`, `backend/product_catalog.py`, `backend/recipes_service.py`, `backend/service_limits.py`, `.ai/core-rules.md`, `.ai/stacks/python-fastapi.md`, `.ai/test-policy.md`, `CLAUDE.md`, `AGENTS.md`
+**Tests ajoutés/mis à jour :** `backend/tests/test_debug_logs_upload.py::test_upload_debug_logs_authenticates_with_real_bearer_token` (vrai jeton, sans remplacement de dépendance ; les autres tests du fichier remplacent désormais `_get_current_user`, et le test sans jeton exige 401), `backend/tests/test_server_import_smoke.py::test_no_route_exposes_a_mongo_handle_as_request_parameter` (aucune route n'expose une collection en paramètre de requête), `backend/tests/test_gmail_oauth.py::test_state_token_rejects_non_string_user_id`, `backend/tests/test_gmail_oauth.py::test_exchange_rejects_non_object_token_response`, `backend/tests/test_household_sharing.py::TestInviteTokenDecoding::test_rejects_non_string_household_id`, `tests/test_ci_non_regression_policy.py::test_backend_application_modules_are_strictly_typed` (options strictes présentes, liste des exceptions figée). Tous vérifiés probants : ils échouent sur l'ancien code.
+**Commandes exécutées :** `mypy backend tests` (0 erreur, 103 fichiers), `ruff check backend tests`, `bash scripts/ai-validate.sh`
+**Résultat :** PASS
+**Risques restants :** `server.py` reste en mode normal (124 erreurs strictes) ; il passera en strict avec le découpage de ses routes. Les jetons concernés sont signés par le backend lui-même : les défauts (1) et (2) n'étaient pas exploitables sans la clé, la correction est défensive.
+
+## BUG-089 — ruff : règles flake8-bugbear activées
+
+**Contexte :** 14/11, deuxième palier du lint backend (BUG-084). Les règles de base ne couvraient ni les arguments par défaut mutables, ni les variables de boucle capturées par une fermeture, ni les exceptions relancées sans cause. Mesure : 105 constats, dont 74 sur l'idiome FastAPI `Depends(...)` en valeur par défaut, voulu.
+
+| ID | Sévérité | Statut | Résumé |
+|---|---|---|---|
+| BUG-089 | 🟡 MINEUR (processus + diagnostic) | `CORRIGÉ` | Règles `B` ajoutées à `ruff.toml` ; marqueurs déclaratifs de FastAPI et `typing.cast` déclarés immuables. **27 exceptions chaînées** (`raise … from exc`) dans un bloc `except` : les réponses HTTP sont inchangées, mais les traces Sentry et les journaux montrent désormais la cause d'origine au lieu de « pendant le traitement d'une autre exception ». Le script de chaînage s'appuie sur l'arbre syntaxique et n'a pas réutilisé un nom `exc` déjà présent dans la fonction (le `del` implicite de fin de bloc l'aurait effacé). `rstrip("```")` remplacé par `rstrip("`")` (comportement identique, `rstrip` retire des caractères, pas une chaîne). `zip(..., strict=True)` sur les identifiants insérés par `insert_many`. Aucun défaut réel trouvé par ce palier. |
+
+**Fichiers modifiés :** `ruff.toml`, `backend/auth_utils.py`, `backend/gmail_oauth_service.py`, `backend/household_service.py`, `backend/ocr_service.py`, `backend/recipes_service.py`, `backend/server.py`, `tests/test_alerts_preferences.py`
+**Tests ajoutés/mis à jour :** `tests/test_ci_non_regression_policy.py::test_backend_lint_includes_bugbear` (règles `B` actives, liste des appels admis en valeur par défaut figée, aucune exclusion `B` par fichier)
+**Commandes exécutées :** `ruff check backend tests`, `mypy backend tests`, `bash scripts/ai-validate.sh`
+**Résultat :** PASS
+**Risques restants :** aucun.
+
+## BUG-090 — L'APK E2E visait le backend de production
+
+**Contexte :** 14/11, premier run Maestro après BUG-083. Le bundle est bien embarqué, mais les trois scénarios échouent : l'écran de connexion n'apparaît jamais, et le backend de test ne reçoit **aucune** requête de l'émulateur, pas même l'appel `/api/health` que l'application fait au démarrage. Cause, établie par lecture du code : une variante non débogable est bundlée en mode production (`devEnabled=false` dans le plugin Gradle de React Native). Dans ce bundle, `__DEV__` est faux et `process.env.NODE_ENV` est inliné à `production`, quoi que dise l'environnement du job. `config.ts` range alors l'application en production, le garde-fou rejette l'URL de test `http://10.0.2.2:8000` et la remplace par le backend de production sur Render. Avant BUG-083, Metro servait le code en mode développement et ce chemin n'était jamais pris.
+
+| ID | Sévérité | Statut | Résumé |
+|---|---|---|---|
+| BUG-090 | 🟠 MAJEUR (E2E inopérant, et dirigé vers la production) | `CORRIGÉ` (confirmé par le run CI du 14/11 : journal Android « apiEnv: development, apiUrl: http://10.0.2.2:8000 », appels `/api/health` reçus par le backend de test) | Les deux workflows E2E déclarent `EXPO_PUBLIC_APP_ENV=development` au prebuild et au build : l'application vise le backend de test, reste en variante « prod » (aucun outil de debug à l'écran) et le garde-fou des builds de production réels est inchangé. **Diagnostic rendu lisible :** l'API ne renvoie que les 5 000 dernières lignes d'un journal de job, et les journaux du conteneur MongoDB vidés en fin de job (bilans de santé toutes les 10 s) en occupaient près de 4 800 ; les artefacts ne sont pas téléchargeables depuis l'environnement de développement. Journaux du conteneur bornés (`--log-opt max-size=200k`, `max-file=1`), et condensé d'échec avant le résumé de la suite : écran affiché (uiautomator), écran du premier lancement, message d'échec Maestro par scénario, journal Android filtré (JavaScript, plantages, cible du backend). |
+
+**Fichiers modifiés :** `.github/workflows/mobile-e2e.yml`, `.github/workflows/mobile-e2e-nightly.yml`, `scripts/run-maestro-e2e.sh`
+**Tests ajoutés/mis à jour :** `frontend/utils/config.test.ts` (conditions exactes du bundle E2E : sans environnement explicite l'URL de test est rejetée, avec `EXPO_PUBLIC_APP_ENV=development` elle est retenue, un build de production réel garde son garde-fou), `tests/test_ci_non_regression_policy.py::test_e2e_bundle_targets_the_test_backend`, `tests/test_ci_non_regression_policy.py::test_maestro_failures_are_diagnosable_from_the_job_log` (tous deux vérifiés probants). Condensé d'échec exécuté localement sous `set -euo pipefail` avec un faux `adb` : il ne peut pas interrompre le script.
+**Commandes exécutées :** `npm run test:ci`, `pytest tests/test_ci_non_regression_policy.py`, `bash scripts/ai-validate.sh`
+**Résultat :** PASS
+**Risques restants :** la cause est établie par lecture du code et cohérente avec l'absence totale de requêtes ; le verdict appartient au prochain run Maestro, dont le condensé montrera l'écran réellement affiché si un autre obstacle subsiste. Une modification du seul workflow ne force pas la reconstruction de l'APK (choix figé par un test de politique existant) : après un changement de variable `EXPO_PUBLIC_*` dans le workflow, lancer le job avec `force_mobile_apk_build`.
+
+## BUG-091 — L'émulateur E2E tournait sans accélération matérielle
+
+**Contexte :** 14/11, run E2E du correctif BUG-090. Grâce aux journaux MongoDB bornés, le journal complet du job est enfin lisible. Le diagnostic KVM du workflow affiche « /dev/kvm exists » mais « not readable/writable » : l'émulateur tourne en émulation logicielle. Le démarrage a pris 468 s, puis le réglage des animations a échoué sur une coupure adb (`Broken pipe`) et l'action d'émulateur a avorté avant de lancer le moindre scénario. Les runs précédents montraient la même lenteur : 7 à 15 minutes par scénario.
+
+| ID | Sévérité | Statut | Résumé |
+|---|---|---|---|
+| BUG-091 | 🟠 MAJEUR (E2E instable et très lent) | `CORRIGÉ` (confirmé par le run CI du 14/11 : « /dev/kvm is readable and writable », démarrage de l'émulateur en 25 s au lieu de 468 s, 00-smoke-launch vert en 10 s) | Étape « Enable KVM hardware acceleration » avant l'émulateur dans les deux workflows E2E : règle udev qui ouvre `/dev/kvm` au job, méthode documentée par `reactivecircus/android-emulator-runner`. Le diagnostic KVM existant, placé après, confirmera l'accès à chaque run. |
+
+**Fichiers modifiés :** `.github/workflows/mobile-e2e.yml`, `.github/workflows/mobile-e2e-nightly.yml`
+**Tests ajoutés/mis à jour :** `tests/test_ci_non_regression_policy.py::test_e2e_emulator_gets_kvm_acceleration` (règle présente dans les deux workflows, avant le démarrage de l'émulateur), vérifié probant.
+**Commandes exécutées :** `pytest tests/test_ci_non_regression_policy.py`, `bash scripts/ai-validate.sh`
+**Résultat :** PASS
+**Risques restants :** l'effet réel (démarrage en une à deux minutes) ne se vérifie que sur le runner ; le diagnostic KVM du job l'affichera.
+
+## BUG-092 — Le clavier recouvre le champ mot de passe sur un petit écran Android
+
+**Contexte :** 14/11, premier run Maestro avec le backend de test et KVM (BUG-090, BUG-091). `00-smoke-launch` passe ; `01-auth-session` et `02-navigation-main-tabs` échouent sur « Element not found: login-password-input » juste après la saisie de l'e-mail. Le condensé de diagnostic montre l'écran de connexion, l'e-mail saisi et le champ mot de passe bien présent une fois le clavier refermé. L'émulateur a un écran de 320 × 640 et l'application est en bord à bord (avertissement `setBackgroundColorAsync is not supported with edge-to-edge enabled` dans le journal Android). Dans ce mode, Android ne redimensionne plus la fenêtre à l'ouverture du clavier, et le `KeyboardAvoidingView` de l'écran de connexion n'a pas de comportement sur Android : le clavier recouvre le bas du formulaire.
+
+| ID | Sévérité | Statut | Résumé |
+|---|---|---|---|
+| BUG-092 | 🟡 MINEUR (scénario E2E ; gêne possible sur petits téléphones) | `CORRIGÉ` côté scénarios (confirmé par le run CI du 14/11 : mot de passe saisi, connexion envoyée) ; `OUVERT` côté application (à vérifier sur appareil) | Les quatre séquences de connexion des scénarios Maestro (`01-auth-session` ×2, `02-navigation-main-tabs`, `helpers/ensure-authenticated`) ferment le clavier entre l'e-mail et le mot de passe, comme le ferait un utilisateur. **Non modifié dans l'application :** la mise en page de l'écran de connexion. L'hypothèse du clavier qui masque le champ est cohérente avec le journal, mais elle n'a pas pu être vue (les captures Maestro ne sont pas téléchargeables depuis l'environnement de développement) ; changer le comportement clavier sans le voir risquerait de dégrader l'écran sur les téléphones où il fonctionne. À vérifier sur un petit téléphone Android ; si confirmé, `behavior="padding"` sur Android ou une gestion des encarts clavier. |
+
+**Fichiers modifiés :** `.maestro/01-auth-session.yaml`, `.maestro/02-navigation-main-tabs.yaml`, `.maestro/helpers/ensure-authenticated.yaml`, `TODO_BY_OWNER.md`
+**Tests ajoutés/mis à jour :** `tests/test_ci_non_regression_policy.py::test_maestro_login_hides_keyboard_before_password_field` (chaque saisie de l'e-mail de test est suivie d'un `hideKeyboard` avant le champ mot de passe), vérifié probant.
+**Commandes exécutées :** `pytest tests/test_ci_non_regression_policy.py`, `bash scripts/ai-validate.sh`
+**Résultat :** PASS
+**Risques restants :** le comportement réel de l'écran de connexion clavier ouvert, sur petit téléphone Android.
+
+## BUG-093 — Les comptes E2E avaient une adresse refusée à la connexion, et l'erreur s'affichait « [object Object] »
+
+**Contexte :** 14/11, run Maestro après BUG-092. Les scénarios saisissent désormais l'e-mail et le mot de passe et envoient la connexion, mais l'accueil n'apparaît jamais. Le condensé de diagnostic montre la réponse du backend : 422, « value is not a valid email address: The part after the @-sign is a special-use or reserved name ». Les comptes du jeu de test E2E étaient en `@keepeat.test` ; le seed les écrit directement en base, mais `/api/auth/login` valide l'e-mail (`EmailStr`) et email-validator refuse les domaines réservés (`.test`, `.local`, `.localhost`…). Ce refus est antérieur à l'épinglage de BUG-081 (`email-validator>=2.2.0` le faisait déjà) : les scénarios n'avaient jamais atteint cette étape. Second défaut, visible sur la même capture : l'écran de connexion affichait « [object Object] ». `new Error(data.detail)` sur une liste d'erreurs de validation FastAPI produit ce texte ; c'est le cas de toute erreur 422 à la connexion, à l'inscription, à l'export ou à la suppression du compte.
+
+| ID | Sévérité | Statut | Résumé |
+|---|---|---|---|
+| BUG-093 | 🟠 MAJEUR (E2E bloqué ; message d'erreur illisible pour les utilisateurs) | `CORRIGÉ` (confirmé par le run CI du 14/11 : l'adresse est acceptée, la requête atteint la connexion) | Comptes E2E déplacés vers `example.com` (domaine réservé par l'IANA aux exemples, accepté par le validateur) dans `test_mode.py`, les scénarios Maestro et le script de seed ; la validation de production n'est pas assouplie. Nouveau `formatApiErrorDetail` (`utils/errorDetails.ts`) : chaîne conservée, liste d'erreurs de validation réduite à leurs messages, objet lu par `message` puis `code`, `undefined` sinon pour laisser le message de repli. Utilisé par `authStore` (appels `/api/auth/*`, lecture des droits premium et de l'usage des quotas) et `accountService` (export, suppression du compte). |
+
+**Fichiers modifiés :** `backend/test_mode.py`, `scripts/e2e-reset-seed.mjs`, `.maestro/01-auth-session.yaml`, `.maestro/02-navigation-main-tabs.yaml`, `.maestro/helpers/ensure-authenticated.yaml`, `frontend/utils/errorDetails.ts`, `frontend/store/authStore.ts`, `frontend/utils/accountService.ts`, `docs/non-regression-tests.md`
+**Tests ajoutés/mis à jour :** `backend/tests/test_test_mode_guards.py::test_e2e_fixture_accounts_pass_login_validation` (chaque compte du jeu de test passe `UserLogin`, vérifié probant), `frontend/utils/errorDetails.test.ts` (erreur 422 réelle de ce run rendue lisible, erreurs multiples, chaîne, objet, repli) ; assertions des tests de politique et de `test_test_mode_guards.py` mises à jour vers la nouvelle adresse.
+**Commandes exécutées :** `npm run test:ci`, `pytest`, `bash scripts/ai-validate.sh`
+**Résultat :** PASS
+**Risques restants :** le message affiché pour une adresse mal formée reste celui, en anglais, du validateur ; une traduction côté écran de connexion serait une amélioration distincte.
+
+## BUG-094 — Le backend E2E démarrait sans clé de signature des jetons
+
+**Contexte :** 14/11, run Maestro après BUG-093. L'adresse est acceptée, mais la connexion répond 500 et l'application affiche « JSON Parse error: Unexpected character: I » (la page d'erreur « Internal Server Error » n'est pas du JSON). Le journal du backend de test donne la cause : `RuntimeError: JWT_SECRET_KEY is required` dans `create_token`. Les deux workflows E2E démarraient le backend avec `JWT_SECRET`, alors que le code lit `JWT_SECRET_KEY` (repli `SECRET_KEY`). C'est le même renommage que BUG-075 a fait dans les jobs backend de la CI, oublié dans les workflows E2E. Un test de politique existant exigeait même l'ancien nom.
+
+| ID | Sévérité | Statut | Résumé |
+|---|---|---|---|
+| BUG-094 | 🟠 MAJEUR (E2E bloqué) | `CORRIGÉ` (confirmé par le run CI du 14/11 : `POST /api/auth/login` 200, `01-auth-session` vert) | `JWT_SECRET_KEY` fourni au backend de test dans `mobile-e2e.yml` et `mobile-e2e-nightly.yml` (valeur de 32 octets au moins, pour éviter l'avertissement de PyJWT sur les clés courtes). Le test de politique qui exigeait `JWT_SECRET` est corrigé. |
+
+**Fichiers modifiés :** `.github/workflows/mobile-e2e.yml`, `.github/workflows/mobile-e2e-nightly.yml`, `tests/test_ci_non_regression_policy.py`
+**Tests ajoutés/mis à jour :** `tests/test_ci_non_regression_policy.py::test_workflows_give_the_backend_its_jwt_secret_under_the_name_it_reads` (aucun workflow n'utilise l'ancien nom ; l'étape de démarrage du backend E2E fournit `JWT_SECRET_KEY`), vérifié probant ; assertion de `test_maestro_e2e_is_fully_runnable_in_github_actions` corrigée.
+**Commandes exécutées :** `pytest tests/test_ci_non_regression_policy.py`, `bash scripts/ai-validate.sh`
+**Résultat :** PASS
+**Risques restants :** aucun connu ; le run Maestro dira si un autre obstacle suit la connexion.
+
+## BUG-095 — Un utilisateur existant sur un nouvel appareil tombait sur l'onboarding
+
+**Contexte :** 14/11, relu avant le prochain run Maestro. Après connexion, `app/index.tsx` choisissait entre l'onboarding et les onglets avec `resolvePostLoginDestination`, à partir du drapeau local « onboarding vu » et du stock **local**. Sur un nouvel appareil, après une réinstallation, ou en E2E (données de l'application effacées entre deux scénarios), le stock local est vide au moment de décider : rien n'avait encore été chargé depuis le serveur. Un utilisateur qui avait déjà des produits était donc envoyé vers l'onboarding, alors que le commentaire de BUG-043 dit précisément l'inverse (« Un utilisateur qui a déjà des produits (import, autre appareil, session précédente) n'a rien à apprendre de cet écran »). En E2E, le compte de test a un stock semé côté serveur : après la connexion, l'onglet accueil n'aurait jamais été visible.
+
+| ID | Sévérité | Statut | Résumé |
+|---|---|---|---|
+| BUG-095 | 🟡 MINEUR (parcours d'un utilisateur existant) | `CORRIGÉ` (confirmé par le run CI du 14/11 : « user exists, navigating { destination: '/(tabs)' } » pour le compte E2E, données de l'application effacées) | Nouveau `decidePostLoginDestination` (`utils/postLoginDestination.ts`) : si l'onboarding n'a pas été vu et que le stock local est vide, le stock du serveur est chargé (`fetchStock({ force: true })`, borné à 4 s, sans jamais lever) avant de trancher ; en cas d'erreur ou de lenteur, la décision locale s'applique comme avant. `app/index.tsx` l'utilise. Un nouvel utilisateur (stock vide partout) voit toujours l'onboarding. |
+
+**Fichiers modifiés :** `frontend/utils/postLoginDestination.ts`, `frontend/app/index.tsx`
+**Tests ajoutés/mis à jour :** `frontend/utils/postLoginDestination.test.ts` (stock serveur rempli → onglets ; vide partout → onboarding ; pas de requête si l'onboarding est vu ou le stock local rempli ; erreur serveur → décision locale ; serveur trop lent → décision locale au bout du délai), `frontend/utils/onboardingFlow.test.ts` (`index.tsx` passe par `decidePostLoginDestination` et consulte le stock du serveur).
+**Commandes exécutées :** `npm run test:ci`, `bash scripts/ai-validate.sh`
+**Résultat :** PASS
+**Risques restants :** jusqu'à 4 s d'écran neutre après la connexion si le serveur est lent et que l'utilisateur n'a jamais vu l'onboarding sur cet appareil (cas d'un réveil à froid du backend sur Render).
+
+## BUG-096 — L'onglet Statistiques était inutilisable pour un utilisateur gratuit
+
+**Contexte :** 14/11, run Maestro après BUG-094 et BUG-095 : `00-smoke-launch` et `01-auth-session` sont verts ; `02-navigation-main-tabs` passe les onglets Stock et Recettes, puis échoue sur l'onglet Statistiques. Le condensé montre le paywall Premium (« Accès Premium requis pour predictions ») à la place de l'écran. L'écran chargeait statistiques mensuelles, gamification et prédictions dans un seul `Promise.all`. Les deux premières sont gratuites, les prédictions sont Premium : pour un utilisateur gratuit, leur 403 `PREMIUM_REQUIRED` faisait échouer tout le chargement. Les statistiques n'apparaissaient jamais, le message disait « Impossible de charger les stats. Vérifiez votre connexion. », et le paywall s'ouvrait sans que l'utilisateur ait rien demandé.
+
+| ID | Sévérité | Statut | Résumé |
+|---|---|---|---|
+| BUG-096 | 🟠 MAJEUR (fonction gratuite inaccessible) | `CORRIGÉ` (confirmé par le run CI du 14/11 : `02-navigation-main-tabs` vert, onglet Statistiques affiché sans paywall) | Nouveau `utils/statsScreenData.ts` : `loadStatsScreenData` charge statistiques et gamification comme avant (leur échec reste une erreur), et les prédictions à part ; leur échec vaut « aucune prédiction ». `canLoadPredictions` ne les demande que si le droit est ouvert (droits du serveur s'ils sont connus, sinon le plan) : plus de 403 inutile qui gonflait le taux d'erreur de `/api/predictions` dans le dashboard admin, plus de paywall imposé. `app/(tabs)/stats.tsx` l'utilise. |
+
+**Fichiers modifiés :** `frontend/utils/statsScreenData.ts` (nouveau), `frontend/app/(tabs)/stats.tsx`
+**Tests ajoutés/mis à jour :** `frontend/utils/statsScreenData.test.ts` (utilisateur gratuit : statistiques et gamification chargées sans requête de prédictions ; un 403 des prédictions ne fait plus échouer le chargement ; prédictions comptées pour un Premium ; échec des statistiques mensuelles toujours signalé ; règle des droits ; l'écran passe par le nouveau chargement, vérifié probant sur l'ancien écran).
+**Commandes exécutées :** `npm run test:ci`, `bash scripts/ai-validate.sh`
+**Résultat :** PASS
+**Risques restants :** aucun connu ; le run Maestro confirmera l'onglet sur émulateur.
+
+## Bilan du 14/11 — suite Maestro réparée
+
+La suite de fumée Maestro de la PR #173 est **verte** pour la première fois depuis le 27/08 : `00-smoke-launch` (11 s), `01-auth-session` (41 s), `02-navigation-main-tabs` (44 s), émulateur démarré en 29 s avec KVM. Il a fallu lever huit obstacles successifs, chacun révélé par le précédent :
+
+| Ordre | ID | Obstacle | Nature |
+|---|---|---|---|
+| 1 | BUG-083 | aucun bundle JS dans l'APK debug | CI |
+| 2 | BUG-090 | l'APK E2E visait le backend de production | CI (garde-fou de `config.ts` en mode production) |
+| 3 | BUG-091 | émulateur sans KVM, démarrage en 8 min et coupures adb | CI |
+| 4 | BUG-092 | clavier recouvrant le champ mot de passe | scénarios (et mise en page à vérifier sur appareil) |
+| 5 | BUG-093 | comptes E2E en `.test` refusés à la connexion ; erreurs 422 affichées « [object Object] » | jeu de test ; **défaut visible des utilisateurs** |
+| 6 | BUG-094 | backend E2E sans `JWT_SECRET_KEY` | CI |
+| 7 | BUG-095 | utilisateur existant envoyé vers l'onboarding sur un nouvel appareil | **défaut produit** |
+| 8 | BUG-096 | onglet Statistiques inutilisable pour un utilisateur gratuit | **défaut produit** |
+
+Trois de ces obstacles étaient de vrais défauts de l'application, invisibles tant que la suite ne dépassait pas l'écran de connexion. Le diagnostic lisible depuis le journal du job (BUG-090 : journaux MongoDB bornés, condensé d'échec) a rendu chaque étape identifiable en un run. **Reste à suivre :** la suite complète nocturne (`mobile-e2e-nightly.yml`, scénarios au-delà de la fumée), qui n'a pas encore tourné avec ces correctifs.

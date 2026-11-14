@@ -7,11 +7,12 @@ import httpx
 
 from backend.app_core import logger, utc_now
 from backend.models import ProductBase, ShelfLife
+from backend.mongo_types import MongoCollection
 
 OFF_USER_AGENT = os.getenv("OFF_USER_AGENT", "KeepEat/1.0 (https://keepeat.app)")
 
 
-async def lookup_product_openfoodfacts(barcode: str, products_cache_col) -> Optional[ProductBase]:
+async def lookup_product_openfoodfacts(barcode: str, products_cache_col: MongoCollection) -> Optional[ProductBase]:
     cached = await products_cache_col.find_one({"barcode": barcode})
     if cached:
         logger.info("OFF cache hit barcode=%s", barcode)
@@ -66,7 +67,7 @@ async def lookup_product_openfoodfacts(barcode: str, products_cache_col) -> Opti
 async def search_openfoodfacts_by_name(
     name: str,
     brand: Optional[str],
-    products_cache_col,
+    products_cache_col: MongoCollection,
 ) -> Optional[str]:
     """Recherche une image produit sur OpenFoodFacts par nom (pas de code-barres
     disponible — cas des articles issus de l'OCR d'un ticket de caisse).

@@ -21,6 +21,7 @@ import { generateLastSixMonthLabels } from '../../utils/monthlyLabels';
 import { countLabelFr, formatEuroFr } from '../../utils/uiText';
 import { extractPremiumErrorDetail } from '../../utils/premiumErrors';
 import { usePremiumUiStore } from '../../store/premiumUiStore';
+import { canLoadPredictions, loadStatsScreenData } from '../../utils/statsScreenData';
 
 interface MonthlyStats {
   month: string;   // "YYYY-MM"
@@ -55,7 +56,7 @@ function formatMonth(month: string, lang: string): string {
 }
 
 export default function StatsScreen() {
-  const { token } = useAuthStore();
+  const { token, plan, entitlements } = useAuthStore();
   const { language } = useLanguageStore();
   const isFr = language === 'fr';
   const t = (fr: string, en: string) => isFr ? fr : en;
@@ -77,21 +78,20 @@ export default function StatsScreen() {
     if (!silent) setIsLoading(true);
     setError(null);
     try {
-      const [monthly, gamifRes, predictionsRes] = await Promise.all([
-        axios.get(buildApiUrl('/api/stats/monthly?months=6'), {
-          headers: { Authorization: `Bearer ${token}` },
-        }),
-        axios.get(buildApiUrl('/api/gamification'), {
-          headers: { Authorization: `Bearer ${token}` },
-        }),
-        axios.get(buildApiUrl('/api/predictions'), {
-          headers: { Authorization: `Bearer ${token}` },
-        }),
-      ]);
-      setData(monthly.data);
-      setGamif(gamifRes.data);
-      setPredictionsCount(Array.isArray(predictionsRes.data) ? predictionsRes.data.length : 0);
-    } catch (err: any) {
+      // BUG-096 : les prédictions (Premium) ne doivent ni bloquer les statistiques
+      // gratuites ni ouvrir le paywall d'elles-mêmes.
+      const headers = { Authorization: `Bearer ${token}` };
+      const result = await loadStatsScreenData({
+        fetchMonthly: () => axios.get(buildApiUrl('/api/stats/monthly?months=6'), { headers }).then(res => res.data),
+        fetchGamification: () => axios.get(buildApiUrl('/api/gamification'), { headers }).then(res => res.data),
+        fetchPredictions: canLoadPredictions(plan, entitlements)
+          ? () => axios.get(buildApiUrl('/api/predictions'), { headers }).then(res => res.data)
+          : null,
+      });
+      setData(result.monthly);
+      setGamif(result.gamification);
+      setPredictionsCount(result.predictionsCount);
+    } catch (err: unknown) {
       const premiumError = extractPremiumErrorDetail(err);
       if (premiumError) {
         openPaywall(premiumError);
@@ -105,7 +105,7 @@ export default function StatsScreen() {
       setIsLoading(false);
       setIsRefreshing(false);
     }
-  }, [isFr, openPaywall, token]);
+  }, [entitlements, isFr, openPaywall, plan, token]);
 
   useEffect(() => { fetchStats(); }, [fetchStats]);
 

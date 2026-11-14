@@ -129,7 +129,7 @@ export default function ScanReceiptScreen() {
       setProducts(detected);
       setSelected(new Set(detected.map((_, i) => i)));
       setMode('confirm');
-    } catch (err: any) {
+    } catch (err: unknown) {
       const action = resolveReceiptErrorAction(err);
       if (action.type === 'premium') {
         openPaywall(action.detail);
