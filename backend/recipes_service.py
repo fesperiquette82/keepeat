@@ -238,7 +238,7 @@ def _extract_gemini_recipe_text(payload: Any) -> str | None:
     return None
 
 
-async def _generate_ai_recipe(stock_names: list[str], gemini_key: str) -> dict | None:
+async def _generate_ai_recipe(stock_names: list[str], gemini_key: str) -> dict[str, Any] | None:
     """Appelle Gemini pour générer 1 recette française depuis les ingrédients du stock.
     Retourne None en cas d'échec ou si GEMINI_RECIPES_API_KEY n'est pas configuré.
 
@@ -295,7 +295,11 @@ async def _generate_ai_recipe(stock_names: list[str], gemini_key: str) -> dict |
 
     try:
         data = json.loads(text)
-        if not isinstance(data.get("title"), str) or not isinstance(data.get("ingredients_keywords"), list):
+        if (
+            not isinstance(data, dict)
+            or not isinstance(data.get("title"), str)
+            or not isinstance(data.get("ingredients_keywords"), list)
+        ):
             logger.warning("Gemini suggest recipe invalid structure: %s", text[:200])
             return None
         return data
@@ -360,12 +364,12 @@ def clear_recipe_catalog_cache() -> None:
     load_local_recipes.cache_clear()
 
 
-def append_recipe_to_catalog(recipe_dict: dict, catalog_path: str | os.PathLike[str] | None = None) -> None:
+def append_recipe_to_catalog(recipe_dict: dict[str, Any], catalog_path: str | os.PathLike[str] | None = None) -> None:
     """Ajoute une nouvelle recette au fichier JSON du catalogue et invalide le cache mémoire."""
     path = Path(catalog_path) if catalog_path else _DEFAULT_CATALOG_PATH
     with _catalog_write_lock:
         try:
-            raw: list = json.loads(path.read_text(encoding="utf-8"))
+            raw: list[Any] = json.loads(path.read_text(encoding="utf-8"))
         except Exception as exc:
             raise RecipeCatalogError(f"Impossible de lire le catalogue pour l'ajout : {exc}") from exc
         raw.append(recipe_dict)
@@ -438,7 +442,7 @@ def _candidate_terms(raw: str) -> set[str]:
     return terms
 
 
-def normalize_stock_items(stock_items: Iterable[str | dict]) -> list[str]:
+def normalize_stock_items(stock_items: Iterable[str | dict[str, Any]]) -> list[str]:
     normalized: list[str] = []
     for item in stock_items:
         if isinstance(item, dict):
@@ -596,7 +600,7 @@ def is_recipe_eligible(match: RecipeMatch) -> bool:
     return eligible
 
 
-def score_recipe_against_stock(recipe: Recipe, stock_items: Iterable[str | dict]) -> RecipeMatch:
+def score_recipe_against_stock(recipe: Recipe, stock_items: Iterable[str | dict[str, Any]]) -> RecipeMatch:
     norm_stock = [_normalize_fr(item) for item in normalize_stock_items(stock_items)]
 
     used_required: list[str] = []
@@ -660,7 +664,7 @@ def _compute_rank_score(match: RecipeMatch, *, suggestion_style: SuggestionStyle
 
 
 def _ranked_matches_from_catalog(
-    stock_items: Iterable[str | dict],
+    stock_items: Iterable[str | dict[str, Any]],
     *,
     catalog_path: str | os.PathLike[str] | None = None,
     meal_type: str | None = None,
@@ -807,7 +811,7 @@ def _ranked_matches_from_catalog(
     return matches
 
 def suggest_recipes_from_catalog(
-    stock_items: Iterable[str | dict],
+    stock_items: Iterable[str | dict[str, Any]],
     *,
     limit: int = 5,
     catalog_path: str | os.PathLike[str] | None = None,
@@ -919,7 +923,7 @@ def classify_recipe_match(match: RecipeMatch) -> RecipeMatchGroup:
 
 
 def suggest_recipe_groups_from_catalog(
-    stock_items: Iterable[str | dict],
+    stock_items: Iterable[str | dict[str, Any]],
     *,
     limit_per_group: int = 5,
     catalog_path: str | os.PathLike[str] | None = None,
@@ -949,7 +953,7 @@ def suggest_recipe_groups_from_catalog(
         grouped[status].append(match)
     return grouped
 
-def recipe_to_legacy_candidate(recipe: Recipe) -> dict:
+def recipe_to_legacy_candidate(recipe: Recipe) -> dict[str, Any]:
     compat_focus = recipe.compat.storage_focus
     category = compat_focus[0] if compat_focus else (
         "frigo" if RecipeMealType.dinner in recipe.meal_type or RecipeMealType.lunch in recipe.meal_type else "placard"
@@ -1044,7 +1048,7 @@ def recipe_match_to_grouped_suggestion(match: RecipeMatch) -> RecipeGroupedSugge
 
 
 try:
-    _FRENCH_RECIPE_DB: list[dict] = [recipe_to_legacy_candidate(recipe) for recipe in load_local_recipes()]
+    _FRENCH_RECIPE_DB: list[dict[str, Any]] = [recipe_to_legacy_candidate(recipe) for recipe in load_local_recipes()]
 except Exception as _catalog_load_exc:
     import logging as _logging
     _logging.getLogger("keepeat-backend").warning(
@@ -1055,7 +1059,7 @@ except Exception as _catalog_load_exc:
 
 
 def _match_recipe_to_stock(
-    recipe: dict,
+    recipe: dict[str, Any],
     norm_stock: list[str],
     norm_urgent: set[str],
     boost_urgent: bool,

@@ -13,7 +13,7 @@ Lire et appliquer strictement, dans cet ordre de priorité :
 3. **`.ai/test-policy.md`** — Politique de tests (pyramide, conventions)
 4. **`.ai/review-checklist.md`** — Checklist auto-revue
 5. **`.ai/stacks/react-native-expo.md`** — Conventions frontend (Node.js --test, TypeScript strict)
-6. **`.ai/stacks/python-fastapi.md`** — Conventions backend (pytest, ruff, mypy — mode normal en CI, strict en cible)
+6. **`.ai/stacks/python-fastapi.md`** — Conventions backend (pytest, ruff, mypy — strict sur les modules applicatifs, `server.py` encore en mode normal)
 7. **`.ai/stacks/e2e-maestro.md`** — Conventions E2E (Maestro, testID)
 
 Tous les points suivants sont des résumés ; **en cas d'ambiguïté, `.ai/core-rules.md` prime.**

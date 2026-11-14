@@ -237,14 +237,12 @@ def test_recipe_upsert(db_session):
 ### Type Checking (mypy)
 
 ```bash
-# Check types
-mypy backend/
-
-# With strict mode
-mypy --strict backend/
+mypy backend tests
 ```
 
-All backend code must pass `mypy` (no `type: ignore` except with comment).
+Strict on every application module of `backend/` (configured in `mypy.ini`);
+`server.py`, `backend/scripts/` and the tests run in normal mode. All backend
+code must pass (no `type: ignore` except with comment).
 
 ---
 

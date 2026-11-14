@@ -10,6 +10,7 @@ import jwt
 from jwt import PyJWTError as JWTError
 
 from backend.app_core import logger, utc_now
+from backend.mongo_types import MongoCollection
 
 JWT_SECRET_KEY = os.getenv("JWT_SECRET_KEY", "")
 JWT_ALGORITHM = "HS256"
@@ -121,7 +122,7 @@ def extract_user_id_from_auth_header(authorization_header: str | None) -> str | 
 
 async def log_api_request(
     *,
-    api_request_logs_col,
+    api_request_logs_col: MongoCollection,
     method: str,
     path: str,
     user_id: str | None,
@@ -150,7 +151,7 @@ async def log_api_request(
 
 async def track_business_event(
     *,
-    business_events_col,
+    business_events_col: MongoCollection,
     user_id: str | None,
     event_name: str,
     event_category: str,
@@ -188,7 +189,7 @@ def resolve_plan_type_at_time(user_doc: dict[str, Any] | None) -> str:
 
 async def track_service_usage(
     *,
-    service_usage_logs_col,
+    service_usage_logs_col: MongoCollection,
     user_id: str | None,
     service_name: str,
     action_name: str,
@@ -227,7 +228,7 @@ def _coerce_float(value: Any, default: float = 0.0) -> float:
         return default
 
 
-async def build_monitoring_kpis(*, users_col, api_request_logs_col, service_usage_logs_col) -> dict[str, Any]:
+async def build_monitoring_kpis(*, users_col: MongoCollection, api_request_logs_col: MongoCollection, service_usage_logs_col: MongoCollection) -> dict[str, Any]:
     now_iso = utc_now().isoformat()
     users_total = await users_col.count_documents({})
     new_users_today = await users_col.count_documents({"created_at": {"$gte": _iso_days_ago(1)}})
@@ -253,7 +254,7 @@ async def build_monitoring_kpis(*, users_col, api_request_logs_col, service_usag
     est_mrr = round(active_subscriptions * monthly_price, 2)
 
     api_volume = await api_request_logs_col.count_documents({"created_at": {"$gte": _iso_days_ago(7)}})
-    service_usage_cost_pipeline = [
+    service_usage_cost_pipeline: list[dict[str, Any]] = [
         {"$match": {"created_at": {"$gte": _iso_days_ago(30)}}},
         {"$group": {"_id": "$service_name", "units": {"$sum": "$units_consumed"}, "cost": {"$sum": "$estimated_cost"}}},
         {"$sort": {"cost": -1}},
@@ -294,11 +295,11 @@ async def build_monitoring_kpis(*, users_col, api_request_logs_col, service_usag
     }
 
 
-async def summarize_api_metrics(*, api_request_logs_col, start_iso: str, end_iso: str, limit: int = 20) -> dict[str, Any]:
+async def summarize_api_metrics(*, api_request_logs_col: MongoCollection, start_iso: str, end_iso: str, limit: int = 20) -> dict[str, Any]:
     match = {"created_at": {"$gte": start_iso, "$lte": end_iso}}
     volume = await api_request_logs_col.count_documents(match)
 
-    pipeline = [
+    pipeline: list[dict[str, Any]] = [
         {"$match": match},
         {
             "$group": {
@@ -313,7 +314,7 @@ async def summarize_api_metrics(*, api_request_logs_col, start_iso: str, end_iso
         {"$limit": limit},
     ]
     rows = await api_request_logs_col.aggregate(pipeline).to_list(length=limit)
-    formatted = []
+    formatted: list[dict[str, Any]] = []
     for row in rows:
         values = sorted(float(v) for v in row.get("p95_values", []) if isinstance(v, (int, float)))
         idx = int(0.95 * (len(values) - 1)) if values else 0
@@ -335,7 +336,7 @@ async def summarize_api_metrics(*, api_request_logs_col, start_iso: str, end_iso
     # interroge toute la période, filtre les endpoints avec au moins 2 appels
     # (évite les faux positifs "1 appel / 1 erreur = 100%") et trie par
     # error_rate décroissant directement dans MongoDB.
-    error_pipeline = [
+    error_pipeline: list[dict[str, Any]] = [
         {"$match": match},
         {
             "$group": {
@@ -370,7 +371,7 @@ async def summarize_api_metrics(*, api_request_logs_col, start_iso: str, end_iso
     ]
     for row in highest_error_rate:
         endpoint_key = row["endpoint_key"]
-        dominant_error_pipeline = [
+        dominant_error_pipeline: list[dict[str, Any]] = [
             {
                 "$match": {
                     **match,
@@ -421,14 +422,14 @@ def _compute_endpoint_severity(*, endpoint_key: str, error_rate: float, has_rece
 
 async def build_operational_overview(
     *,
-    api_request_logs_col,
-    service_usage_logs_col,
+    api_request_logs_col: MongoCollection,
+    service_usage_logs_col: MongoCollection,
     start_iso: str,
     end_iso: str,
 ) -> dict[str, Any]:
     now = utc_now()
     match = {"created_at": {"$gte": start_iso, "$lte": end_iso}}
-    endpoint_stats_pipeline = [
+    endpoint_stats_pipeline: list[dict[str, Any]] = [
         {"$match": match},
         {
             "$group": {
@@ -454,7 +455,7 @@ async def build_operational_overview(
         }
 
     for endpoint_key, endpoint_row in by_endpoint.items():
-        dominant_error_pipeline = [
+        dominant_error_pipeline: list[dict[str, Any]] = [
             {"$match": {**match, "endpoint_key": endpoint_key, "status_code": {"$gte": 400}}},
             {"$group": {"_id": "$error_type", "count": {"$sum": 1}}},
             {"$sort": {"count": -1}},
@@ -470,7 +471,8 @@ async def build_operational_overview(
         last_error_dt = _parse_iso_datetime(last_error_at)
         recent_window_hours = int(_OPS_THRESHOLDS["critical_recent_error_window_hours"])
         is_recent_critical_error = bool(
-            last_error_dt
+            last_error is not None
+            and last_error_dt
             and int(last_error.get("status_code", 0)) >= 500
             and (now - last_error_dt).total_seconds() <= recent_window_hours * 3600
         )
@@ -567,8 +569,8 @@ async def build_operational_overview(
 
 async def build_activation_funnel(
     *,
-    users_col,
-    business_events_col,
+    users_col: MongoCollection,
+    business_events_col: MongoCollection,
     start_iso: str,
     end_iso: str,
 ) -> dict[str, Any]:
@@ -629,7 +631,7 @@ async def build_activation_funnel(
 
 async def build_email_import_overview(
     *,
-    business_events_col,
+    business_events_col: MongoCollection,
     start_iso: str,
     end_iso: str,
 ) -> dict[str, Any]:
@@ -639,7 +641,7 @@ async def build_email_import_overview(
     à l'OCR photo, il n'écrit jamais dans receipt_tickets_col (écriture
     directe en stock), donc n'apparaît dans aucune autre vue du dashboard.
     """
-    pipeline = [
+    pipeline: list[dict[str, Any]] = [
         {
             "$match": {
                 "created_at": {"$gte": start_iso, "$lte": end_iso},
@@ -661,7 +663,7 @@ async def build_email_import_overview(
 
 async def build_premium_verification_overview(
     *,
-    business_events_col,
+    business_events_col: MongoCollection,
     start_iso: str,
     end_iso: str,
 ) -> dict[str, Any]:
@@ -678,7 +680,7 @@ async def build_premium_verification_overview(
     Sans ce bloc, ces refus n'apparaîtraient nulle part : le tunnel
     d'activation ne compte que les succès (`premium_checkout_succeeded`).
     """
-    pipeline = [
+    pipeline: list[dict[str, Any]] = [
         {
             "$match": {
                 "created_at": {"$gte": start_iso, "$lte": end_iso},
@@ -714,7 +716,7 @@ async def build_premium_verification_overview(
 
 async def build_crash_reports_overview(
     *,
-    crash_reports_col,
+    crash_reports_col: MongoCollection,
     start_iso: str,
     end_iso: str,
     limit: int = 20,
@@ -740,9 +742,9 @@ async def build_crash_reports_overview(
     return {"total": total, "recent": recent}
 
 
-async def summarize_services_usage(*, service_usage_logs_col, start_iso: str, end_iso: str) -> dict[str, Any]:
+async def summarize_services_usage(*, service_usage_logs_col: MongoCollection, start_iso: str, end_iso: str) -> dict[str, Any]:
     match = {"created_at": {"$gte": start_iso, "$lte": end_iso}}
-    pipeline = [
+    pipeline: list[dict[str, Any]] = [
         {"$match": match},
         {
             "$group": {

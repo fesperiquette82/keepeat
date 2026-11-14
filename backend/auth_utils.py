@@ -13,6 +13,7 @@ import jwt
 from jwt import PyJWTError as JWTError
 
 from backend.app_core import serialize_mongo, utc_now
+from backend.mongo_types import MongoCollection
 
 
 def get_jwt_secret_key() -> str:
@@ -115,7 +116,7 @@ def token_session_version_is_current(payload: dict[str, Any], user_doc: dict[str
 
 
 async def get_current_user(
-    users_col,
+    users_col: MongoCollection,
     credentials: HTTPAuthorizationCredentials | None = Depends(http_bearer),
 ) -> dict[str, Any]:
     if not credentials or not credentials.credentials:

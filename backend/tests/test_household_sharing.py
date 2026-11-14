@@ -262,6 +262,27 @@ class TestInviteAndJoin:
         server.app.dependency_overrides.clear()
 
 
+class TestInviteTokenDecoding:
+    def test_rejects_non_string_household_id(self, monkeypatch):
+        """[REGRESSION] BUG-088 — un jeton d'invitation signé dont
+        `household_id` n'est pas une chaîne était renvoyé tel quel au lieu
+        d'un 400 INVALID_INVITE_TOKEN."""
+        import jwt
+
+        from backend import household_service
+        monkeypatch.setenv("JWT_SECRET_KEY", "test-secret")
+        for bad_household_id in (123, ["h"], {"id": "h"}):
+            token = jwt.encode(
+                {"household_id": bad_household_id, "type": household_service.INVITE_TOKEN_TYPE},
+                "test-secret",
+                algorithm=household_service.JWT_ALGORITHM,
+            )
+            with pytest.raises(HTTPException) as exc_info:
+                household_service.decode_invite_token(token)
+            assert exc_info.value.status_code == 400
+            assert exc_info.value.detail == {"code": "INVALID_INVITE_TOKEN"}
+
+
 class TestLeaveHousehold:
     def test_member_leaves(self, monkeypatch):
         server = _load_server(monkeypatch)

@@ -9,6 +9,7 @@ from typing import Any
 import httpx
 
 from backend.app_core import utc_now
+from backend.mongo_types import MongoCollection, MongoDatabase
 
 
 SERVICE_REGISTRY: list[dict[str, Any]] = [
@@ -102,7 +103,7 @@ def _warning_level(usage_percent: float | None) -> str:
     return "normal"
 
 
-async def build_services_status(*, db, api_request_logs_col) -> dict[str, Any]:
+async def build_services_status(*, db: MongoDatabase, api_request_logs_col: MongoCollection) -> dict[str, Any]:
     now = utc_now()
     now_iso = now.isoformat()
     services: list[dict[str, Any]] = []
@@ -212,7 +213,7 @@ async def build_services_status(*, db, api_request_logs_col) -> dict[str, Any]:
     return {"generated_at": now_iso, "services": services}
 
 
-async def build_usage_metrics(*, users_col, stock_col, service_usage_logs_col) -> dict[str, Any]:
+async def build_usage_metrics(*, users_col: MongoCollection, stock_col: MongoCollection, service_usage_logs_col: MongoCollection) -> dict[str, Any]:
     now = utc_now()
     start, end = _month_bounds(now)
     start_iso, end_iso = start.isoformat(), end.isoformat()

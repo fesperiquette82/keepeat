@@ -6,6 +6,8 @@ from typing import Any, Final, Literal
 from fastapi import HTTPException
 from pymongo import ReturnDocument
 
+from backend.mongo_types import MongoCollection
+
 PlanName = Literal["free", "premium"]
 
 FREE_PLAN: Final = "free"
@@ -101,7 +103,7 @@ def check_access_or_raise(*, plan: str, feature: str) -> dict[str, Any]:
 
 async def consume_quota_or_raise(
     *,
-    app_state_col,
+    app_state_col: MongoCollection,
     user_id: str,
     feature: str,
     monthly_limit: int | None,
@@ -151,7 +153,7 @@ async def consume_quota_or_raise(
 
 async def refund_quota(
     *,
-    app_state_col,
+    app_state_col: MongoCollection,
     user_id: str,
     feature: str,
     period: str,

@@ -6155,7 +6155,7 @@ async def admin_dedup_recipes(
 @api_router.post("/debug/logs/upload", status_code=200, response_model=DebugLogsUploadResponse)
 async def upload_debug_logs(
     body: DebugLogsUploadBody,
-    current_user: Dict[str, Any] = Depends(get_current_user),
+    current_user: Dict[str, Any] = Depends(_get_current_user),
 ):
     """Upload les logs de debug de l'app mobile (généré par debugSwipeLogger).
 

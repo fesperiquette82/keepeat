@@ -11,6 +11,7 @@ from jwt import PyJWTError as JWTError
 from backend.app_core import serialize_mongo, utc_now
 from backend.auth_utils import get_jwt_secret_key
 from backend.entitlements import PREMIUM_PLAN, resolve_plan
+from backend.mongo_types import MongoCollection
 
 JWT_ALGORITHM = "HS256"
 INVITE_EXPIRE_DAYS = 7
@@ -38,13 +39,13 @@ def decode_invite_token(token: str) -> str:
     if payload.get("type") != INVITE_TOKEN_TYPE:
         raise HTTPException(status_code=400, detail={"code": "INVALID_INVITE_TOKEN"})
     household_id = payload.get("household_id")
-    if not household_id:
+    if not isinstance(household_id, str) or not household_id:
         raise HTTPException(status_code=400, detail={"code": "INVALID_INVITE_TOKEN"})
     return household_id
 
 
 def household_response(household_doc: dict[str, Any], *, members_docs: list[dict[str, Any]]) -> dict[str, Any]:
-    out = serialize_mongo(household_doc)
+    out: dict[str, Any] = serialize_mongo(household_doc)
     members_by_id = {str(m.get("_id")): m for m in members_docs}
     owner_id = out.get("owner_id")
     out["members"] = [
@@ -60,17 +61,17 @@ def household_response(household_doc: dict[str, Any], *, members_docs: list[dict
 
 @overload
 async def resolve_billing_user_doc(
-    user_doc: dict[str, Any], *, users_col: Any, households_col: Any
+    user_doc: dict[str, Any], *, users_col: MongoCollection, households_col: MongoCollection
 ) -> dict[str, Any]: ...
 @overload
 async def resolve_billing_user_doc(
-    user_doc: dict[str, Any] | None, *, users_col: Any, households_col: Any
+    user_doc: dict[str, Any] | None, *, users_col: MongoCollection, households_col: MongoCollection
 ) -> dict[str, Any] | None: ...
 async def resolve_billing_user_doc(
     user_doc: dict[str, Any] | None,
     *,
-    users_col,
-    households_col,
+    users_col: MongoCollection,
+    households_col: MongoCollection,
 ) -> dict[str, Any] | None:
     """Retourne le document utilisateur à utiliser pour toute résolution
     d'abonnement (plan, quotas, historique). Un utilisateur premium sur son

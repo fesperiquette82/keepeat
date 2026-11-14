@@ -1887,3 +1887,33 @@ def test_backend_is_type_checked_with_mypy():
     script = Path("scripts/lib/validate-python-fastapi.sh").read_text(encoding="utf-8")
     assert "mypy backend tests" in script
     assert "[skip] mypy: not installed" not in script
+
+
+def test_backend_application_modules_are_strictly_typed():
+    """BUG-088 : tous les modules applicatifs de backend/ sont vérifiés par
+    mypy en strict (équivalent par module de --strict). Les seules exceptions
+    sont server.py, les scripts ponctuels et les tests : en ajouter une doit
+    être une décision visible, pas une ligne glissée dans mypy.ini."""
+    import configparser
+
+    config = configparser.ConfigParser()
+    config.read("mypy.ini", encoding="utf-8")
+    strict = config["mypy-backend.*"]
+    for flag in (
+        "disallow_any_generics",
+        "disallow_subclassing_any",
+        "disallow_untyped_calls",
+        "disallow_untyped_defs",
+        "disallow_incomplete_defs",
+        "check_untyped_defs",
+        "disallow_untyped_decorators",
+        "warn_unused_ignores",
+        "warn_return_any",
+        "strict_equality",
+        "extra_checks",
+    ):
+        assert strict.getboolean(flag) is True, flag
+    assert strict.getboolean("implicit_reexport") is False
+    assert config["mypy"].getboolean("warn_redundant_casts") is True
+    relaxed = [name for name in config.sections() if name not in ("mypy", "mypy-backend.*")]
+    assert relaxed == ["mypy-backend.server,backend.scripts.*,backend.tests.*"]
