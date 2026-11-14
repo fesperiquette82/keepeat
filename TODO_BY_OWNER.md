@@ -140,13 +140,13 @@ inachevée. Le chronomètre tourne pendant que le reste avance.
 
 **Avant d'ouvrir au public — qualité**
 
-- [ ] Réparer la suite **Maestro** (seul test de bout en bout, rouge depuis le
-      27/08). **Cause racine corrigée le 13/11 (BUG-083, PR #173)** : l'APK debug
-      construit en CI n'embarquait aucun bundle JS, l'app n'avait rien à exécuter.
-      Le run du 14/11 a confirmé le bundle embarqué, mais a révélé une seconde
-      cause (BUG-090) : l'APK E2E visait le backend de production. Corrigée le
-      14/11. Reste à **confirmer sur le run CI** (job « PR smoke Maestro suite »
-      du PR, puis nightly) ; rien à faire de votre côté tant que je suis le run.
+- [x] Réparer la suite **Maestro** (seul test de bout en bout, rouge depuis le
+      27/08) — **fait le 14/11 (PR #173)** : suite de fumée verte, 3 scénarios
+      sur 3, après huit correctifs en chaîne (BUG-083, BUG-090 à BUG-096, voir le
+      bilan en fin d'`AUDIT_BUGS.md`). Trois étaient de vrais défauts de l'app
+      (erreurs « [object Object] », onboarding imposé sur un nouvel appareil,
+      onglet Statistiques inutilisable en gratuit). Rien à faire de votre côté ;
+      la suite complète nocturne tournera après la fusion de la PR.
 - [x] **Épingler les dépendances backend** — fait le 12/11 (BUG-081, PR #173) :
       `requirements.txt` épinglé, `pip-audit` en CI.
 - [ ] **Vérifier le thème sombre sur un vrai appareil** (jamais fait).

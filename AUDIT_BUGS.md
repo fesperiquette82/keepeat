@@ -1263,7 +1263,7 @@ Le cas le plus visible était le premier : le chemin le plus utilisé étiquetai
 
 | ID | Sévérité | Statut | Résumé |
 |---|---|---|---|
-| BUG-083 | 🟠 MAJEUR (seul test de bout en bout inopérant) | `CORRIGÉ` (bundle embarqué confirmé par le run CI du 14/11 ; Maestro restait rouge pour une seconde cause, BUG-090) | `app.config.js` : plugin de configuration `withAppBuildGradle` qui ajoute `debuggableVariants = []` au bloc `react {}` quand `EXPO_E2E_EMBED_BUNDLE=1` (idempotent, échoue bruyamment si le bloc est introuvable ; Metro reste utilisé en développement local). Les deux workflows E2E posent le flag au prebuild **et** au build (le bundle est produit par Gradle, les `EXPO_PUBLIC_*` doivent y être présentes), puis vérifient la présence d'`assets/index.android.bundle` dans l'APK, sinon le job échoue avec un message explicite. `00-smoke-launch.yaml` exige désormais l'écran de connexion ou l'onglet accueil. |
+| BUG-083 | 🟠 MAJEUR (seul test de bout en bout inopérant) | `CORRIGÉ` (confirmé le 14/11 : suite Maestro de la PR verte, 3 scénarios sur 3, après les correctifs en chaîne BUG-090 à BUG-096) | `app.config.js` : plugin de configuration `withAppBuildGradle` qui ajoute `debuggableVariants = []` au bloc `react {}` quand `EXPO_E2E_EMBED_BUNDLE=1` (idempotent, échoue bruyamment si le bloc est introuvable ; Metro reste utilisé en développement local). Les deux workflows E2E posent le flag au prebuild **et** au build (le bundle est produit par Gradle, les `EXPO_PUBLIC_*` doivent y être présentes), puis vérifient la présence d'`assets/index.android.bundle` dans l'APK, sinon le job échoue avec un message explicite. `00-smoke-launch.yaml` exige désormais l'écran de connexion ou l'onglet accueil. |
 
 **Fichiers modifiés :** `frontend/app.config.js`, `.github/workflows/mobile-e2e.yml`, `.github/workflows/mobile-e2e-nightly.yml`, `.maestro/00-smoke-launch.yaml`, `TODO_BY_OWNER.md`
 **Tests ajoutés/mis à jour :** `frontend/smoke/appConfigE2eBundle.smoke.test.ts` (flag, réécriture Gradle idempotente, échec bruyant, plugin attaché seulement en E2E), `tests/test_ci_non_regression_policy.py::test_e2e_debug_apk_embeds_js_bundle` et `::test_smoke_launch_flow_is_not_vacuous`
@@ -1447,10 +1447,27 @@ Le cas le plus visible était le premier : le chemin le plus utilisé étiquetai
 
 | ID | Sévérité | Statut | Résumé |
 |---|---|---|---|
-| BUG-096 | 🟠 MAJEUR (fonction gratuite inaccessible) | `CORRIGÉ` (à confirmer par le run CI) | Nouveau `utils/statsScreenData.ts` : `loadStatsScreenData` charge statistiques et gamification comme avant (leur échec reste une erreur), et les prédictions à part ; leur échec vaut « aucune prédiction ». `canLoadPredictions` ne les demande que si le droit est ouvert (droits du serveur s'ils sont connus, sinon le plan) : plus de 403 inutile qui gonflait le taux d'erreur de `/api/predictions` dans le dashboard admin, plus de paywall imposé. `app/(tabs)/stats.tsx` l'utilise. |
+| BUG-096 | 🟠 MAJEUR (fonction gratuite inaccessible) | `CORRIGÉ` (confirmé par le run CI du 14/11 : `02-navigation-main-tabs` vert, onglet Statistiques affiché sans paywall) | Nouveau `utils/statsScreenData.ts` : `loadStatsScreenData` charge statistiques et gamification comme avant (leur échec reste une erreur), et les prédictions à part ; leur échec vaut « aucune prédiction ». `canLoadPredictions` ne les demande que si le droit est ouvert (droits du serveur s'ils sont connus, sinon le plan) : plus de 403 inutile qui gonflait le taux d'erreur de `/api/predictions` dans le dashboard admin, plus de paywall imposé. `app/(tabs)/stats.tsx` l'utilise. |
 
 **Fichiers modifiés :** `frontend/utils/statsScreenData.ts` (nouveau), `frontend/app/(tabs)/stats.tsx`
 **Tests ajoutés/mis à jour :** `frontend/utils/statsScreenData.test.ts` (utilisateur gratuit : statistiques et gamification chargées sans requête de prédictions ; un 403 des prédictions ne fait plus échouer le chargement ; prédictions comptées pour un Premium ; échec des statistiques mensuelles toujours signalé ; règle des droits ; l'écran passe par le nouveau chargement, vérifié probant sur l'ancien écran).
 **Commandes exécutées :** `npm run test:ci`, `bash scripts/ai-validate.sh`
 **Résultat :** PASS
 **Risques restants :** aucun connu ; le run Maestro confirmera l'onglet sur émulateur.
+
+## Bilan du 14/11 — suite Maestro réparée
+
+La suite de fumée Maestro de la PR #173 est **verte** pour la première fois depuis le 27/08 : `00-smoke-launch` (11 s), `01-auth-session` (41 s), `02-navigation-main-tabs` (44 s), émulateur démarré en 29 s avec KVM. Il a fallu lever huit obstacles successifs, chacun révélé par le précédent :
+
+| Ordre | ID | Obstacle | Nature |
+|---|---|---|---|
+| 1 | BUG-083 | aucun bundle JS dans l'APK debug | CI |
+| 2 | BUG-090 | l'APK E2E visait le backend de production | CI (garde-fou de `config.ts` en mode production) |
+| 3 | BUG-091 | émulateur sans KVM, démarrage en 8 min et coupures adb | CI |
+| 4 | BUG-092 | clavier recouvrant le champ mot de passe | scénarios (et mise en page à vérifier sur appareil) |
+| 5 | BUG-093 | comptes E2E en `.test` refusés à la connexion ; erreurs 422 affichées « [object Object] » | jeu de test ; **défaut visible des utilisateurs** |
+| 6 | BUG-094 | backend E2E sans `JWT_SECRET_KEY` | CI |
+| 7 | BUG-095 | utilisateur existant envoyé vers l'onboarding sur un nouvel appareil | **défaut produit** |
+| 8 | BUG-096 | onglet Statistiques inutilisable pour un utilisateur gratuit | **défaut produit** |
+
+Trois de ces obstacles étaient de vrais défauts de l'application, invisibles tant que la suite ne dépassait pas l'écran de connexion. Le diagnostic lisible depuis le journal du job (BUG-090 : journaux MongoDB bornés, condensé d'échec) a rendu chaque étape identifiable en un run. **Reste à suivre :** la suite complète nocturne (`mobile-e2e-nightly.yml`, scénarios au-delà de la fumée), qui n'a pas encore tourné avec ces correctifs.
