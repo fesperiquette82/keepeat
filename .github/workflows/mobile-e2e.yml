@@ -551,7 +551,9 @@ jobs:
           MOCK_BILLING: "true"
           MOCK_EMAILS: "true"
           MOCK_PUSH: "true"
-          JWT_SECRET: test-secret
+          # BUG-094 : le backend lit JWT_SECRET_KEY (repli : SECRET_KEY). Sous
+          # l'ancien nom JWT_SECRET, toute connexion E2E finissait en 500.
+          JWT_SECRET_KEY: e2e-test-secret-not-for-production-0001
           BACKEND_URL: http://127.0.0.1:8000
           PYTHONPATH: ${{ github.workspace }}/backend
         run: |

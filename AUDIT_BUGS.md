@@ -1405,10 +1405,24 @@ Le cas le plus visible était le premier : le chemin le plus utilisé étiquetai
 
 | ID | Sévérité | Statut | Résumé |
 |---|---|---|---|
-| BUG-093 | 🟠 MAJEUR (E2E bloqué ; message d'erreur illisible pour les utilisateurs) | `CORRIGÉ` (scénarios à confirmer par le run CI) | Comptes E2E déplacés vers `example.com` (domaine réservé par l'IANA aux exemples, accepté par le validateur) dans `test_mode.py`, les scénarios Maestro et le script de seed ; la validation de production n'est pas assouplie. Nouveau `formatApiErrorDetail` (`utils/errorDetails.ts`) : chaîne conservée, liste d'erreurs de validation réduite à leurs messages, objet lu par `message` puis `code`, `undefined` sinon pour laisser le message de repli. Utilisé par `authStore` (appels `/api/auth/*`, lecture des droits premium et de l'usage des quotas) et `accountService` (export, suppression du compte). |
+| BUG-093 | 🟠 MAJEUR (E2E bloqué ; message d'erreur illisible pour les utilisateurs) | `CORRIGÉ` (confirmé par le run CI du 14/11 : l'adresse est acceptée, la requête atteint la connexion) | Comptes E2E déplacés vers `example.com` (domaine réservé par l'IANA aux exemples, accepté par le validateur) dans `test_mode.py`, les scénarios Maestro et le script de seed ; la validation de production n'est pas assouplie. Nouveau `formatApiErrorDetail` (`utils/errorDetails.ts`) : chaîne conservée, liste d'erreurs de validation réduite à leurs messages, objet lu par `message` puis `code`, `undefined` sinon pour laisser le message de repli. Utilisé par `authStore` (appels `/api/auth/*`, lecture des droits premium et de l'usage des quotas) et `accountService` (export, suppression du compte). |
 
 **Fichiers modifiés :** `backend/test_mode.py`, `scripts/e2e-reset-seed.mjs`, `.maestro/01-auth-session.yaml`, `.maestro/02-navigation-main-tabs.yaml`, `.maestro/helpers/ensure-authenticated.yaml`, `frontend/utils/errorDetails.ts`, `frontend/store/authStore.ts`, `frontend/utils/accountService.ts`, `docs/non-regression-tests.md`
 **Tests ajoutés/mis à jour :** `backend/tests/test_test_mode_guards.py::test_e2e_fixture_accounts_pass_login_validation` (chaque compte du jeu de test passe `UserLogin`, vérifié probant), `frontend/utils/errorDetails.test.ts` (erreur 422 réelle de ce run rendue lisible, erreurs multiples, chaîne, objet, repli) ; assertions des tests de politique et de `test_test_mode_guards.py` mises à jour vers la nouvelle adresse.
 **Commandes exécutées :** `npm run test:ci`, `pytest`, `bash scripts/ai-validate.sh`
 **Résultat :** PASS
 **Risques restants :** le message affiché pour une adresse mal formée reste celui, en anglais, du validateur ; une traduction côté écran de connexion serait une amélioration distincte.
+
+## BUG-094 — Le backend E2E démarrait sans clé de signature des jetons
+
+**Contexte :** 14/11, run Maestro après BUG-093. L'adresse est acceptée, mais la connexion répond 500 et l'application affiche « JSON Parse error: Unexpected character: I » (la page d'erreur « Internal Server Error » n'est pas du JSON). Le journal du backend de test donne la cause : `RuntimeError: JWT_SECRET_KEY is required` dans `create_token`. Les deux workflows E2E démarraient le backend avec `JWT_SECRET`, alors que le code lit `JWT_SECRET_KEY` (repli `SECRET_KEY`). C'est le même renommage que BUG-075 a fait dans les jobs backend de la CI, oublié dans les workflows E2E. Un test de politique existant exigeait même l'ancien nom.
+
+| ID | Sévérité | Statut | Résumé |
+|---|---|---|---|
+| BUG-094 | 🟠 MAJEUR (E2E bloqué) | `CORRIGÉ` (à confirmer par le run CI) | `JWT_SECRET_KEY` fourni au backend de test dans `mobile-e2e.yml` et `mobile-e2e-nightly.yml` (valeur de 32 octets au moins, pour éviter l'avertissement de PyJWT sur les clés courtes). Le test de politique qui exigeait `JWT_SECRET` est corrigé. |
+
+**Fichiers modifiés :** `.github/workflows/mobile-e2e.yml`, `.github/workflows/mobile-e2e-nightly.yml`, `tests/test_ci_non_regression_policy.py`
+**Tests ajoutés/mis à jour :** `tests/test_ci_non_regression_policy.py::test_workflows_give_the_backend_its_jwt_secret_under_the_name_it_reads` (aucun workflow n'utilise l'ancien nom ; l'étape de démarrage du backend E2E fournit `JWT_SECRET_KEY`), vérifié probant ; assertion de `test_maestro_e2e_is_fully_runnable_in_github_actions` corrigée.
+**Commandes exécutées :** `pytest tests/test_ci_non_regression_policy.py`, `bash scripts/ai-validate.sh`
+**Résultat :** PASS
+**Risques restants :** aucun connu ; le run Maestro dira si un autre obstacle suit la connexion.

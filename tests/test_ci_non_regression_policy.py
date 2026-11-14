@@ -235,7 +235,7 @@ def test_maestro_e2e_is_fully_runnable_in_github_actions():
     assert "DB_NAME: keepeat_e2e_test" in workflow
     assert "APP_ENV: test" in workflow
     assert 'DISABLE_EXTERNAL_SERVICES: "true"' in workflow
-    assert "JWT_SECRET: test-secret" in workflow
+    assert "JWT_SECRET_KEY:" in workflow  # BUG-094 : nom lu par le backend
     assert "PYTHONPATH: ${{ github.workspace }}" in workflow
     assert "pip install -r backend/requirements.txt" in workflow
     assert "Waiting for MongoDB test service..." in workflow
@@ -1900,6 +1900,21 @@ def test_maestro_login_hides_keyboard_before_password_field():
             assert password != -1, f"{flow} : saisie d'e-mail sans champ mot de passe ensuite"
             assert "hideKeyboard" in text[email:password], f"{flow} : clavier non fermé avant le mot de passe"
             position = password
+
+def test_workflows_give_the_backend_its_jwt_secret_under_the_name_it_reads():
+    """BUG-094 : le backend lit JWT_SECRET_KEY (repli SECRET_KEY,
+    backend/auth_utils.py). Les workflows E2E le démarraient avec JWT_SECRET :
+    toute connexion Maestro finissait en 500 (« JWT_SECRET_KEY is required »).
+    Aucun workflow ne doit utiliser l'ancien nom, et chaque workflow qui démarre
+    ou teste le backend fournit JWT_SECRET_KEY."""
+    auth_utils = Path("backend/auth_utils.py").read_text(encoding="utf-8")
+    assert "JWT_SECRET_KEY" in auth_utils
+    for path in sorted(Path(".github/workflows").glob("*.yml")):
+        workflow = path.read_text(encoding="utf-8")
+        assert not re.search(r"^\s*JWT_SECRET\s*:", workflow, re.M), f"{path} : ancien nom JWT_SECRET"
+    for path in (".github/workflows/mobile-e2e.yml", ".github/workflows/mobile-e2e-nightly.yml"):
+        block = Path(path).read_text(encoding="utf-8").split("- name: Start backend in test mode")[1].split("- name:")[0]
+        assert "JWT_SECRET_KEY:" in block, path
 
 def test_maestro_failures_are_diagnosable_from_the_job_log():
     """BUG-090 : l'API ne rend que les dernières lignes du journal d'un job, et
