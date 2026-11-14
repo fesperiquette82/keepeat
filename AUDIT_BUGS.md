@@ -400,7 +400,7 @@ Le `catch` de `updateItem` vérifie désormais `isNetworkError(err)` et déclenc
 |---|---|---|
 | `storageZone` absent du formulaire tickets | `CORRIGÉ` | Sélecteur zones (frigo/placard/congélo) ajouté dans `buildItemRow()` + `selectZone()` + `collectItems()`. |
 | `reopenTicket` non implémenté | `CORRIGÉ` | Endpoint `POST /admin/receipt-tickets/{id}/reopen` ajouté + JS dans la page. |
-| Page `/admin/dashboard` (Vue d'ensemble) | `IMPLÉMENTÉ` | HTML inline `_ADMIN_DASHBOARD_HTML` + route `GET /admin/dashboard`. Appels aux endpoints monitoring/health et monitoring/dashboard. Auto-refresh 60s. |
+| Page `/admin/dashboard` (Vue d'ensemble) | `IMPLÉMENTÉ` | HTML `ADMIN_DASHBOARD_HTML` (dans `backend/admin_pages.py` depuis BUG-087) + route `GET /admin/dashboard`. Appels aux endpoints monitoring/health et monitoring/dashboard. Auto-refresh 60s. |
 | Navigation inter-pages admin | `IMPLÉMENTÉ` | Lien Dashboard ajouté dans nav de `/admin/tickets`. Liens Dashboard + Tickets ajoutés dans `/admin/recipes`. |
 | Tests `test_admin_monitoring.py` (14 tests) | `AJOUTÉ` | `normalize_endpoint_key`, `classify_error_type`, `test_dashboard_route_exists`. |
 
@@ -1314,3 +1314,17 @@ Le cas le plus visible était le premier : le chemin le plus utilisé étiquetai
 **Commandes exécutées :** `mypy backend tests` (0 erreur, 99 fichiers), `ruff check backend tests`, `bash scripts/ai-validate.sh`
 **Résultat :** PASS
 **Risques restants :** mode normal seulement — les fonctions non annotées ne sont pas vérifiées (notes `annotation-unchecked`). Le passage en strict se fera module par module (`[mypy-backend.xxx]` dans `mypy.ini`), en commençant par les modules purs (`google_play_billing`, `entitlements`, `mongo_settings`).
+
+## BUG-087 — `server.py` portait 1 600 lignes de HTML en ligne
+
+**Contexte :** 14/11, premier lot du découpage de `server.py` (7 966 lignes). Un cinquième du fichier était du HTML et du JavaScript statiques : politique de confidentialité, page de suppression de compte et trois pages admin (recettes, tickets, dashboard). Ces blocs noyaient la logique, gonflaient chaque diff et rendaient les recherches dans le backend bruyantes.
+
+| ID | Sévérité | Statut | Résumé |
+|---|---|---|---|
+| BUG-087 | 🟡 MINEUR (maintenabilité) | `CORRIGÉ` | Pages déplacées à l'identique, au caractère près (vérifié par comparaison des valeurs avant et après) : `backend/legal_pages.py` (`PRIVACY_POLICY_HTML`, `ACCOUNT_DELETION_HTML`) et `backend/admin_pages.py` (`ADMIN_RECIPES_HTML`, `ADMIN_TICKETS_HTML`, `ADMIN_DASHBOARD_HTML`). `server.py` les importe et les sert par les mêmes routes ; il passe de 7 966 à 6 332 lignes. **Ce qui reste dans `server.py`, et pourquoi :** les routes. Les tests remplacent les collections directement sur le module (`monkeypatch.setattr(server, "users_col", …)`) ; une route déplacée dans un autre module lirait sa propre référence et ignorerait ce remplacement sans erreur. Le découpage des routes demande d'abord d'injecter les collections (dépendance FastAPI ou objet de contexte) et d'adapter les tests en conséquence. |
+
+**Fichiers modifiés :** `backend/server.py`, `backend/legal_pages.py` (nouveau), `backend/admin_pages.py` (nouveau), `backend/tests/test_admin_monitoring.py` et `backend/tests/test_account_deletion_completeness.py` (nouveaux noms des constantes)
+**Tests ajoutés/mis à jour :** `backend/tests/test_static_pages_modules.py` (chaque route sert exactement le contenu de son module en `text/html` ; aucune page HTML complète en ligne dans `server.py`). Vérifié probant : 6 échecs sur l'ancien code.
+**Commandes exécutées :** `ruff check backend tests`, `mypy backend tests`, `bash scripts/ai-validate.sh`
+**Résultat :** PASS
+**Risques restants :** aucun sur le contenu servi (valeurs identiques). Le découpage des routes reste à faire, conditionné à l'injection des collections.
