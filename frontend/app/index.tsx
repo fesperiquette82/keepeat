@@ -5,7 +5,7 @@ import { useRouter } from 'expo-router';
 import { useEffect } from 'react';
 import { logger } from '../utils/logger';
 import { hasSeenOnboarding, markOnboardingSeen } from '../utils/onboardingStorage';
-import { resolvePostLoginDestination } from '../utils/postLoginDestination';
+import { decidePostLoginDestination } from '../utils/postLoginDestination';
 
 export default function Root() {
   const router = useRouter();
@@ -27,8 +27,13 @@ export default function Root() {
     let cancelled = false;
     (async () => {
       const seen = await hasSeenOnboarding(user.id);
-      const hasStockItems = useStockStore.getState().items.length > 0;
-      const destination = resolvePostLoginDestination({ hasSeenOnboarding: seen, hasStockItems });
+      // BUG-095 : sur un nouvel appareil, le stock local est vide au moment de
+      // décider ; le stock du serveur est consulté avant d'imposer l'onboarding.
+      const destination = await decidePostLoginDestination({
+        hasSeenOnboarding: seen,
+        localStockCount: () => useStockStore.getState().items.length,
+        loadRemoteStock: () => useStockStore.getState().fetchStock({ force: true, reason: 'post_login_destination' }),
+      });
       if (cancelled) return;
       if (destination === '/(tabs)' && !seen) {
         // Stock non vide sans que l'onboarding ait été vu (autre appareil,

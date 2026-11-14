@@ -1426,3 +1426,17 @@ Le cas le plus visible était le premier : le chemin le plus utilisé étiquetai
 **Commandes exécutées :** `pytest tests/test_ci_non_regression_policy.py`, `bash scripts/ai-validate.sh`
 **Résultat :** PASS
 **Risques restants :** aucun connu ; le run Maestro dira si un autre obstacle suit la connexion.
+
+## BUG-095 — Un utilisateur existant sur un nouvel appareil tombait sur l'onboarding
+
+**Contexte :** 14/11, relu avant le prochain run Maestro. Après connexion, `app/index.tsx` choisissait entre l'onboarding et les onglets avec `resolvePostLoginDestination`, à partir du drapeau local « onboarding vu » et du stock **local**. Sur un nouvel appareil, après une réinstallation, ou en E2E (données de l'application effacées entre deux scénarios), le stock local est vide au moment de décider : rien n'avait encore été chargé depuis le serveur. Un utilisateur qui avait déjà des produits était donc envoyé vers l'onboarding, alors que le commentaire de BUG-043 dit précisément l'inverse (« Un utilisateur qui a déjà des produits (import, autre appareil, session précédente) n'a rien à apprendre de cet écran »). En E2E, le compte de test a un stock semé côté serveur : après la connexion, l'onglet accueil n'aurait jamais été visible.
+
+| ID | Sévérité | Statut | Résumé |
+|---|---|---|---|
+| BUG-095 | 🟡 MINEUR (parcours d'un utilisateur existant) | `CORRIGÉ` | Nouveau `decidePostLoginDestination` (`utils/postLoginDestination.ts`) : si l'onboarding n'a pas été vu et que le stock local est vide, le stock du serveur est chargé (`fetchStock({ force: true })`, borné à 4 s, sans jamais lever) avant de trancher ; en cas d'erreur ou de lenteur, la décision locale s'applique comme avant. `app/index.tsx` l'utilise. Un nouvel utilisateur (stock vide partout) voit toujours l'onboarding. |
+
+**Fichiers modifiés :** `frontend/utils/postLoginDestination.ts`, `frontend/app/index.tsx`
+**Tests ajoutés/mis à jour :** `frontend/utils/postLoginDestination.test.ts` (stock serveur rempli → onglets ; vide partout → onboarding ; pas de requête si l'onboarding est vu ou le stock local rempli ; erreur serveur → décision locale ; serveur trop lent → décision locale au bout du délai), `frontend/utils/onboardingFlow.test.ts` (`index.tsx` passe par `decidePostLoginDestination` et consulte le stock du serveur).
+**Commandes exécutées :** `npm run test:ci`, `bash scripts/ai-validate.sh`
+**Résultat :** PASS
+**Risques restants :** jusqu'à 4 s d'écran neutre après la connexion si le serveur est lent et que l'utilisateur n'a jamais vu l'onboarding sur cet appareil (cas d'un réveil à froid du backend sur Render).
