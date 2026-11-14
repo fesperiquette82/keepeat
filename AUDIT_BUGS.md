@@ -1419,7 +1419,7 @@ Le cas le plus visible était le premier : le chemin le plus utilisé étiquetai
 
 | ID | Sévérité | Statut | Résumé |
 |---|---|---|---|
-| BUG-094 | 🟠 MAJEUR (E2E bloqué) | `CORRIGÉ` (à confirmer par le run CI) | `JWT_SECRET_KEY` fourni au backend de test dans `mobile-e2e.yml` et `mobile-e2e-nightly.yml` (valeur de 32 octets au moins, pour éviter l'avertissement de PyJWT sur les clés courtes). Le test de politique qui exigeait `JWT_SECRET` est corrigé. |
+| BUG-094 | 🟠 MAJEUR (E2E bloqué) | `CORRIGÉ` (confirmé par le run CI du 14/11 : `POST /api/auth/login` 200, `01-auth-session` vert) | `JWT_SECRET_KEY` fourni au backend de test dans `mobile-e2e.yml` et `mobile-e2e-nightly.yml` (valeur de 32 octets au moins, pour éviter l'avertissement de PyJWT sur les clés courtes). Le test de politique qui exigeait `JWT_SECRET` est corrigé. |
 
 **Fichiers modifiés :** `.github/workflows/mobile-e2e.yml`, `.github/workflows/mobile-e2e-nightly.yml`, `tests/test_ci_non_regression_policy.py`
 **Tests ajoutés/mis à jour :** `tests/test_ci_non_regression_policy.py::test_workflows_give_the_backend_its_jwt_secret_under_the_name_it_reads` (aucun workflow n'utilise l'ancien nom ; l'étape de démarrage du backend E2E fournit `JWT_SECRET_KEY`), vérifié probant ; assertion de `test_maestro_e2e_is_fully_runnable_in_github_actions` corrigée.
@@ -1433,10 +1433,24 @@ Le cas le plus visible était le premier : le chemin le plus utilisé étiquetai
 
 | ID | Sévérité | Statut | Résumé |
 |---|---|---|---|
-| BUG-095 | 🟡 MINEUR (parcours d'un utilisateur existant) | `CORRIGÉ` | Nouveau `decidePostLoginDestination` (`utils/postLoginDestination.ts`) : si l'onboarding n'a pas été vu et que le stock local est vide, le stock du serveur est chargé (`fetchStock({ force: true })`, borné à 4 s, sans jamais lever) avant de trancher ; en cas d'erreur ou de lenteur, la décision locale s'applique comme avant. `app/index.tsx` l'utilise. Un nouvel utilisateur (stock vide partout) voit toujours l'onboarding. |
+| BUG-095 | 🟡 MINEUR (parcours d'un utilisateur existant) | `CORRIGÉ` (confirmé par le run CI du 14/11 : « user exists, navigating { destination: '/(tabs)' } » pour le compte E2E, données de l'application effacées) | Nouveau `decidePostLoginDestination` (`utils/postLoginDestination.ts`) : si l'onboarding n'a pas été vu et que le stock local est vide, le stock du serveur est chargé (`fetchStock({ force: true })`, borné à 4 s, sans jamais lever) avant de trancher ; en cas d'erreur ou de lenteur, la décision locale s'applique comme avant. `app/index.tsx` l'utilise. Un nouvel utilisateur (stock vide partout) voit toujours l'onboarding. |
 
 **Fichiers modifiés :** `frontend/utils/postLoginDestination.ts`, `frontend/app/index.tsx`
 **Tests ajoutés/mis à jour :** `frontend/utils/postLoginDestination.test.ts` (stock serveur rempli → onglets ; vide partout → onboarding ; pas de requête si l'onboarding est vu ou le stock local rempli ; erreur serveur → décision locale ; serveur trop lent → décision locale au bout du délai), `frontend/utils/onboardingFlow.test.ts` (`index.tsx` passe par `decidePostLoginDestination` et consulte le stock du serveur).
 **Commandes exécutées :** `npm run test:ci`, `bash scripts/ai-validate.sh`
 **Résultat :** PASS
 **Risques restants :** jusqu'à 4 s d'écran neutre après la connexion si le serveur est lent et que l'utilisateur n'a jamais vu l'onboarding sur cet appareil (cas d'un réveil à froid du backend sur Render).
+
+## BUG-096 — L'onglet Statistiques était inutilisable pour un utilisateur gratuit
+
+**Contexte :** 14/11, run Maestro après BUG-094 et BUG-095 : `00-smoke-launch` et `01-auth-session` sont verts ; `02-navigation-main-tabs` passe les onglets Stock et Recettes, puis échoue sur l'onglet Statistiques. Le condensé montre le paywall Premium (« Accès Premium requis pour predictions ») à la place de l'écran. L'écran chargeait statistiques mensuelles, gamification et prédictions dans un seul `Promise.all`. Les deux premières sont gratuites, les prédictions sont Premium : pour un utilisateur gratuit, leur 403 `PREMIUM_REQUIRED` faisait échouer tout le chargement. Les statistiques n'apparaissaient jamais, le message disait « Impossible de charger les stats. Vérifiez votre connexion. », et le paywall s'ouvrait sans que l'utilisateur ait rien demandé.
+
+| ID | Sévérité | Statut | Résumé |
+|---|---|---|---|
+| BUG-096 | 🟠 MAJEUR (fonction gratuite inaccessible) | `CORRIGÉ` (à confirmer par le run CI) | Nouveau `utils/statsScreenData.ts` : `loadStatsScreenData` charge statistiques et gamification comme avant (leur échec reste une erreur), et les prédictions à part ; leur échec vaut « aucune prédiction ». `canLoadPredictions` ne les demande que si le droit est ouvert (droits du serveur s'ils sont connus, sinon le plan) : plus de 403 inutile qui gonflait le taux d'erreur de `/api/predictions` dans le dashboard admin, plus de paywall imposé. `app/(tabs)/stats.tsx` l'utilise. |
+
+**Fichiers modifiés :** `frontend/utils/statsScreenData.ts` (nouveau), `frontend/app/(tabs)/stats.tsx`
+**Tests ajoutés/mis à jour :** `frontend/utils/statsScreenData.test.ts` (utilisateur gratuit : statistiques et gamification chargées sans requête de prédictions ; un 403 des prédictions ne fait plus échouer le chargement ; prédictions comptées pour un Premium ; échec des statistiques mensuelles toujours signalé ; règle des droits ; l'écran passe par le nouveau chargement, vérifié probant sur l'ancien écran).
+**Commandes exécutées :** `npm run test:ci`, `bash scripts/ai-validate.sh`
+**Résultat :** PASS
+**Risques restants :** aucun connu ; le run Maestro confirmera l'onglet sur émulateur.
