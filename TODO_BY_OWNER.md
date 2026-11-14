@@ -156,6 +156,11 @@ inachevée. Le chronomètre tourne pendant que le reste avance.
       bouton empreinte → session ouverte sans mot de passe. Un ancien
       enregistrement (mot de passe) est effacé au premier lancement : une
       connexion au mot de passe est nécessaire une fois pour réactiver l'empreinte.
+- [ ] **Vérifier l'écran de connexion clavier ouvert sur un petit téléphone
+      Android** (BUG-092) : après avoir tapé l'e-mail, le champ mot de passe
+      reste-t-il visible, ou le clavier le recouvre-t-il ? Les tests E2E
+      suggèrent qu'il est recouvert sur un petit écran. Me dire ce que vous
+      voyez : si c'est confirmé, je corrige la mise en page.
 - [ ] **Décider du sort de l'auto-merge** (`auto-merge-pr.yml`) : il attend un
       check nommé « Mobile E2E / Not required (changes filter) » qui n'existe
       plus (le job s'appelle « …/ Not required or missing required APK »), il

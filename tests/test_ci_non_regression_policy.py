@@ -1884,6 +1884,23 @@ def test_e2e_emulator_gets_kvm_acceleration():
         assert "udevadm trigger --name-match=kvm" in workflow, path
         assert workflow.index(rule) < workflow.index("uses: reactivecircus/android-emulator-runner@v2"), path
 
+def test_maestro_login_hides_keyboard_before_password_field():
+    """BUG-092 : sur l'émulateur CI (petit écran, application en bord à bord),
+    le clavier ouvert par la saisie de l'e-mail recouvre le champ mot de passe :
+    Maestro échouait sur « Element not found: login-password-input ». Chaque
+    séquence de connexion ferme le clavier entre l'e-mail et le mot de passe."""
+    for flow in sorted(Path(".maestro").rglob("*.yaml")):
+        text = flow.read_text(encoding="utf-8")
+        position = 0
+        while True:
+            email = text.find("inputText: e2e.free@keepeat.test", position)
+            if email == -1:
+                break
+            password = text.find("login-password-input", email)
+            assert password != -1, f"{flow} : saisie d'e-mail sans champ mot de passe ensuite"
+            assert "hideKeyboard" in text[email:password], f"{flow} : clavier non fermé avant le mot de passe"
+            position = password
+
 def test_maestro_failures_are_diagnosable_from_the_job_log():
     """BUG-090 : l'API ne rend que les dernières lignes du journal d'un job, et
     les artefacts ne sont pas toujours accessibles. Les journaux du conteneur
