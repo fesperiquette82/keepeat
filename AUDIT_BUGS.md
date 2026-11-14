@@ -1263,13 +1263,13 @@ Le cas le plus visible était le premier : le chemin le plus utilisé étiquetai
 
 | ID | Sévérité | Statut | Résumé |
 |---|---|---|---|
-| BUG-083 | 🟠 MAJEUR (seul test de bout en bout inopérant) | `CORRIGÉ` (à confirmer par le run CI) | `app.config.js` : plugin de configuration `withAppBuildGradle` qui ajoute `debuggableVariants = []` au bloc `react {}` quand `EXPO_E2E_EMBED_BUNDLE=1` (idempotent, échoue bruyamment si le bloc est introuvable ; Metro reste utilisé en développement local). Les deux workflows E2E posent le flag au prebuild **et** au build (le bundle est produit par Gradle, les `EXPO_PUBLIC_*` doivent y être présentes), puis vérifient la présence d'`assets/index.android.bundle` dans l'APK, sinon le job échoue avec un message explicite. `00-smoke-launch.yaml` exige désormais l'écran de connexion ou l'onglet accueil. |
+| BUG-083 | 🟠 MAJEUR (seul test de bout en bout inopérant) | `CORRIGÉ` (bundle embarqué confirmé par le run CI du 14/11 ; Maestro restait rouge pour une seconde cause, BUG-090) | `app.config.js` : plugin de configuration `withAppBuildGradle` qui ajoute `debuggableVariants = []` au bloc `react {}` quand `EXPO_E2E_EMBED_BUNDLE=1` (idempotent, échoue bruyamment si le bloc est introuvable ; Metro reste utilisé en développement local). Les deux workflows E2E posent le flag au prebuild **et** au build (le bundle est produit par Gradle, les `EXPO_PUBLIC_*` doivent y être présentes), puis vérifient la présence d'`assets/index.android.bundle` dans l'APK, sinon le job échoue avec un message explicite. `00-smoke-launch.yaml` exige désormais l'écran de connexion ou l'onglet accueil. |
 
 **Fichiers modifiés :** `frontend/app.config.js`, `.github/workflows/mobile-e2e.yml`, `.github/workflows/mobile-e2e-nightly.yml`, `.maestro/00-smoke-launch.yaml`, `TODO_BY_OWNER.md`
 **Tests ajoutés/mis à jour :** `frontend/smoke/appConfigE2eBundle.smoke.test.ts` (flag, réécriture Gradle idempotente, échec bruyant, plugin attaché seulement en E2E), `tests/test_ci_non_regression_policy.py::test_e2e_debug_apk_embeds_js_bundle` et `::test_smoke_launch_flow_is_not_vacuous`
 **Commandes exécutées :** `bash scripts/ai-validate.sh`
 **Résultat :** PASS en local ; **le verdict appartient au run CI** (job Maestro du PR #173, puis nightly) — impossible d'exécuter un émulateur depuis cet environnement.
-**Risques restants :** une fois l'application réellement exécutée en CI, des scénarios peuvent révéler de vrais défauts (lenteur de l'émulateur sans KVM, `testID` manquants) : ce seront des bugs distincts à traiter un par un. Le bundle debug est produit avec `--dev true` (non minifié), ce qui allonge un peu la construction.
+**Risques restants :** une fois l'application réellement exécutée en CI, des scénarios peuvent révéler de vrais défauts (lenteur de l'émulateur sans KVM, `testID` manquants) : ce seront des bugs distincts à traiter un par un. Correction du 14/11 : le bundle est produit en mode production (`devEnabled=false` pour une variante non débogable dans le plugin Gradle de React Native), ce qui a causé BUG-090.
 
 
 ## BUG-084 — Un test du dashboard admin passait grâce à une NameError absorbée ; ruff branché sur le backend
@@ -1356,3 +1356,17 @@ Le cas le plus visible était le premier : le chemin le plus utilisé étiquetai
 **Commandes exécutées :** `ruff check backend tests`, `mypy backend tests`, `bash scripts/ai-validate.sh`
 **Résultat :** PASS
 **Risques restants :** aucun.
+
+## BUG-090 — L'APK E2E visait le backend de production
+
+**Contexte :** 14/11, premier run Maestro après BUG-083. Le bundle est bien embarqué, mais les trois scénarios échouent : l'écran de connexion n'apparaît jamais, et le backend de test ne reçoit **aucune** requête de l'émulateur, pas même l'appel `/api/health` que l'application fait au démarrage. Cause, établie par lecture du code : une variante non débogable est bundlée en mode production (`devEnabled=false` dans le plugin Gradle de React Native). Dans ce bundle, `__DEV__` est faux et `process.env.NODE_ENV` est inliné à `production`, quoi que dise l'environnement du job. `config.ts` range alors l'application en production, le garde-fou rejette l'URL de test `http://10.0.2.2:8000` et la remplace par le backend de production sur Render. Avant BUG-083, Metro servait le code en mode développement et ce chemin n'était jamais pris.
+
+| ID | Sévérité | Statut | Résumé |
+|---|---|---|---|
+| BUG-090 | 🟠 MAJEUR (E2E inopérant, et dirigé vers la production) | `CORRIGÉ` (à confirmer par le run CI) | Les deux workflows E2E déclarent `EXPO_PUBLIC_APP_ENV=development` au prebuild et au build : l'application vise le backend de test, reste en variante « prod » (aucun outil de debug à l'écran) et le garde-fou des builds de production réels est inchangé. **Diagnostic rendu lisible :** l'API ne renvoie que les 5 000 dernières lignes d'un journal de job, et les journaux du conteneur MongoDB vidés en fin de job (bilans de santé toutes les 10 s) en occupaient près de 4 800 ; les artefacts ne sont pas téléchargeables depuis l'environnement de développement. Journaux du conteneur bornés (`--log-opt max-size=200k`, `max-file=1`), et condensé d'échec avant le résumé de la suite : écran affiché (uiautomator), écran du premier lancement, message d'échec Maestro par scénario, journal Android filtré (JavaScript, plantages, cible du backend). |
+
+**Fichiers modifiés :** `.github/workflows/mobile-e2e.yml`, `.github/workflows/mobile-e2e-nightly.yml`, `scripts/run-maestro-e2e.sh`
+**Tests ajoutés/mis à jour :** `frontend/utils/config.test.ts` (conditions exactes du bundle E2E : sans environnement explicite l'URL de test est rejetée, avec `EXPO_PUBLIC_APP_ENV=development` elle est retenue, un build de production réel garde son garde-fou), `tests/test_ci_non_regression_policy.py::test_e2e_bundle_targets_the_test_backend`, `tests/test_ci_non_regression_policy.py::test_maestro_failures_are_diagnosable_from_the_job_log` (tous deux vérifiés probants). Condensé d'échec exécuté localement sous `set -euo pipefail` avec un faux `adb` : il ne peut pas interrompre le script.
+**Commandes exécutées :** `npm run test:ci`, `pytest tests/test_ci_non_regression_policy.py`, `bash scripts/ai-validate.sh`
+**Résultat :** PASS
+**Risques restants :** la cause est établie par lecture du code et cohérente avec l'absence totale de requêtes ; le verdict appartient au prochain run Maestro, dont le condensé montrera l'écran réellement affiché si un autre obstacle subsiste. Une modification du seul workflow ne force pas la reconstruction de l'APK (choix figé par un test de politique existant) : après un changement de variable `EXPO_PUBLIC_*` dans le workflow, lancer le job avec `force_mobile_apk_build`.

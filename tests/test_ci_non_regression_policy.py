@@ -1852,6 +1852,42 @@ def test_e2e_debug_apk_embeds_js_bundle():
         assert "assets/index.android.bundle" in workflow, f"{path} : aucune vérification du bundle dans l'APK"
 
 
+
+def _workflow_step_block(workflow: str, step_name: str) -> str:
+    return workflow.split(f"- name: {step_name}")[1].split("- name:")[0]
+
+
+def test_e2e_bundle_targets_the_test_backend():
+    """BUG-090 : le bundle embarqué (BUG-083) est compilé en mode production :
+    __DEV__ faux et NODE_ENV inliné à « production ». Sans environnement
+    explicite, le garde-fou de config.ts rejetait l'URL du backend de test et
+    l'application E2E visait le backend de PRODUCTION. Le prebuild et le build
+    doivent déclarer EXPO_PUBLIC_APP_ENV=development."""
+    for path in (".github/workflows/mobile-e2e.yml", ".github/workflows/mobile-e2e-nightly.yml"):
+        workflow = Path(path).read_text(encoding="utf-8")
+        for step in ("Prebuild Android app", "Build debug APK"):
+            block = _workflow_step_block(workflow, step)
+            assert "EXPO_PUBLIC_APP_ENV: development" in block, f"{path} / {step}"
+            assert "EXPO_PUBLIC_BACKEND_URL: http://10.0.2.2:8000" in block, f"{path} / {step}"
+
+
+def test_maestro_failures_are_diagnosable_from_the_job_log():
+    """BUG-090 : l'API ne rend que les dernières lignes du journal d'un job, et
+    les artefacts ne sont pas toujours accessibles. Les journaux du conteneur
+    MongoDB, vidés en fin de job, repoussaient tout le diagnostic Maestro hors
+    de cette fenêtre. Ils sont bornés, et un condensé (écran affiché, message
+    d'échec, journal Android filtré) précède le résumé de la suite."""
+    for path in (".github/workflows/mobile-e2e.yml", ".github/workflows/mobile-e2e-nightly.yml"):
+        workflow = Path(path).read_text(encoding="utf-8")
+        assert "--log-opt max-size=" in workflow, path
+        assert "--log-opt max-file=1" in workflow, path
+    script = Path("scripts/run-maestro-e2e.sh").read_text(encoding="utf-8")
+    assert "print_failure_digest()" in script
+    digest_call = script.index("print_failure_digest || true")
+    assert digest_call < script.index('echo "Maestro E2E Suite Summary')
+    for marker in ("uiautomator dump", "message=", "ReactNativeJS", "ENV_GUARDRAIL"):
+        assert marker in script, marker
+
 def test_smoke_launch_flow_is_not_vacuous():
     """BUG-083 : 00-smoke-launch passait quoi qu'affiche l'application (deux
     assertions `optional: true`). Il doit exiger l'écran de connexion ou, à

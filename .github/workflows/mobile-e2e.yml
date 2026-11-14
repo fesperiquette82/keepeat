@@ -338,6 +338,11 @@ jobs:
         working-directory: frontend
         env:
           EXPO_PUBLIC_BACKEND_URL: http://10.0.2.2:8000
+          # BUG-090 : le bundle embarqué est compilé en mode production (__DEV__ faux,
+          # NODE_ENV inliné à « production » quoi qu'en dise l'environnement) : sans
+          # cet environnement explicite, le garde-fou de config.ts rejette l'URL de
+          # test et l'application vise le backend de PRODUCTION.
+          EXPO_PUBLIC_APP_ENV: development
           EXPO_E2E_EMBED_BUNDLE: "1"
           CI: "1"
           EXPO_NO_TELEMETRY: "1"
@@ -350,6 +355,11 @@ jobs:
           # BUG-083 : le bundle est produit ici (export:embed via Gradle) : les variables
           # EXPO_PUBLIC_* doivent être présentes à cette étape, pas seulement au prebuild.
           EXPO_PUBLIC_BACKEND_URL: http://10.0.2.2:8000
+          # BUG-090 : le bundle embarqué est compilé en mode production (__DEV__ faux,
+          # NODE_ENV inliné à « production » quoi qu'en dise l'environnement) : sans
+          # cet environnement explicite, le garde-fou de config.ts rejette l'URL de
+          # test et l'application vise le backend de PRODUCTION.
+          EXPO_PUBLIC_APP_ENV: development
           EXPO_E2E_EMBED_BUNDLE: "1"
           NODE_ENV: development
           CI: "1"
@@ -500,6 +510,9 @@ jobs:
       contents: read
       actions: read
     services:
+      # BUG-090 : journaux du conteneur bornés (--log-opt) — GitHub les vide en fin de
+      # job et leurs milliers de lignes de bilans de santé repoussaient le diagnostic
+      # Maestro hors de la partie lisible du journal.
       mongodb:
         image: mongo:7
         ports:
@@ -509,6 +522,8 @@ jobs:
           --health-interval 10s
           --health-timeout 5s
           --health-retries 10
+          --log-opt max-size=200k
+          --log-opt max-file=1
 
     steps:
       - name: Checkout
