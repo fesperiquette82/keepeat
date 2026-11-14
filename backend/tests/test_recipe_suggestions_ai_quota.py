@@ -14,7 +14,6 @@ Correction : même paire d'helpers (_enforce_feature_access(consume_quota=True)
 faire échouer /suggestions (l'IA n'est ici qu'un repli parmi d'autres) — il
 désactive juste le repli IA pour cet appel, et le mécanisme de gap prend le relais.
 """
-import asyncio
 import importlib
 import sys
 from pathlib import Path

@@ -3,13 +3,11 @@
 Phase 1 : connexion/déconnexion OAuth Gmail uniquement (consentement,
 stockage chiffré du refresh_token). Aucune recherche ni parsing d'email.
 """
-import asyncio
 import importlib
 import sys
 from pathlib import Path
-from unittest.mock import AsyncMock, MagicMock
+from unittest.mock import AsyncMock
 
-import httpx
 import pytest
 from bson import ObjectId
 from cryptography.fernet import Fernet

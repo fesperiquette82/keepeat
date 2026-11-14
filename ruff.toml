@@ -1,0 +1,16 @@
+# Lint Python (BUG-079) : règles de base de ruff (erreurs de syntaxe, noms
+# indéfinis, imports et variables inutilisés, clés de dictionnaire en double…).
+# Volontairement minimal pour démarrer à zéro finding ; on durcira par paliers.
+target-version = "py311"
+extend-exclude = ["frontend", "docs", ".maestro"]
+
+[lint]
+select = ["E4", "E7", "E9", "F"]
+
+[lint.per-file-ignores]
+# load_dotenv() doit précéder les imports qui lisent l'environnement au chargement.
+"backend/server.py" = ["E402"]
+"backend/asgi.py" = ["E402"]
+# Les tests posent leurs variables d'environnement avant d'importer le serveur.
+"backend/tests/**" = ["E402"]
+"tests/**" = ["E402"]

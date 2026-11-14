@@ -142,7 +142,7 @@ class TestHighestErrorRatePipeline:
         ]
         for r in simulated_results:
             assert r["volume"] >= 2, f"volume < 2 pour {r['endpoint_key']} : incohérent"
-            assert r["error_rate"] > 0, f"error_rate = 0 ne devrait pas figurer dans la liste"
+            assert r["error_rate"] > 0, "error_rate = 0 ne devrait pas figurer dans la liste"
             # error_rate doit être calculable depuis volume (pas de division par 0)
             inferred_errors = round(r["error_rate"] * r["volume"])
             assert inferred_errors >= 1, f"Incohérence : {r['error_rate']} * {r['volume']} < 1"

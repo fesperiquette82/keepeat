@@ -1087,8 +1087,6 @@ def test_maestro_runner_no_early_exit_on_failure():
         f"Loop must not call 'exit 1' (found {exit_count} occurrences)"
 
     # Verify that on failure, code appends to array instead of exiting
-    failure_section = loop_section.split("then")[1].split("else")[0] if "else" in loop_section else loop_section.split("if ~/.maestro/bin/maestro test")[1].split("fi")[0]
-
     # After maestro test in if block, should have PASSED append
     assert "FLOW_RESULTS+=" in loop_section, \
         "Script must append to FLOW_RESULTS array (both success and failure cases)"
@@ -1173,7 +1171,6 @@ def test_navigation_flow_ensures_auth_before_nav_tests():
         "02-navigation-main-tabs must handle login-email-input if visible"
 
     # Verify hideKeyboard is used before submit (keyboard can cover button)
-    login_section = nav_flow.split("login-email-input")[0] if "login-email-input" in nav_flow else ""
     submit_section = nav_flow.split("login-submit-button")[0]
     assert "hideKeyboard" in submit_section, \
         "Flow must hide keyboard before tapping submit button"
@@ -1189,7 +1186,6 @@ def test_navigation_flow_ensures_auth_before_nav_tests():
     # Verify the order: login (if needed) → assert home → then test tabs
     # Find position after login section where home is asserted
     home_assert_section = nav_flow.split("Final assertion: Home must be visible before testing navigation")[1]
-    stock_tap_section = nav_flow.split("Test navigation to stock tab")[0]
 
     # The home assert should come before stock tap section
     assert "assertVisible:" in home_assert_section and "id: tab-home" in home_assert_section, \
@@ -1210,10 +1206,6 @@ def test_maestro_runner_sets_up_backend_forwarding():
     # Verify forward_backend_to_emulator function exists
     assert "forward_backend_to_emulator()" in runner_script, \
         "scripts/run-maestro-e2e.sh must define forward_backend_to_emulator() function"
-
-    # Extract function body
-    forward_section = runner_script.split("forward_backend_to_emulator()")[1].split("^}")[0] \
-        if "forward_backend_to_emulator()" in runner_script else ""
 
     # Verify adb reverse is called
     assert "adb reverse tcp:8000 tcp:8000" in runner_script, \
@@ -1639,7 +1631,7 @@ def test_maestro_runner_clears_app_data_between_flows():
     # Look specifically for force-stop targeting the E2E app AFTER pm clear
     pm_clear_section = stabilize_section[pm_clear_pos:]
 
-    app_id_force_stop_in_pm_clear_section = f"force-stop" in pm_clear_section and "$E2E_ANDROID_APP_ID" in pm_clear_section
+    app_id_force_stop_in_pm_clear_section = "force-stop" in pm_clear_section and "$E2E_ANDROID_APP_ID" in pm_clear_section
     assert app_id_force_stop_in_pm_clear_section, \
         "stabilize_between_flows must call 'adb shell am force-stop $E2E_ANDROID_APP_ID' AFTER pm clear to ensure app is fully stopped (pm clear can auto-restart)"
 
@@ -1867,3 +1859,17 @@ def test_smoke_launch_flow_is_not_vacuous():
     flow = Path(".maestro/00-smoke-launch.yaml").read_text(encoding="utf-8")
     assert "runFlow" in flow and "tab-home" in flow and "login-email-input" in flow
     assert flow.count("optional: true") == 1, "seule l'attente initiale peut être optionnelle"
+
+
+def test_backend_is_linted_with_ruff():
+    """BUG-079 : le script de validation sautait ruff faute de le trouver dans
+    requirements.txt — le backend n'avait aucun lint. ruff est désormais
+    configuré (ruff.toml), installé par requirements-dev.txt et exécuté en CI ;
+    l'absence de l'outil fait échouer la validation au lieu de la sauter."""
+    assert Path("ruff.toml").exists()
+    workflow = Path(".github/workflows/ci.yml").read_text(encoding="utf-8")
+    assert "ruff check backend tests" in workflow
+    assert "ruff==" in Path("backend/requirements-dev.txt").read_text(encoding="utf-8")
+    script = Path("scripts/lib/validate-python-fastapi.sh").read_text(encoding="utf-8")
+    assert "ruff check backend tests" in script
+    assert "[skip] ruff: not installed" not in script

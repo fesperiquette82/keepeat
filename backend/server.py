@@ -18,17 +18,14 @@ import unicodedata
 from contextlib import asynccontextmanager
 from datetime import datetime, timedelta, timezone
 from decimal import Decimal
-from email.mime.multipart import MIMEMultipart
-from email.mime.text import MIMEText
 from typing import Any, Dict, List, Optional
 
-import aiosmtplib
 import httpx
 import sentry_sdk
 from bson import ObjectId
 from bson.decimal128 import Decimal128
 from pymongo.errors import DuplicateKeyError
-from fastapi import APIRouter, Depends, FastAPI, Header, HTTPException, Query, Request, Response, status
+from fastapi import APIRouter, Depends, FastAPI, Header, HTTPException, Query, Request, Response
 from fastapi.exception_handlers import request_validation_exception_handler
 from fastapi.exceptions import RequestValidationError
 from fastapi.middleware.cors import CORSMiddleware
@@ -49,7 +46,7 @@ from backend.alerts import (
     seed_default_user,
     send_expo_push,
 )
-from backend.app_core import days_until, logger, redirect_html, serialize_mongo, utc_now
+from backend.app_core import logger, redirect_html, serialize_mongo, utc_now
 from backend.auth_utils import create_token, get_current_user, hash_password, http_bearer, validate_password, verify_password
 from backend.models import (
     AccountDeletionBody,
@@ -162,7 +159,6 @@ from backend.recipes_service import (
     get_recipe_catalog_debug_info,
     fr_to_en_ingredient,
     recipe_match_to_grouped_suggestion,
-    recipe_match_to_suggestion,
     resolve_suggestion_style,
     suggest_recipe_groups_from_catalog,
     suggest_recipes_from_catalog,
@@ -3931,7 +3927,6 @@ def _score_recipe_match(recipe_doc: dict[str, Any], stock_items: list[dict[str, 
     }
 
     ingredients = recipe_doc.get("ingredients", []) or []
-    required_ingredients = [i for i in ingredients if not bool(i.get("optional"))]
     servings = int(recipe_doc.get("servings") or 2)
     structured_ingredients: list[dict[str, Any]] = []
     available: list[str] = []

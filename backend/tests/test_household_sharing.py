@@ -8,7 +8,6 @@ import asyncio
 import importlib
 import sys
 from pathlib import Path
-from unittest.mock import AsyncMock
 
 import pytest
 from bson import ObjectId
@@ -302,7 +301,7 @@ class TestLeaveHousehold:
 
 class TestResolveBillingUserDoc:
     def test_own_premium_returns_self(self, monkeypatch):
-        server = _load_server(monkeypatch)
+        _load_server(monkeypatch)  # charge server avec l'environnement de test (effet de bord voulu)
         from backend.household_service import resolve_billing_user_doc
 
         user_doc = _user_doc(OWNER_ID, is_premium=True)
@@ -312,7 +311,7 @@ class TestResolveBillingUserDoc:
         assert result == user_doc
 
     def test_no_household_returns_self(self, monkeypatch):
-        server = _load_server(monkeypatch)
+        _load_server(monkeypatch)  # charge server avec l'environnement de test (effet de bord voulu)
         from backend.household_service import resolve_billing_user_doc
 
         user_doc = _user_doc(MEMBER_ID)
@@ -322,7 +321,7 @@ class TestResolveBillingUserDoc:
         assert result == user_doc
 
     def test_household_member_resolves_to_premium_owner(self, monkeypatch):
-        server = _load_server(monkeypatch)
+        _load_server(monkeypatch)  # charge server avec l'environnement de test (effet de bord voulu)
         from backend.household_service import resolve_billing_user_doc
 
         household_oid = ObjectId()
@@ -340,7 +339,7 @@ class TestResolveBillingUserDoc:
         assert result["is_premium"] is True
 
     def test_household_not_found_falls_back_to_self(self, monkeypatch):
-        server = _load_server(monkeypatch)
+        _load_server(monkeypatch)  # charge server avec l'environnement de test (effet de bord voulu)
         from backend.household_service import resolve_billing_user_doc
 
         member_doc = _user_doc(MEMBER_ID, household_id=str(ObjectId()))

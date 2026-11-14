@@ -45,22 +45,23 @@ else
 fi
 
 # Step 2: Ruff (lint) if configured
-if grep -q "ruff" backend/requirements.txt 2>/dev/null || grep -q "ruff" backend/pyproject.toml 2>/dev/null; then
+# BUG-079 : la configuration ruff vit dans ruff.toml à la racine et couvre
+# backend/ ET tests/. ruff est installé par requirements-dev.txt ; s'il manque,
+# c'est une erreur d'installation, pas une raison de sauter le lint.
+if [ -f "ruff.toml" ]; then
   if command -v ruff &> /dev/null; then
-    echo "[step] Running ruff lint..."
-    cd backend
-    ruff check . 2>&1 || {
-      cd ..
+    echo "[step] Running ruff lint (backend + tests)..."
+    ruff check backend tests 2>&1 || {
       echo "❌ ruff lint failed"
       exit 1
     }
-    cd ..
     echo "✓ ruff lint passed"
   else
-    echo "[skip] ruff: not installed"
+    echo "❌ ruff introuvable : pip install -r backend/requirements-dev.txt"
+    exit 1
   fi
 else
-  echo "[skip] ruff: not in requirements"
+  echo "[skip] ruff: ruff.toml absent"
 fi
 
 # Step 3: Black (format check) if configured

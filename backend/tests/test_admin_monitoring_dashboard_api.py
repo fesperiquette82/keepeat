@@ -539,9 +539,14 @@ def test_dashboard_survives_kpis_source_exception_with_block_fallbacks(monkeypat
         return _build_nominal_apis()
 
     monkeypatch.setattr(server, "build_monitoring_kpis", _failing_kpis)
+
+    # BUG-084 : ce faux référençait une variable `quotas` inexistante (copié de
+    # `_patch_dashboard_sources`). Il levait donc NameError, que le dashboard
+    # absorbait en repli : le test passait sans jamais exercer le bloc quotas
+    # nominal qu'il prétend préserver quand seule la source KPI échoue.
     async def _fake_quotas(**kwargs):
         _ = kwargs
-        return _build_nominal_external_service_quotas() if quotas is None else quotas
+        return _build_nominal_external_service_quotas()
 
     monkeypatch.setattr(server, "build_operational_overview", _fake_overview)
     monkeypatch.setattr(server, "summarize_api_metrics", _fake_apis)
@@ -559,6 +564,10 @@ def test_dashboard_survives_kpis_source_exception_with_block_fallbacks(monkeypat
     assert isinstance(payload["top_api_issues"], list)
     assert isinstance(payload["critical_flows"], dict)
     assert payload["cost_metrics"]["ocr_cost_eur"] >= 0.0
+    # BUG-084 : une panne de la source KPI ne doit pas emporter le bloc quotas.
+    quotas_block = payload["external_service_quotas"]
+    expected_keys = [svc["service_key"] for svc in _build_nominal_external_service_quotas()["services"]]
+    assert [svc["service_key"] for svc in quotas_block["services"]] == expected_keys
 
 
 def _set_frontend_env(monkeypatch, values: dict[str, str | None]):

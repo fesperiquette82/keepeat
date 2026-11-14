@@ -76,6 +76,10 @@ jobs:
       - name: Audit dependencies (pip-audit)
         run: pip-audit -r backend/requirements.txt --desc off
 
+      # BUG-079 : lint Python (règles de base, voir ruff.toml) sur backend/ et tests/.
+      - name: Lint (ruff)
+        run: ruff check backend tests
+
       # BUG-070 : cette étape ne lançait que 7 fichiers choisis à la main. Tout
       # test ajouté ailleurs — y compris un test de non-régression écrit pour un
       # bug bloquant — ne s'exécutait donc jamais en CI, alors que le job

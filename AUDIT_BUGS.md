@@ -1207,7 +1207,7 @@ Le cas le plus visible était le premier : le chemin le plus utilisé étiquetai
 
 | ID | Sévérité | Statut | Résumé |
 |---|---|---|---|
-| BUG-079 | 🟡 MINEUR (processus) | `PARTIELLEMENT CORRIGÉ` | Scripts repassés en `100755` (`git update-index --chmod=+x`). Dépendance à l'ordre d'exécution supprimée par la fixture de reliaison Motor dans les deux `conftest.py` : la suite passe quel que soit l'ordre. **Reste à faire :** `requirements-dev.txt` avec ruff + mypy et leur branchement dans le script et la CI (mypy en mode normal d'abord, 115 erreurs à résorber), et la mise en cohérence de `.ai/core-rules.md` avec ce qui est réellement contrôlé. |
+| BUG-079 | 🟡 MINEUR (processus) | `PARTIELLEMENT CORRIGÉ` (ruff branché le 14/11, mypy restant) | Scripts repassés en `100755` (`git update-index --chmod=+x`). Dépendance à l'ordre d'exécution supprimée par la fixture de reliaison Motor dans les deux `conftest.py` : la suite passe quel que soit l'ordre. **Reste à faire :** `requirements-dev.txt` avec ruff + mypy et leur branchement dans le script et la CI (mypy en mode normal d'abord, 115 erreurs à résorber), et la mise en cohérence de `.ai/core-rules.md` avec ce qui est réellement contrôlé. |
 
 **Fichiers modifiés :** `scripts/ai-validate.sh`, `scripts/lib/*.sh` (mode), `tests/conftest.py`, `backend/tests/conftest.py`
 **Tests ajoutés/mis à jour :** la suite backend exécutée dans les deux ordres (`tests backend/tests` et `backend/tests tests`)
@@ -1270,3 +1270,18 @@ Le cas le plus visible était le premier : le chemin le plus utilisé étiquetai
 **Commandes exécutées :** `bash scripts/ai-validate.sh`
 **Résultat :** PASS en local ; **le verdict appartient au run CI** (job Maestro du PR #173, puis nightly) — impossible d'exécuter un émulateur depuis cet environnement.
 **Risques restants :** une fois l'application réellement exécutée en CI, des scénarios peuvent révéler de vrais défauts (lenteur de l'émulateur sans KVM, `testID` manquants) : ce seront des bugs distincts à traiter un par un. Le bundle debug est produit avec `--dev true` (non minifié), ce qui allonge un peu la construction.
+
+
+## BUG-084 — Un test du dashboard admin passait grâce à une NameError absorbée ; ruff branché sur le backend
+
+**Contexte :** révélé le 14/11 en branchant ruff (suite de BUG-079), règle `F821` (nom indéfini). Dans `backend/tests/test_admin_monitoring_dashboard_api.py::test_dashboard_survives_kpis_source_exception_with_block_fallbacks`, le faux de la source « quotas » avait été copié depuis `_patch_dashboard_sources` et référençait une variable `quotas` qui n'existe pas dans ce test. Chaque appel levait `NameError`, que le dashboard absorbe en repli de bloc : le test passait sans jamais exercer le bloc quotas nominal qu'il prétend préserver quand seule la source KPI tombe.
+
+| ID | Sévérité | Statut | Résumé |
+|---|---|---|---|
+| BUG-084 | 🟡 MINEUR (test non probant) | `CORRIGÉ` | Le faux renvoie la fixture nominale, et une assertion vérifie désormais que le bloc `external_service_quotas` reste intact quand la source KPI échoue. Vérifié probant : avec l'ancien faux, le test échoue. Dans le même mouvement, **ruff branché sur le backend** : `ruff.toml` (règles de base E4/E7/E9/F, `E402` toléré là où l'environnement doit être posé avant les imports), `ruff==0.17.5` dans `requirements-dev.txt`, étape « Lint (ruff) » en CI, script de validation qui échoue si l'outil manque au lieu de sauter. 37 findings résorbés : imports et variables inutilisés (dont `required_ingredients`, calcul mort dans `server.py`), f-strings sans paramètre, 4 calculs morts dans le test de politique CI, réponse non vérifiée dans `test_recipe_gap_upsert.py` (assertion de statut ajoutée). `backend/utils/constants.py` supprimé : jamais importé, brouillon inachevé (« copier-coller depuis server.py ») dont les 11 clés de mois en double étaient signalées. `aiosmtplib` retiré des dépendances : plus aucun import (les e-mails passent par l'API HTTP de Brevo). |
+
+**Fichiers modifiés :** `ruff.toml` (nouveau), `backend/requirements.txt`, `backend/requirements-dev.txt`, `.github/workflows/ci.yml`, `scripts/lib/validate-python-fastapi.sh`, `backend/server.py`, `backend/household_service.py`, `backend/scripts/*.py`, 11 fichiers de tests ; suppression de `backend/utils/constants.py`
+**Tests ajoutés/mis à jour :** `test_dashboard_survives_kpis_source_exception_with_block_fallbacks` (assertion sur le bloc quotas), `tests/test_ci_non_regression_policy.py::test_backend_is_linted_with_ruff`
+**Commandes exécutées :** `ruff check backend tests`, `pip-audit -r backend/requirements.txt`, `bash scripts/ai-validate.sh`
+**Résultat :** PASS — 0 finding ruff, 0 vulnérabilité
+**Risques restants :** règles volontairement minimales ; les familles `B` (bugbear) et `UP` (modernisation) totalisent ~330 findings à traiter par paliers. mypy reste à brancher (115 erreurs en mode normal).

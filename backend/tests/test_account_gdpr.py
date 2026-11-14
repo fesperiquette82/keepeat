@@ -18,7 +18,6 @@ Couverture :
     recipe_gap_requests — dédupliqués entre utilisateurs via `signature`).
   - /privacy-policy et /account-deletion sont publiquement joignables.
 """
-import asyncio
 import importlib
 import sys
 from pathlib import Path
