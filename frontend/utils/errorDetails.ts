@@ -41,3 +41,30 @@ export function getApiErrorDetail(error: unknown): string | undefined {
 export function getHttpResponseData(error: unknown): unknown {
   return getResponse(error)?.data ?? null;
 }
+
+function validationItemMessage(item: unknown): string | undefined {
+  const record = asRecord(item);
+  return record && typeof record.msg === 'string' ? record.msg : undefined;
+}
+
+/**
+ * Texte lisible d'un champ `detail` renvoyé par l'API (BUG-093).
+ *
+ * FastAPI renvoie selon les cas une chaîne, une liste d'erreurs de validation
+ * (422 : `[{ loc, msg, type }]`) ou un objet (`{ code }`, `{ message }`).
+ * `new Error(detail)` sur une liste ou un objet produisait « [object Object] »,
+ * affiché tel quel à l'utilisateur. Rend `undefined` si rien n'est lisible :
+ * l'appelant garde alors son message de repli.
+ */
+export function formatApiErrorDetail(detail: unknown): string | undefined {
+  if (typeof detail === 'string') return detail || undefined;
+  if (Array.isArray(detail)) {
+    const messages = detail.map(validationItemMessage).filter((msg): msg is string => !!msg);
+    return messages.length > 0 ? messages.join(' ; ') : undefined;
+  }
+  const record = asRecord(detail);
+  if (!record) return undefined;
+  if (typeof record.message === 'string' && record.message) return record.message;
+  if (typeof record.code === 'string' && record.code) return record.code;
+  return undefined;
+}

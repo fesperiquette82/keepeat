@@ -3,7 +3,13 @@ import { readdirSync, readFileSync, statSync } from 'node:fs';
 import { join } from 'node:path';
 import test from 'node:test';
 
-import { getApiErrorDetail, getErrorMessage, getHttpResponseData, getHttpStatus } from './errorDetails';
+import {
+  formatApiErrorDetail,
+  getApiErrorDetail,
+  getErrorMessage,
+  getHttpResponseData,
+  getHttpStatus,
+} from './errorDetails';
 
 // BUG-085 : les `catch (e: any)` lisaient `e.message` / `e.response.data.detail`
 // sans aucune vérification. Ces helpers doivent rendre la même information pour
@@ -44,6 +50,40 @@ test('getHttpResponseData rend le corps brut de la réponse, sinon null', () => 
   assert.deepEqual(getHttpResponseData(axiosLike), { detail: 'WEAK_PASSWORD: 8 caractères minimum' });
   assert.equal(getHttpResponseData(new Error('réseau')), null);
   assert.equal(getHttpResponseData(undefined), null);
+});
+
+// BUG-093 : `new Error(detail)` sur une liste d'erreurs de validation FastAPI
+// (422) affichait « [object Object] » à l'utilisateur, à la connexion comme à
+// l'export ou à la suppression du compte.
+
+test('[REGRESSION BUG-093] formatApiErrorDetail rend lisible une erreur de validation 422', () => {
+  const detail = [
+    {
+      type: 'value_error',
+      loc: ['body', 'email'],
+      msg: 'value is not a valid email address: The part after the @-sign is a special-use or reserved name that cannot be used with email.',
+      input: 'e2e.free@keepeat.test',
+    },
+  ];
+  const message = formatApiErrorDetail(detail);
+  assert.ok(message && message.startsWith('value is not a valid email address'));
+  assert.notEqual(new Error(message).message, '[object Object]');
+});
+
+test('formatApiErrorDetail joint plusieurs erreurs de validation', () => {
+  assert.equal(formatApiErrorDetail([{ msg: 'champ requis' }, { msg: 'trop court' }]), 'champ requis ; trop court');
+});
+
+test('formatApiErrorDetail garde une chaîne et lit message puis code d’un objet', () => {
+  assert.equal(formatApiErrorDetail('EMAIL_NOT_VERIFIED'), 'EMAIL_NOT_VERIFIED');
+  assert.equal(formatApiErrorDetail({ message: 'Mot de passe incorrect', code: 'X' }), 'Mot de passe incorrect');
+  assert.equal(formatApiErrorDetail({ code: 'INVALID_PASSWORD' }), 'INVALID_PASSWORD');
+});
+
+test('formatApiErrorDetail rend undefined quand rien n’est lisible, pour laisser le repli', () => {
+  for (const value of [undefined, null, '', 42, {}, [], [{ loc: ['body'] }]]) {
+    assert.equal(formatApiErrorDetail(value), undefined);
+  }
 });
 
 // Garde-fou : plus aucun `catch (x: any)` dans le code applicatif — la valeur

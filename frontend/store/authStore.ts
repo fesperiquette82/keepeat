@@ -14,7 +14,7 @@ import {
   parseBiometricSession,
   serializeBiometricSession,
 } from '../utils/biometricAuth';
-import { getErrorMessage } from '../utils/errorDetails';
+import { formatApiErrorDetail, getErrorMessage } from '../utils/errorDetails';
 
 const TOKEN_KEY = 'keepeat_token';
 const USER_KEY = 'keepeat_user';
@@ -94,7 +94,7 @@ async function apiPost(endpoint: string, body: object): Promise<any> {
 
     if (!response.ok) {
       logger.error('[AUTH_API] response not ok', { detail: data.detail });
-      throw new Error(data.detail || `Error ${response.status}`);
+      throw new Error(formatApiErrorDetail(data.detail) || `Error ${response.status}`);
     }
 
     return data;
@@ -396,7 +396,7 @@ export const useAuthStore = create<AuthStore>((set) => ({
       }
       const data = await response.json();
       if (!response.ok) {
-        throw new Error(data?.detail || `Error ${response.status}`);
+        throw new Error(formatApiErrorDetail(data?.detail) || `Error ${response.status}`);
       }
       const entitlements = data as BillingEntitlements;
       logger.debug('[AUTH_STORE] refreshEntitlements succeeded', { plan: entitlements.plan });
@@ -434,7 +434,7 @@ export const useAuthStore = create<AuthStore>((set) => ({
       }
       const data = await response.json();
       if (!response.ok) {
-        throw new Error(data?.detail || `Error ${response.status}`);
+        throw new Error(formatApiErrorDetail(data?.detail) || `Error ${response.status}`);
       }
       logger.debug('[AUTH_STORE] refreshUsage succeeded');
       set({ usage: data as BillingUsage });

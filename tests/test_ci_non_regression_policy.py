@@ -321,13 +321,13 @@ def test_smoke_flows_use_seeded_e2e_account_and_are_independent():
     assert "extendedWaitUntil:\n    visible:\n      id: tab-home" in auth_flow
     assert "takeScreenshot: 01-auth-session-login-still-visible-after-submit" in auth_flow
     assert "takeScreenshot: 01-auth-session-login-still-visible-after-retry" in auth_flow
-    assert 'inputText: e2e.free@keepeat.test' in auth_flow
+    assert 'inputText: e2e.free@example.com' in auth_flow
     assert 'inputText: TestPassword123!' in auth_flow
     assert "hideKeyboard" in auth_flow
 
     assert 'id: login-email-input' in tabs_flow
     assert 'runFlow:' in tabs_flow
-    assert 'inputText: e2e.free@keepeat.test' in tabs_flow
+    assert 'inputText: e2e.free@example.com' in tabs_flow
     assert 'inputText: TestPassword123!' in tabs_flow
     assert 'id: tab-home' in tabs_flow
     assert 'id: tab-stock' in tabs_flow
@@ -1893,7 +1893,7 @@ def test_maestro_login_hides_keyboard_before_password_field():
         text = flow.read_text(encoding="utf-8")
         position = 0
         while True:
-            email = text.find("inputText: e2e.free@keepeat.test", position)
+            email = text.find("inputText: e2e.free@example.com", position)
             if email == -1:
                 break
             password = text.find("login-password-input", email)

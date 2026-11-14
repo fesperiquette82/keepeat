@@ -23,7 +23,7 @@ appId: com.fesperiquette.keepeat
       - takeScreenshot: 01-auth-session-login-screen-visible
       - tapOn:
           id: login-email-input
-      - inputText: e2e.free@keepeat.test
+      - inputText: e2e.free@example.com
       # BUG-092 : le clavier ouvert recouvre le champ mot de passe sur un
       # petit écran Android (bord à bord) ; Maestro ne le trouve plus.
       - hideKeyboard
@@ -70,7 +70,7 @@ appId: com.fesperiquette.keepeat
             - takeScreenshot: 01-auth-session-retry-login-visible
             - tapOn:
                 id: login-email-input
-            - inputText: e2e.free@keepeat.test
+            - inputText: e2e.free@example.com
             # BUG-092 : le clavier ouvert recouvre le champ mot de passe sur un
             # petit écran Android (bord à bord) ; Maestro ne le trouve plus.
             - hideKeyboard

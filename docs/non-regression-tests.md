@@ -28,7 +28,7 @@ Les scénarios Maestro sont dans `.maestro/` :
 ## Fixtures déterministes
 - Données déclarées dans `backend/data/test_mode_fixtures.json`.
 - Compte E2E seedé pour les flows auth :
-  - `email`: `e2e.free@keepeat.test`
+  - `email`: `e2e.free@example.com`
   - `password`: `TestPassword123!`
   - plan: free (`is_premium=false`, `subscription_status=inactive`)
   - `email_verified=true` au seed backend
