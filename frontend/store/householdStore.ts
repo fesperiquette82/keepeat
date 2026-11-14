@@ -9,6 +9,7 @@ import {
   leaveHousehold,
 } from '../utils/householdApi';
 import { logger } from '../utils/logger';
+import { getErrorMessage } from '../utils/errorDetails';
 
 interface HouseholdStoreState {
   household: Household | null;
@@ -37,9 +38,9 @@ export const useHouseholdStore = create<HouseholdStoreState>((set, get) => ({
     try {
       const household = await fetchHousehold(token);
       set({ household });
-    } catch (error: any) {
-      logger.warn('[HOUSEHOLD] refresh failed', { message: error?.message });
-      set({ error: error?.message ?? 'household_refresh_failed' });
+    } catch (error: unknown) {
+      logger.warn('[HOUSEHOLD] refresh failed', { message: getErrorMessage(error) });
+      set({ error: getErrorMessage(error) ?? 'household_refresh_failed' });
     } finally {
       set({ isLoading: false });
     }
@@ -53,8 +54,8 @@ export const useHouseholdStore = create<HouseholdStoreState>((set, get) => ({
       const household = await createHousehold(token, name);
       set({ household });
       return true;
-    } catch (error: any) {
-      set({ error: error?.message ?? 'household_create_failed' });
+    } catch (error: unknown) {
+      set({ error: getErrorMessage(error) ?? 'household_create_failed' });
       return false;
     } finally {
       set({ isLoading: false });
@@ -66,8 +67,8 @@ export const useHouseholdStore = create<HouseholdStoreState>((set, get) => ({
     if (!token) return null;
     try {
       return await inviteToHousehold(token);
-    } catch (error: any) {
-      set({ error: error?.message ?? 'household_invite_failed' });
+    } catch (error: unknown) {
+      set({ error: getErrorMessage(error) ?? 'household_invite_failed' });
       return null;
     }
   },
@@ -80,8 +81,8 @@ export const useHouseholdStore = create<HouseholdStoreState>((set, get) => ({
       const household = await joinHousehold(token, inviteToken);
       set({ household });
       return true;
-    } catch (error: any) {
-      set({ error: error?.message ?? 'household_join_failed' });
+    } catch (error: unknown) {
+      set({ error: getErrorMessage(error) ?? 'household_join_failed' });
       return false;
     } finally {
       set({ isLoading: false });
@@ -96,8 +97,8 @@ export const useHouseholdStore = create<HouseholdStoreState>((set, get) => ({
       await leaveHousehold(token);
       set({ household: null });
       return true;
-    } catch (error: any) {
-      set({ error: error?.message ?? 'household_leave_failed' });
+    } catch (error: unknown) {
+      set({ error: getErrorMessage(error) ?? 'household_leave_failed' });
       return false;
     } finally {
       set({ isLoading: false });

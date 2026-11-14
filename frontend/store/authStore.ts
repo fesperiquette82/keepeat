@@ -14,6 +14,7 @@ import {
   parseBiometricSession,
   serializeBiometricSession,
 } from '../utils/biometricAuth';
+import { getErrorMessage } from '../utils/errorDetails';
 
 const TOKEN_KEY = 'keepeat_token';
 const USER_KEY = 'keepeat_user';
@@ -97,7 +98,7 @@ async function apiPost(endpoint: string, body: object): Promise<any> {
     }
 
     return data;
-  } catch (err: any) {
+  } catch (err: unknown) {
     logger.errorFromException('[AUTH_API] fetch failed', err);
     throw err;
   }
@@ -220,9 +221,9 @@ export const useAuthStore = create<AuthStore>((set) => ({
       await useAuthStore.getState().refreshEntitlements();
       await useAuthStore.getState().refreshUsage();
       logger.debug('[AUTH_STORE] login complete');
-    } catch (err: any) {
+    } catch (err: unknown) {
       logger.errorFromException('[AUTH_STORE] login failed', err);
-      set({ error: err.message || 'Erreur de connexion' });
+      set({ error: getErrorMessage(err) || 'Erreur de connexion' });
       throw err;
     }
   },
@@ -284,20 +285,20 @@ export const useAuthStore = create<AuthStore>((set) => ({
       await useAuthStore.getState().refreshEntitlements();
       await useAuthStore.getState().refreshUsage();
       logger.debug('[AUTH_STORE] biometric login complete');
-    } catch (err: any) {
-      if (err?.message === 'BIOMETRIC_NOT_SUPPORTED') {
+    } catch (err: unknown) {
+      if (getErrorMessage(err) === 'BIOMETRIC_NOT_SUPPORTED') {
         set({ error: 'Biométrie non disponible sur cet appareil', isBiometricSupported: false });
         throw err;
       }
-      if (err?.message === 'BIOMETRIC_CREDENTIALS_NOT_FOUND') {
+      if (getErrorMessage(err) === 'BIOMETRIC_CREDENTIALS_NOT_FOUND') {
         set({ error: 'Connexion biométrique indisponible' });
         throw err;
       }
-      if (err?.message === 'BIOMETRIC_SESSION_EXPIRED') {
+      if (getErrorMessage(err) === 'BIOMETRIC_SESSION_EXPIRED') {
         set({ error: 'Session biométrique expirée, reconnectez-vous avec votre mot de passe' });
         throw err;
       }
-      set({ error: err?.message || 'Échec de la connexion biométrique' });
+      set({ error: getErrorMessage(err) || 'Échec de la connexion biométrique' });
       throw err;
     }
   },
@@ -307,8 +308,8 @@ export const useAuthStore = create<AuthStore>((set) => ({
     try {
       const data = await apiPost('register', { email, password });
       return { email: data.email as string };
-    } catch (err: any) {
-      set({ error: err.message || "Erreur d'inscription" });
+    } catch (err: unknown) {
+      set({ error: getErrorMessage(err) || "Erreur d'inscription" });
       throw err;
     }
   },
@@ -323,8 +324,8 @@ export const useAuthStore = create<AuthStore>((set) => ({
       set({ token: access_token, user, plan: user.is_premium ? 'premium' : 'free' });
       await useAuthStore.getState().refreshEntitlements();
       await useAuthStore.getState().refreshUsage();
-    } catch (err: any) {
-      set({ error: err.message || 'Erreur de vérification' });
+    } catch (err: unknown) {
+      set({ error: getErrorMessage(err) || 'Erreur de vérification' });
       throw err;
     }
   },
@@ -333,8 +334,8 @@ export const useAuthStore = create<AuthStore>((set) => ({
     set({ error: null });
     try {
       await apiPost('resend-verification', { email });
-    } catch (err: any) {
-      set({ error: err.message || "Erreur d'envoi" });
+    } catch (err: unknown) {
+      set({ error: getErrorMessage(err) || "Erreur d'envoi" });
       throw err;
     }
   },
@@ -343,8 +344,8 @@ export const useAuthStore = create<AuthStore>((set) => ({
     set({ error: null });
     try {
       await apiPost('forgot-password', { email });
-    } catch (err: any) {
-      set({ error: err.message || "Erreur d'envoi" });
+    } catch (err: unknown) {
+      set({ error: getErrorMessage(err) || "Erreur d'envoi" });
       throw err;
     }
   },
@@ -353,8 +354,8 @@ export const useAuthStore = create<AuthStore>((set) => ({
     set({ error: null });
     try {
       await apiPost('reset-password', { token, new_password: newPassword });
-    } catch (err: any) {
-      set({ error: err.message || 'Erreur de réinitialisation' });
+    } catch (err: unknown) {
+      set({ error: getErrorMessage(err) || 'Erreur de réinitialisation' });
       throw err;
     }
   },
@@ -410,9 +411,9 @@ export const useAuthStore = create<AuthStore>((set) => ({
       if (nextUser) {
         await SecureStore.setItemAsync(USER_KEY, JSON.stringify(nextUser));
       }
-    } catch (err: any) {
-      logger.error('[AUTH_STORE] refreshEntitlements failed', { message: err.message });
-      set({ error: err.message || 'Erreur de synchronisation premium' });
+    } catch (err: unknown) {
+      logger.error('[AUTH_STORE] refreshEntitlements failed', { message: getErrorMessage(err) });
+      set({ error: getErrorMessage(err) || 'Erreur de synchronisation premium' });
     }
   },
 
@@ -437,9 +438,9 @@ export const useAuthStore = create<AuthStore>((set) => ({
       }
       logger.debug('[AUTH_STORE] refreshUsage succeeded');
       set({ usage: data as BillingUsage });
-    } catch (err: any) {
-      logger.error('[AUTH_STORE] refreshUsage failed', { message: err.message });
-      set({ error: err.message || 'Erreur de synchronisation quota' });
+    } catch (err: unknown) {
+      logger.error('[AUTH_STORE] refreshUsage failed', { message: getErrorMessage(err) });
+      set({ error: getErrorMessage(err) || 'Erreur de synchronisation quota' });
     }
   },
 

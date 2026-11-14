@@ -1285,3 +1285,17 @@ Le cas le plus visible était le premier : le chemin le plus utilisé étiquetai
 **Commandes exécutées :** `ruff check backend tests`, `pip-audit -r backend/requirements.txt`, `bash scripts/ai-validate.sh`
 **Résultat :** PASS — 0 finding ruff, 0 vulnérabilité
 **Risques restants :** règles volontairement minimales ; les familles `B` (bugbear) et `UP` (modernisation) totalisent ~330 findings à traiter par paliers. mypy reste à brancher (115 erreurs en mode normal).
+
+## BUG-085 — 46 `catch (e: any)` lisaient l'erreur sans aucune vérification
+
+**Contexte :** découvert le 12/11 lors de l'analyse générale (point n° 10), traité le 14/11. Le frontend interceptait les erreurs en `catch (e: any)` puis lisait `e.message`, `e.response.data.detail` ou `e.response.status` directement : `any` désactivait toute vérification. Un `throw` de chaîne ou de `null` donnait `undefined` en silence, et `isNetworkError` (`stockStore.ts`) levait même une `TypeError` (`err.response` sur `null`) qui masquait l'erreur d'origine.
+
+| ID | Sévérité | Statut | Résumé |
+|---|---|---|---|
+| BUG-085 | 🟡 MINEUR (robustesse, dette de typage) | `CORRIGÉ` | Nouveau `frontend/utils/errorDetails.ts` : `getErrorMessage`, `getHttpStatus`, `getApiErrorDetail`, `getHttpResponseData` — lecture typée d'une valeur `unknown`, sans jamais lever. Les **46** blocs `catch (x: any)` de 20 fichiers passent en `catch (x: unknown)` et lisent l'erreur par ces helpers (conversion outillée, limitée au corps de chaque `catch`, vérifiée par `tsc`). `isNetworkError`, `handlePremiumOrQuotaError`, `extractPremiumErrorDetail` et le `.catch` de `verify-email.tsx` reçoivent `unknown` ; `ErrorBoundary` est typé (`Props`, `React.ErrorInfo`). Les `any` restants (63) sont des frontières avec l'API (réponses non modélisées), des replis pour l'environnement de test Node et des chemins Expo Router dynamiques : chantier séparé. |
+
+**Fichiers modifiés :** `frontend/utils/errorDetails.ts` (nouveau), `frontend/utils/premiumErrors.ts`, `frontend/component/ErrorBoundary.tsx`, `frontend/store/{authStore,stockStore,recipesStore,householdStore}.ts`, 16 écrans de `frontend/app/`
+**Tests ajoutés/mis à jour :** `frontend/utils/errorDetails.test.ts` (formes usuelles et inattendues pour chaque helper, garde-fou qui interdit le retour de `catch (x: any)` dans le code applicatif)
+**Commandes exécutées :** `cd frontend && npx tsc --noEmit && npx eslint . && npm run test:ci`, `bash scripts/ai-validate.sh`
+**Résultat :** PASS
+**Risques restants :** changement purement défensif — pour une `Error` ou une erreur axios, les valeurs lues sont identiques à avant. Seul écart : une chaîne levée telle quelle est désormais lue comme message au lieu de donner `undefined`.

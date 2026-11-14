@@ -3,19 +3,25 @@ import { Text, ScrollView, StyleSheet, Platform } from "react-native";
 import Constants from "expo-constants";
 import { logger } from "../utils/logger";
 import { reportCrash } from "../utils/crashReporting";
+import { getErrorMessage } from "../utils/errorDetails";
 
-interface State {
-  error: any;
-  errorInfo: any;
+interface Props {
+  children?: React.ReactNode;
 }
 
-export default class ErrorBoundary extends React.Component<any, State> {
-  constructor(props: any) {
+interface State {
+  // `unknown` : un composant peut lever n'importe quelle valeur, pas seulement une Error.
+  error: unknown;
+  errorInfo: React.ErrorInfo | null;
+}
+
+export default class ErrorBoundary extends React.Component<Props, State> {
+  constructor(props: Props) {
     super(props);
     this.state = { error: null, errorInfo: null };
   }
 
-  componentDidCatch(error: any, errorInfo: any) {
+  componentDidCatch(error: unknown, errorInfo: React.ErrorInfo) {
     const message = error instanceof Error ? error.message : String(error);
     const stack = errorInfo?.componentStack ? String(errorInfo.componentStack) : undefined;
     logger.error("ErrorBoundary caught", { message, stack });
@@ -29,14 +35,14 @@ export default class ErrorBoundary extends React.Component<any, State> {
   }
 
   render() {
-    if (this.state.error) {
+    if (this.state.error !== null && this.state.error !== undefined) {
       return (
         <ScrollView style={styles.container}>
           <Text style={styles.title}>🚨 JavaScript Error</Text>
 
           <Text style={styles.label}>Message:</Text>
           <Text testID="backend-error-message" style={styles.text}>
-            {String(this.state.error?.message || this.state.error)}
+            {getErrorMessage(this.state.error) || String(this.state.error)}
           </Text>
 
           <Text style={styles.label}>Stack:</Text>

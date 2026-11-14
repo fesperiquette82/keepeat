@@ -14,6 +14,7 @@ import { shouldBootstrapRecipeAssociationsCache } from '../utils/recipeCacheBoot
 import { resolveRecipeDetailLoadPolicy } from '../utils/recipeDetailLoadPolicy';
 import type { DashboardStockItem } from '../data/mockDashboardData';
 import type { RecipeCandidate } from '../utils/stockItemRecipes';
+import { getErrorMessage } from '../utils/errorDetails';
 
 export type RecipesFilter = 'stock' | 'expiryDay' | 'expiryWeek' | 'expiryMonth';
 
@@ -180,12 +181,12 @@ export const useRecipesStore = create<RecipesStoreState>((set, get) => ({
         recipesById: { ...state.recipesById, ...recipesByIdFromBatch },
       }));
       return sanitized;
-    } catch (error: any) {
+    } catch (error: unknown) {
       const premiumError = extractPremiumErrorDetail(error);
       if (premiumError) {
         usePremiumUiStore.getState().openPaywall(premiumError);
       }
-      const message = error?.message ?? 'Impossible de récupérer les recettes.';
+      const message = getErrorMessage(error) ?? 'Impossible de récupérer les recettes.';
       logger.warn('[RECIPES] backend suggestions failed, fallback local only', { filter, message });
       set({ error: message });
       return [];
@@ -261,10 +262,10 @@ export const useRecipesStore = create<RecipesStoreState>((set, get) => ({
         }));
         logger.debug('[RECIPES_DETAIL_PERF] recipe fetched by id and cached', { recipeId: recipe.id });
         return recipe;
-      } catch (error: any) {
+      } catch (error: unknown) {
         logger.warn('[RECIPES_DETAIL_PERF] recipe by id request failed', {
           recipeId: id,
-          message: error?.message ?? String(error),
+          message: getErrorMessage(error) ?? String(error),
         });
         return null;
       } finally {

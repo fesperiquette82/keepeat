@@ -19,6 +19,7 @@ import { useLanguageStore } from '../store/languageStore';
 import { APP_CONFIG } from '../utils/appConfig';
 import { shouldDisplayBiometricLoginButton } from '../utils/biometricAuth';
 import { logger } from '../utils/logger';
+import { getErrorMessage } from '../utils/errorDetails';
 
 
 export default function LoginScreen() {
@@ -75,16 +76,16 @@ export default function LoginScreen() {
       await login(email.trim().toLowerCase(), password);
       logger.info('[LOGIN_FORM] authStore.login() succeeded, navigation managed by _layout.tsx');
       // La navigation est gérée par _layout.tsx via le changement d'état user
-    } catch (err: any) {
+    } catch (err: unknown) {
       logger.error('[LOGIN_FORM] authStore.login() failed', err);
-      if (err.message === 'EMAIL_NOT_VERIFIED') {
+      if (getErrorMessage(err) === 'EMAIL_NOT_VERIFIED') {
         logger.info('[LOGIN_FORM] email not verified');
         clearError();
         setEmailNotVerified(true);
       } else {
-        logger.error('[LOGIN_FORM] login error', { message: err.message });
+        logger.error('[LOGIN_FORM] login error', { message: getErrorMessage(err) });
         setLocalError(
-          err.message || (fr ? 'Email ou mot de passe incorrect.' : 'Invalid email or password.')
+          getErrorMessage(err) || (fr ? 'Email ou mot de passe incorrect.' : 'Invalid email or password.')
         );
       }
     } finally {
@@ -100,14 +101,14 @@ export default function LoginScreen() {
     try {
       await loginWithBiometrics();
       // La navigation est gérée par _layout.tsx via le changement d'état user
-    } catch (err: any) {
-      if (err?.message === 'BIOMETRIC_NOT_SUPPORTED') {
+    } catch (err: unknown) {
+      if (getErrorMessage(err) === 'BIOMETRIC_NOT_SUPPORTED') {
         setLocalError(fr ? 'Votre téléphone ne supporte pas la biométrie.' : 'Your phone does not support biometrics.');
       } else
-      if (err?.message === 'BIOMETRIC_CREDENTIALS_NOT_FOUND') {
+      if (getErrorMessage(err) === 'BIOMETRIC_CREDENTIALS_NOT_FOUND') {
         setLocalError(fr ? 'Aucun identifiant biométrique enregistré.' : 'No biometric credential is saved yet.');
       } else
-      if (err?.message === 'BIOMETRIC_SESSION_EXPIRED') {
+      if (getErrorMessage(err) === 'BIOMETRIC_SESSION_EXPIRED') {
         setLocalError(fr ? 'Session biométrique expirée : connectez-vous avec votre mot de passe.' : 'Biometric session expired: sign in with your password.');
       } else {
         setLocalError(fr ? 'Connexion biométrique échouée.' : 'Biometric sign-in failed.');

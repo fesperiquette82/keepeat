@@ -7,6 +7,7 @@ import { useAuthStore } from '../store/authStore';
 import { getThemeColors, getThemeText } from '../utils/theme';
 import { useAppSettingsStore } from '../store/appSettingsStore';
 import { deleteAccount } from '../utils/accountService';
+import { getErrorMessage } from '../utils/errorDetails';
 
 export default function DeleteAccountScreen() {
   const router = useRouter();
@@ -49,9 +50,9 @@ export default function DeleteAccountScreen() {
       await deleteAccount(token, password);
       await logout();
       // La navigation vers /login est gérée par _layout.tsx via le changement d'état user.
-    } catch (err: any) {
+    } catch (err: unknown) {
       setIsDeleting(false);
-      if (err?.message?.includes('403') || err?.message === 'Mot de passe incorrect') {
+      if (getErrorMessage(err)?.includes('403') || getErrorMessage(err) === 'Mot de passe incorrect') {
         setLocalError('Mot de passe incorrect.');
       } else {
         setLocalError('Impossible de supprimer le compte pour le moment. Réessayez plus tard.');

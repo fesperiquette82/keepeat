@@ -15,6 +15,7 @@ import {
 } from '../../../component/admin/AdminUi';
 import { getMonitoringDashboard, getMonitoringHealth, MonitoringDashboardResponse, MonitoringHealthResponse } from '../../../utils/adminMonitoringApi';
 import { useAuthStore } from '../../../store/authStore';
+import { getErrorMessage } from '../../../utils/errorDetails';
 
 
 
@@ -59,8 +60,8 @@ export default function AdminMonitoringDashboardScreen() {
         ]);
         setHealth(healthData);
         setDashboard(dashboardData);
-      } catch (e: any) {
-        setError(e?.message || 'Chargement impossible');
+      } catch (e: unknown) {
+        setError(getErrorMessage(e) || 'Chargement impossible');
       } finally {
         setLoading(false);
       }

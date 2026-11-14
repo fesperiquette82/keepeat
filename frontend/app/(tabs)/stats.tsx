@@ -91,7 +91,7 @@ export default function StatsScreen() {
       setData(monthly.data);
       setGamif(gamifRes.data);
       setPredictionsCount(Array.isArray(predictionsRes.data) ? predictionsRes.data.length : 0);
-    } catch (err: any) {
+    } catch (err: unknown) {
       const premiumError = extractPremiumErrorDetail(err);
       if (premiumError) {
         openPaywall(premiumError);
