@@ -1,3 +1,4 @@
+import ast
 import re
 from pathlib import Path
 
@@ -484,6 +485,109 @@ def test_auto_merge_workflow_requires_explicit_critical_success_checks():
     assert "Ready to merge" not in workflow
     assert "--auto --squash" in workflow
     assert "git push origin" not in workflow
+
+
+def _workflow_step(workflow: str, name: str) -> str:
+    """Texte d'une étape, de son `- name:` jusqu'à l'étape suivante."""
+    marker = f"      - name: {name}\n"
+    assert workflow.count(marker) == 1, f"étape introuvable ou en double : {name}"
+    return workflow.split(marker)[1].split("      - name: ")[0]
+
+
+def test_auto_merge_waits_for_the_review_of_codex_touched_prs():
+    """BUG-097 : l'auto-merge fusionnait toute PR verte. Depuis que Maestro est
+    réparé, un correctif de Codex pouvait arriver sur main sans relecture. Le
+    verrou (scripts/ci/codex_fix_review_gate.py, comportement testé dans
+    tests/test_codex_fix_review_gate.py) doit rester branché, en refus par
+    défaut, et exécuté depuis main."""
+    workflow = Path(".github/workflows/auto-merge-pr.yml").read_text(encoding="utf-8")
+
+    # Le verrou tourne avant toute activation de l'auto-merge.
+    review = _workflow_step(workflow, "Review gate for PRs touched by an automated fixer")
+    assert "id: review" in review
+    assert "if: steps.pr.outputs.should_run == 'true'" in review
+    assert 'python3 scripts/ci/codex_fix_review_gate.py --repo "$REPO" --pr "$PR_NUMBER" --owner "$REPO_OWNER"' in review
+    assert "REPO_OWNER: ${{ github.repository_owner }}" in review
+    assert "continue-on-error" not in workflow
+    assert workflow.index("id: review") < workflow.index("--auto --squash")
+
+    # Le script exécuté est celui de main : une PR ne réécrit pas son verrou.
+    checkout = _workflow_step(workflow, "Checkout the trusted review gate from main (never the PR head)")
+    assert re.findall(r"^\s+ref: (.+)$", workflow, flags=re.MULTILINE) == ["main"]
+    assert "persist-credentials: false" in checkout
+    assert workflow.count("uses: actions/checkout") == 1
+    assert workflow.index("ref: main") < workflow.index("id: review")
+    for pr_controlled_ref in ("pull_request.head", "github.head_ref"):
+        assert pr_controlled_ref not in workflow
+
+    # L'activation exige les checks verts ET la relecture, pour ce commit précis.
+    enable = _workflow_step(workflow, "Enable auto-merge after strict critical checks gate")
+    assert "steps.pr.outputs.should_run == 'true' &&" in enable
+    assert "steps.gate.outputs.all_ok == 'true' &&" in enable
+    assert "steps.review.outputs.review_ok == 'true' &&" in enable
+    assert "steps.review.outputs.reviewed_head_sha == steps.pr.outputs.head_sha" in enable
+    assert '--auto --squash --match-head-commit "$HEAD_SHA"' in enable
+    assert workflow.count("--auto --squash") == 1, "une seule commande peut armer l'auto-merge"
+
+    # Refus par défaut : une étape en échec ne laisse aucun auto-merge armé.
+    disarm = _workflow_step(workflow, "Disarm auto-merge when a gate step failed")
+    assert "if: failure() && steps.pr.outputs.should_run == 'true'" in disarm
+    assert "--disable-auto" in disarm
+
+    # Un verdict de relecture, ou une étiquette posée, relance le verrou.
+    triggers = workflow.split("jobs:")[0]
+    assert "issue_comment:" in triggers
+    assert "- labeled" in triggers
+    assert "contains(github.event.comment.body, 'codex-fix-review:')" in workflow
+    assert "github.event.comment.user.login == github.repository_owner" in workflow
+    assert "issues: read" in workflow
+
+    # Le texte d'un commentaire n'est lu que par la condition du job : il
+    # n'atteint jamais un script (injection de commandes).
+    assert workflow.count("github.event.comment") == 2
+    assert workflow.rindex("github.event.comment") < workflow.index("runs-on:")
+    assert 'PR_NUMBER="${{ github.event.issue.number }}"' in workflow
+
+
+def test_review_gate_script_runs_without_installing_anything():
+    """BUG-097 : le workflow exécute le verrou sur un runner nu, sans
+    `pip install`. Une dépendance tierce le ferait échouer, donc refuser
+    toutes les fusions automatiques."""
+    source = Path("scripts/ci/codex_fix_review_gate.py").read_text(encoding="utf-8")
+    imported = set()
+    for node in ast.walk(ast.parse(source)):
+        if isinstance(node, ast.Import):
+            imported.update(alias.name.split(".")[0] for alias in node.names)
+        elif isinstance(node, ast.ImportFrom):
+            imported.add((node.module or "").split(".")[0])
+    assert imported <= {"__future__", "argparse", "json", "os", "re", "subprocess", "sys", "typing"}
+
+    workflow = Path(".github/workflows/auto-merge-pr.yml").read_text(encoding="utf-8")
+    assert "pip install" not in workflow
+
+
+def test_codex_fix_review_is_documented_and_codex_may_not_approve_itself():
+    """BUG-097 : la relecture est une procédure. Sans elle, le marqueur est
+    introuvable pour qui doit le poster ; et l'outil relu ne doit pas pouvoir
+    se croire autorisé à l'écrire."""
+    marker = "<!-- codex-fix-review: sha=<SHA complet"
+    docs = Path("docs/codex-auto-fix.md").read_text(encoding="utf-8")
+    assert "## Relecture avant fusion automatique (BUG-097)" in docs
+    assert marker in docs
+    assert "verdict=approved" in docs and "verdict=changes-requested" in docs
+    assert "scripts/ci/codex_fix_review_gate.py" in docs
+    assert "### Limites" in docs
+
+    claude_rules = Path("CLAUDE.md").read_text(encoding="utf-8")
+    assert "## Relecture des correctifs Codex avant fusion" in claude_rules
+    assert marker in claude_rules
+    assert "Ne jamais approuver un commit non relu en entier" in claude_rules
+
+    prompt = Path(".github/codex/prompts/auto-fix-ci.md").read_text(encoding="utf-8")
+    assert "Ne jamais écrire le marqueur `codex-fix-review`" in prompt
+    assert "Ne jamais modifier `scripts/ci/codex_fix_review_gate.py`" in prompt
+    agents = Path("AGENTS.md").read_text(encoding="utf-8")
+    assert "Codex n’écrit jamais le marqueur `codex-fix-review`" in agents
 
 
 def test_codex_auto_fix_prompt_exists_and_forbids_weakening_tests():

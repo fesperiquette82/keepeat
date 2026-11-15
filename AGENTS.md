@@ -54,6 +54,11 @@ Pour chaque correction de bug ou nouvelle fonctionnalité :
 - Les outils de debug doivent être activés par config/flags centralisés uniquement.
 - Les composants debug ne doivent jamais être visibles en prod.
 
+## Relecture des correctifs automatiques
+Une PR touchée par Codex ne fusionne automatiquement qu’après un verdict de relecture lié à son commit de tête exact (`docs/codex-auto-fix.md`, BUG-097).
+- Un agent ne relit jamais son propre travail : Codex n’écrit jamais le marqueur `codex-fix-review`.
+- Ne pas modifier le verrou (`scripts/ci/codex_fix_review_gate.py`, ses tests, `.github/workflows/auto-merge-pr.yml`) dans une PR de correctif.
+
 ## Logs / sécurité
 - Utiliser un logger central si disponible.
 - Ne pas laisser de `console.log` dispersés.

@@ -161,13 +161,22 @@ inachevée. Le chronomètre tourne pendant que le reste avance.
       reste-t-il visible, ou le clavier le recouvre-t-il ? Les tests E2E
       suggèrent qu'il est recouvert sur un petit écran. Me dire ce que vous
       voyez : si c'est confirmé, je corrige la mise en page.
-- [ ] **Décider du sort de l'auto-merge** (`auto-merge-pr.yml`) : il attend un
-      check nommé « Mobile E2E / Not required (changes filter) » qui n'existe
-      plus (le job s'appelle « …/ Not required or missing required APK »), il
-      n'a donc jamais fusionné un PR. Soit corriger le nom, soit supprimer le
-      workflow — recommandation : supprimer, tu merges à la main et un
-      auto-merge couplé à l'auto-fix Codex ferait atterrir du code sur `main`
-      sans regard humain.
+- [x] **Sort de l'auto-merge** (`auto-merge-pr.yml`) — décidé le 15/11 : il
+      reste, et une PR touchée par Codex ne fusionne qu'après relecture de son
+      commit exact par une session Claude (BUG-097, `docs/codex-auto-fix.md`).
+      Le verrou prend effet quand il est sur `main`.
+- [ ] **Auto-merge : corriger ou non le nom de check obsolète.** Le workflow
+      attend « Mobile E2E / Not required (changes filter) », qui n'existe plus
+      (le job s'appelle « …/ Not required or missing required APK »).
+      Conséquence aujourd'hui : seules les PR qui touchent l'application
+      mobile (build et Maestro verts) peuvent fusionner seules ; une PR de
+      backend seul ne fusionne jamais automatiquement. Corriger le nom étend
+      l'auto-merge aux PR vertes de backend seul, hors brouillon. Me dire si
+      tu le veux.
+- [ ] **Relecture des correctifs Codex : savoir que la PR attend sans session
+      ouverte.** Si aucune session Claude ne suit la PR, rien ne la relit :
+      demander la relecture dans une session, poster le marqueur à la main
+      (`docs/codex-auto-fix.md`), ou fusionner à la main.
 
 ### Déjà en place (ne pas refaire)
 
