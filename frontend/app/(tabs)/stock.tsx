@@ -9,7 +9,7 @@ import { syncStateForItem } from '../../utils/pendingMutationQueue';
 import { ActionBanner } from '../../component/ActionBanner';
 import { getThemeColors, getThemeText } from '../../utils/theme';
 import { useAppSettingsStore } from '../../store/appSettingsStore';
-import { daysUntil, resolveStockItems } from '../../data/mockDashboardData';
+import { daysUntil, resolveStockItems } from '../../utils/stockDashboard';
 import { removeStockItems, undoRemovedStockItems } from '../../utils/stockRemoval';
 import { countLabelFr } from '../../utils/uiText';
 import { storageZoneLabel, UI_LABELS } from '../../utils/uiLabels';
@@ -92,7 +92,7 @@ export default function StockScreen() {
     };
   }, []);
 
-  const { items, isMock } = useMemo(() => resolveStockItems(storeItems, { useMockFallback: false }), [storeItems]);
+  const items = useMemo(() => resolveStockItems(storeItems), [storeItems]);
 
   const mostUrgentDays = useMemo(() => {
     const allDays = items.map((item) => daysUntil(item.expiry_date)).filter((d): d is number => d !== null);
@@ -283,7 +283,6 @@ export default function StockScreen() {
         </View>
         <Text style={styles.subtitle}>{countLabelFr(displayedItems.length, 'ingrédient')} affiché{displayedItems.length > 1 ? 's' : ''}</Text>
         <Text style={styles.swipeHint}>Glisser à droite = utilisé · à gauche = jeté</Text>
-        {isMock && <Text style={styles.mockInfo}>Données de démonstration</Text>}
       </View>
 
       <View style={styles.controlsCard}>
@@ -453,7 +452,6 @@ const createStyles = (C: ReturnType<typeof getThemeColors>, T: ReturnType<typeof
   title: { fontSize: 26, fontWeight: '800', color: C.text },
   subtitle: { marginTop: 4, ...T.secondary },
   swipeHint: { marginTop: 4, color: C.textLight, fontSize: 12, fontWeight: '600' },
-  mockInfo: { marginTop: 4, ...T.tertiary },
   controlsCard: { marginHorizontal: 16, marginBottom: 8, padding: 12, borderRadius: 12, backgroundColor: '#fff', borderWidth: 1, borderColor: C.border, gap: 8 },
   controlsSectionLabel: { ...T.secondarySmall, fontWeight: '700' },
   filterRow: { flexDirection: 'row', gap: 8, paddingBottom: 2 },

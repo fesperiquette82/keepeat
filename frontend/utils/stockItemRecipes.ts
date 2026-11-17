@@ -1,5 +1,5 @@
-import { daysUntil } from '../data/mockDashboardData';
-import type { DashboardStockItem } from '../data/mockDashboardData';
+import { daysUntil } from './stockDashboard';
+import type { DashboardStockItem } from './stockDashboard';
 import { dedupeRecipesById } from './recipesScoping';
 import { isClearIngredientMatch, normalizeIngredientName } from './ingredientMatching';
 

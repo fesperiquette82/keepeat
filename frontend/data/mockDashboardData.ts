@@ -1,12 +1,15 @@
-import type { StockItem } from '../store/stockStore';
+// Moteur de recettes de démonstration : un petit catalogue local et son
+// calcul de suggestions. Plus aucun écran ne l'utilise ; il ne sert qu'à ses
+// propres tests. Le code métier de l'application (types du stock affiché,
+// calcul des jours restants, périmètres) vit dans utils/stockDashboard.ts, et
+// un test interdit à l'application d'importer ce fichier (BUG-098).
 import { computeRecipeIngredientAvailability, isClearIngredientMatch, normalizeIngredientName } from '../utils/ingredientMatching';
-import { resolveStockItemImageUrl } from '../utils/stockItemImage';
-
-export type StorageZone = 'frigo' | 'placard';
-
-export interface DashboardStockItem extends StockItem {
-  storageZone: StorageZone;
-}
+import {
+  daysUntil,
+  getActiveItemsByScope,
+  type DashboardStockItem,
+  type RecipeSuggestionScope,
+} from '../utils/stockDashboard';
 
 export interface RecipeIngredient {
   name: string;
@@ -37,33 +40,11 @@ export interface MockRecipe extends BaseMockRecipe {
   ingredients: string[];
 }
 
-export type RecipeSuggestionScope = 'stock' | 'expiryDay' | 'expiryWeek' | 'expiryMonth';
 export interface AntiWastePlan {
   recipes: MockRecipe[];
   coveredItemIds: string[];
   coveredCount: number;
 }
-
-const TODAY = new Date();
-
-function isoInDays(days: number): string {
-  const value = new Date(TODAY);
-  value.setUTCDate(value.getUTCDate() + days);
-  return value.toISOString();
-}
-
-export const MOCK_STOCK_ITEMS: DashboardStockItem[] = [
-  { id: 'm1', name: 'Yaourt nature', brand: 'Danone', food_category: 'frais', storageZone: 'frigo', quantity: '4 pots', expiry_date: isoInDays(2), added_date: isoInDays(-3), status: 'active', image_url: 'https://images.unsplash.com/photo-1488477181946-6428a0291777?auto=format&fit=crop&w=240&h=240&q=60' },
-  { id: 'm2', name: 'Lait demi-écrémé', brand: 'Lactel', food_category: 'boissons', storageZone: 'frigo', quantity: '1 bouteille', expiry_date: isoInDays(5), added_date: isoInDays(-6), status: 'active', image_url: 'https://images.unsplash.com/photo-1550583724-b2692b85b150?auto=format&fit=crop&w=240&h=240&q=60' },
-  { id: 'm3', name: 'Courgettes', brand: 'Primeur', food_category: 'legumes', storageZone: 'frigo', quantity: '3 pièces', expiry_date: isoInDays(1), added_date: isoInDays(-2), status: 'active', image_url: 'https://images.unsplash.com/photo-1576045057995-568f588f82fb?auto=format&fit=crop&w=240&h=240&q=60' },
-  { id: 'm4', name: 'Poulet émincé', brand: 'Fermier', food_category: 'proteines', storageZone: 'frigo', quantity: '450g', expiry_date: isoInDays(0), added_date: isoInDays(-1), status: 'active', image_url: 'https://images.unsplash.com/photo-1604503468506-a8da13d82791?auto=format&fit=crop&w=240&h=240&q=60' },
-  { id: 'm5', name: 'Tomates concassées', brand: 'Mutti', food_category: 'epicerie', storageZone: 'placard', quantity: '2 boîtes', expiry_date: isoInDays(45), added_date: isoInDays(-20), status: 'active', image_url: 'https://images.unsplash.com/photo-1592924357228-91a4daadcfea?auto=format&fit=crop&w=240&h=240&q=60' },
-  { id: 'm6', name: 'Pâtes complètes', brand: 'Barilla', food_category: 'feculents', storageZone: 'placard', quantity: '500g', expiry_date: isoInDays(180), added_date: isoInDays(-15), status: 'active', image_url: 'https://images.unsplash.com/photo-1551462147-ff29053bfc14?auto=format&fit=crop&w=240&h=240&q=60' },
-  { id: 'm7', name: 'Riz basmati', brand: 'Taureau Ailé', food_category: 'feculents', storageZone: 'placard', quantity: '1 kg', expiry_date: isoInDays(260), added_date: isoInDays(-45), status: 'active', image_url: 'https://images.unsplash.com/photo-1586201375761-83865001e31c?auto=format&fit=crop&w=240&h=240&q=60' },
-  { id: 'm8', name: 'Pois chiches', brand: 'Bonduelle', food_category: 'epicerie', storageZone: 'placard', quantity: '1 bocal', expiry_date: isoInDays(90), added_date: isoInDays(-12), status: 'active', image_url: 'https://images.unsplash.com/photo-1515543904379-3d757afe72e3?auto=format&fit=crop&w=240&h=240&q=60' },
-  { id: 'm9', name: 'Œufs', brand: 'Plein Air', food_category: 'proteines', storageZone: 'frigo', quantity: '6', expiry_date: isoInDays(4), added_date: isoInDays(-4), status: 'active', image_url: 'https://images.unsplash.com/photo-1506976785307-8732e854ad03?auto=format&fit=crop&w=240&h=240&q=60' },
-  { id: 'm10', name: 'Huile d’olive', brand: 'Puget', food_category: 'epicerie', storageZone: 'placard', quantity: '1 bouteille', expiry_date: isoInDays(320), added_date: isoInDays(-90), status: 'active', image_url: 'https://images.unsplash.com/photo-1474979266404-7eaacbcd87c5?auto=format&fit=crop&w=240&h=240&q=60' },
-];
 
 const MOCK_RECIPES_BASE: BaseMockRecipe[] = [
   {
@@ -232,77 +213,8 @@ export function findRecipeBaseById(recipeId: string): BaseMockRecipe | undefined
   return MOCK_RECIPES_BASE.find((recipe) => recipe.id === recipeId);
 }
 
-export function daysUntil(expiryDate?: string): number | null {
-  if (!expiryDate) return null;
-  const value = String(expiryDate).trim();
-  if (!value) return null;
-
-  const isoDateOnly = value.match(/^(\d{4})-(\d{2})-(\d{2})/);
-  let expiryUtcMs: number;
-  if (isoDateOnly) {
-    const [, year, month, day] = isoDateOnly;
-    expiryUtcMs = Date.UTC(Number(year), Number(month) - 1, Number(day));
-  } else {
-    const parsed = new Date(value);
-    if (Number.isNaN(parsed.getTime())) return null;
-    expiryUtcMs = Date.UTC(parsed.getUTCFullYear(), parsed.getUTCMonth(), parsed.getUTCDate());
-  }
-
-  const now = new Date();
-  const todayUtcMs = Date.UTC(now.getUTCFullYear(), now.getUTCMonth(), now.getUTCDate());
-  return Math.round((expiryUtcMs - todayUtcMs) / 86400000);
-}
-
-export function resolveStockItems(
-  items: StockItem[],
-  options?: { useMockFallback?: boolean },
-): { items: DashboardStockItem[]; isMock: boolean } {
-  if (items.length > 0) {
-    return {
-      isMock: false,
-      items: items.map((item) => ({
-        ...item,
-        image_url: resolveStockItemImageUrl(item),
-        storageZone: item.food_category && ['frais', 'proteines', 'legumes', 'boissons'].includes(item.food_category)
-          ? 'frigo'
-          : 'placard',
-      })),
-    };
-  }
-
-  if (options?.useMockFallback === false) {
-    return { items: [], isMock: false };
-  }
-
-  return { items: MOCK_STOCK_ITEMS, isMock: true };
-}
-
-export function findExpiringSoon(items: DashboardStockItem[], limit = 3): DashboardStockItem[] {
-  return [...items]
-    .filter((item) => item.expiry_date)
-    .sort((a, b) => (daysUntil(a.expiry_date) ?? 999) - (daysUntil(b.expiry_date) ?? 999))
-    .slice(0, limit);
-}
-
 export function buildRecipeSuggestions(items: DashboardStockItem[]): MockRecipe[] {
   return buildRecipeSuggestionsByScope(items, 'stock');
-}
-
-export function getActiveItemsByScope(items: DashboardStockItem[], scope: RecipeSuggestionScope): DashboardStockItem[] {
-  const activeItems = items.filter((item) => item.status === 'active');
-  if (scope === 'stock') return activeItems;
-
-  const maxDaysByScope: Record<Exclude<RecipeSuggestionScope, 'stock'>, number> = {
-    expiryDay: 0,
-    expiryWeek: 7,
-    expiryMonth: 31,
-  };
-
-  return activeItems.filter((item) => {
-    const days = daysUntil(item.expiry_date);
-    if (days === null) return false;
-    return days >= 0 && days <= maxDaysByScope[scope];
-  });
 }
 
 export function buildRecipeSuggestionsByScope(

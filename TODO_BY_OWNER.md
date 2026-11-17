@@ -161,6 +161,11 @@ inachevée. Le chronomètre tourne pendant que le reste avance.
       reste-t-il visible, ou le clavier le recouvre-t-il ? Les tests E2E
       suggèrent qu'il est recouvert sur un petit écran. Me dire ce que vous
       voyez : si c'est confirmé, je corrige la mise en page.
+- [ ] **Regarder l'accueil avec un stock vide** (BUG-098) : avec un compte sans
+      aucun produit, l'accueil doit afficher « Votre stock est vide. Ajoutez un
+      premier produit… » et un lien « Ajouter un produit », plus aucun produit
+      d'exemple. Le comportement est testé, la mise en page n'a pas été vue
+      sur un écran.
 - [x] **Sort de l'auto-merge** (`auto-merge-pr.yml`) — décidé le 15/11 : il
       reste, et une PR touchée par Codex ne fusionne qu'après relecture de son
       commit exact par une session Claude (BUG-097, `docs/codex-auto-fix.md`).

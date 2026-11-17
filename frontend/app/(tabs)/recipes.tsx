@@ -12,7 +12,7 @@ import { UI_LABELS } from '../../utils/uiLabels';
 import { useLanguageStore } from '../../store/languageStore';
 import { RecipesFilter, useRecipesStore } from '../../store/recipesStore';
 import { logger } from '../../utils/logger';
-import { getActiveItemsByScope, resolveStockItems } from '../../data/mockDashboardData';
+import { getActiveItemsByScope, resolveStockItems } from '../../utils/stockDashboard';
 import {
   buildScopedRecipesWithDiagnostics,
   buildTargetIngredientNames,
@@ -72,7 +72,7 @@ export default function RecipesScreen() {
     }, [fetchStock]),
   );
 
-  const { items } = useMemo(() => resolveStockItems(storeItems, { useMockFallback: false }), [storeItems]);
+  const items = useMemo(() => resolveStockItems(storeItems), [storeItems]);
   const activeItems = useMemo(() => getActiveItemsByScope(items, 'stock'), [items]);
   const targetItems = useMemo(() => getActiveItemsByScope(items, activeFilter), [activeFilter, items]);
 

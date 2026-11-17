@@ -6,7 +6,7 @@ import Ionicons from '@expo/vector-icons/Ionicons';
 import { useStockStore } from '../../store/stockStore';
 import { getThemeColors, getThemeText, shadowSm } from '../../utils/theme';
 import { useAppSettingsStore } from '../../store/appSettingsStore';
-import { daysUntil, findExpiringSoon, resolveStockItems } from '../../data/mockDashboardData';
+import { daysUntil, findExpiringSoon, resolveHomeStockOverviewState, resolveStockItems } from '../../utils/stockDashboard';
 import { countLabelFr } from '../../utils/uiText';
 import { storageZoneLabel, UI_LABELS } from '../../utils/uiLabels';
 import { logger } from '../../utils/logger';
@@ -15,7 +15,7 @@ import { useRecipesStore } from '../../store/recipesStore';
 
 export default function HomeDashboardScreen() {
   const router = useRouter();
-  const { items: storeItems, fetchStock } = useStockStore();
+  const { items: storeItems, fetchStock, isLoading: isStockLoading } = useStockStore();
   const fetchSuggestions = useRecipesStore((state) => state.fetchSuggestions);
   const [recipesOnHome, setRecipesOnHome] = React.useState<any[]>([]);
 
@@ -23,7 +23,9 @@ export default function HomeDashboardScreen() {
     fetchStock();
   }, [fetchStock]);
 
-  const { items, isMock } = useMemo(() => resolveStockItems(storeItems), [storeItems]);
+  // BUG-098 : l'accueil n'affiche que le stock réel. Vide, il le dit : il
+  // remplaçait auparavant le stock par un jeu de faux produits.
+  const items = useMemo(() => resolveStockItems(storeItems), [storeItems]);
   const themeMode = useAppSettingsStore((state) => state.themeMode);
   const C = getThemeColors(themeMode);
   const T = getThemeText(C);
@@ -40,6 +42,11 @@ export default function HomeDashboardScreen() {
   }, [items]);
 
   const expiringSoon = useMemo(() => findExpiringSoon(items), [items]);
+  const stockOverviewState = resolveHomeStockOverviewState({
+    itemCount: items.length,
+    expiringSoonCount: expiringSoon.length,
+    isLoading: isStockLoading,
+  });
   const recipes = useMemo(
     () =>
       recipesOnHome.map((recipe) => ({
@@ -94,10 +101,6 @@ export default function HomeDashboardScreen() {
           </TouchableOpacity>
         </View>
 
-        {isMock && (
-          <Text style={styles.mockText}>Mode démo actif (données mockées réalistes)</Text>
-        )}
-
         <View style={styles.summaryGrid}>
           {summaryCards.map((card) => (
             <View key={card.key} style={styles.summaryCard}>
@@ -124,7 +127,16 @@ export default function HomeDashboardScreen() {
               <Text style={styles.linkText}>{UI_LABELS.fr.actions.viewStock}</Text>
             </TouchableOpacity>
           </View>
-          {expiringSoon.length === 0 ? (
+          {stockOverviewState === 'loading' ? (
+            <Text style={styles.emptyText}>Chargement de votre stock…</Text>
+          ) : stockOverviewState === 'empty' ? (
+            <View testID="home-stock-empty">
+              <Text style={styles.emptyText}>Votre stock est vide. Ajoutez un premier produit pour suivre ses dates.</Text>
+              <TouchableOpacity testID="home-stock-empty-add" onPress={() => router.push('/scan')}>
+                <Text style={styles.linkText}>{UI_LABELS.fr.actions.addProduct}</Text>
+              </TouchableOpacity>
+            </View>
+          ) : stockOverviewState === 'no-urgent' ? (
             <Text style={styles.emptyText}>Aucun produit urgent pour le moment 🎉</Text>
           ) : (
             expiringSoon.map((item) => {
@@ -214,7 +226,6 @@ const createStyles = (C: ReturnType<typeof getThemeColors>, T: ReturnType<typeof
   settingsButton: { width: 36, height: 36, borderRadius: 18, backgroundColor: C.card, alignItems: 'center', justifyContent: 'center' },
   title: { fontSize: 28, fontWeight: '800', color: C.text },
   subtitle: { marginTop: 4, ...T.secondary },
-  mockText: { ...T.tertiary, opacity: 0.85 },
   summaryGrid: { flexDirection: 'row', gap: 8 },
   summaryCard: { flex: 1, backgroundColor: C.card, borderRadius: 12, padding: 12, gap: 6 },
   summaryCardHeader: { flexDirection: 'row', alignItems: 'center', gap: 6 },

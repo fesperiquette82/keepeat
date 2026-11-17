@@ -14,7 +14,7 @@ import { extractPremiumErrorDetail } from '../utils/premiumErrors';
 import { resolveStockItemImageUrlWithFallback } from '../utils/stockItemImage';
 import { usePremiumUiStore } from './premiumUiStore';
 import { useRecipesStore } from './recipesStore';
-import type { DashboardStockItem } from '../data/mockDashboardData';
+import type { DashboardStockItem } from '../utils/stockDashboard';
 import type { AxiosError, AxiosRequestConfig } from 'axios';
 import { shouldSkipStockFetch } from '../utils/stockFetchPolicy';
 import { buildRestoredItemsList } from '../utils/stockRestoreInsert';

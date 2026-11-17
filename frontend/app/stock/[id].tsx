@@ -8,7 +8,7 @@ import { useStockStore } from '../../store/stockStore';
 import { useRecipesStore } from '../../store/recipesStore';
 import { useAppSettingsStore } from '../../store/appSettingsStore';
 import { getThemeColors, getThemeText } from '../../utils/theme';
-import { daysUntil, resolveStockItems } from '../../data/mockDashboardData';
+import { daysUntil, resolveStockItems } from '../../utils/stockDashboard';
 import { storageZoneLabel, UI_LABELS } from '../../utils/uiLabels';
 import { expiryColor } from '../../utils/expiryLabels';
 import { buildStockItemDetailRecipeBlocks } from '../../utils/stockItemDetailRecipes';
@@ -21,7 +21,7 @@ import {
   STOCK_DETAIL_EDIT_ICON,
   STOCK_DETAIL_EDIT_LABEL,
 } from '../../utils/productEditNavigation';
-import type { DashboardStockItem } from '../../data/mockDashboardData';
+import type { DashboardStockItem } from '../../utils/stockDashboard';
 import { resolveBackNavigationAction } from '../../utils/navigationBack';
 
 type BlockState = 'loading' | 'error' | 'success';
@@ -139,7 +139,7 @@ export default function StockItemDetailScreen() {
     };
   }, [ensureRecipeAssociationsFromCache, fetchStock, itemId]);
 
-  const { items } = useMemo(() => resolveStockItems(storeItems, { useMockFallback: false }), [storeItems]);
+  const items = useMemo(() => resolveStockItems(storeItems), [storeItems]);
   const selectedItem = useMemo(() => items.find((item) => item.id === itemId) ?? null, [itemId, items]);
 
   const sections = useMemo(() => {

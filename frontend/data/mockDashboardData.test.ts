@@ -1,14 +1,13 @@
 import assert from 'node:assert/strict';
 import test from 'node:test';
 
+import { buildAntiWastePlanByScope, buildRecipeSuggestionsByScope } from './mockDashboardData';
 import {
-  buildAntiWastePlanByScope,
-  buildRecipeSuggestionsByScope,
   daysUntil,
   getActiveItemsByScope,
   resolveStockItems,
   type DashboardStockItem,
-} from './mockDashboardData';
+} from '../utils/stockDashboard';
 import { buildTargetIngredientNames, filterRecipesByTargetIngredients } from '../utils/recipesScoping';
 
 const ACTIVE_STATUS = 'active' as const;
@@ -149,7 +148,7 @@ test("resolveStockItems expose l'image quand la payload stock fournit image_url"
       image_url: 'https://cdn/img/oeufs.jpg',
     },
   ]);
-  assert.equal(result.items[0]?.image_url, 'https://cdn/img/oeufs.jpg');
+  assert.equal(result[0]?.image_url, 'https://cdn/img/oeufs.jpg');
 });
 
 test("resolveStockItems expose l'image quand la payload stock fournit imageUrl", () => {
@@ -159,7 +158,7 @@ test("resolveStockItems expose l'image quand la payload stock fournit imageUrl",
       imageUrl: 'https://cdn/img/pistache.jpg',
     } as DashboardStockItem,
   ]);
-  assert.equal(result.items[0]?.image_url, 'https://cdn/img/pistache.jpg');
+  assert.equal(result[0]?.image_url, 'https://cdn/img/pistache.jpg');
 });
 
 test("resolveStockItems expose l'image quand la payload stock contient product.image_url", () => {
@@ -171,7 +170,7 @@ test("resolveStockItems expose l'image quand la payload stock contient product.i
       },
     } as DashboardStockItem,
   ]);
-  assert.equal(result.items[0]?.image_url, 'https://cdn/img/mix.jpg');
+  assert.equal(result[0]?.image_url, 'https://cdn/img/mix.jpg');
 });
 
 test("resolveStockItems garde le placeholder UI quand aucune image valide n'existe", () => {
@@ -182,7 +181,7 @@ test("resolveStockItems garde le placeholder UI quand aucune image valide n'exis
       imageUrl: '',
     } as DashboardStockItem,
   ]);
-  assert.equal(result.items[0]?.image_url, undefined);
+  assert.equal(result[0]?.image_url, undefined);
 });
 
 test('resolveStockItems conserve les doublons de nom quand les IDs sont différents (cas scan/ajouts multiples)', () => {
@@ -197,9 +196,9 @@ test('resolveStockItems conserve les doublons de nom quand les IDs sont différe
     },
   ]);
 
-  assert.equal(result.items.length, 2);
-  assert.deepEqual(result.items.map((item) => item.id), ['dup-1', 'dup-2']);
-  assert.deepEqual(result.items.map((item) => item.name), [
+  assert.equal(result.length, 2);
+  assert.deepEqual(result.map((item) => item.id), ['dup-1', 'dup-2']);
+  assert.deepEqual(result.map((item) => item.name), [
     'Poivrons mi-séchés ricotta basilic',
     'Poivrons mi-séchés ricotta basilic',
   ]);

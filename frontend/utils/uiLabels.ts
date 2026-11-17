@@ -10,6 +10,7 @@ export const UI_LABELS = {
     actions: {
       viewStock: 'Voir le stock',
       viewRecipes: 'Voir les recettes',
+      addProduct: 'Ajouter un produit',
     },
   },
 } as const;

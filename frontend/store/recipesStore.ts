@@ -12,7 +12,7 @@ import {
 } from '../utils/recipeAssociations';
 import { shouldBootstrapRecipeAssociationsCache } from '../utils/recipeCacheBootstrap';
 import { resolveRecipeDetailLoadPolicy } from '../utils/recipeDetailLoadPolicy';
-import type { DashboardStockItem } from '../data/mockDashboardData';
+import type { DashboardStockItem } from '../utils/stockDashboard';
 import type { RecipeCandidate } from '../utils/stockItemRecipes';
 import { getErrorMessage } from '../utils/errorDetails';
 
