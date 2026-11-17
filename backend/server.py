@@ -95,6 +95,7 @@ from backend.models import (
     VerifyEmailBody,
 )
 from backend.mongo_settings import mongo_client_kwargs
+from backend.ingredient_keys import ingredient_key, stock_item_keys
 from backend.admin_pages import ADMIN_DASHBOARD_HTML, ADMIN_RECIPES_HTML, ADMIN_TICKETS_HTML
 from backend.legal_pages import ACCOUNT_DELETION_HTML, PRIVACY_POLICY_HTML
 from backend.entitlements import (
@@ -3545,6 +3546,16 @@ def _normalize_ingredient_name(raw_name: Any) -> str:
     return normalized
 
 
+def _stock_name_provides_ingredient(stock_name: Any, ingredient_name: Any) -> bool:
+    """BUG-103 : un article fournit un ingrédient si leurs noms normalisés sont
+    identiques ou si le nom de l'article commence par celui de l'ingrédient
+    (backend/ingredient_keys.py). Même règle que _score_recipe_match."""
+    exact_stock_name = _normalize_ingredient_name(stock_name)
+    if exact_stock_name and exact_stock_name == _normalize_ingredient_name(ingredient_name):
+        return True
+    return ingredient_key(str(ingredient_name or "")) in stock_item_keys(str(stock_name or ""))
+
+
 def _to_iso_date(raw_date: Any) -> datetime | None:
     if not raw_date:
         return None
@@ -3799,19 +3810,31 @@ def _score_recipe_match(recipe_doc: dict[str, Any], stock_items: list[dict[str, 
                 return float(estimated_quantity), unit, display_unit, True
         return None, None, None, True
 
-    normalized_stock_names = [_normalize_ingredient_name(i.get("name")) for i in stock_items if i.get("name")]
-    stock_set = set(name for name in normalized_stock_names if name)
-    stock_id_map: dict[str, list[str]] = {}
-    for item in stock_items:
-        normalized_name = _normalize_ingredient_name(item.get("name"))
-        stock_id = str(item.get("_id") or item.get("id") or "").strip()
-        if normalized_name and stock_id:
-            stock_id_map.setdefault(normalized_name, []).append(stock_id)
-    urgents = {
-        _normalize_ingredient_name(item.get("name"))
-        for item in stock_items
-        if item.get("_expiry_dt") and 0 <= (item["_expiry_dt"].date() - utc_now().date()).days <= 2
-    }
+    # BUG-103 : un article correspond à un ingrédient si son nom normalisé est
+    # identique (règle d'origine) ou s'il commence par le nom de l'ingrédient
+    # (« Carottes râpées bio 500g » → carotte, voir backend/ingredient_keys.py).
+    # Index : nom normalisé ou clé d'ingrédient → positions dans stock_items.
+    exact_index: dict[str, list[int]] = {}
+    key_index: dict[str, list[int]] = {}
+    for position, item in enumerate(stock_items):
+        raw_stock_name = item.get("name")
+        if not raw_stock_name:
+            continue
+        exact_name = _normalize_ingredient_name(raw_stock_name)
+        if exact_name:
+            exact_index.setdefault(exact_name, []).append(position)
+        for key in stock_item_keys(str(raw_stock_name)):
+            key_index.setdefault(key, []).append(position)
+    today = utc_now().date()
+
+    def _matching_positions(raw_ingredient_name: Any, normalized_ingredient: str) -> list[int]:
+        positions = set(exact_index.get(normalized_ingredient, []))
+        positions.update(key_index.get(ingredient_key(str(raw_ingredient_name or "")), []))
+        return sorted(positions)
+
+    def _is_urgent(item: dict[str, Any]) -> bool:
+        expiry = item.get("_expiry_dt")
+        return bool(expiry and 0 <= (expiry.date() - today).days <= 2)
 
     ingredients = recipe_doc.get("ingredients", []) or []
     servings = int(recipe_doc.get("servings") or 2)
@@ -3824,10 +3847,11 @@ def _score_recipe_match(recipe_doc: dict[str, Any], stock_items: list[dict[str, 
         if not normalized_name:
             continue
         is_optional = bool(ingredient.get("optional"))
-        is_available = normalized_name in stock_set
+        matched_positions = _matching_positions(ingredient.get("name"), normalized_name)
+        is_available = bool(matched_positions)
         if not is_optional and is_available:
             available.append(normalized_name)
-            if normalized_name in urgents:
+            if any(_is_urgent(stock_items[position]) for position in matched_positions):
                 urgent_hits += 1
         elif not is_optional:
             missing.append(normalized_name)
@@ -3846,7 +3870,11 @@ def _score_recipe_match(recipe_doc: dict[str, Any], stock_items: list[dict[str, 
             unit = inferred_unit if unit is None else unit
             display_unit = inferred_display if display_unit is None else display_unit
             is_estimated = estimated
-        matched_ids = stock_id_map.get(normalized_name, [])
+        matched_ids = [
+            stock_id
+            for stock_id in (str(stock_items[position].get("_id") or stock_items[position].get("id") or "").strip() for position in matched_positions)
+            if stock_id
+        ]
         structured_ingredients.append(
             {
                 "name": ingredient.get("name", ""),
@@ -4104,19 +4132,28 @@ async def get_recipe_suggestions(
             # correspondant au filtre actif. Un stock vide ou un filtre temporel sans
             # produits expirants ne doit pas déclencher d'e-mail.
             if stock_names:
-                normalized_stock_names = sorted(
+                reference_recipe = scored[0] if scored else None
+                # BUG-103 : un article est couvert s'il fournit un ingrédient
+                # requis de la recette de référence, selon la même règle que le
+                # score. Comparer son nom aux ingrédients disponibles ne tenait
+                # plus : « carottes rapees bio 500g » fournit « carotte ».
+                required_ingredient_names = [
+                    ingredient.get("name")
+                    for ingredient in (reference_recipe or {}).get("ingredients", [])
+                    if not ingredient.get("optional")
+                ]
+                uncovered_ingredients = sorted(
                     {
                         _normalize_ingredient_name(item.get("name"))
                         for item in items
                         if item.get("name")
+                        and not any(
+                            _stock_name_provides_ingredient(item.get("name"), ingredient_name)
+                            for ingredient_name in required_ingredient_names
+                        )
                     }
+                    - {""}
                 )
-                normalized_stock_names = [name for name in normalized_stock_names if name]
-                reference_recipe = scored[0] if scored else None
-                used_ingredients = set(reference_recipe.get("available_ingredients", [])) if reference_recipe else set()
-                uncovered_ingredients = [
-                    ingredient for ingredient in normalized_stock_names if ingredient not in used_ingredients
-                ]
                 try:
                     gap_logged = await _upsert_recipe_gap(
                         uid=uid,
