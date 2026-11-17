@@ -22,6 +22,7 @@ import { formatFrenchRecipeText } from '../../utils/recipeFrenchTypography';
 import { buildProductEditRoute } from '../../utils/productEditNavigation';
 import { shouldSkipStockFetch } from '../../utils/stockFetchPolicy';
 import { resolveRecipeDetailBackAction } from '../../utils/recipeDetailNavigation';
+import { formatRecipeDuration, joinRecipeMeta, recipeTypeLabel, resolveRecipeDurationMinutes } from '../../utils/recipeDisplay';
 
 function resolveSteps(recipe: BackendRecipeSuggestion | null): string[] {
   if (!recipe) return [];
@@ -172,12 +173,15 @@ export default function RecipeDetailScreen() {
     }, [handleBack]),
   );
 
-  const totalTime = useMemo(() => {
-    if (!baseRecipe) return 15;
-    const prep = typeof baseRecipe.prep_time_min === 'number' ? baseRecipe.prep_time_min : 0;
-    const cook = typeof baseRecipe.cook_time_min === 'number' ? baseRecipe.cook_time_min : 0;
-    return prep + cook > 0 ? prep + cook : 15;
-  }, [baseRecipe]);
+  // BUG-101 : la durée est celle du serveur. Inconnue, elle n'est pas affichée :
+  // l'écran inventait « 15 min » pour toutes les recettes.
+  const recipeMeta = useMemo(
+    () => joinRecipeMeta([
+      formatRecipeDuration(resolveRecipeDurationMinutes(baseRecipe)),
+      recipeTypeLabel(baseRecipe?.dish_type),
+    ]),
+    [baseRecipe],
+  );
 
   useEffect(() => {
     logger.debug('[RECIPES] detail state updated', {
@@ -348,7 +352,7 @@ export default function RecipeDetailScreen() {
           <Image source={{ uri: baseRecipe.image }} style={styles.heroImage} resizeMode="cover" />
         )}
         <Text style={styles.title}>{formatFrenchRecipeText(baseRecipe.title)}</Text>
-        <Text style={styles.meta}>{totalTime} min · Idée simple</Text>
+        <Text style={styles.meta}>{recipeMeta}</Text>
 
         <View style={styles.servingsCard}>
           <Text style={styles.sectionTitle}>Portions</Text>

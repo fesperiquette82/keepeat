@@ -76,10 +76,16 @@ const CONCEPT_DEFINITIONS: Record<IngredientConceptKey, IngredientConceptDefinit
   jambon: { aliases: ['jambon', 'ham', 'schinken'] },
 };
 
+// Ramène un mot à son singulier. BUG-102 : la règle retirait « es » à tout
+// pluriel en « -es » (« carottes » → « carott ») alors que le singulier restait
+// intact (« carotte ») : en français, où le pluriel ajoute un « s », un produit
+// au pluriel ne correspondait jamais à l'ingrédient au singulier (carotte,
+// tomate, pâte, pomme, courgette…). Seuls les pluriels anglais en « -oes »
+// (tomatoes, potatoes) perdent « es ».
 function normalizeToken(token: string): string {
   if (token.length <= 3) return token;
   if (token.endsWith('ies') && token.length > 5) return `${token.slice(0, -3)}y`;
-  if (token.endsWith('es') && token.length > 4) return token.slice(0, -2);
+  if (token.endsWith('oes') && token.length > 4) return token.slice(0, -2);
   if (token.endsWith('s') || token.endsWith('x')) return token.slice(0, -1);
   return token;
 }

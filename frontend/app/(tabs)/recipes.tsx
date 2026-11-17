@@ -16,19 +16,9 @@ import { getActiveItemsByScope, resolveStockItems } from '../../utils/stockDashb
 import {
   buildScopedRecipesWithDiagnostics,
   buildTargetIngredientNames,
-  getRecipeAvailableIngredients,
 } from '../../utils/recipesScoping';
 import { splitRecipeDisplay } from '../../utils/recipeListSplit';
-
-const TYPE_LABEL: Record<string, string> = {
-  apero: 'Apéro',
-  toast: 'Toast',
-  tartine: 'Tartine',
-  poelee: 'Poêlée',
-  salade: 'Salade',
-  bol: 'Bol',
-  rapide: 'Rapide',
-};
+import { formatRecipeDuration, joinRecipeMeta, recipeTypeLabel, resolveRecipeDurationMinutes, resolveRecipeIngredientCounts } from '../../utils/recipeDisplay';
 
 const FILTER_ORDER: RecipesFilter[] = ['expiryDay', 'expiryWeek', 'expiryMonth', 'stock'];
 
@@ -78,16 +68,21 @@ export default function RecipesScreen() {
 
   const activeStockCount = activeItems.length;
   const targetIngredientNames = useMemo(() => buildTargetIngredientNames(targetItems), [targetItems]);
+  // BUG-102 : périmètre par identifiant d'article, comme le serveur l'associe.
+  const targetItemIds = useMemo(() => new Set(targetItems.map((item) => item.id).filter(Boolean)), [targetItems]);
   const classicSuggestions = useMemo(
     () =>
-      recipes.map((recipe) => ({
-        ...recipe,
-        timeMinutes: recipe.duration_min ?? recipe.timeMinutes ?? 0,
-        type: String(recipe.dish_type || 'rapide').toLowerCase(),
-        matchedCount: recipe.available_count ?? recipe.availableCount ?? getRecipeAvailableIngredients(recipe).length ?? 0,
-        missingCount: recipe.missing_count ?? recipe.missingCount ?? 0,
-        imageUrl: recipe.image || recipe.imageUrl || '',
-      })),
+      recipes.map((recipe) => {
+        const counts = resolveRecipeIngredientCounts(recipe);
+        return {
+          ...recipe,
+          timeMinutes: resolveRecipeDurationMinutes(recipe),
+          typeLabel: recipeTypeLabel(recipe.dish_type),
+          matchedCount: counts.available,
+          missingCount: counts.missing,
+          imageUrl: recipe.image || recipe.imageUrl || '',
+        };
+      }),
     [recipes],
   );
   const recipeListSplit = useMemo(() => splitRecipeDisplay(classicSuggestions), [classicSuggestions]);
@@ -110,7 +105,7 @@ export default function RecipesScreen() {
       try {
         const rawRecipes = await fetchSuggestions(activeFilter);
         if (cancelled) return;
-        const { recipes: scopedRecipes, diagnostics } = buildScopedRecipesWithDiagnostics(rawRecipes, targetIngredientNames);
+        const { recipes: scopedRecipes, diagnostics } = buildScopedRecipesWithDiagnostics(rawRecipes, targetIngredientNames, targetItemIds);
         const antiWasteRecipes = scopedRecipes.slice(0, 2);
         logger.debug('[RECIPES_MATCH] suggestions payload diagnostics', {
           activeFilter,
@@ -137,7 +132,7 @@ export default function RecipesScreen() {
     return () => {
       cancelled = true;
     };
-  }, [activeFilter, activeItems.length, activeStockCount, fetchSuggestions, items.length, storeItems.length, targetIngredientNames, targetItems.length]);
+  }, [activeFilter, activeItems.length, activeStockCount, fetchSuggestions, items.length, storeItems.length, targetIngredientNames, targetItemIds, targetItems.length]);
 
   const filters = useMemo(
     () =>
@@ -224,7 +219,7 @@ export default function RecipesScreen() {
                       style={styles.planRecipeButton}
                     >
                       <Text style={styles.planRecipeTitle}>{index + 1}. {recipe.title}</Text>
-                      <Text style={styles.planRecipeMeta}>{recipe.timeMinutes} min · {countLabelFr(recipe.matchedCount, 'ingrédient')} disponible{recipe.matchedCount > 1 ? 's' : ''}</Text>
+                      <Text style={styles.planRecipeMeta}>{joinRecipeMeta([formatRecipeDuration(recipe.timeMinutes), `${countLabelFr(recipe.matchedCount, 'ingrédient')} disponible${recipe.matchedCount > 1 ? 's' : ''}`])}</Text>
                     </TouchableOpacity>
                   ))}
                 </>
@@ -252,7 +247,7 @@ export default function RecipesScreen() {
                 </View>
                 <View style={styles.cardText}>
                   <Text style={styles.cardTitle}>{item.title}</Text>
-                  <Text style={styles.cardMeta}>{item.timeMinutes} min · {TYPE_LABEL[item.type] ?? 'Idée simple'}</Text>
+                  <Text style={styles.cardMeta}>{joinRecipeMeta([formatRecipeDuration(item.timeMinutes), item.typeLabel])}</Text>
                   <Text style={styles.cardInfo}>
                     {countLabelFr(item.matchedCount, 'ingrédient')} dispo{item.matchedCount > 1 ? 's' : ''} · {item.missingCount === 0 ? 'Tout est là ✅' : `Il manque ${countLabelFr(item.missingCount, 'ingrédient')}`}
                   </Text>

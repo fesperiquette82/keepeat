@@ -39,7 +39,9 @@ test('régression BUG-022 : markConsumed/markThrown utilisent get() et non useSt
 test('régression BUG-024 : recipes.tsx ne calcule plus le filtre de recettes deux fois', () => {
   const src = readSource('app/(tabs)/recipes.tsx');
 
-  assert.match(src, /buildScopedRecipesWithDiagnostics\(rawRecipes, targetIngredientNames\)/);
+  // BUG-102 : la passe unique reçoit aussi les identifiants des articles ciblés.
+  assert.match(src, /buildScopedRecipesWithDiagnostics\(rawRecipes, targetIngredientNames, targetItemIds\)/);
+  assert.equal((src.match(/buildScopedRecipesWithDiagnostics\(/g) ?? []).length, 1, 'une seule passe de filtrage');
   // filterRecipesByTargetIngredients ne doit plus être appelé directement dans l'écran
   // (la logique est encapsulée une seule fois dans buildScopedRecipesWithDiagnostics).
   assert.doesNotMatch(src, /\bfilterRecipesByTargetIngredients\(/);

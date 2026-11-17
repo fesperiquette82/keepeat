@@ -12,6 +12,7 @@ import { storageZoneLabel, UI_LABELS } from '../../utils/uiLabels';
 import { logger } from '../../utils/logger';
 import { expiryColor, expiryText } from '../../utils/expiryLabels';
 import { useRecipesStore } from '../../store/recipesStore';
+import { formatRecipeDuration, joinRecipeMeta, resolveRecipeDurationMinutes, resolveRecipeIngredientCounts } from '../../utils/recipeDisplay';
 
 export default function HomeDashboardScreen() {
   const router = useRouter();
@@ -49,13 +50,16 @@ export default function HomeDashboardScreen() {
   });
   const recipes = useMemo(
     () =>
-      recipesOnHome.map((recipe) => ({
-        ...recipe,
-        timeMinutes: recipe.duration_min ?? recipe.timeMinutes ?? 0,
-        matchedCount: recipe.available_count ?? recipe.availableCount ?? 0,
-        missingCount: recipe.missing_count ?? recipe.missingCount ?? 0,
-        imageUrl: recipe.image || recipe.imageUrl || '',
-      })),
+      recipesOnHome.map((recipe) => {
+        const counts = resolveRecipeIngredientCounts(recipe);
+        return {
+          ...recipe,
+          timeMinutes: resolveRecipeDurationMinutes(recipe),
+          matchedCount: counts.available,
+          missingCount: counts.missing,
+          imageUrl: recipe.image || recipe.imageUrl || '',
+        };
+      }),
     [recipesOnHome],
   );
   const summaryCards = useMemo(() => ([
@@ -192,9 +196,11 @@ export default function HomeDashboardScreen() {
                   <View style={styles.rowText}>
                     <Text style={styles.rowTitle}>{recipe.title}</Text>
                     <Text style={styles.recipeMeta}>
-                      {recipe.timeMinutes} min
-                      {` · ${countLabelFr(recipe.matchedCount, 'ingrédient')} disponible${recipe.matchedCount > 1 ? 's' : ''}`}
-                      {recipe.missingCount > 0 ? ` · Il manque ${countLabelFr(recipe.missingCount, 'ingrédient')}` : ''}
+                      {joinRecipeMeta([
+                        formatRecipeDuration(recipe.timeMinutes),
+                        `${countLabelFr(recipe.matchedCount, 'ingrédient')} disponible${recipe.matchedCount > 1 ? 's' : ''}`,
+                        recipe.missingCount > 0 && `Il manque ${countLabelFr(recipe.missingCount, 'ingrédient')}`,
+                      ])}
                     </Text>
                   </View>
                 </View>

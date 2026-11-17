@@ -1531,3 +1531,31 @@ Second constat, non corrigé : une fois le bundle réparé, **la connexion reste
 **Commandes exécutées :** `npx tsc --noEmit`, `npx eslint .`, `npm run test:ci`, exports web et captures d'écran avant/après dans les deux thèmes, `bash scripts/ai-validate.sh`
 **Résultat :** PASS
 **Risques restants :** (1) vérifié en rendu web (react-native-web), pas sur un téléphone ; (2) Scan, ticket de caisse, import e-mail, Foyer et connexion Gmail restent entièrement clairs en thème sombre : lisibles, mais pas au thème (décision du propriétaire) ; (3) écrans d'administration et écran Premium non examinés (Premium ne s'affiche pas sur le web) ; (4) dashboard admin : sans objet (correction d'affichage).
+
+## BUG-101 — Durées et compteurs d'ingrédients des recettes faux ou inventés
+
+**Contexte :** 17/11, vu sur les captures du banc d'essai (BUG-099) : l'accueil affichait « 0 min » pour la recette suggérée, et chaque fiche recette « 15 min · Idée simple », quelle que soit la recette. Cause : `sanitizeRecipe` (`store/recipesStore.ts`) reconstruisait chaque recette reçue à partir d'une liste fixe de champs et perdait ceux que l'API sert : `duration_min`, `available_count`, `missing_count`, `dish_type`. Les écrans lisaient ces champs avec une valeur par défaut. Conséquences : listes à « 0 min » ; accueil à « 0 ingrédients disponible » ; **onglet Recettes affichant « Tout est là ✅ » pour chaque recette, même quand des ingrédients manquaient** (le nombre manquant retombait à 0) ; fiche recette calculant la durée depuis préparation + cuisson, que l'API ne sert pas, d'où « 15 min » partout ; libellé de type jamais trouvé (`lunch`, `dinner`… contre `apero`, `toast`…), d'où « Idée simple » partout.
+
+| ID | Sévérité | Statut | Résumé |
+|---|---|---|---|
+| BUG-101 | 🟠 MAJEUR (information fausse sur chaque recette, dont « Tout est là » à tort) | `CORRIGÉ` (vérifié sur la version web : « 30 min · Plat » au lieu de « 15 min · Idée simple ») | `utils/recipeSanitizer.ts` : le nettoyage sort du magasin (il devient testable) et conserve durée, compteurs et type. `utils/recipeDisplay.ts` : durée servie, sinon préparation + cuisson ; compteurs servis, sinon taille des listes ; libellés français des types servis (Déjeuner, Dîner, En-cas…) ; une valeur inconnue n'est plus affichée au lieu d'être inventée. Accueil, onglet Recettes et fiche recette l'utilisent. |
+
+**Fichiers modifiés :** `frontend/utils/recipeSanitizer.ts` (nouveau), `frontend/utils/recipeDisplay.ts` (nouveau), `frontend/store/recipesStore.ts`, `frontend/app/(tabs)/index.tsx`, `frontend/app/(tabs)/recipes.tsx`, `frontend/app/recipes/[id].tsx`
+**Tests ajoutés/mis à jour :** `frontend/utils/recipeSanitizer.test.ts` (forme réelle d'une suggestion servie : durée, compteurs et type conservés ; ligne de l'accueil « 30 min · 1 ingrédient disponible · Il manque 1 ingrédient » ; aucune durée inventée ; valeurs invalides rejetées ; le magasin utilise ce nettoyage), `frontend/utils/recipeDisplay.test.ts` (ordre de résolution de la durée, jamais 0 ni 15 ; compteurs ; libellés de type ; écrans sans « 15 min » ni « 0 min » par défaut).
+**Commandes exécutées :** `npx tsc --noEmit`, `npx eslint .`, `npm run test:ci`, export web et captures, `bash scripts/ai-validate.sh`
+**Résultat :** PASS
+**Risques restants :** aucun connu ; dashboard admin : sans objet (correction d'affichage).
+
+## BUG-102 — L'onglet Recettes masquait les recettes trouvées par le serveur
+
+**Contexte :** 17/11, sur le banc d'essai : stock « Yaourt nature, Carottes, Pâtes » ; le serveur sert 5 recettes (purée de carottes, riz sauté aux légumes, tarte tomate moutarde…), l'onglet Recettes en affiche 0 et dit « J'ai détecté des articles dans votre stock, mais je n'arrive pas à vous proposer de recette pour le moment ». L'écran refiltre les recettes reçues en comparant les noms d'ingrédients aux noms des produits ciblés, avec sa propre normalisation : elle coupait « es » à tout mot en « -es » (« carottes » → « carott », « pâtes » → « pat ») mais laissait le singulier intact (« carotte »). Or le pluriel français ajoute un « s » : un produit au pluriel ne correspondait jamais à l'ingrédient au singulier. Carotte, tomate, pâte, pomme, courgette, crêpe… étaient concernés. Cette règle cassait aussi la plupart des pluriels anglais (« apples », « olives », « sauces »).
+
+| ID | Sévérité | Statut | Résumé |
+|---|---|---|---|
+| BUG-102 | 🟠 MAJEUR (fonction principale : des recettes trouvées n'étaient jamais montrées) | `CORRIGÉ` | (1) Le filtre suit d'abord les articles que le serveur a associés aux ingrédients requis de chaque recette (`matched_stock_item_ids`) : l'écran ne recompare plus des noms que les deux côtés normalisent différemment. La comparaison des noms ne sert qu'à défaut d'identifiants. (2) `normalizeToken` ne retire plus que le « s » final (sauf pluriels anglais en « -oes » et « -ies ») : pluriel et singulier se normalisent pareil. |
+
+**Fichiers modifiés :** `frontend/utils/recipesScoping.ts`, `frontend/utils/ingredientMatching.ts`, `frontend/app/(tabs)/recipes.tsx`
+**Tests ajoutés/mis à jour :** `frontend/utils/recipesScopingServerMatch.test.ts` (pluriels français et anglais ; le stock réel du constat donne les 3 recettes servies, avec ou sans identifiants ; les identifiants décident même si les noms diffèrent entièrement ; une recette associée à des articles hors du filtre reste masquée ; seuls les ingrédients requis comptent ; l'écran passe les identifiants). Vérifiés probants : l'ancienne règle du pluriel fait échouer 2 tests, le filtre sans identifiants en fait échouer 1.
+**Commandes exécutées :** `npm run test:ci`, `npx eslint .`, `npx tsc --noEmit`, export web et captures, `bash scripts/ai-validate.sh`
+**Résultat :** PASS
+**Risques restants :** (1) pluriels anglais en « -ches »/« -shes » (« peaches ») ne se ramènent plus au singulier : choix assumé, le français (« pêches », « brioches ») l'emporte ; (2) le serveur lui-même ne reconnaît un produit que si son nom normalisé est identique à l'ingrédient (« Carottes râpées bio 500g » ne correspond pas à « carotte ») : voir BUG-103 ; (3) dashboard admin : sans objet (correction d'affichage).

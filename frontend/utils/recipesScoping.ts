@@ -12,16 +12,44 @@ export function buildTargetIngredientNames(targetItems: { name?: string | null }
   return new Set(targetItems.map((item) => normalizeIngredientName(item.name ?? '')).filter(Boolean));
 }
 
+/** Articles du stock que le serveur a associés aux ingrédients requis de la
+ *  recette (`matched_stock_item_ids`), ou null si la recette n'en porte pas. */
+export function getServerMatchedStockItemIds(recipe: any): string[] | null {
+  if (!Array.isArray(recipe?.ingredients)) return null;
+  const ids: string[] = [];
+  for (const ingredient of recipe.ingredients) {
+    if (!ingredient || typeof ingredient !== 'object' || ingredient.optional === true) continue;
+    if (!Array.isArray(ingredient.matched_stock_item_ids)) continue;
+    for (const id of ingredient.matched_stock_item_ids) {
+      if (typeof id === 'string' && id.length > 0) ids.push(id);
+    }
+  }
+  return ids.length > 0 ? ids : null;
+}
+
+/** Garde les recettes qui utilisent au moins un article ciblé (périmètre du
+ *  filtre actif). BUG-102 : la décision suit les articles que le serveur a
+ *  associés à la recette quand il les donne ; le nom de l'ingrédient n'est
+ *  comparé au nom du produit qu'à défaut. Les deux côtés normalisaient les
+ *  noms différemment, et l'écran masquait des recettes trouvées par le
+ *  serveur (« Carottes » contre « carotte »). */
 export function filterRecipesByTargetIngredients(
   backendRecipes: any[],
   targetIngredientNames: Set<string>,
+  targetItemIds?: ReadonlySet<string>,
 ): any[] {
-  if (targetIngredientNames.size === 0) return [];
+  const hasTargetItemIds = Boolean(targetItemIds && targetItemIds.size > 0);
+  if (targetIngredientNames.size === 0 && !hasTargetItemIds) return [];
   return backendRecipes.filter((recipe) => {
     const isGenericFallback = Boolean(
       recipe?.is_fallback || (recipe?.debug && typeof recipe.debug === 'object' && (recipe.debug as any).is_fallback),
     );
     if (isGenericFallback) return false;
+
+    if (targetItemIds && hasTargetItemIds) {
+      const matchedIds = getServerMatchedStockItemIds(recipe);
+      if (matchedIds) return matchedIds.some((id) => targetItemIds.has(id));
+    }
 
     const recipeAvailableIngredients = getRecipeAvailableIngredients(recipe);
     return recipeAvailableIngredients.some((ingredient) =>
@@ -70,8 +98,9 @@ export function dedupeRecipesById(recipes: any[]): any[] {
 export function scopeAndDedupeRecipes(
   backendRecipes: any[],
   targetIngredientNames: Set<string>,
+  targetItemIds?: ReadonlySet<string>,
 ): any[] {
-  return dedupeRecipesById(filterRecipesByTargetIngredients(backendRecipes, targetIngredientNames));
+  return dedupeRecipesById(filterRecipesByTargetIngredients(backendRecipes, targetIngredientNames, targetItemIds));
 }
 
 export interface RecipesScopeDiagnostics {
@@ -84,9 +113,10 @@ export interface RecipesScopeDiagnostics {
 export function buildScopedRecipesWithDiagnostics(
   backendRecipes: any[],
   targetIngredientNames: Set<string>,
+  targetItemIds?: ReadonlySet<string>,
 ): { recipes: any[]; diagnostics: RecipesScopeDiagnostics } {
   const rawRecipesCount = backendRecipes.length;
-  const scopedRecipes = filterRecipesByTargetIngredients(backendRecipes, targetIngredientNames);
+  const scopedRecipes = filterRecipesByTargetIngredients(backendRecipes, targetIngredientNames, targetItemIds);
   const dedupedRecipes = dedupeRecipesById(scopedRecipes);
   return {
     recipes: dedupedRecipes,
