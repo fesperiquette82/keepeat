@@ -4,7 +4,7 @@ import { View, Text, StyleSheet, ScrollView, TouchableOpacity, Image, ImageBackg
 import { useRouter } from 'expo-router';
 import Ionicons from '@expo/vector-icons/Ionicons';
 import { useStockStore } from '../../store/stockStore';
-import { getThemeColors, getThemeText, shadowSm } from '../../utils/theme';
+import { getThemeColors, getThemeText, screenBackdropColor, shadowSm, type ThemeMode } from '../../utils/theme';
 import { useAppSettingsStore } from '../../store/appSettingsStore';
 import { daysUntil, findExpiringSoon, resolveHomeStockOverviewState, resolveStockItems } from '../../utils/stockDashboard';
 import { countLabelFr } from '../../utils/uiText';
@@ -29,7 +29,7 @@ export default function HomeDashboardScreen() {
   const themeMode = useAppSettingsStore((state) => state.themeMode);
   const C = getThemeColors(themeMode);
   const T = getThemeText(C);
-  const styles = useMemo(() => createStyles(C, T), [C, T]);
+  const styles = useMemo(() => createStyles(C, T, themeMode), [C, T, themeMode]);
 
   const summary = useMemo(() => {
     const frigo = items.filter((item) => item.storageZone === 'frigo').length;
@@ -120,7 +120,7 @@ export default function HomeDashboardScreen() {
             <View style={styles.sectionTitleRow}>
               <Text style={styles.sectionTitle}>Aperçu du stock :</Text>
               {expiringSoon.length > 0 && (
-                <View style={[styles.sectionDot, { backgroundColor: expiryColor(daysUntil(expiringSoon[0].expiry_date)) }]} />
+                <View style={[styles.sectionDot, { backgroundColor: expiryColor(daysUntil(expiringSoon[0].expiry_date), themeMode) }]} />
               )}
             </View>
             <TouchableOpacity onPress={() => router.push('/(tabs)/stock')}>
@@ -141,7 +141,7 @@ export default function HomeDashboardScreen() {
           ) : (
             expiringSoon.map((item) => {
               const days = daysUntil(item.expiry_date);
-              const urgColor = expiryColor(days);
+              const urgColor = expiryColor(days, themeMode);
               return (
                 <View key={item.id} style={styles.rowItem}>
                   <View style={styles.rowMain}>
@@ -217,9 +217,9 @@ export default function HomeDashboardScreen() {
 // issu du thème actif. En mode sombre, `C.text` est quasi blanc : le contenu
 // devenait illisible (texte très clair sur fond blanc). On emploie les jetons
 // `C.card`/`C.bg` déjà définis pour les deux thèmes.
-const createStyles = (C: ReturnType<typeof getThemeColors>, T: ReturnType<typeof getThemeText>) => StyleSheet.create({
+const createStyles = (C: ReturnType<typeof getThemeColors>, T: ReturnType<typeof getThemeText>, themeMode: ThemeMode) => StyleSheet.create({
   bgImage: { flex: 1 },
-  container: { flex: 1, backgroundColor: 'transparent' },
+  container: { flex: 1, backgroundColor: screenBackdropColor(themeMode) },
   scroll: { flex: 1 },
   content: { padding: 16, gap: 12, paddingBottom: 28 },
   headerRow: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center' },
@@ -232,19 +232,19 @@ const createStyles = (C: ReturnType<typeof getThemeColors>, T: ReturnType<typeof
   summaryIconBadge: { width: 20, height: 20, borderRadius: 10, alignItems: 'center', justifyContent: 'center', backgroundColor: '#DCFCE7' },
   summaryLabel: { ...T.secondarySmall },
   summaryValue: { color: C.text, fontSize: 23, fontWeight: '800' },
-  urgentValue: { color: '#15803d' },
+  urgentValue: { color: themeMode === 'dark' ? C.primary : '#15803d' },
   sectionCard: { backgroundColor: C.card, borderRadius: 14, padding: 13, gap: 8, ...shadowSm },
   recipesCard: { backgroundColor: C.card, borderRadius: 14, padding: 13, gap: 8 },
   sectionHeader: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between' },
   sectionTitleRow: { flexDirection: 'row', alignItems: 'center', gap: 8 },
   sectionDot: { width: 10, height: 10, borderRadius: 5 },
   sectionTitle: { fontSize: 17, fontWeight: '700', color: C.text },
-  linkText: { color: '#166534', fontWeight: '700', fontSize: 13 },
+  linkText: { color: C.primaryText, fontWeight: '700', fontSize: 13 },
   emptyText: { ...T.secondary, paddingVertical: 8 },
   rowItem: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', paddingVertical: 5, gap: 8 },
   rowMain: { flexDirection: 'row', alignItems: 'center', gap: 10, flex: 1 },
   rowText: { flex: 1 },
-  squareThumb: { width: 42, height: 42, borderRadius: 10, backgroundColor: '#F3F4F6', overflow: 'hidden', alignItems: 'center', justifyContent: 'center' },
+  squareThumb: { width: 42, height: 42, borderRadius: 10, backgroundColor: C.surfaceMuted, overflow: 'hidden', alignItems: 'center', justifyContent: 'center' },
   squareThumbImage: { width: '100%', height: '100%' },
   rowTitle: { fontSize: 15, color: C.text, fontWeight: '600' },
   rowMeta: { ...T.secondarySmall, marginTop: 2 },
@@ -252,5 +252,5 @@ const createStyles = (C: ReturnType<typeof getThemeColors>, T: ReturnType<typeof
   recipeRow: { paddingVertical: 5 },
   recipeMeta: { ...T.secondarySmall, marginTop: 2 },
   tipInline: { flexDirection: 'row', gap: 7, alignItems: 'center', paddingVertical: 2 },
-  tipText: { flex: 1, color: '#166534', fontSize: 12, fontWeight: '600' },
+  tipText: { flex: 1, color: C.primaryText, fontSize: 12, fontWeight: '600' },
 });

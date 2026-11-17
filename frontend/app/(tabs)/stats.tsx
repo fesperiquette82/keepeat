@@ -15,7 +15,7 @@ import axios from 'axios';
 import { useAuthStore } from '../../store/authStore';
 import { useLanguageStore } from '../../store/languageStore';
 import { buildApiUrl } from '../../utils/config';
-import { getThemeColors, getThemeText, shadowSm } from '../../utils/theme';
+import { getThemeColors, getThemeText, screenBackdropColor, shadowSm, type ThemeMode } from '../../utils/theme';
 import { useAppSettingsStore } from '../../store/appSettingsStore';
 import { generateLastSixMonthLabels } from '../../utils/monthlyLabels';
 import { countLabelFr, formatEuroFr } from '../../utils/uiText';
@@ -63,7 +63,7 @@ export default function StatsScreen() {
   const themeMode = useAppSettingsStore((state) => state.themeMode);
   const C = getThemeColors(themeMode);
   const T = getThemeText(C);
-  const styles = useMemo(() => createStyles(C, T), [C, T]);
+  const styles = useMemo(() => createStyles(C, T, themeMode), [C, T, themeMode]);
 
   const [data, setData]                 = useState<MonthlyStats[]>([]);
   const [gamif, setGamif]               = useState<GamifData | null>(null);
@@ -339,9 +339,16 @@ export default function StatsScreen() {
   );
 }
 
-const createStyles = (C: ReturnType<typeof getThemeColors>, T: ReturnType<typeof getThemeText>) => StyleSheet.create({
+// BUG-100 : cartes, titres et filets suivent le thème. En clair, les valeurs
+// d'origine sont conservées telles quelles (titres #1A1A1A, filets #F0EDE8).
+const createStyles = (C: ReturnType<typeof getThemeColors>, T: ReturnType<typeof getThemeText>, themeMode: ThemeMode) => {
+  const isDark = themeMode === 'dark';
+  const titleInk = isDark ? C.text : '#1A1A1A';
+  const hairline = isDark ? C.border : '#F0EDE8';
+  const track = isDark ? C.surfaceMuted : '#F0EDE8';
+  return StyleSheet.create({
   bgImage: { flex: 1 },
-  container: { flex: 1, backgroundColor: 'transparent' },
+  container: { flex: 1, backgroundColor: screenBackdropColor(themeMode) },
 
   // ── Header ──
   header: {
@@ -350,11 +357,11 @@ const createStyles = (C: ReturnType<typeof getThemeColors>, T: ReturnType<typeof
     paddingHorizontal: 20,
     paddingTop: 16,
     paddingBottom: 14,
-    backgroundColor: '#fff',
+    backgroundColor: C.card,
     overflow: 'hidden',
   },
   headerLeft: { flex: 1 },
-  headerTitle: { fontSize: 24, fontWeight: '800', color: '#1A1A1A' },
+  headerTitle: { fontSize: 24, fontWeight: '800', color: titleInk },
   headerSub:   { ...T.secondary, marginTop: 3 },
 
   illustration: { width: 70, height: 52, position: 'relative', marginRight: 4, marginTop: -2 },
@@ -369,7 +376,7 @@ const createStyles = (C: ReturnType<typeof getThemeColors>, T: ReturnType<typeof
 
   // ── Level card ──
   levelCard: {
-    backgroundColor: '#fff',
+    backgroundColor: C.card,
     borderRadius: 18,
     padding: 16,
     borderWidth: 1,
@@ -380,7 +387,7 @@ const createStyles = (C: ReturnType<typeof getThemeColors>, T: ReturnType<typeof
   levelTop: { flexDirection: 'row', alignItems: 'center', gap: 12 },
   levelEmoji: { fontSize: 32 },
   levelInfo: { flex: 1 },
-  levelName: { fontSize: 17, fontWeight: '800', color: '#1A1A1A' },
+  levelName: { fontSize: 17, fontWeight: '800', color: titleInk },
   levelNext: { ...T.tertiary, marginTop: 2 },
   levelBadge: {
     backgroundColor: C.primaryLight,
@@ -405,11 +412,11 @@ const createStyles = (C: ReturnType<typeof getThemeColors>, T: ReturnType<typeof
 
   // ── Score card ──
   scoreCard: {
-    backgroundColor: '#fff',
+    backgroundColor: C.card,
     borderRadius: 18,
     padding: 20,
     borderWidth: 1,
-    borderColor: '#F0EDE8',
+    borderColor: hairline,
     gap: 8,
     ...shadowSm,
   },
@@ -424,7 +431,7 @@ const createStyles = (C: ReturnType<typeof getThemeColors>, T: ReturnType<typeof
   savingsEmoji:   { fontSize: 16 },
   savingsText:    { color: '#16a34a', fontSize: 13, fontWeight: '700' },
   indicatorsCard: {
-    backgroundColor: '#fff',
+    backgroundColor: C.card,
     borderRadius: 14,
     borderWidth: 1,
     borderColor: C.border,
@@ -440,18 +447,18 @@ const createStyles = (C: ReturnType<typeof getThemeColors>, T: ReturnType<typeof
 
   // ── Legend ──
   legendRow: { flexDirection: 'row', gap: 16 },
-  predictionsHint: { color: '#166534', fontSize: 12, fontWeight: '700' },
+  predictionsHint: { color: C.primaryText, fontSize: 12, fontWeight: '700' },
   legendItem: { flexDirection: 'row', alignItems: 'center', gap: 6 },
   legendDot:  { width: 10, height: 10, borderRadius: 5 },
   legendText: { ...T.secondarySmall },
 
   // ── Bars ──
   barsCard: {
-    backgroundColor: '#fff',
+    backgroundColor: C.card,
     borderRadius: 18,
     padding: 16,
     borderWidth: 1,
-    borderColor: '#F0EDE8',
+    borderColor: hairline,
     gap: 14,
     ...shadowSm,
   },
@@ -461,13 +468,13 @@ const createStyles = (C: ReturnType<typeof getThemeColors>, T: ReturnType<typeof
   barYear:  { fontSize: 10, color: C.textLight, fontWeight: '600' },
   barTrack: {
     flex: 1, height: 22,
-    backgroundColor: '#F0EDE8',
+    backgroundColor: track,
     borderRadius: 6,
     flexDirection: 'row',
     overflow: 'hidden',
   },
   barFill:    { height: '100%' },
-  barEmpty:   { flex: 1, backgroundColor: '#F0EDE8' },
+  barEmpty:   { flex: 1, backgroundColor: track },
   barNumbers: { width: 50, flexDirection: 'row', justifyContent: 'flex-end', gap: 4 },
   barConsumed: { fontSize: 12, color: C.primary, fontWeight: '600' },
   barThrown:   { fontSize: 12, color: C.red,     fontWeight: '600' },
@@ -476,9 +483,10 @@ const createStyles = (C: ReturnType<typeof getThemeColors>, T: ReturnType<typeof
   // ── Info ──
   infoBox: {
     flexDirection: 'row', gap: 8, alignItems: 'flex-start',
-    backgroundColor: '#fff',
+    backgroundColor: C.card,
     borderRadius: 12, padding: 12,
-    borderWidth: 1, borderColor: '#F0EDE8',
+    borderWidth: 1, borderColor: hairline,
   },
   infoText: { flex: 1, ...T.tertiary, lineHeight: 18 },
-});
+  });
+};

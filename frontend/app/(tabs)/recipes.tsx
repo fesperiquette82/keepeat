@@ -5,7 +5,7 @@ import Ionicons from '@expo/vector-icons/Ionicons';
 import { useRouter } from 'expo-router';
 import { useFocusEffect } from '@react-navigation/native';
 import { useStockStore } from '../../store/stockStore';
-import { getThemeColors, getThemeText } from '../../utils/theme';
+import { getThemeColors, getThemeText, screenBackdropColor, type ThemeMode } from '../../utils/theme';
 import { useAppSettingsStore } from '../../store/appSettingsStore';
 import { countLabelFr } from '../../utils/uiText';
 import { UI_LABELS } from '../../utils/uiLabels';
@@ -64,7 +64,7 @@ export default function RecipesScreen() {
   const themeMode = useAppSettingsStore((state) => state.themeMode);
   const C = getThemeColors(themeMode);
   const T = getThemeText(C);
-  const styles = useMemo(() => createStyles(C, T), [C, T]);
+  const styles = useMemo(() => createStyles(C, T, themeMode), [C, T, themeMode]);
 
   useFocusEffect(
     React.useCallback(() => {
@@ -278,13 +278,13 @@ export default function RecipesScreen() {
   );
 }
 
-const createStyles = (C: ReturnType<typeof getThemeColors>, T: ReturnType<typeof getThemeText>) => StyleSheet.create({
+const createStyles = (C: ReturnType<typeof getThemeColors>, T: ReturnType<typeof getThemeText>, themeMode: ThemeMode) => StyleSheet.create({
   bgImage: { flex: 1 },
-  container: { flex: 1, backgroundColor: 'transparent' },
+  container: { flex: 1, backgroundColor: screenBackdropColor(themeMode) },
   header: { paddingHorizontal: 16, paddingTop: 8, paddingBottom: 8 },
   title: { fontSize: 24, fontWeight: '800', color: C.text },
   subtitle: { marginTop: 6, ...T.secondary },
-  controlsCard: { marginHorizontal: 16, marginBottom: 8, padding: 12, borderRadius: 12, backgroundColor: '#fff', borderWidth: 1, borderColor: C.border, gap: 8 },
+  controlsCard: { marginHorizontal: 16, marginBottom: 8, padding: 12, borderRadius: 12, backgroundColor: C.card, borderWidth: 1, borderColor: C.border, gap: 8 },
   controlsSectionLabel: { ...T.secondarySmall, fontWeight: '700' },
   filterRow: { flexDirection: 'row', gap: 8, paddingBottom: 2, flexWrap: 'wrap' },
   filterChip: { paddingVertical: 8, paddingHorizontal: 12, borderRadius: 999, backgroundColor: '#ECFDF3' },
@@ -296,20 +296,20 @@ const createStyles = (C: ReturnType<typeof getThemeColors>, T: ReturnType<typeof
   planTitle: { color: '#14532D', fontSize: 16, fontWeight: '800' },
   planMeta: { color: '#166534', fontSize: 12, fontWeight: '700' },
   planEmptyText: { color: '#166534', fontSize: 13, fontWeight: '600' },
-  planRecipeButton: { backgroundColor: '#fff', borderRadius: 10, paddingVertical: 8, paddingHorizontal: 10, borderWidth: 1, borderColor: '#DCFCE7' },
+  planRecipeButton: { backgroundColor: C.card, borderRadius: 10, paddingVertical: 8, paddingHorizontal: 10, borderWidth: 1, borderColor: '#DCFCE7' },
   planRecipeTitle: { color: C.text, fontSize: 14, fontWeight: '700' },
   planRecipeMeta: { color: C.textMid, fontSize: 12, fontWeight: '600' },
   planSectionHint: { marginTop: 2, color: C.textMid, fontSize: 12, fontWeight: '700' },
-  card: { backgroundColor: '#fff', borderRadius: 12, padding: 11, gap: 4 },
+  card: { backgroundColor: C.card, borderRadius: 12, padding: 11, gap: 4 },
   cardMain: { flexDirection: 'row', gap: 10 },
   cardText: { flex: 1 },
-  thumb: { width: 48, height: 48, borderRadius: 12, backgroundColor: '#F3F4F6', overflow: 'hidden', alignItems: 'center', justifyContent: 'center' },
+  thumb: { width: 48, height: 48, borderRadius: 12, backgroundColor: C.surfaceMuted, overflow: 'hidden', alignItems: 'center', justifyContent: 'center' },
   thumbImage: { width: '100%', height: '100%' },
   cardTitle: { color: C.text, fontSize: 16, fontWeight: '700' },
   cardMeta: { ...T.secondary },
-  cardInfo: { color: '#166534', fontWeight: '700', fontSize: 12 },
+  cardInfo: { color: C.primaryText, fontWeight: '700', fontSize: 12 },
   detailsButton: { marginTop: 4, alignSelf: 'flex-start', paddingVertical: 2 },
-  detailsButtonLabel: { color: '#166534', fontSize: 12, fontWeight: '700' },
+  detailsButtonLabel: { color: C.primaryText, fontSize: 12, fontWeight: '700' },
   cta: { marginTop: 10, backgroundColor: C.primary, borderRadius: 12, paddingVertical: 12, alignItems: 'center' },
   ctaText: { color: '#fff', fontWeight: '700' },
   emptyWrap: { flex: 1, justifyContent: 'center', paddingHorizontal: 28 },

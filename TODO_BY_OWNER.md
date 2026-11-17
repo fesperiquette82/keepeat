@@ -149,7 +149,13 @@ inachevée. Le chronomètre tourne pendant que le reste avance.
       la suite complète nocturne tournera après la fusion de la PR.
 - [x] **Épingler les dépendances backend** — fait le 12/11 (BUG-081, PR #173) :
       `requirements.txt` épinglé, `pip-audit` en CI.
-- [ ] **Vérifier le thème sombre sur un vrai appareil** (jamais fait).
+- [ ] **Regarder le thème sombre sur un vrai appareil.** Il était illisible sur
+      les écrans principaux (BUG-100) : corrigé le 17/11 et vérifié sur la
+      version web de l'application, pas sur un téléphone. À regarder : Accueil,
+      Stock, fiche produit, Recettes, Statistiques, Réglages, suppression du
+      compte. À savoir : Scan, ticket de caisse, import e-mail et Foyer restent
+      entièrement clairs même en thème sombre (lisibles, mais pas sombres) ;
+      me dire si tu veux que je les passe au thème aussi.
 - [ ] **Vérifier la connexion biométrique sur un vrai appareil** après le PR #173
       (BUG-082) : l'empreinte ouvre désormais une session par jeton, plus par
       mot de passe rejoué. Scénario : connexion au mot de passe → fermer l'app →
