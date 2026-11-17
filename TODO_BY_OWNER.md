@@ -161,11 +161,13 @@ inachevée. Le chronomètre tourne pendant que le reste avance.
       reste-t-il visible, ou le clavier le recouvre-t-il ? Les tests E2E
       suggèrent qu'il est recouvert sur un petit écran. Me dire ce que vous
       voyez : si c'est confirmé, je corrige la mise en page.
-- [ ] **Regarder l'accueil avec un stock vide** (BUG-098) : avec un compte sans
-      aucun produit, l'accueil doit afficher « Votre stock est vide. Ajoutez un
-      premier produit… » et un lien « Ajouter un produit », plus aucun produit
-      d'exemple. Le comportement est testé, la mise en page n'a pas été vue
-      sur un écran.
+- [ ] **Décider du sort de la version web** (BUG-099) : Vercel déploie une
+      version web de l'application à chaque PR. Son bundle ne démarrait pas
+      (corrigé), mais on ne peut de toute façon pas s'y connecter : le jeton
+      de session est rangé dans le stockage sécurisé du téléphone, qui n'existe
+      pas dans un navigateur. Soit on lui donne un stockage web (la version web
+      devient utilisable, par exemple pour les écrans d'administration), soit
+      on arrête de la déployer. Me dire ce que tu préfères.
 - [x] **Sort de l'auto-merge** (`auto-merge-pr.yml`) — décidé le 15/11 : il
       reste, et une PR touchée par Codex ne fusionne qu'après relecture de son
       commit exact par une session Claude (BUG-097, `docs/codex-auto-fix.md`).
