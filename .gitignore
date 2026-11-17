@@ -35,3 +35,6 @@ project.zip
 .claude/settings.local.json
 
 frontend/.test-dist/
+
+# Index local d'un assistant de bureau (chemins machine, 4 Mo) : jamais versionné
+.project_assistant/

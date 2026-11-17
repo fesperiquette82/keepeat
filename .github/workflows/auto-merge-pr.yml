@@ -7,6 +7,7 @@ on:
       - reopened
       - ready_for_review
       - synchronize
+      - labeled
   check_suite:
     types:
       - completed
@@ -17,14 +18,27 @@ on:
       - Mobile E2E (Maestro)
     types:
       - completed
+  # BUG-097 : un verdict de relecture posté en commentaire relance le verrou.
+  issue_comment:
+    types:
+      - created
 
 jobs:
   enable-automerge:
+    # Un commentaire ne relance le job que s'il vient du propriétaire, sur une
+    # PR, et porte un verdict de relecture. Son texte n'est lu que par cette
+    # condition : il n'est jamais interpolé dans un script.
+    if: >-
+      github.event_name != 'issue_comment' ||
+      (github.event.issue.pull_request &&
+      github.event.comment.user.login == github.repository_owner &&
+      contains(github.event.comment.body, 'codex-fix-review:'))
     runs-on: ubuntu-latest
     permissions:
       contents: write
       pull-requests: write
       checks: read
+      issues: read
 
     steps:
       - name: Resolve eligible PR context
@@ -40,6 +54,8 @@ jobs:
 
           if [ "$EVENT" = "pull_request_target" ]; then
             PR_NUMBER="${{ github.event.pull_request.number }}"
+          elif [ "$EVENT" = "issue_comment" ]; then
+            PR_NUMBER="${{ github.event.issue.number }}"
           elif [ "$EVENT" = "check_suite" ]; then
             HEAD_SHA="${{ github.event.check_suite.head_sha }}"
             PR_NUMBER=$(gh api "repos/$REPO/commits/$HEAD_SHA/pulls" \
@@ -86,6 +102,31 @@ jobs:
           echo "should_run=true" >> "$GITHUB_OUTPUT"
           echo "pr_number=$PR_NUMBER" >> "$GITHUB_OUTPUT"
           echo "head_sha=$HEAD_SHA" >> "$GITHUB_OUTPUT"
+
+      # BUG-097 : une PR touchée par Codex ne fusionne qu'après relecture de son
+      # commit de tête exact (docs/codex-auto-fix.md). Le script vient de main,
+      # jamais de la branche de la PR : une PR ne peut pas réécrire son verrou.
+      - name: Checkout the trusted review gate from main (never the PR head)
+        if: steps.pr.outputs.should_run == 'true'
+        uses: actions/checkout@v5
+        with:
+          ref: main
+          sparse-checkout: |
+            scripts/ci
+          sparse-checkout-cone-mode: false
+          persist-credentials: false
+
+      - name: Review gate for PRs touched by an automated fixer
+        if: steps.pr.outputs.should_run == 'true'
+        id: review
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          REPO: ${{ github.repository }}
+          REPO_OWNER: ${{ github.repository_owner }}
+          PR_NUMBER: ${{ steps.pr.outputs.pr_number }}
+        run: |
+          set -euo pipefail
+          python3 scripts/ci/codex_fix_review_gate.py --repo "$REPO" --pr "$PR_NUMBER" --owner "$REPO_OWNER"
 
       - name: Verify critical checks are completed + success
         if: steps.pr.outputs.should_run == 'true'
@@ -176,11 +217,30 @@ jobs:
           echo "all_ok=true" >> "$GITHUB_OUTPUT"
 
       - name: Enable auto-merge after strict critical checks gate
-        if: steps.pr.outputs.should_run == 'true' && steps.gate.outputs.all_ok == 'true'
+        if: >-
+          steps.pr.outputs.should_run == 'true' &&
+          steps.gate.outputs.all_ok == 'true' &&
+          steps.review.outputs.review_ok == 'true' &&
+          steps.review.outputs.reviewed_head_sha == steps.pr.outputs.head_sha
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          REPO: ${{ github.repository }}
+          PR_NUMBER: ${{ steps.pr.outputs.pr_number }}
+          HEAD_SHA: ${{ steps.pr.outputs.head_sha }}
+        run: |
+          set -euo pipefail
+          # --match-head-commit : un commit poussé entre la relecture et la
+          # fusion fait échouer la commande au lieu de fusionner avec lui.
+          gh pr merge "$PR_NUMBER" --repo "$REPO" --auto --squash --match-head-commit "$HEAD_SHA"
+
+      # Refus par défaut : si une étape ci-dessus a échoué (script absent,
+      # panne d'API, commit de tête changé), aucun auto-merge ne reste armé.
+      - name: Disarm auto-merge when a gate step failed
+        if: failure() && steps.pr.outputs.should_run == 'true'
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
           REPO: ${{ github.repository }}
           PR_NUMBER: ${{ steps.pr.outputs.pr_number }}
         run: |
-          set -euo pipefail
-          gh pr merge "$PR_NUMBER" --repo "$REPO" --auto --squash
+          gh pr merge "$PR_NUMBER" --repo "$REPO" --disable-auto \
+            || echo "No armed auto-merge to disable."

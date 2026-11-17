@@ -5,7 +5,7 @@ import {
   buildRecipeAssociationsSnapshot,
   STOCK_ASSOCIATION_REFRESH_SOURCES,
 } from './recipeAssociations';
-import type { DashboardStockItem } from '../data/mockDashboardData';
+import type { DashboardStockItem } from './stockDashboard';
 import type { RecipeCandidate } from './stockItemRecipes';
 
 function stockItem(overrides: Partial<DashboardStockItem>): DashboardStockItem {

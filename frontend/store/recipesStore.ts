@@ -5,44 +5,21 @@ import { useAuthStore } from './authStore';
 import { usePremiumUiStore } from './premiumUiStore';
 import { extractPremiumErrorDetail } from '../utils/premiumErrors';
 import { logger } from '../utils/logger';
-import { formatFrenchRecipeText } from '../utils/recipeFrenchTypography';
+import { sanitizeRecipe, type BackendRecipeSuggestion } from '../utils/recipeSanitizer';
 import {
   buildRecipeAssociationsSnapshot,
   type StockMutationRefreshSource,
 } from '../utils/recipeAssociations';
 import { shouldBootstrapRecipeAssociationsCache } from '../utils/recipeCacheBootstrap';
 import { resolveRecipeDetailLoadPolicy } from '../utils/recipeDetailLoadPolicy';
-import type { DashboardStockItem } from '../data/mockDashboardData';
+import type { DashboardStockItem } from '../utils/stockDashboard';
 import type { RecipeCandidate } from '../utils/stockItemRecipes';
+import { getErrorMessage } from '../utils/errorDetails';
 
 export type RecipesFilter = 'stock' | 'expiryDay' | 'expiryWeek' | 'expiryMonth';
 
-export interface BackendRecipeSuggestion {
-  id: string;
-  title: string;
-  summary?: string;
-  image?: string;
-  usedIngredients?: string[];
-  missedIngredients?: string[];
-  ingredients?: Array<{
-    name: string;
-    quantity: number | null;
-    unit: string | null;
-    display_unit?: string | null;
-    display_label?: string | null;
-    optional?: boolean;
-    available?: boolean;
-    matched_stock_item_ids?: string[];
-    missing_quantity?: number | null;
-    is_estimated?: boolean;
-  }>;
-  instructions_summary?: string;
-  prep_time_min?: number | null;
-  cook_time_min?: number | null;
-  score?: number;
-  debug?: Record<string, unknown>;
-  servings?: number;
-}
+export { sanitizeRecipe };
+export type { BackendRecipeSuggestion };
 
 interface RecipesStoreState {
   suggestionsByFilter: Record<RecipesFilter, BackendRecipeSuggestion[]>;
@@ -75,67 +52,6 @@ const inFlightRecipeDetailRequests: Record<string, Promise<BackendRecipeSuggesti
 function authHeaders() {
   const token = useAuthStore.getState().token;
   return token ? { Authorization: `Bearer ${token}` } : {};
-}
-
-export function sanitizeRecipe(raw: any, fallbackIndex: number): BackendRecipeSuggestion {
-  const prep = typeof raw?.prep_time_min === 'number' ? raw.prep_time_min : null;
-  const cook = typeof raw?.cook_time_min === 'number' ? raw.cook_time_min : null;
-
-  const usedIngredients = Array.isArray(raw?.usedIngredients)
-    ? raw.usedIngredients.filter((item: unknown) => typeof item === 'string').map((item: string) => formatFrenchRecipeText(item))
-    : Array.isArray(raw?.available_ingredients)
-      ? raw.available_ingredients.filter((item: unknown) => typeof item === 'string').map((item: string) => formatFrenchRecipeText(item))
-      : [];
-
-  const missedIngredients = Array.isArray(raw?.missedIngredients)
-    ? raw.missedIngredients.filter((item: unknown) => typeof item === 'string').map((item: string) => formatFrenchRecipeText(item))
-    : Array.isArray(raw?.missing_ingredients)
-      ? raw.missing_ingredients.filter((item: unknown) => typeof item === 'string').map((item: string) => formatFrenchRecipeText(item))
-      : [];
-
-  const existingDebug = typeof raw?.debug === 'object' && raw?.debug ? raw.debug : {};
-  const topLevelSteps = Array.isArray(raw?.steps) ? raw.steps.filter((s: unknown) => typeof s === 'string') : [];
-  const debugStepsRaw = Array.isArray(existingDebug.steps) ? existingDebug.steps : topLevelSteps;
-  const debugSteps = debugStepsRaw
-    .filter((step: unknown): step is string => typeof step === 'string')
-    .map((step: string) => formatFrenchRecipeText(step));
-  const debug = { ...existingDebug, steps: debugSteps };
-
-  const ingredients = Array.isArray(raw?.ingredients)
-    ? raw.ingredients
-      .filter((item: unknown) => typeof item === 'object' && item !== null)
-      .map((item: any) => ({
-        name: formatFrenchRecipeText(typeof item.name === 'string' ? item.name : ''),
-        quantity: typeof item.quantity === 'number' ? item.quantity : null,
-        unit: typeof item.unit === 'string' ? item.unit : null,
-        display_unit: typeof item.display_unit === 'string' ? item.display_unit : null,
-        display_label: typeof item.display_label === 'string' ? item.display_label : null,
-        optional: item.optional === true,
-        available: item.available === true,
-        matched_stock_item_ids: Array.isArray(item.matched_stock_item_ids)
-          ? item.matched_stock_item_ids.filter((id: unknown) => typeof id === 'string')
-          : [],
-        missing_quantity: typeof item.missing_quantity === 'number' ? item.missing_quantity : null,
-        is_estimated: item.is_estimated === true,
-      }))
-      .filter((item: { name: string }) => item.name.length > 0)
-    : [];
-
-  return {
-    id: typeof raw?.id === 'string' && raw.id.trim() ? raw.id : `recipe-${fallbackIndex}`,
-    title: formatFrenchRecipeText(typeof raw?.title === 'string' ? raw.title : `Recette ${fallbackIndex + 1}`),
-    image: typeof raw?.image === 'string' ? raw.image : '',
-    summary: formatFrenchRecipeText(typeof raw?.summary === 'string' ? raw.summary : ''),
-    usedIngredients,
-    missedIngredients,
-    ingredients,
-    instructions_summary: formatFrenchRecipeText(typeof raw?.instructions_summary === 'string' ? raw.instructions_summary : ''),
-    prep_time_min: prep,
-    cook_time_min: cook,
-    score: typeof raw?.score === 'number' ? raw.score : 0,
-    debug,
-    servings: typeof raw?.servings === 'number' && raw.servings > 0 ? raw.servings : 2,
-  };
 }
 
 export const useRecipesStore = create<RecipesStoreState>((set, get) => ({
@@ -180,12 +96,12 @@ export const useRecipesStore = create<RecipesStoreState>((set, get) => ({
         recipesById: { ...state.recipesById, ...recipesByIdFromBatch },
       }));
       return sanitized;
-    } catch (error: any) {
+    } catch (error: unknown) {
       const premiumError = extractPremiumErrorDetail(error);
       if (premiumError) {
         usePremiumUiStore.getState().openPaywall(premiumError);
       }
-      const message = error?.message ?? 'Impossible de récupérer les recettes.';
+      const message = getErrorMessage(error) ?? 'Impossible de récupérer les recettes.';
       logger.warn('[RECIPES] backend suggestions failed, fallback local only', { filter, message });
       set({ error: message });
       return [];
@@ -261,10 +177,10 @@ export const useRecipesStore = create<RecipesStoreState>((set, get) => ({
         }));
         logger.debug('[RECIPES_DETAIL_PERF] recipe fetched by id and cached', { recipeId: recipe.id });
         return recipe;
-      } catch (error: any) {
+      } catch (error: unknown) {
         logger.warn('[RECIPES_DETAIL_PERF] recipe by id request failed', {
           recipeId: id,
-          message: error?.message ?? String(error),
+          message: getErrorMessage(error) ?? String(error),
         });
         return null;
       } finally {

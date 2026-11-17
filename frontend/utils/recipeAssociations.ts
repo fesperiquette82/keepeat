@@ -3,7 +3,7 @@ import {
   buildStockItemRecipeSections,
   type RecipeCandidate,
 } from './stockItemRecipes';
-import type { DashboardStockItem } from '../data/mockDashboardData';
+import type { DashboardStockItem } from './stockDashboard';
 
 export type StockMutationRefreshSource =
   | 'stock.add.manual'

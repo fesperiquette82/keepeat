@@ -5,30 +5,20 @@ import Ionicons from '@expo/vector-icons/Ionicons';
 import { useRouter } from 'expo-router';
 import { useFocusEffect } from '@react-navigation/native';
 import { useStockStore } from '../../store/stockStore';
-import { getThemeColors, getThemeText } from '../../utils/theme';
+import { getThemeColors, getThemeText, screenBackdropColor, type ThemeMode } from '../../utils/theme';
 import { useAppSettingsStore } from '../../store/appSettingsStore';
 import { countLabelFr } from '../../utils/uiText';
 import { UI_LABELS } from '../../utils/uiLabels';
 import { useLanguageStore } from '../../store/languageStore';
 import { RecipesFilter, useRecipesStore } from '../../store/recipesStore';
 import { logger } from '../../utils/logger';
-import { getActiveItemsByScope, resolveStockItems } from '../../data/mockDashboardData';
+import { getActiveItemsByScope, resolveStockItems } from '../../utils/stockDashboard';
 import {
   buildScopedRecipesWithDiagnostics,
   buildTargetIngredientNames,
-  getRecipeAvailableIngredients,
 } from '../../utils/recipesScoping';
 import { splitRecipeDisplay } from '../../utils/recipeListSplit';
-
-const TYPE_LABEL: Record<string, string> = {
-  apero: 'Apéro',
-  toast: 'Toast',
-  tartine: 'Tartine',
-  poelee: 'Poêlée',
-  salade: 'Salade',
-  bol: 'Bol',
-  rapide: 'Rapide',
-};
+import { formatRecipeDuration, joinRecipeMeta, recipeTypeLabel, resolveRecipeDurationMinutes, resolveRecipeIngredientCounts } from '../../utils/recipeDisplay';
 
 const FILTER_ORDER: RecipesFilter[] = ['expiryDay', 'expiryWeek', 'expiryMonth', 'stock'];
 
@@ -64,7 +54,7 @@ export default function RecipesScreen() {
   const themeMode = useAppSettingsStore((state) => state.themeMode);
   const C = getThemeColors(themeMode);
   const T = getThemeText(C);
-  const styles = useMemo(() => createStyles(C, T), [C, T]);
+  const styles = useMemo(() => createStyles(C, T, themeMode), [C, T, themeMode]);
 
   useFocusEffect(
     React.useCallback(() => {
@@ -72,22 +62,27 @@ export default function RecipesScreen() {
     }, [fetchStock]),
   );
 
-  const { items } = useMemo(() => resolveStockItems(storeItems, { useMockFallback: false }), [storeItems]);
+  const items = useMemo(() => resolveStockItems(storeItems), [storeItems]);
   const activeItems = useMemo(() => getActiveItemsByScope(items, 'stock'), [items]);
   const targetItems = useMemo(() => getActiveItemsByScope(items, activeFilter), [activeFilter, items]);
 
   const activeStockCount = activeItems.length;
   const targetIngredientNames = useMemo(() => buildTargetIngredientNames(targetItems), [targetItems]);
+  // BUG-102 : périmètre par identifiant d'article, comme le serveur l'associe.
+  const targetItemIds = useMemo(() => new Set(targetItems.map((item) => item.id).filter(Boolean)), [targetItems]);
   const classicSuggestions = useMemo(
     () =>
-      recipes.map((recipe) => ({
-        ...recipe,
-        timeMinutes: recipe.duration_min ?? recipe.timeMinutes ?? 0,
-        type: String(recipe.dish_type || 'rapide').toLowerCase(),
-        matchedCount: recipe.available_count ?? recipe.availableCount ?? getRecipeAvailableIngredients(recipe).length ?? 0,
-        missingCount: recipe.missing_count ?? recipe.missingCount ?? 0,
-        imageUrl: recipe.image || recipe.imageUrl || '',
-      })),
+      recipes.map((recipe) => {
+        const counts = resolveRecipeIngredientCounts(recipe);
+        return {
+          ...recipe,
+          timeMinutes: resolveRecipeDurationMinutes(recipe),
+          typeLabel: recipeTypeLabel(recipe.dish_type),
+          matchedCount: counts.available,
+          missingCount: counts.missing,
+          imageUrl: recipe.image || recipe.imageUrl || '',
+        };
+      }),
     [recipes],
   );
   const recipeListSplit = useMemo(() => splitRecipeDisplay(classicSuggestions), [classicSuggestions]);
@@ -110,7 +105,7 @@ export default function RecipesScreen() {
       try {
         const rawRecipes = await fetchSuggestions(activeFilter);
         if (cancelled) return;
-        const { recipes: scopedRecipes, diagnostics } = buildScopedRecipesWithDiagnostics(rawRecipes, targetIngredientNames);
+        const { recipes: scopedRecipes, diagnostics } = buildScopedRecipesWithDiagnostics(rawRecipes, targetIngredientNames, targetItemIds);
         const antiWasteRecipes = scopedRecipes.slice(0, 2);
         logger.debug('[RECIPES_MATCH] suggestions payload diagnostics', {
           activeFilter,
@@ -137,7 +132,7 @@ export default function RecipesScreen() {
     return () => {
       cancelled = true;
     };
-  }, [activeFilter, activeItems.length, activeStockCount, fetchSuggestions, items.length, storeItems.length, targetIngredientNames, targetItems.length]);
+  }, [activeFilter, activeItems.length, activeStockCount, fetchSuggestions, items.length, storeItems.length, targetIngredientNames, targetItemIds, targetItems.length]);
 
   const filters = useMemo(
     () =>
@@ -224,7 +219,7 @@ export default function RecipesScreen() {
                       style={styles.planRecipeButton}
                     >
                       <Text style={styles.planRecipeTitle}>{index + 1}. {recipe.title}</Text>
-                      <Text style={styles.planRecipeMeta}>{recipe.timeMinutes} min · {countLabelFr(recipe.matchedCount, 'ingrédient')} disponible{recipe.matchedCount > 1 ? 's' : ''}</Text>
+                      <Text style={styles.planRecipeMeta}>{joinRecipeMeta([formatRecipeDuration(recipe.timeMinutes), `${countLabelFr(recipe.matchedCount, 'ingrédient')} disponible${recipe.matchedCount > 1 ? 's' : ''}`])}</Text>
                     </TouchableOpacity>
                   ))}
                 </>
@@ -252,7 +247,7 @@ export default function RecipesScreen() {
                 </View>
                 <View style={styles.cardText}>
                   <Text style={styles.cardTitle}>{item.title}</Text>
-                  <Text style={styles.cardMeta}>{item.timeMinutes} min · {TYPE_LABEL[item.type] ?? 'Idée simple'}</Text>
+                  <Text style={styles.cardMeta}>{joinRecipeMeta([formatRecipeDuration(item.timeMinutes), item.typeLabel])}</Text>
                   <Text style={styles.cardInfo}>
                     {countLabelFr(item.matchedCount, 'ingrédient')} dispo{item.matchedCount > 1 ? 's' : ''} · {item.missingCount === 0 ? 'Tout est là ✅' : `Il manque ${countLabelFr(item.missingCount, 'ingrédient')}`}
                   </Text>
@@ -278,13 +273,13 @@ export default function RecipesScreen() {
   );
 }
 
-const createStyles = (C: ReturnType<typeof getThemeColors>, T: ReturnType<typeof getThemeText>) => StyleSheet.create({
+const createStyles = (C: ReturnType<typeof getThemeColors>, T: ReturnType<typeof getThemeText>, themeMode: ThemeMode) => StyleSheet.create({
   bgImage: { flex: 1 },
-  container: { flex: 1, backgroundColor: 'transparent' },
+  container: { flex: 1, backgroundColor: screenBackdropColor(themeMode) },
   header: { paddingHorizontal: 16, paddingTop: 8, paddingBottom: 8 },
   title: { fontSize: 24, fontWeight: '800', color: C.text },
   subtitle: { marginTop: 6, ...T.secondary },
-  controlsCard: { marginHorizontal: 16, marginBottom: 8, padding: 12, borderRadius: 12, backgroundColor: '#fff', borderWidth: 1, borderColor: C.border, gap: 8 },
+  controlsCard: { marginHorizontal: 16, marginBottom: 8, padding: 12, borderRadius: 12, backgroundColor: C.card, borderWidth: 1, borderColor: C.border, gap: 8 },
   controlsSectionLabel: { ...T.secondarySmall, fontWeight: '700' },
   filterRow: { flexDirection: 'row', gap: 8, paddingBottom: 2, flexWrap: 'wrap' },
   filterChip: { paddingVertical: 8, paddingHorizontal: 12, borderRadius: 999, backgroundColor: '#ECFDF3' },
@@ -296,20 +291,20 @@ const createStyles = (C: ReturnType<typeof getThemeColors>, T: ReturnType<typeof
   planTitle: { color: '#14532D', fontSize: 16, fontWeight: '800' },
   planMeta: { color: '#166534', fontSize: 12, fontWeight: '700' },
   planEmptyText: { color: '#166534', fontSize: 13, fontWeight: '600' },
-  planRecipeButton: { backgroundColor: '#fff', borderRadius: 10, paddingVertical: 8, paddingHorizontal: 10, borderWidth: 1, borderColor: '#DCFCE7' },
+  planRecipeButton: { backgroundColor: C.card, borderRadius: 10, paddingVertical: 8, paddingHorizontal: 10, borderWidth: 1, borderColor: '#DCFCE7' },
   planRecipeTitle: { color: C.text, fontSize: 14, fontWeight: '700' },
   planRecipeMeta: { color: C.textMid, fontSize: 12, fontWeight: '600' },
   planSectionHint: { marginTop: 2, color: C.textMid, fontSize: 12, fontWeight: '700' },
-  card: { backgroundColor: '#fff', borderRadius: 12, padding: 11, gap: 4 },
+  card: { backgroundColor: C.card, borderRadius: 12, padding: 11, gap: 4 },
   cardMain: { flexDirection: 'row', gap: 10 },
   cardText: { flex: 1 },
-  thumb: { width: 48, height: 48, borderRadius: 12, backgroundColor: '#F3F4F6', overflow: 'hidden', alignItems: 'center', justifyContent: 'center' },
+  thumb: { width: 48, height: 48, borderRadius: 12, backgroundColor: C.surfaceMuted, overflow: 'hidden', alignItems: 'center', justifyContent: 'center' },
   thumbImage: { width: '100%', height: '100%' },
   cardTitle: { color: C.text, fontSize: 16, fontWeight: '700' },
   cardMeta: { ...T.secondary },
-  cardInfo: { color: '#166534', fontWeight: '700', fontSize: 12 },
+  cardInfo: { color: C.primaryText, fontWeight: '700', fontSize: 12 },
   detailsButton: { marginTop: 4, alignSelf: 'flex-start', paddingVertical: 2 },
-  detailsButtonLabel: { color: '#166534', fontSize: 12, fontWeight: '700' },
+  detailsButtonLabel: { color: C.primaryText, fontSize: 12, fontWeight: '700' },
   cta: { marginTop: 10, backgroundColor: C.primary, borderRadius: 12, paddingVertical: 12, alignItems: 'center' },
   ctaText: { color: '#fff', fontWeight: '700' },
   emptyWrap: { flex: 1, justifyContent: 'center', paddingHorizontal: 28 },

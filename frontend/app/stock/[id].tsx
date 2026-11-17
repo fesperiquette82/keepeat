@@ -8,7 +8,7 @@ import { useStockStore } from '../../store/stockStore';
 import { useRecipesStore } from '../../store/recipesStore';
 import { useAppSettingsStore } from '../../store/appSettingsStore';
 import { getThemeColors, getThemeText } from '../../utils/theme';
-import { daysUntil, resolveStockItems } from '../../data/mockDashboardData';
+import { daysUntil, resolveStockItems } from '../../utils/stockDashboard';
 import { storageZoneLabel, UI_LABELS } from '../../utils/uiLabels';
 import { expiryColor } from '../../utils/expiryLabels';
 import { buildStockItemDetailRecipeBlocks } from '../../utils/stockItemDetailRecipes';
@@ -21,7 +21,7 @@ import {
   STOCK_DETAIL_EDIT_ICON,
   STOCK_DETAIL_EDIT_LABEL,
 } from '../../utils/productEditNavigation';
-import type { DashboardStockItem } from '../../data/mockDashboardData';
+import type { DashboardStockItem } from '../../utils/stockDashboard';
 import { resolveBackNavigationAction } from '../../utils/navigationBack';
 
 type BlockState = 'loading' | 'error' | 'success';
@@ -139,7 +139,7 @@ export default function StockItemDetailScreen() {
     };
   }, [ensureRecipeAssociationsFromCache, fetchStock, itemId]);
 
-  const { items } = useMemo(() => resolveStockItems(storeItems, { useMockFallback: false }), [storeItems]);
+  const items = useMemo(() => resolveStockItems(storeItems), [storeItems]);
   const selectedItem = useMemo(() => items.find((item) => item.id === itemId) ?? null, [itemId, items]);
 
   const sections = useMemo(() => {
@@ -216,8 +216,8 @@ export default function StockItemDetailScreen() {
             <Text style={styles.productMeta}>Emplacement : {storageZoneLabel(selectedItem.storageZone)}</Text>
             <Text style={styles.productMeta}>Quantité : {selectedItem.quantity ?? UI_LABELS.fr.unknownQuantity}</Text>
             <View style={styles.expiryRow}>
-              <View style={[styles.expiryDot, { backgroundColor: expiryColor(daysUntil(selectedItem.expiry_date)) }]} />
-              <Text style={[styles.productExpiry, { color: expiryColor(daysUntil(selectedItem.expiry_date)) }]}>{formatExpiryLabel(selectedItem.expiry_date)}</Text>
+              <View style={[styles.expiryDot, { backgroundColor: expiryColor(daysUntil(selectedItem.expiry_date), themeMode) }]} />
+              <Text style={[styles.productExpiry, { color: expiryColor(daysUntil(selectedItem.expiry_date), themeMode) }]}>{formatExpiryLabel(selectedItem.expiry_date)}</Text>
             </View>
           </View>
         </View>
@@ -265,8 +265,8 @@ const createStyles = (C: ReturnType<typeof getThemeColors>, T: ReturnType<typeof
   },
   editButtonLabel: { color: C.textMid, fontSize: 13, fontWeight: '700' },
   content: { paddingHorizontal: 16, paddingBottom: 28, gap: 12 },
-  productCard: { backgroundColor: '#fff', borderRadius: 14, borderWidth: 1, borderColor: C.border, padding: 12, flexDirection: 'row', gap: 12 },
-  productImageWrap: { width: 72, height: 72, borderRadius: 12, backgroundColor: '#F3F4F6', alignItems: 'center', justifyContent: 'center', overflow: 'hidden' },
+  productCard: { backgroundColor: C.card, borderRadius: 14, borderWidth: 1, borderColor: C.border, padding: 12, flexDirection: 'row', gap: 12 },
+  productImageWrap: { width: 72, height: 72, borderRadius: 12, backgroundColor: C.surfaceMuted, alignItems: 'center', justifyContent: 'center', overflow: 'hidden' },
   productImage: { width: '100%', height: '100%' },
   productInfos: { flex: 1, gap: 2 },
   productName: { color: C.text, fontSize: 16, fontWeight: '800' },
@@ -274,7 +274,7 @@ const createStyles = (C: ReturnType<typeof getThemeColors>, T: ReturnType<typeof
   expiryRow: { marginTop: 4, flexDirection: 'row', alignItems: 'center', gap: 6 },
   expiryDot: { width: 8, height: 8, borderRadius: 4 },
   productExpiry: { fontSize: 12, fontWeight: '700' },
-  sectionCard: { backgroundColor: '#fff', borderRadius: 14, borderWidth: 1, borderColor: C.border, padding: 12, gap: 8 },
+  sectionCard: { backgroundColor: C.card, borderRadius: 14, borderWidth: 1, borderColor: C.border, padding: 12, gap: 8 },
   sectionHeader: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', gap: 12 },
   sectionTitle: { color: C.text, fontSize: 16, fontWeight: '800' },
   seeAll: { color: C.primary, fontSize: 13, fontWeight: '700' },
@@ -282,7 +282,7 @@ const createStyles = (C: ReturnType<typeof getThemeColors>, T: ReturnType<typeof
   sectionError: { color: '#B91C1C', fontSize: 13, fontWeight: '600' },
   sectionEmpty: { ...T.secondary, fontSize: 13 },
   recipeCard: { borderRadius: 10, borderWidth: 1, borderColor: C.border, padding: 9, flexDirection: 'row', alignItems: 'center', gap: 9 },
-  recipeThumb: { width: 42, height: 42, borderRadius: 9, backgroundColor: '#F3F4F6', overflow: 'hidden', alignItems: 'center', justifyContent: 'center' },
+  recipeThumb: { width: 42, height: 42, borderRadius: 9, backgroundColor: C.surfaceMuted, overflow: 'hidden', alignItems: 'center', justifyContent: 'center' },
   recipeThumbImage: { width: '100%', height: '100%' },
   recipeTextWrap: { flex: 1 },
   recipeTitle: { color: C.text, fontSize: 14, fontWeight: '700' },

@@ -4,6 +4,7 @@ import { View, Text, StyleSheet, TouchableOpacity, ActivityIndicator, Share } fr
 import { useRouter } from 'expo-router';
 import { useAuthStore } from '../store/authStore';
 import { fetchEmailImportAddress } from '../utils/emailImportApi';
+import { getErrorMessage } from '../utils/errorDetails';
 
 export default function EmailImportScreen() {
   const router = useRouter();
@@ -21,8 +22,8 @@ export default function EmailImportScreen() {
       const result = await fetchEmailImportAddress(token);
       setConfigured(result.configured);
       setAddress(result.address);
-    } catch (err: any) {
-      if (err?.message === 'email_import_address_failed_403') {
+    } catch (err: unknown) {
+      if (getErrorMessage(err) === 'email_import_address_failed_403') {
         setError('premium_required');
       } else {
         setError('unknown');

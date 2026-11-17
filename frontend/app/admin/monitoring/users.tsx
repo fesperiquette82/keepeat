@@ -4,6 +4,7 @@ import { AdminMonitoringNav } from '../../../component/admin/AdminMonitoringNav'
 import { AdminScaffold, ErrorState, KpiCard, LoadingState } from '../../../component/admin/AdminUi';
 import { getMonitoringUsers, MonitoringUsersResponse } from '../../../utils/adminMonitoringApi';
 import { useAuthStore } from '../../../store/authStore';
+import { getErrorMessage } from '../../../utils/errorDetails';
 
 export default function AdminMonitoringUsersScreen() {
   const [data, setData] = useState<MonitoringUsersResponse | null>(null);
@@ -19,8 +20,8 @@ export default function AdminMonitoringUsersScreen() {
         setError(null);
         if (!token) throw new Error('Session expirée');
         setData(await getMonitoringUsers(token, controller.signal));
-      } catch (e: any) {
-        setError(e?.message || 'Chargement impossible');
+      } catch (e: unknown) {
+        setError(getErrorMessage(e) || 'Chargement impossible');
       } finally {
         setLoading(false);
       }

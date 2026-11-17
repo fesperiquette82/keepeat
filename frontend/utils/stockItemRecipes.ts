@@ -1,5 +1,5 @@
-import { daysUntil } from '../data/mockDashboardData';
-import type { DashboardStockItem } from '../data/mockDashboardData';
+import { daysUntil } from './stockDashboard';
+import type { DashboardStockItem } from './stockDashboard';
 import { dedupeRecipesById } from './recipesScoping';
 import { isClearIngredientMatch, normalizeIngredientName } from './ingredientMatching';
 
@@ -26,7 +26,7 @@ export interface RecipeCandidate {
   availableIngredients?: string[];
   usedIngredients?: string[];
   used_ingredients?: string[];
-  ingredients?: Array<{ name?: string | null }>;
+  ingredients?: { name?: string | null }[];
   missing_ingredients?: string[];
   missingIngredients?: string[];
 }

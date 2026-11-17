@@ -9,7 +9,6 @@ Couvre également le nouvel endpoint DELETE /admin/monitoring/logs/api-requests.
 """
 import asyncio
 import importlib
-import json
 import sys
 from pathlib import Path
 from unittest.mock import AsyncMock, MagicMock

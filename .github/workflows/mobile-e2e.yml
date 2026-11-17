@@ -338,6 +338,12 @@ jobs:
         working-directory: frontend
         env:
           EXPO_PUBLIC_BACKEND_URL: http://10.0.2.2:8000
+          # BUG-090 : le bundle embarqué est compilé en mode production (__DEV__ faux,
+          # NODE_ENV inliné à « production » quoi qu'en dise l'environnement) : sans
+          # cet environnement explicite, le garde-fou de config.ts rejette l'URL de
+          # test et l'application vise le backend de PRODUCTION.
+          EXPO_PUBLIC_APP_ENV: development
+          EXPO_E2E_EMBED_BUNDLE: "1"
           CI: "1"
           EXPO_NO_TELEMETRY: "1"
         run: npx expo prebuild --platform android --clean
@@ -345,9 +351,29 @@ jobs:
       - name: Build debug APK
         if: steps.decide_build.outputs.build_apk_step_should_run == 'true'
         working-directory: frontend/android
+        env:
+          # BUG-083 : le bundle est produit ici (export:embed via Gradle) : les variables
+          # EXPO_PUBLIC_* doivent être présentes à cette étape, pas seulement au prebuild.
+          EXPO_PUBLIC_BACKEND_URL: http://10.0.2.2:8000
+          # BUG-090 : le bundle embarqué est compilé en mode production (__DEV__ faux,
+          # NODE_ENV inliné à « production » quoi qu'en dise l'environnement) : sans
+          # cet environnement explicite, le garde-fou de config.ts rejette l'URL de
+          # test et l'application vise le backend de PRODUCTION.
+          EXPO_PUBLIC_APP_ENV: development
+          EXPO_E2E_EMBED_BUNDLE: "1"
+          NODE_ENV: development
+          CI: "1"
+          EXPO_NO_TELEMETRY: "1"
         run: |
           chmod +x ./gradlew
           ./gradlew assembleDebug --no-daemon
+          # BUG-083 : sans bundle JS embarqué, l'application n'a rien à exécuter en CI
+          # (aucun Metro) et chaque scénario Maestro échoue avant l'écran de connexion.
+          if ! unzip -l app/build/outputs/apk/debug/app-debug.apk | grep -q "assets/index.android.bundle"; then
+            echo "❌ L'APK debug ne contient pas assets/index.android.bundle : le bundling JS n'a pas eu lieu (BUG-083)"
+            exit 1
+          fi
+          echo "✅ Bundle JS embarqué dans l'APK debug"
           mkdir -p "$GITHUB_WORKSPACE/e2e-apk"
           cp app/build/outputs/apk/debug/app-debug.apk "$GITHUB_WORKSPACE/e2e-apk/app-debug.apk"
 
@@ -484,6 +510,9 @@ jobs:
       contents: read
       actions: read
     services:
+      # BUG-090 : journaux du conteneur bornés (--log-opt) — GitHub les vide en fin de
+      # job et leurs milliers de lignes de bilans de santé repoussaient le diagnostic
+      # Maestro hors de la partie lisible du journal.
       mongodb:
         image: mongo:7
         ports:
@@ -493,6 +522,8 @@ jobs:
           --health-interval 10s
           --health-timeout 5s
           --health-retries 10
+          --log-opt max-size=200k
+          --log-opt max-file=1
 
     steps:
       - name: Checkout
@@ -520,7 +551,9 @@ jobs:
           MOCK_BILLING: "true"
           MOCK_EMAILS: "true"
           MOCK_PUSH: "true"
-          JWT_SECRET: test-secret
+          # BUG-094 : le backend lit JWT_SECRET_KEY (repli : SECRET_KEY). Sous
+          # l'ancien nom JWT_SECRET, toute connexion E2E finissait en 500.
+          JWT_SECRET_KEY: e2e-test-secret-not-for-production-0001
           BACKEND_URL: http://127.0.0.1:8000
           PYTHONPATH: ${{ github.workspace }}/backend
         run: |
@@ -640,6 +673,16 @@ jobs:
 
       - name: Install Maestro CLI
         run: curl -Ls "https://get.maestro.mobile.dev" | bash
+
+      - name: Enable KVM hardware acceleration
+        # BUG-091 : /dev/kvm existe sur les runners Linux de GitHub mais n'est pas
+        # accessible au job : l'émulateur retombait en émulation logicielle
+        # (démarrage en 8 min, scénarios de 7 à 15 min, coupures adb). Règle udev
+        # documentée par reactivecircus/android-emulator-runner.
+        run: |
+          echo 'KERNEL=="kvm", GROUP="kvm", MODE="0666", OPTIONS+="static_node=kvm"' | sudo tee /etc/udev/rules.d/99-kvm4all.rules
+          sudo udevadm control --reload-rules
+          sudo udevadm trigger --name-match=kvm
 
       - name: Diagnose KVM and hardware acceleration availability
         run: |

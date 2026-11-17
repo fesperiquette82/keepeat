@@ -32,9 +32,9 @@ echo "Using: $PYTHON $($PYTHON --version)"
 
 # Step 1: Install dependencies
 if [ ! -d "backend/.venv" ] && [ ! -d "venv" ]; then
-  echo "[step] Installing backend dependencies (pip install -r requirements.txt)..."
+  echo "[step] Installing backend dependencies (pip install -r requirements-dev.txt)..."
   cd backend
-  $PYTHON -m pip install -r requirements.txt --quiet 2>&1 || {
+  $PYTHON -m pip install -r requirements-dev.txt --quiet 2>&1 || {
     cd ..
     echo "❌ pip install failed"
     exit 1
@@ -45,22 +45,23 @@ else
 fi
 
 # Step 2: Ruff (lint) if configured
-if grep -q "ruff" backend/requirements.txt 2>/dev/null || grep -q "ruff" backend/pyproject.toml 2>/dev/null; then
+# BUG-079 : la configuration ruff vit dans ruff.toml à la racine et couvre
+# backend/ ET tests/. ruff est installé par requirements-dev.txt ; s'il manque,
+# c'est une erreur d'installation, pas une raison de sauter le lint.
+if [ -f "ruff.toml" ]; then
   if command -v ruff &> /dev/null; then
-    echo "[step] Running ruff lint..."
-    cd backend
-    ruff check . 2>&1 || {
-      cd ..
+    echo "[step] Running ruff lint (backend + tests)..."
+    ruff check backend tests 2>&1 || {
       echo "❌ ruff lint failed"
       exit 1
     }
-    cd ..
     echo "✓ ruff lint passed"
   else
-    echo "[skip] ruff: not installed"
+    echo "❌ ruff introuvable : pip install -r backend/requirements-dev.txt"
+    exit 1
   fi
 else
-  echo "[skip] ruff: not in requirements"
+  echo "[skip] ruff: ruff.toml absent"
 fi
 
 # Step 3: Black (format check) if configured
@@ -83,22 +84,21 @@ else
 fi
 
 # Step 4: mypy (type check)
-if grep -q "mypy" backend/requirements.txt 2>/dev/null || grep -q "mypy" backend/pyproject.toml 2>/dev/null; then
+# BUG-079 : configuration dans mypy.ini à la racine, sur backend/ ET tests/.
+if [ -f "mypy.ini" ]; then
   if command -v mypy &> /dev/null; then
-    echo "[step] Running mypy type check..."
-    cd backend
-    mypy . 2>&1 || {
-      cd ..
+    echo "[step] Running mypy type check (backend + tests)..."
+    mypy backend tests 2>&1 || {
       echo "❌ mypy type check failed"
       exit 1
     }
-    cd ..
     echo "✓ mypy type check passed"
   else
-    echo "[skip] mypy: not installed"
+    echo "❌ mypy introuvable : pip install -r backend/requirements-dev.txt"
+    exit 1
   fi
 else
-  echo "[skip] mypy: not in requirements"
+  echo "[skip] mypy: mypy.ini absent"
 fi
 
 # Step 5: Tests (skip in --quick mode)

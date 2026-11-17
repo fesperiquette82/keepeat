@@ -2,6 +2,7 @@
 const { getDefaultConfig } = require("expo/metro-config");
 const path = require('path');
 const { FileStore } = require('metro-cache');
+const { createWebSafeResolveRequest } = require('./scripts/metro-web-resolver');
 
 const config = getDefaultConfig(__dirname);
 
@@ -21,5 +22,9 @@ config.cacheStores = [
 
 // Reduce the number of workers to decrease resource usage
 config.maxWorkers = 2;
+
+// BUG-099 : sans cela, le bundle web contient `import.meta` (zustand) et ne
+// démarre pas. Web uniquement ; voir scripts/metro-web-resolver.js.
+config.resolver.resolveRequest = createWebSafeResolveRequest(config.resolver.resolveRequest);
 
 module.exports = config;

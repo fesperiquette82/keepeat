@@ -11,7 +11,7 @@ import asyncio
 import importlib
 import sys
 from pathlib import Path
-from unittest.mock import AsyncMock, MagicMock, patch
+from unittest.mock import AsyncMock, MagicMock
 
 BACKEND_DIR = Path(__file__).resolve().parents[1]
 if str(BACKEND_DIR) not in sys.path:
@@ -168,6 +168,7 @@ class TestGapNotLoggedWhenAiSucceeds:
         from fastapi.testclient import TestClient
         client = TestClient(server.app)
         resp = client.get("/api/recipes/suggestions?filter=stock")
+        assert resp.status_code == 200
 
         # L'IA a réussi → gap ne doit pas avoir été upsert
         gap_col.update_one.assert_not_awaited()

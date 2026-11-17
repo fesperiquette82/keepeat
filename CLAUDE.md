@@ -13,7 +13,7 @@ Lire et appliquer strictement, dans cet ordre de priorité :
 3. **`.ai/test-policy.md`** — Politique de tests (pyramide, conventions)
 4. **`.ai/review-checklist.md`** — Checklist auto-revue
 5. **`.ai/stacks/react-native-expo.md`** — Conventions frontend (Node.js --test, TypeScript strict)
-6. **`.ai/stacks/python-fastapi.md`** — Conventions backend (pytest, mypy strict)
+6. **`.ai/stacks/python-fastapi.md`** — Conventions backend (pytest, ruff, mypy — strict sur les modules applicatifs, `server.py` encore en mode normal)
 7. **`.ai/stacks/e2e-maestro.md`** — Conventions E2E (Maestro, testID)
 
 Tous les points suivants sont des résumés ; **en cas d'ambiguïté, `.ai/core-rules.md` prime.**
@@ -64,7 +64,7 @@ Une tâche est considérée comme **INCOMPLÈTE** tant que :
 | Périmètre | Répertoire | Commande |
 |---|---|---|
 | Backend Python | `tests/` (pytest) | `cd backend && pytest` |
-| Frontend TypeScript | `frontend/__tests__/` (node --test) | `cd frontend && npm run test` |
+| Frontend TypeScript | co-localisés `frontend/utils/*.test.ts`, `frontend/data/*.test.ts` (unitaires) ; `frontend/integration/`, `frontend/smoke/` (node --test) | `cd frontend && npm run test` |
 
 ### Quoi tester
 
@@ -147,6 +147,32 @@ cd frontend && npm run test:ci    # CI
 
 Le fichier `AUDIT_BUGS.md` à la racine liste tous les bugs connus avec leur statut.
 Mettre à jour ce fichier (`OUVERT` → `CORRIGÉ`) lors de chaque correction.
+
+## Relecture des correctifs Codex avant fusion
+
+L'auto-merge ne fusionne une PR touchée par Codex (étiquette `codex` ou
+`codex-autofix`, branche `codex/…`, demande `@codex` sur la PR) qu'après un
+verdict de relecture lié à son commit de tête exact. Détail et limites :
+`docs/codex-auto-fix.md` (BUG-097).
+
+Quand le propriétaire t'a demandé de suivre une telle PR, à chaque nouveau
+commit de tête :
+
+1. Relire le diff complet de ce commit contre `main`
+   (`git diff origin/main...<sha>`), pas le résumé de Codex.
+2. Refuser si : test supprimé, sauté ou désactivé ; assertion retirée ou
+   affaiblie ; scénario Maestro allégé ; workflow, garde-fou ou seuil modifié
+   pour faire passer un check ; changement hors de la cause de l'échec ;
+   correctif sans test de non-régression ; secret ou donnée personnelle.
+3. Poster un seul commentaire de PR : ce qui a été relu, le constat, puis le
+   marqueur sur sa propre ligne :
+   `<!-- codex-fix-review: sha=<SHA complet> verdict=approved -->`
+   ou `verdict=changes-requested` suivi des raisons.
+
+Ne jamais approuver un commit non relu en entier, ni un autre SHA que la tête
+actuelle. Un nouveau commit invalide l'approbation : la relecture est à refaire.
+Dans le doute : `changes-requested`, et le dire au propriétaire. Une
+approbation déclenche la fusion dès que la CI est verte : elle engage.
 
 ## Logs / sécurité
 

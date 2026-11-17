@@ -5,6 +5,7 @@ import { AdminScaffold, AdminSectionCard, EmptyState, ErrorState, formatDate, fo
 import { getMonitoringCosts, getMonitoringServiceStatus, getMonitoringUsage, MonitoringCostsResponse, MonitoringServiceStatusResponse, MonitoringUsageResponse } from '../../../utils/adminMonitoringApi';
 import { useAuthStore } from '../../../store/authStore';
 import { C } from '../../../utils/theme';
+import { getErrorMessage } from '../../../utils/errorDetails';
 
 function ProgressBar({ ratio, tone }: { ratio: number; tone: 'normal' | 'warning' | 'critical' }) {
   const width = `${Math.max(0, Math.min(ratio, 1)) * 100}%` as `${number}%`;
@@ -62,8 +63,8 @@ export default function AdminMonitoringServicesUsageScreen() {
           throw new Error('Chargement impossible');
         }
         setPartialErrors(nextPartialErrors);
-      } catch (e: any) {
-        setError(e?.message || 'Chargement impossible');
+      } catch (e: unknown) {
+        setError(getErrorMessage(e) || 'Chargement impossible');
       } finally {
         setLoading(false);
       }

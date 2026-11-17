@@ -25,7 +25,10 @@ appId: com.fesperiquette.keepeat
     commands:
       - tapOn:
           id: login-email-input
-      - inputText: e2e.free@keepeat.test
+      - inputText: e2e.free@example.com
+      # BUG-092 : le clavier ouvert recouvre le champ mot de passe sur un
+      # petit écran Android (bord à bord) ; Maestro ne le trouve plus.
+      - hideKeyboard
       - tapOn:
           id: login-password-input
       - inputText: TestPassword123!

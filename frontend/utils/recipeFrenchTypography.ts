@@ -1,4 +1,4 @@
-const RECIPE_TEXT_REPLACEMENTS: Array<[RegExp, string]> = [
+const RECIPE_TEXT_REPLACEMENTS: [RegExp, string][] = [
   [/\boeufs\b/gi, 'œufs'],
   [/\boeuf\b/gi, 'œuf'],
   [/\bbrouilles\b/gi, 'brouillés'],

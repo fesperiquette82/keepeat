@@ -171,7 +171,7 @@ class ReceiptTicketRetentionTests(unittest.TestCase):
     def test_privacy_policy_documents_the_exception(self):
         """La politique affirmait « aucune photo n'est stockée durablement »
         alors que le signalement d'un ticket en conservait une."""
-        policy = server._PRIVACY_POLICY_HTML
+        policy = server.PRIVACY_POLICY_HTML
         self.assertIn("90 jours", policy)
         self.assertNotIn("aucune photo n’est stockée durablement", policy)
 

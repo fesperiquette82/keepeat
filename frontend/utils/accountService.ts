@@ -1,5 +1,6 @@
 import { buildApiUrl } from './config';
 import { fetchWithTimeout as fetch } from './fetchWithTimeout';
+import { formatApiErrorDetail } from './errorDetails';
 
 export interface AccountExportPayload {
   generated_at: string;
@@ -14,7 +15,7 @@ export async function exportAccountData(token: string): Promise<AccountExportPay
   });
   const data = await res.json();
   if (!res.ok) {
-    throw new Error(data?.detail ?? `export_failed_${res.status}`);
+    throw new Error(formatApiErrorDetail(data?.detail) ?? `export_failed_${res.status}`);
   }
   return data as AccountExportPayload;
 }
@@ -30,6 +31,6 @@ export async function deleteAccount(token: string, confirmPassword: string): Pro
   });
   if (!res.ok) {
     const data = await res.json().catch(() => null);
-    throw new Error(data?.detail ?? `delete_failed_${res.status}`);
+    throw new Error(formatApiErrorDetail(data?.detail) ?? `delete_failed_${res.status}`);
   }
 }

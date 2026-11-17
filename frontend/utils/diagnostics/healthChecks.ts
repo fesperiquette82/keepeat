@@ -145,7 +145,7 @@ const CHECKS_REGISTRY: DiagnosticCheckDefinition[] = [
   },
 ];
 
-export function getDiagnosticChecksRegistry(): ReadonlyArray<{ key: string; label: string }> {
+export function getDiagnosticChecksRegistry(): readonly { key: string; label: string }[] {
   return CHECKS_REGISTRY.map(({ key, label }) => ({ key, label }));
 }
 

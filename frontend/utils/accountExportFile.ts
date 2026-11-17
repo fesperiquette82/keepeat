@@ -25,6 +25,7 @@ let Paths: FilesystemPaths;
 let Sharing: SharingInterface;
 
 try {
+  // eslint-disable-next-line @typescript-eslint/no-require-imports -- repli volontaire pour l'environnement de test Node
   const expoFS = require('expo-file-system');
   File = expoFS.File;
   Paths = expoFS.Paths;
@@ -34,6 +35,7 @@ try {
 }
 
 try {
+  // eslint-disable-next-line @typescript-eslint/no-require-imports -- repli volontaire pour l'environnement de test Node
   Sharing = require('expo-sharing');
 } catch {
   Sharing = {

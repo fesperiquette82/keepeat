@@ -22,6 +22,7 @@ import { formatFrenchRecipeText } from '../../utils/recipeFrenchTypography';
 import { buildProductEditRoute } from '../../utils/productEditNavigation';
 import { shouldSkipStockFetch } from '../../utils/stockFetchPolicy';
 import { resolveRecipeDetailBackAction } from '../../utils/recipeDetailNavigation';
+import { formatRecipeDuration, joinRecipeMeta, recipeTypeLabel, resolveRecipeDurationMinutes } from '../../utils/recipeDisplay';
 
 function resolveSteps(recipe: BackendRecipeSuggestion | null): string[] {
   if (!recipe) return [];
@@ -172,12 +173,15 @@ export default function RecipeDetailScreen() {
     }, [handleBack]),
   );
 
-  const totalTime = useMemo(() => {
-    if (!baseRecipe) return 15;
-    const prep = typeof baseRecipe.prep_time_min === 'number' ? baseRecipe.prep_time_min : 0;
-    const cook = typeof baseRecipe.cook_time_min === 'number' ? baseRecipe.cook_time_min : 0;
-    return prep + cook > 0 ? prep + cook : 15;
-  }, [baseRecipe]);
+  // BUG-101 : la durée est celle du serveur. Inconnue, elle n'est pas affichée :
+  // l'écran inventait « 15 min » pour toutes les recettes.
+  const recipeMeta = useMemo(
+    () => joinRecipeMeta([
+      formatRecipeDuration(resolveRecipeDurationMinutes(baseRecipe)),
+      recipeTypeLabel(baseRecipe?.dish_type),
+    ]),
+    [baseRecipe],
+  );
 
   useEffect(() => {
     logger.debug('[RECIPES] detail state updated', {
@@ -348,7 +352,7 @@ export default function RecipeDetailScreen() {
           <Image source={{ uri: baseRecipe.image }} style={styles.heroImage} resizeMode="cover" />
         )}
         <Text style={styles.title}>{formatFrenchRecipeText(baseRecipe.title)}</Text>
-        <Text style={styles.meta}>{totalTime} min · Idée simple</Text>
+        <Text style={styles.meta}>{recipeMeta}</Text>
 
         <View style={styles.servingsCard}>
           <Text style={styles.sectionTitle}>Portions</Text>
@@ -445,21 +449,21 @@ function createStyles(C: ThemeColors, T: ReturnType<typeof getThemeText>) {
   return StyleSheet.create({
   container: { flex: 1, backgroundColor: C.bg },
   headerRow: { flexDirection: 'row', alignItems: 'center', gap: 8, paddingHorizontal: 16, paddingTop: 8 },
-  backIcon: { width: 32, height: 32, borderRadius: 16, backgroundColor: '#fff', alignItems: 'center', justifyContent: 'center' },
+  backIcon: { width: 32, height: 32, borderRadius: 16, backgroundColor: C.card, alignItems: 'center', justifyContent: 'center' },
   headerTitle: { color: C.text, fontSize: 16, fontWeight: '700' },
   content: { padding: 16, paddingBottom: 28, gap: 12 },
-  heroImage: { width: '100%', height: 200, borderRadius: 12, backgroundColor: '#E5E7EB' },
+  heroImage: { width: '100%', height: 200, borderRadius: 12, backgroundColor: C.border },
   title: { color: C.text, fontSize: 24, fontWeight: '800' },
   meta: { ...T.secondary },
-  servingsCard: { backgroundColor: '#fff', borderRadius: 12, padding: 12, gap: 8 },
+  servingsCard: { backgroundColor: C.card, borderRadius: 12, padding: 12, gap: 8 },
   servingsControls: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between' },
-  counterButton: { width: 34, height: 34, borderRadius: 17, backgroundColor: '#F3F4F6', alignItems: 'center', justifyContent: 'center' },
+  counterButton: { width: 34, height: 34, borderRadius: 17, backgroundColor: C.surfaceMuted, alignItems: 'center', justifyContent: 'center' },
   servingsValue: { color: C.text, fontSize: 16, fontWeight: '700' },
   servingsHint: { color: C.textLight, fontSize: 12, fontWeight: '500' },
-  card: { backgroundColor: '#fff', borderRadius: 12, padding: 12, gap: 10 },
+  card: { backgroundColor: C.card, borderRadius: 12, padding: 12, gap: 10 },
   sectionTitle: { color: C.text, fontSize: 17, fontWeight: '700' },
   ingredientRow: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', gap: 8 },
-  ingredientThumb: { width: 34, height: 34, borderRadius: 8, backgroundColor: '#F3F4F6', overflow: 'hidden', alignItems: 'center', justifyContent: 'center' },
+  ingredientThumb: { width: 34, height: 34, borderRadius: 8, backgroundColor: C.surfaceMuted, overflow: 'hidden', alignItems: 'center', justifyContent: 'center' },
   ingredientThumbImage: { width: '100%', height: '100%' },
   ingredientTextWrap: { flex: 1 },
   ingredientName: { color: C.text, fontSize: 14, fontWeight: '600' },
