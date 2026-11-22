@@ -153,9 +153,9 @@ inachevée. Le chronomètre tourne pendant que le reste avance.
       les écrans principaux (BUG-100) : corrigé le 17/11 et vérifié sur la
       version web de l'application, pas sur un téléphone. À regarder : Accueil,
       Stock, fiche produit, Recettes, Statistiques, Réglages, suppression du
-      compte. À savoir : Scan, ticket de caisse, import e-mail et Foyer restent
-      entièrement clairs même en thème sombre (lisibles, mais pas sombres) ;
-      me dire si tu veux que je les passe au thème aussi.
+      compte. Scan, ticket de caisse, import e-mail et Foyer restent clairs
+      même en thème sombre (lisibles, mais pas sombres) : **décidé le 22/11,
+      on ne les passe pas au thème** (simple question d'apparence).
 - [ ] **Vérifier la connexion biométrique sur un vrai appareil** après le PR #173
       (BUG-082) : l'empreinte ouvre désormais une session par jeton, plus par
       mot de passe rejoué. Scénario : connexion au mot de passe → fermer l'app →
@@ -173,7 +173,8 @@ inachevée. Le chronomètre tourne pendant que le reste avance.
       de session est rangé dans le stockage sécurisé du téléphone, qui n'existe
       pas dans un navigateur. Soit on lui donne un stockage web (la version web
       devient utilisable, par exemple pour les écrans d'administration), soit
-      on arrête de la déployer. Me dire ce que tu préfères.
+      on arrête de la déployer. **Décision reportée le 22/11** : à reprendre
+      plus tard ; d'ici là, rien ne change (Vercel continue de la déployer).
 - [x] **Sort de l'auto-merge** (`auto-merge-pr.yml`) — décidé le 15/11 : il
       reste, et une PR touchée par Codex ne fusionne qu'après relecture de son
       commit exact par une session Claude (BUG-097, `docs/codex-auto-fix.md`).
@@ -184,8 +185,17 @@ inachevée. Le chronomètre tourne pendant que le reste avance.
       Conséquence aujourd'hui : seules les PR qui touchent l'application
       mobile (build et Maestro verts) peuvent fusionner seules ; une PR de
       backend seul ne fusionne jamais automatiquement. Corriger le nom étend
-      l'auto-merge aux PR vertes de backend seul, hors brouillon. Me dire si
-      tu le veux.
+      l'auto-merge aux PR vertes de backend seul, hors brouillon — **et donc
+      leur mise en production automatique**, puisque le workflow déploie
+      désormais après chaque fusion qui touche le back-end (BUG-104). Me dire
+      si tu le veux.
+- [x] **Déploiement après une fusion automatique** — décidé le 22/11
+      (BUG-104) : une fusion faite par l'auto-merge ne déclenchait aucun
+      workflow sur `main` (règle GitHub), donc ni déploiement ni contrôles
+      post-fusion. Le workflow les lance désormais lui-même après chaque
+      fusion : déploiement Render si la PR touche le back-end, contrôles
+      post-fusion et APK toujours. Rien à faire de ton côté ; une fusion à la
+      main (bouton GitHub) déclenche tout normalement, comme avant.
 - [ ] **Relecture des correctifs Codex : savoir que la PR attend sans session
       ouverte.** Si aucune session Claude ne suit la PR, rien ne la relit :
       demander la relecture dans une session, poster le marqueur à la main
