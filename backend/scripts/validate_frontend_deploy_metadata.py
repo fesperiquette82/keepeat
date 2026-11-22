@@ -16,7 +16,6 @@ from __future__ import annotations
 
 import json
 import os
-import sys
 from dataclasses import dataclass
 from typing import Any
 from urllib import error, request
@@ -72,8 +71,10 @@ def validate_dashboard_frontend_payload(payload: dict[str, Any]) -> tuple[list[s
     if not isinstance(meta, dict):
         return ["dashboard.frontend_deployment est absent ou invalide"], warnings
 
-    current = meta.get("current") if isinstance(meta.get("current"), dict) else {}
-    expected = meta.get("expected") if isinstance(meta.get("expected"), dict) else {}
+    current_raw = meta.get("current")
+    expected_raw = meta.get("expected")
+    current = current_raw if isinstance(current_raw, dict) else {}
+    expected = expected_raw if isinstance(expected_raw, dict) else {}
 
     current_commit = _normalize_text(current.get("commit")).lower()
     current_version = _normalize_text(current.get("version")).lower()
@@ -93,7 +94,7 @@ def run_validation() -> ValidationResult:
     timeout_seconds = float(os.getenv("VALIDATE_TIMEOUT_SECONDS", str(DEFAULT_TIMEOUT_SECONDS)))
 
     explicit_build_info_url = os.getenv("FRONTEND_BUILD_INFO_URL", "")
-    frontend_public_url = os.getenv("FRONTEND_PUBLIC_URL") or os.getenv("FRONTEND_URL", "")
+    frontend_public_url = os.getenv("FRONTEND_PUBLIC_URL") or os.getenv("FRONTEND_URL") or ""
     build_info_url = build_frontend_build_info_url(explicit_build_info_url, frontend_public_url)
 
     errors: list[str] = []

@@ -85,7 +85,7 @@ async function main() {
       throw new Error('Seed payload does not include ok=true');
     }
     console.log(`[e2e-reset-seed] seed completed with fixtures: ${Object.keys(seedPayload.fixtures || {}).join(',')}`);
-    console.log('[e2e-reset-seed] test user e2e.free@keepeat.test is now available for login');
+    console.log('[e2e-reset-seed] test user e2e.free@example.com is now available for login');
     return;
   }
 

@@ -4,6 +4,7 @@ import { AdminMonitoringNav } from '../../../component/admin/AdminMonitoringNav'
 import { AdminScaffold, AdminSectionCard, EmptyState, ErrorState, formatMoney, LoadingState } from '../../../component/admin/AdminUi';
 import { getMonitoringTrends, MonitoringTrendsResponse } from '../../../utils/adminMonitoringApi';
 import { useAuthStore } from '../../../store/authStore';
+import { getErrorMessage } from '../../../utils/errorDetails';
 
 const DAY_OPTIONS = [7, 30, 90] as const;
 
@@ -35,8 +36,8 @@ export default function AdminMonitoringTrendsScreen() {
         if (!token) throw new Error('Session expirée');
         const response = await getMonitoringTrends(token, { days }, controller.signal);
         setData(response);
-      } catch (e: any) {
-        setError(e?.message || 'Chargement impossible');
+      } catch (e: unknown) {
+        setError(getErrorMessage(e) || 'Chargement impossible');
       } finally {
         setLoading(false);
       }

@@ -9,7 +9,7 @@
 - **ORM**: SQLAlchemy (implied from models.py)
 - **Database**: MongoDB (test: local, prod: cloud)
 - **Testing**: pytest
-- **Type Checking**: mypy (strict mode)
+- **Type Checking**: mypy — exécuté en CI (`mypy.ini` à la racine) : strict sur les modules applicatifs de `backend/`, `server.py`, scripts et tests en mode normal
 - **Linting**: ruff (check) + black (format)
 
 ---
@@ -335,15 +335,16 @@ def test_recipe_calculation(sample_recipe):
 ## Type Checking (mypy)
 
 ```bash
-# Check all backend code
-mypy backend/
-
-# Strict mode (recommended)
-mypy --strict backend/
-
-# Show unchecked types
-mypy --show-error-codes backend/
+# Commande unique, celle de la CI et du script de validation
+mypy backend tests
 ```
+
+Le niveau d'exigence est fixé par `mypy.ini`, pas par la ligne de commande :
+strict pour tous les modules de `backend/` (section `[mypy-backend.*]`), mode
+normal pour `server.py`, `backend/scripts/` et les tests. Ne pas lancer
+`mypy --strict` en global : il signalerait `server.py` et les tests, hors
+périmètre. Les collections Motor se typent avec `backend/mongo_types.py`
+(`MongoCollection`, `MongoDatabase`), jamais avec `Any`.
 
 **Rules**:
 - No `type: ignore` without comment

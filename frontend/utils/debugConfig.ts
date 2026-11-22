@@ -11,8 +11,11 @@
  *   EXPO_PUBLIC_DEBUG_SWIPE_ACTIONS=true eas build --profile preview …
  */
 
-function envFlag(name: string): boolean {
-  const raw = process.env[name];
+// BUG-077 : Expo n'inline dans le bundle que les accès STATIQUES à
+// `process.env.EXPO_PUBLIC_*`. Un accès dynamique (`process.env[name]`) vaut
+// toujours `undefined` dans un build publié : les flags ne pouvaient donc jamais
+// être activés sur un build de test, contrairement à ce que promet l'en-tête.
+function envFlag(raw: string | undefined): boolean {
   return typeof raw === 'string' && raw.trim().toLowerCase() === 'true';
 }
 
@@ -20,11 +23,11 @@ function envFlag(name: string): boolean {
 const isDevelopment = typeof __DEV__ !== 'undefined' && __DEV__ === true;
 
 export const DEBUG_SWIPE_ACTIONS =
-  envFlag('EXPO_PUBLIC_DEBUG_SWIPE_ACTIONS') || isDevelopment;
+  envFlag(process.env.EXPO_PUBLIC_DEBUG_SWIPE_ACTIONS) || isDevelopment;
 
 // Taille du buffer circulaire (nombre de logs à conserver en mémoire)
 export const DEBUG_LOG_BUFFER_SIZE = 500;
 
 // Recopier les logs dans la console — bruyant et inutile en production.
 export const DEBUG_LOG_TO_CONSOLE =
-  envFlag('EXPO_PUBLIC_DEBUG_LOG_TO_CONSOLE') || isDevelopment;
+  envFlag(process.env.EXPO_PUBLIC_DEBUG_LOG_TO_CONSOLE) || isDevelopment;

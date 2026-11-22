@@ -1,7 +1,7 @@
 import assert from 'node:assert/strict';
 import test from 'node:test';
 
-import { getActiveItemsByScope, type DashboardStockItem } from '../data/mockDashboardData';
+import { getActiveItemsByScope, type DashboardStockItem } from './stockDashboard';
 import { buildScopedRecipesWithDiagnostics, buildTargetIngredientNames, scopeAndDedupeRecipes } from './recipesScoping';
 
 const ACTIVE_STATUS = 'active' as const;

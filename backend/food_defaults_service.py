@@ -11,6 +11,7 @@ import httpx
 
 from backend.app_core import logger, utc_now
 from backend.observability import track_service_usage
+from backend.mongo_types import MongoCollection
 
 # Mêmes conventions que ocr_service.py (endpoint, header d'auth, modèle par
 # défaut) — la clé/le modèle OCR sont réutilisés par défaut pour ne pas
@@ -70,7 +71,7 @@ def _parse_monthly_limit() -> int:
     return value if value >= 0 else _DEFAULT_MONTHLY_LIMIT
 
 
-async def _monthly_usage_count(service_usage_logs_col: Any) -> int:
+async def _monthly_usage_count(service_usage_logs_col: MongoCollection) -> int:
     now = utc_now()
     month_start = now.replace(day=1, hour=0, minute=0, second=0, microsecond=0).isoformat()
     return int(
@@ -183,8 +184,8 @@ async def resolve_food_defaults(
     *,
     name: str,
     food_category: str,
-    food_defaults_col: Any,
-    service_usage_logs_col: Any,
+    food_defaults_col: MongoCollection,
+    service_usage_logs_col: MongoCollection,
     gemini_api_key: str | None,
     gemini_model: str | None = None,
     plan_type_at_time: str = "system",
@@ -268,7 +269,7 @@ async def resolve_food_defaults(
     return {"storage_zone": result["storage_zone"], "shelf_life_days": result["shelf_life_days"]}
 
 
-async def enrich_food_defaults_from_static(food_defaults_col: Any, items: list[dict[str, Any]]) -> None:
+async def enrich_food_defaults_from_static(food_defaults_col: MongoCollection, items: list[dict[str, Any]]) -> None:
     """Alimente gratuitement le cache à partir d'un ticket déjà analysé par
     Gemini (aucun appel IA supplémentaire — le ticket a déjà classé chaque
     article). N'écrase jamais une entrée déjà affinée par un appel IA dédié

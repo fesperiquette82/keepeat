@@ -5,12 +5,11 @@ en mockant httpx pour éviter tout appel réseau.
 """
 from __future__ import annotations
 
-import importlib
 import json
 import sys
 from datetime import date, datetime, timedelta, timezone
 from pathlib import Path
-from unittest.mock import AsyncMock, MagicMock, call, patch
+from unittest.mock import AsyncMock, MagicMock, patch
 
 import pytest
 

@@ -54,6 +54,47 @@ Liste centralisée dans `WATCHED_CHECKS_JSON` :
 - ne fait jamais d’auto-merge
 - n’altère pas les workflows `auto-merge`, `release` ou `mobile-e2e` (isolation dans `codex-auto-fix.yml`)
 
+## Relecture avant fusion automatique (BUG-097)
+L’auto-merge (`.github/workflows/auto-merge-pr.yml`) fusionne une PR verte vers `main`. Une PR touchée par Codex n’y a droit qu’après relecture de son **commit de tête exact**. Les autres PR ne sont pas concernées.
+
+### PR concernées
+Codex ouvre ses PR et signe ses commits sous le compte du propriétaire : son identité ne le distingue pas. Le verrou (`scripts/ci/codex_fix_review_gate.py`, toujours exécuté depuis `main`, jamais depuis la branche de la PR) se fonde sur des faits :
+- étiquette `codex` (posée par l’intégration GitHub de Codex) ou `codex-autofix`, même retirée depuis ;
+- branche `codex/…` ;
+- demande adressée à Codex sur la PR (description, commentaire, revue de code) : c’est le cas dès que la boucle ci-dessus a publié son commentaire ;
+- par précaution : PR ouverte par un autre compte que le propriétaire, ou commit d’un compte hors de la liste de confiance (propriétaire, `claude`, `web-flow`).
+
+### Verdict de relecture
+Un commentaire de PR, écrit sous le compte du propriétaire, contenant l’un des deux marqueurs :
+
+```text
+<!-- codex-fix-review: sha=<SHA complet du commit de tête> verdict=approved -->
+<!-- codex-fix-review: sha=<SHA complet du commit de tête> verdict=changes-requested -->
+```
+
+- Le verdict est lié au SHA : tout nouveau commit l’invalide, la relecture est à refaire.
+- Le dernier verdict posté pour ce SHA l’emporte (`changes-requested` retire une approbation).
+- Un verdict écrit par un autre compte, ou par l’intégration GitHub de Codex, ne compte pas.
+- Sans approbation : pas de fusion automatique, et un auto-merge déjà armé est désarmé.
+- Erreur d’API, script introuvable, liste de commits tronquée : refus, visible en rouge dans le workflow.
+- La fusion est demandée avec `--match-head-commit` : un commit poussé entre la relecture et la fusion fait échouer la commande.
+
+### Qui relit
+Une session Claude à qui le propriétaire a demandé de suivre la PR (procédure dans `CLAUDE.md`), ou le propriétaire lui-même. Sans session ouverte, la PR attend : poster le marqueur à la main, ou fusionner à la main.
+
+### Ce que la relecture vérifie
+Le diff complet du commit de tête contre `main`, pas le résumé de Codex :
+- aucun test supprimé, sauté ou désactivé ; aucune assertion retirée ou affaiblie ;
+- aucun scénario Maestro allégé, aucun `optional: true` ajouté pour masquer un échec ;
+- aucun workflow, garde-fou, seuil ou script de validation modifié pour faire passer un check ;
+- un changement limité à la cause de l’échec corrigé, avec son test de non-régression ;
+- aucun secret, jeton ou donnée personnelle dans le code ou les journaux.
+
+### Limites
+- C’est un garde-fou de processus : une IA en relit une autre, et un outil qui détient le jeton du propriétaire peut techniquement écrire le marqueur. Codex a pour consigne de ne jamais le faire.
+- Un travail de Codex qui ne laisse aucun des signaux ci-dessus (branche renommée, pas d’étiquette, pas de demande sur la PR) n’est pas reconnu.
+- Le workflow et le script s’exécutent depuis `main` : une modification du verrou ne prend effet qu’une fois fusionnée.
+
 ## Permissions GitHub minimales
 - `actions: read`
 - `checks: read`

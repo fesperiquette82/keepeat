@@ -11,6 +11,7 @@ import { useRouter, useLocalSearchParams } from 'expo-router';
 import Ionicons from '@expo/vector-icons/Ionicons';
 import { useAuthStore } from '../store/authStore';
 import { useLanguageStore } from '../store/languageStore';
+import { getErrorMessage } from '../utils/errorDetails';
 
 export default function VerifyEmailScreen() {
   const router = useRouter();
@@ -31,8 +32,8 @@ export default function VerifyEmailScreen() {
       .then(() => {
         setStatus('success');
       })
-      .catch((err: any) => {
-        const msg = err?.message ?? '';
+      .catch((err: unknown) => {
+        const msg = getErrorMessage(err) ?? '';
         if (msg === 'TOKEN_EXPIRED') {
           setStatus('expired');
         } else {

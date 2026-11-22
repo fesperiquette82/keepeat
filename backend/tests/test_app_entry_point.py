@@ -1,6 +1,5 @@
 """Tests for application entry point to ensure proper initialization."""
 
-import sys
 from pathlib import Path
 
 

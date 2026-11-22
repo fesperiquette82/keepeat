@@ -42,7 +42,7 @@
 - `AUDIT_BUGS.md` — No changes (still source of truth for known bugs)
 - `docs/` — No changes (complementary to `.ai/`)
 - `.github/workflows/` — No changes (parallel to new validation)
-- `backend/tests/`, `frontend/__tests__/` — No changes
+- `backend/tests/`, `frontend/utils/*.test.ts` — No changes
 - `package.json`, `.claude/settings.json` — Minimal updates
 
 ### ⚠️ Modified (Minimal)

@@ -1,5 +1,5 @@
 """Tests de non-régression — enrichissement image des articles issus de l'OCR ticket
-de caisse (TODO.md : "implémentation end-to-end des images pour les articles issus
+de caisse (docs/archive/TODO.md : "implémentation end-to-end des images pour les articles issus
 de l'analyse de ticket de caisse").
 
 Couvre :

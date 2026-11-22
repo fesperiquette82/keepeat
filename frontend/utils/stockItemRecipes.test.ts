@@ -4,7 +4,7 @@ import fs from 'node:fs';
 import path from 'node:path';
 
 import { buildStockItemDetailRecipeBlocks } from './stockItemDetailRecipes';
-import type { DashboardStockItem } from '../data/mockDashboardData';
+import type { DashboardStockItem } from './stockDashboard';
 import { buildStockItemRecipeSections, buildRecipeDetailRoute, normalizeStockItemNameForRecipeMatching } from './stockItemRecipes';
 
 function stockItem(overrides: Partial<DashboardStockItem>): DashboardStockItem {

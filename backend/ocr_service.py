@@ -13,6 +13,7 @@ from fastapi import HTTPException, Request
 
 from backend.app_core import logger, utc_now
 from backend.food_defaults_service import enrich_food_defaults_from_static
+from backend.mongo_types import MongoCollection
 
 
 class OcrApiError(RuntimeError):
@@ -290,7 +291,7 @@ def _normalize_receipt_item(item: dict[str, Any], purchase_date: str | None) -> 
     }
 
 
-def _extract_gemini_text(data: dict) -> str | None:
+def _extract_gemini_text(data: dict[str, Any]) -> str | None:
     """Extrait le texte de la réponse Gemini de façon défensive.
 
     Retourne None si la réponse est vide (candidats ou parts absents).
@@ -344,7 +345,7 @@ def _normalize_date(raw_date: str | None) -> str | None:
     return None
 
 
-def _parse_receipt_json(text: str) -> tuple[str | None, str | None, str | None, list[dict], list[dict]]:
+def _parse_receipt_json(text: str) -> tuple[str | None, str | None, str | None, list[dict[str, Any]], list[dict[str, Any]]]:
     """Parse le texte retourné par Gemini.
 
     Accepte :
@@ -369,8 +370,8 @@ def _parse_receipt_json(text: str) -> tuple[str | None, str | None, str | None, 
 
     try:
         parsed = json.loads(text)
-    except Exception:
-        raise OcrApiError("Réponse OCR invalide (JSON inattendu)", http_status=502)
+    except Exception as exc:
+        raise OcrApiError("Réponse OCR invalide (JSON inattendu)", http_status=502) from exc
 
     # Format v2 : objet avec "items"
     if isinstance(parsed, dict):
@@ -422,7 +423,7 @@ def _compute_expiry(purchase_date_str: str | None, shelf_days: int | None) -> st
         return None
 
 
-async def _enrich_normalizations(col: Any, items: list[dict]) -> None:
+async def _enrich_normalizations(col: MongoCollection, items: list[dict[str, Any]]) -> None:
     """Enrichit la base de connaissances raw_title → normalized_name dans MongoDB.
 
     Silencieux si la collection est None ou si un item n'a pas de raw_title.
@@ -447,7 +448,7 @@ async def _enrich_normalizations(col: Any, items: list[dict]) -> None:
         )
 
 
-async def _enrich_images(products_cache_col: Any, items: list[dict]) -> None:
+async def _enrich_images(products_cache_col: MongoCollection, items: list[dict[str, Any]]) -> None:
     """Attache une image produit à chaque item via recherche OpenFoodFacts par nom
     (les articles issus d'un ticket de caisse n'ont pas de code-barres).
 
@@ -473,9 +474,9 @@ async def ocr_receipt(
     request: Request | None,
     current_user: dict[str, Any],
     request_payload: dict[str, Any] | None = None,
-    normalizations_col: Any = None,
-    products_cache_col: Any = None,
-    food_defaults_col: Any = None,
+    normalizations_col: MongoCollection | None = None,
+    products_cache_col: MongoCollection | None = None,
+    food_defaults_col: MongoCollection | None = None,
 ) -> dict[str, Any]:
     gemini_key = os.environ.get("GEMINI_OCR_API_KEY", "")
     if not gemini_key:
@@ -546,9 +547,9 @@ async def parse_email_receipt_text(
     *,
     current_user: dict[str, Any],
     email_text: str,
-    normalizations_col: Any = None,
-    products_cache_col: Any = None,
-    food_defaults_col: Any = None,
+    normalizations_col: MongoCollection | None = None,
+    products_cache_col: MongoCollection | None = None,
+    food_defaults_col: MongoCollection | None = None,
 ) -> dict[str, Any]:
     """Variante texte de ocr_receipt() (BUG-051 — import automatique par email) :
     même pipeline Gemini + normalisation/enrichissement, mais l'entrée est le texte
@@ -591,9 +592,9 @@ async def _call_gemini_receipt_parser(
     gemini_model: str,
     parts: list[dict[str, Any]],
     current_user: dict[str, Any],
-    normalizations_col: Any,
-    products_cache_col: Any,
-    food_defaults_col: Any = None,
+    normalizations_col: MongoCollection | None,
+    products_cache_col: MongoCollection | None,
+    food_defaults_col: MongoCollection | None = None,
     mime_type: str | None,
     image_b64_len: int | None,
 ) -> dict[str, Any]:
@@ -802,7 +803,7 @@ async def _call_gemini_receipt_parser(
     # ── Parse du JSON ticket ───────────────────────────────────────────────────
     try:
         purchase_date, merchant, currency, raw_items, ignored_items = _parse_receipt_json(text)
-    except OcrApiError:
+    except OcrApiError as exc_1:
         logger.warning(
             "OCR receipt: JSON parse failed — user=%s raw=%s",
             current_user["id"], text[:200],
@@ -814,7 +815,7 @@ async def _call_gemini_receipt_parser(
             mime_type=mime_type,
             image_b64_len=image_b64_len,
             cause="invalid_model_json",
-        )
+        ) from exc_1
 
     if not raw_items:
         logger.info(

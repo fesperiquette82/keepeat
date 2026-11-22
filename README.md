@@ -30,7 +30,8 @@ Application mobile anti-gaspillage alimentaire composée d'un backend FastAPI/Mo
 cd backend
 python -m venv .venv
 source .venv/bin/activate
-pip install -r requirements.txt
+pip install -r requirements.txt        # exécution
+pip install -r requirements-dev.txt    # + pytest, pip-audit (développement, CI)
 ```
 
 Créer un fichier `backend/.env` avec au minimum :

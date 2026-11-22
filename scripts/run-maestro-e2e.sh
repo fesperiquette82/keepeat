@@ -375,6 +375,56 @@ bash scripts/generate-e2e-report.sh maestro-results maestro-results/e2e-report.h
 
 adb logcat -d > emulator-logcat.txt || true
 
+# BUG-090 : le journal du job n'est lisible qu'à travers ses dernières lignes
+# (les artefacts ne sont pas toujours accessibles). Ce condensé, borné, place
+# juste avant le résumé ce qu'il faut pour comprendre un échec : l'écran
+# affiché, le message d'échec de Maestro et le journal Android utile.
+print_failure_digest() {
+  echo ""
+  echo "=========================================="
+  echo "Diagnostic condensé des échecs (BUG-090)"
+  echo "=========================================="
+  echo "--- Écran affiché maintenant (uiautomator : textes, identifiants, paquets)"
+  if adb shell uiautomator dump /sdcard/failure_dump.xml >/dev/null 2>&1 \
+    && adb pull /sdcard/failure_dump.xml maestro-results/failure-ui.xml >/dev/null 2>&1; then
+    { grep -oE '(text|resource-id|package)="[^"]+"' maestro-results/failure-ui.xml || true; } \
+      | sort | uniq -c | sort -rn | head -n 25
+  else
+    echo "(capture de l'écran impossible)"
+  fi
+  echo "--- Écran au premier lancement (pré-vol)"
+  if [ -f maestro-results/preflight-ui.xml ]; then
+    { grep -oE '(text|resource-id|package)="[^"]+"' maestro-results/preflight-ui.xml || true; } \
+      | sort -u | head -n 15
+  else
+    echo "(pas de capture pré-vol)"
+  fi
+  echo "--- Messages d'échec Maestro"
+  local result status flow_name
+  for result in "${FLOW_RESULTS[@]}"; do
+    IFS="|" read -r status flow_name <<< "$result"
+    [ "$status" = "FAILED" ] || continue
+    echo "[$flow_name]"
+    if [ -f "maestro-results/$flow_name" ]; then
+      { grep -oE 'message="[^"]{0,240}' "maestro-results/$flow_name" || true; } | head -n 3
+    else
+      echo "(rapport absent)"
+    fi
+  done
+  echo "--- Journal Android filtré (JavaScript, plantages, cible du backend)"
+  if [ -f emulator-logcat.txt ]; then
+    { grep -aE 'ReactNativeJS|AndroidRuntime|FATAL EXCEPTION|Unable to load script|ENV_GUARDRAIL|\[ENV\]' emulator-logcat.txt || true; } \
+      | cut -c1-240 | tail -n 40
+  else
+    echo "(journal Android absent)"
+  fi
+  echo "=========================================="
+}
+
+if [ "$FLOW_RESULTS_FAILED" -ne 0 ]; then
+  print_failure_digest || true
+fi
+
 echo ""
 echo "=========================================="
 echo "Maestro E2E Suite Summary (suite=$MAESTRO_SUITE)"

@@ -12,7 +12,7 @@ Lire et appliquer strictement, dans cet ordre de priorité :
 3. **`.ai/test-policy.md`** — Politique de tests (pyramide, conventions)
 4. **`.ai/review-checklist.md`** — Checklist auto-revue
 5. **`.ai/stacks/react-native-expo.md`** — Conventions frontend (Node.js --test, TypeScript strict)
-6. **`.ai/stacks/python-fastapi.md`** — Conventions backend (pytest, mypy strict)
+6. **`.ai/stacks/python-fastapi.md`** — Conventions backend (pytest, ruff, mypy — strict sur les modules applicatifs, `server.py` encore en mode normal)
 7. **`.ai/stacks/e2e-maestro.md`** — Conventions E2E (Maestro, testID)
 
 Tous les points suivants sont des résumés ; **en cas d'ambiguïté, `.ai/core-rules.md` prime.**
@@ -53,6 +53,11 @@ Pour chaque correction de bug ou nouvelle fonctionnalité :
 - Les suggestions affichées doivent provenir du flux réellement validé par les garde-fous applicables.
 - Les outils de debug doivent être activés par config/flags centralisés uniquement.
 - Les composants debug ne doivent jamais être visibles en prod.
+
+## Relecture des correctifs automatiques
+Une PR touchée par Codex ne fusionne automatiquement qu’après un verdict de relecture lié à son commit de tête exact (`docs/codex-auto-fix.md`, BUG-097).
+- Un agent ne relit jamais son propre travail : Codex n’écrit jamais le marqueur `codex-fix-review`.
+- Ne pas modifier le verrou (`scripts/ci/codex_fix_review_gate.py`, ses tests, `.github/workflows/auto-merge-pr.yml`) dans une PR de correctif.
 
 ## Logs / sécurité
 - Utiliser un logger central si disponible.

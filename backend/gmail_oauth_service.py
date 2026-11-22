@@ -7,7 +7,8 @@ from urllib.parse import urlencode
 
 import httpx
 from cryptography.fernet import Fernet, InvalidToken
-from jose import JWTError, jwt
+import jwt
+from jwt import PyJWTError as JWTError
 
 from backend.app_core import utc_now
 from backend.auth_utils import get_jwt_secret_key
@@ -86,12 +87,12 @@ def decode_state_token(state: str) -> str:
     """Retourne le user_id encodé dans le state, ou lève ValueError."""
     try:
         payload = jwt.decode(state, get_jwt_secret_key(), algorithms=[JWT_ALGORITHM])
-    except JWTError:
-        raise ValueError("invalid_state")
+    except JWTError as exc:
+        raise ValueError("invalid_state") from exc
     if payload.get("type") != STATE_TOKEN_TYPE:
         raise ValueError("invalid_state")
     user_id = payload.get("user_id")
-    if not user_id:
+    if not isinstance(user_id, str) or not user_id:
         raise ValueError("invalid_state")
     return user_id
 
@@ -127,7 +128,10 @@ async def exchange_code_for_tokens(*, code: str) -> dict[str, Any]:
             },
         )
         resp.raise_for_status()
-        return resp.json()
+        payload = resp.json()
+        if not isinstance(payload, dict):
+            raise ValueError("Réponse inattendue de Google à l'échange du code OAuth")
+        return payload
 
 
 async def revoke_token(*, token: str) -> bool:

@@ -6,6 +6,8 @@ export interface ThemeColors {
   primary: string;
   primaryLight: string;
   primaryMid: string;
+  /** Texte vert sur une surface du thème (liens, mentions) : lisible dans les deux modes. */
+  primaryText: string;
   text: string;
   textMid: string;
   textLight: string;
@@ -29,6 +31,7 @@ export const LIGHT_COLORS: ThemeColors = {
   primary: '#22c55e',
   primaryLight: '#F0FDF4',
   primaryMid: '#DCFCE7',
+  primaryText: '#166534',
   text: '#111827',
   textMid: '#6B7280',
   textLight: '#9CA3AF',
@@ -52,6 +55,7 @@ export const DARK_COLORS: ThemeColors = {
   primary: '#22c55e',
   primaryLight: '#14532D',
   primaryMid: '#166534',
+  primaryText: '#86EFAC',
   text: '#F9FAFB',
   textMid: '#D1D5DB',
   textLight: '#9CA3AF',
@@ -71,6 +75,15 @@ export const DARK_COLORS: ThemeColors = {
 
 export function getThemeColors(mode: ThemeMode): ThemeColors {
   return mode === 'dark' ? DARK_COLORS : LIGHT_COLORS;
+}
+
+/** Fond d'un écran posé sur l'image d'arrière-plan, qui est claire dans les
+ *  deux thèmes. En clair, l'écran est transparent et l'image reste visible.
+ *  En sombre, le texte du thème est clair : l'écran recouvre l'image de la
+ *  couleur de fond du thème, sinon titres et sous-titres sont illisibles
+ *  (BUG-100). */
+export function screenBackdropColor(mode: ThemeMode): string {
+  return mode === 'dark' ? DARK_COLORS.bg : 'transparent';
 }
 
 export function resolveThemeMode(value: unknown): ThemeMode {

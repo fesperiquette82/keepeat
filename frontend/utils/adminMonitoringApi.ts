@@ -20,8 +20,8 @@ export interface MonitoringDashboardResponse {
   generated_at: string;
   users: Record<string, number>;
   subscriptions: Record<string, unknown>;
-  top_api_issues: Array<Record<string, unknown>>;
-  top_service_usage: Array<Record<string, unknown>>;
+  top_api_issues: Record<string, unknown>[];
+  top_service_usage: Record<string, unknown>[];
   estimated_cost_summary?: Record<string, number>;
   operational_status?: string;
   operational_status_reasons?: string[];
@@ -57,13 +57,13 @@ export interface MonitoringDashboardResponse {
   };
   crash_reports?: {
     total: number;
-    recent: Array<{
+    recent: {
       message?: string;
       screen?: string;
       platform?: string;
       app_version?: string;
       created_at?: string;
-    }>;
+    }[];
   };
   cost_metrics?: {
     ocr_cost_eur: number;
@@ -88,7 +88,7 @@ export interface MonitoringDashboardResponse {
   };
   external_service_quotas?: {
     generated_at?: string;
-    services?: Array<{
+    services?: {
       service_key: string;
       display_name: string;
       category?: string;
@@ -106,8 +106,8 @@ export interface MonitoringDashboardResponse {
       pricing_note?: string | null;
       upgrade_note?: string | null;
       status?: 'ok' | 'warning' | 'critical' | 'unknown' | string;
-    }>;
-    comparison_chart?: Array<{
+    }[];
+    comparison_chart?: {
       service_key: string;
       display_name: string;
       capacity_max?: number | null;
@@ -115,30 +115,30 @@ export interface MonitoringDashboardResponse {
       capacity_remaining?: number | null;
       usage_percent?: number | null;
       status?: string;
-    }>;
+    }[];
     notes?: Record<string, string>;
   };
 }
 
 export interface MonitoringApisResponse {
   volume: number;
-  top_endpoints: Array<{
+  top_endpoints: {
     endpoint_key: string;
     volume: number;
     error_rate: number;
     avg_latency_ms: number;
     p95_latency_ms: number;
-  }>;
-  highest_error_rate: Array<{
+  }[];
+  highest_error_rate: {
     endpoint_key: string;
     error_rate: number;
     volume: number;
-  }>;
-  highest_latency: Array<{
+  }[];
+  highest_latency: {
     endpoint_key: string;
     p95_latency_ms: number;
     avg_latency_ms: number;
-  }>;
+  }[];
 }
 
 export interface MonitoringUsersResponse {
@@ -165,26 +165,26 @@ export interface MonitoringSubscriptionsResponse {
 
 export interface MonitoringServicesUsageResponse {
   total_estimated_cost: number;
-  services: Array<{
+  services: {
     service_name: string;
     units: number;
     estimated_cost: number;
     calls: number;
     plans?: Record<string, { units: number; estimated_cost: number; calls: number }>;
-    actions?: Array<{
+    actions?: {
       action_name: string;
       units: number;
       estimated_cost: number;
       calls: number;
       plan_type: string;
-    }>;
-  }>;
+    }[];
+  }[];
 }
 
 export interface MonitoringServiceStatusResponse {
   generated_at: string;
   uptime_seconds?: number;
-  services: Array<{
+  services: {
     id: string;
     name: string;
     type: 'internal' | 'external' | 'local' | string;
@@ -195,13 +195,13 @@ export interface MonitoringServiceStatusResponse {
     message?: string;
     configured: boolean;
     details?: Record<string, unknown>;
-  }>;
+  }[];
 }
 
 export interface MonitoringUsageResponse {
   generated_at: string;
   period?: { start?: string; end?: string; label?: string };
-  usage: Array<{
+  usage: {
     service_id: string;
     label: string;
     current_usage: number;
@@ -213,13 +213,13 @@ export interface MonitoringUsageResponse {
     confidence?: 'low' | 'medium' | 'high' | string;
     is_estimated?: boolean;
     note?: string | null;
-  }>;
+  }[];
 }
 
 export interface MonitoringCostsResponse {
   generated_at: string;
   pricing_note?: string;
-  costs: Array<{
+  costs: {
     service_id: string;
     current_plan: string;
     estimated_monthly_usage: number;
@@ -229,24 +229,24 @@ export interface MonitoringCostsResponse {
     recommendation_reason: string;
     confidence: 'low' | 'medium' | 'high' | string;
     is_estimated: boolean;
-  }>;
+  }[];
 }
 
 export interface MonitoringTrendsResponse {
   generated_at: string;
   days: number;
-  dau: Array<{ date: string; count: number }>;
-  new_users: Array<{ date: string; count: number }>;
-  errors: Array<{ date: string; count: number }>;
-  costs: Array<{ date: string; cost: number }>;
+  dau: { date: string; count: number }[];
+  new_users: { date: string; count: number }[];
+  errors: { date: string; count: number }[];
+  costs: { date: string; cost: number }[];
 }
 
 export interface MonitoringApiDrillResponse {
   endpoint_key: string;
   days: number;
   total_calls: number;
-  by_status: Array<{ status_code: number; count: number; avg_ms: number }>;
-  last_errors: Array<{
+  by_status: { status_code: number; count: number; avg_ms: number }[];
+  last_errors: {
     id?: string;
     method?: string;
     path?: string;
@@ -254,21 +254,21 @@ export interface MonitoringApiDrillResponse {
     duration_ms?: number;
     error_type?: string;
     created_at?: string;
-  }>;
+  }[];
 }
 
 export interface MonitoringEventsResponse {
   page: number;
   page_size: number;
   total: number;
-  events: Array<{
+  events: {
     id: string;
     event_name: string;
     event_category: string;
     user_id?: string | null;
     metadata_json?: Record<string, unknown>;
     created_at: string;
-  }>;
+  }[];
 }
 
 function buildQuery(params: Record<string, string | number | undefined | null>): string {

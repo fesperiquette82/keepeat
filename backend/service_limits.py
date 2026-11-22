@@ -7,6 +7,7 @@ from typing import Any
 from backend.app_core import utc_now
 from backend.food_defaults_service import ACTION_NAME as _FOOD_DEFAULTS_ACTION_NAME
 from backend.food_defaults_service import SERVICE_NAME as _FOOD_DEFAULTS_SERVICE_NAME
+from backend.mongo_types import MongoCollection
 
 
 def _parse_int_env(name: str) -> int | None:
@@ -58,7 +59,7 @@ def _status_for_usage(limit_value: int | None, usage: int | None) -> str:
     return "ok"
 
 
-async def build_external_services_quota_snapshot(*, service_usage_logs_col, api_request_logs_col) -> dict[str, Any]:
+async def build_external_services_quota_snapshot(*, service_usage_logs_col: MongoCollection, api_request_logs_col: MongoCollection) -> dict[str, Any]:
     now = utc_now()
     if now.tzinfo is None:
         now = now.replace(tzinfo=timezone.utc)

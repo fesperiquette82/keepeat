@@ -1,16 +1,17 @@
 from __future__ import annotations
 
-import os
 from datetime import timedelta
-from typing import Any
+from typing import Any, overload
 
 from bson import ObjectId
 from fastapi import HTTPException
-from jose import JWTError, jwt
+import jwt
+from jwt import PyJWTError as JWTError
 
 from backend.app_core import serialize_mongo, utc_now
 from backend.auth_utils import get_jwt_secret_key
 from backend.entitlements import PREMIUM_PLAN, resolve_plan
+from backend.mongo_types import MongoCollection
 
 JWT_ALGORITHM = "HS256"
 INVITE_EXPIRE_DAYS = 7
@@ -33,18 +34,18 @@ def decode_invite_token(token: str) -> str:
     """Retourne le household_id encodé dans le token, ou lève HTTPException(400)."""
     try:
         payload = jwt.decode(token, get_jwt_secret_key(), algorithms=[JWT_ALGORITHM])
-    except JWTError:
-        raise HTTPException(status_code=400, detail={"code": "INVALID_INVITE_TOKEN"})
+    except JWTError as exc:
+        raise HTTPException(status_code=400, detail={"code": "INVALID_INVITE_TOKEN"}) from exc
     if payload.get("type") != INVITE_TOKEN_TYPE:
         raise HTTPException(status_code=400, detail={"code": "INVALID_INVITE_TOKEN"})
     household_id = payload.get("household_id")
-    if not household_id:
+    if not isinstance(household_id, str) or not household_id:
         raise HTTPException(status_code=400, detail={"code": "INVALID_INVITE_TOKEN"})
     return household_id
 
 
 def household_response(household_doc: dict[str, Any], *, members_docs: list[dict[str, Any]]) -> dict[str, Any]:
-    out = serialize_mongo(household_doc)
+    out: dict[str, Any] = serialize_mongo(household_doc)
     members_by_id = {str(m.get("_id")): m for m in members_docs}
     owner_id = out.get("owner_id")
     out["members"] = [
@@ -58,11 +59,19 @@ def household_response(household_doc: dict[str, Any], *, members_docs: list[dict
     return out
 
 
+@overload
+async def resolve_billing_user_doc(
+    user_doc: dict[str, Any], *, users_col: MongoCollection, households_col: MongoCollection
+) -> dict[str, Any]: ...
+@overload
+async def resolve_billing_user_doc(
+    user_doc: dict[str, Any] | None, *, users_col: MongoCollection, households_col: MongoCollection
+) -> dict[str, Any] | None: ...
 async def resolve_billing_user_doc(
     user_doc: dict[str, Any] | None,
     *,
-    users_col,
-    households_col,
+    users_col: MongoCollection,
+    households_col: MongoCollection,
 ) -> dict[str, Any] | None:
     """Retourne le document utilisateur à utiliser pour toute résolution
     d'abonnement (plan, quotas, historique). Un utilisateur premium sur son

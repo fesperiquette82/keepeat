@@ -7,6 +7,7 @@ Usage:
 from __future__ import annotations
 
 import os
+from typing import Any
 
 from motor.motor_asyncio import AsyncIOMotorClient
 
@@ -17,7 +18,7 @@ async def run() -> None:
     if not mongo_url:
         raise RuntimeError("MONGO_URL is required")
 
-    client = AsyncIOMotorClient(mongo_url)
+    client: AsyncIOMotorClient[dict[str, Any]] = AsyncIOMotorClient(mongo_url)
     db = client[db_name]
 
     api_request_logs_col = db["api_request_logs"]

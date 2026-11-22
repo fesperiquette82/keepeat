@@ -27,7 +27,7 @@ const makeStockItem = (id: string): StockItem => ({
 
 test('régression: undoRemovalCore transmet l\'item complet à restoreItemFn (pas seulement l\'id)', async () => {
   const item = makeStockItem('xyz');
-  const calls: Array<{ id: string; restoredItem: StockItem }> = [];
+  const calls: { id: string; restoredItem: StockItem }[] = [];
 
   await undoRemovalCore([item], async (id, restoredItem) => {
     calls.push({ id, restoredItem });

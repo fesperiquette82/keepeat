@@ -7,9 +7,9 @@ import ReanimatedSwipeable, { type SwipeableMethods, SwipeDirection } from 'reac
 import { useStockStore } from '../../store/stockStore';
 import { syncStateForItem } from '../../utils/pendingMutationQueue';
 import { ActionBanner } from '../../component/ActionBanner';
-import { getThemeColors, getThemeText } from '../../utils/theme';
+import { getThemeColors, getThemeText, screenBackdropColor, type ThemeMode } from '../../utils/theme';
 import { useAppSettingsStore } from '../../store/appSettingsStore';
-import { daysUntil, resolveStockItems } from '../../data/mockDashboardData';
+import { daysUntil, resolveStockItems } from '../../utils/stockDashboard';
 import { removeStockItems, undoRemovedStockItems } from '../../utils/stockRemoval';
 import { countLabelFr } from '../../utils/uiText';
 import { storageZoneLabel, UI_LABELS } from '../../utils/uiLabels';
@@ -77,7 +77,7 @@ export default function StockScreen() {
   const themeMode = useAppSettingsStore((state) => state.themeMode);
   const C = getThemeColors(themeMode);
   const T = getThemeText(C);
-  const styles = useMemo(() => createStyles(C, T), [C, T]);
+  const styles = useMemo(() => createStyles(C, T, themeMode), [C, T, themeMode]);
 
   useEffect(() => {
     fetchStock({ reason: 'stock.tab.mount' });
@@ -92,7 +92,7 @@ export default function StockScreen() {
     };
   }, []);
 
-  const { items, isMock } = useMemo(() => resolveStockItems(storeItems, { useMockFallback: false }), [storeItems]);
+  const items = useMemo(() => resolveStockItems(storeItems), [storeItems]);
 
   const mostUrgentDays = useMemo(() => {
     const allDays = items.map((item) => daysUntil(item.expiry_date)).filter((d): d is number => d !== null);
@@ -278,12 +278,11 @@ export default function StockScreen() {
         <View style={styles.titleRow}>
           <Text testID="stock-screen-title" style={styles.title}>Stock complet</Text>
           {mostUrgentDays !== null && (
-            <View style={[styles.titleDot, { backgroundColor: expiryColor(mostUrgentDays) }]} />
+            <View style={[styles.titleDot, { backgroundColor: expiryColor(mostUrgentDays, themeMode) }]} />
           )}
         </View>
         <Text style={styles.subtitle}>{countLabelFr(displayedItems.length, 'ingrédient')} affiché{displayedItems.length > 1 ? 's' : ''}</Text>
         <Text style={styles.swipeHint}>Glisser à droite = utilisé · à gauche = jeté</Text>
-        {isMock && <Text style={styles.mockInfo}>Données de démonstration</Text>}
       </View>
 
       <View style={styles.controlsCard}>
@@ -415,8 +414,8 @@ export default function StockScreen() {
                     </View>
                   </View>
                   <View style={styles.expiryBadge}>
-                    <View style={[styles.expiryDot, { backgroundColor: expiryColor(daysUntil(item.expiry_date)) }]} />
-                    <Text style={[styles.expiry, { color: expiryColor(daysUntil(item.expiry_date)) }]}>
+                    <View style={[styles.expiryDot, { backgroundColor: expiryColor(daysUntil(item.expiry_date), themeMode) }]} />
+                    <Text style={[styles.expiry, { color: expiryColor(daysUntil(item.expiry_date), themeMode) }]}>
                       {formatExpiryLabel(item.expiry_date)}
                       {/* BUG-073 : une date déduite d'une durée de conservation
                           ne doit pas s'afficher comme une DLC lue. */}
@@ -444,17 +443,16 @@ export default function StockScreen() {
   );
 }
 
-const createStyles = (C: ReturnType<typeof getThemeColors>, T: ReturnType<typeof getThemeText>) => StyleSheet.create({
+const createStyles = (C: ReturnType<typeof getThemeColors>, T: ReturnType<typeof getThemeText>, themeMode: ThemeMode) => StyleSheet.create({
   bgImage: { flex: 1 },
-  container: { flex: 1, backgroundColor: 'transparent' },
+  container: { flex: 1, backgroundColor: screenBackdropColor(themeMode) },
   header: { paddingHorizontal: 16, paddingTop: 8, paddingBottom: 10 },
   titleRow: { flexDirection: 'row', alignItems: 'center', gap: 8 },
   titleDot: { width: 10, height: 10, borderRadius: 5 },
   title: { fontSize: 26, fontWeight: '800', color: C.text },
   subtitle: { marginTop: 4, ...T.secondary },
   swipeHint: { marginTop: 4, color: C.textLight, fontSize: 12, fontWeight: '600' },
-  mockInfo: { marginTop: 4, ...T.tertiary },
-  controlsCard: { marginHorizontal: 16, marginBottom: 8, padding: 12, borderRadius: 12, backgroundColor: '#fff', borderWidth: 1, borderColor: C.border, gap: 8 },
+  controlsCard: { marginHorizontal: 16, marginBottom: 8, padding: 12, borderRadius: 12, backgroundColor: C.card, borderWidth: 1, borderColor: C.border, gap: 8 },
   controlsSectionLabel: { ...T.secondarySmall, fontWeight: '700' },
   filterRow: { flexDirection: 'row', gap: 8, paddingBottom: 2 },
   filterChip: { paddingVertical: 8, paddingHorizontal: 12, borderRadius: 999, backgroundColor: '#ECFDF3' },
@@ -462,15 +460,15 @@ const createStyles = (C: ReturnType<typeof getThemeColors>, T: ReturnType<typeof
   filterChipLabel: { color: '#166534', fontSize: 13, fontWeight: '700' },
   filterChipLabelActive: { color: '#fff' },
   sortRow: { flexDirection: 'row', gap: 6, flexWrap: 'wrap' },
-  sortChip: { paddingVertical: 6, paddingHorizontal: 10, borderRadius: 999, backgroundColor: '#F3F4F6' },
+  sortChip: { paddingVertical: 6, paddingHorizontal: 10, borderRadius: 999, backgroundColor: C.surfaceMuted },
   sortChipActive: { backgroundColor: '#D1FAE5' },
   sortChipLabel: { color: C.textMid, fontSize: 12, fontWeight: '700' },
   sortChipLabelActive: { color: '#166534' },
   listContent: { padding: 16, gap: 8, paddingBottom: 24 },
-  card: { backgroundColor: '#fff', borderRadius: 12, padding: 13, flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', gap: 10 },
+  card: { backgroundColor: C.card, borderRadius: 12, padding: 13, flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', gap: 10 },
   cardMain: { flexDirection: 'row', alignItems: 'center', gap: 10, flex: 1 },
   cardText: { flex: 1 },
-  thumb: { width: 42, height: 42, borderRadius: 10, backgroundColor: '#F3F4F6', overflow: 'hidden', alignItems: 'center', justifyContent: 'center' },
+  thumb: { width: 42, height: 42, borderRadius: 10, backgroundColor: C.surfaceMuted, overflow: 'hidden', alignItems: 'center', justifyContent: 'center' },
   thumbImage: { width: '100%', height: '100%' },
   name: { color: C.text, fontSize: 15, fontWeight: '700' },
   meta: { ...T.secondarySmall, marginTop: 2 },
@@ -480,7 +478,7 @@ const createStyles = (C: ReturnType<typeof getThemeColors>, T: ReturnType<typeof
   expiryBadge: { flexDirection: 'row', alignItems: 'center', gap: 5 },
   expiryDot: { width: 8, height: 8, borderRadius: 4 },
   expiry: { fontSize: 12, fontWeight: '700' },
-  searchRow: { flexDirection: 'row', alignItems: 'center', gap: 8, backgroundColor: '#F3F4F6', borderRadius: 10, paddingHorizontal: 10, paddingVertical: 8 },
+  searchRow: { flexDirection: 'row', alignItems: 'center', gap: 8, backgroundColor: C.surfaceMuted, borderRadius: 10, paddingHorizontal: 10, paddingVertical: 8 },
   searchInput: { flex: 1, fontSize: 14, color: C.text, paddingVertical: 0 },
   swipeAction: { justifyContent: 'center', alignItems: 'center', width: 92, borderRadius: 12, marginVertical: 2, gap: 4 },
   swipeActionText: { color: '#fff', fontSize: 11, fontWeight: '700' },

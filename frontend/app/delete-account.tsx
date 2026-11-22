@@ -7,6 +7,7 @@ import { useAuthStore } from '../store/authStore';
 import { getThemeColors, getThemeText } from '../utils/theme';
 import { useAppSettingsStore } from '../store/appSettingsStore';
 import { deleteAccount } from '../utils/accountService';
+import { getErrorMessage } from '../utils/errorDetails';
 
 export default function DeleteAccountScreen() {
   const router = useRouter();
@@ -49,9 +50,9 @@ export default function DeleteAccountScreen() {
       await deleteAccount(token, password);
       await logout();
       // La navigation vers /login est gérée par _layout.tsx via le changement d'état user.
-    } catch (err: any) {
+    } catch (err: unknown) {
       setIsDeleting(false);
-      if (err?.message?.includes('403') || err?.message === 'Mot de passe incorrect') {
+      if (getErrorMessage(err)?.includes('403') || getErrorMessage(err) === 'Mot de passe incorrect') {
         setLocalError('Mot de passe incorrect.');
       } else {
         setLocalError('Impossible de supprimer le compte pour le moment. Réessayez plus tard.');
@@ -127,7 +128,7 @@ export default function DeleteAccountScreen() {
 const createStyles = (C: ReturnType<typeof getThemeColors>, T: ReturnType<typeof getThemeText>) => StyleSheet.create({
   container: { flex: 1, backgroundColor: C.bg },
   header: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', paddingHorizontal: 16, paddingTop: 8, paddingBottom: 6 },
-  backButton: { width: 34, height: 34, borderRadius: 17, backgroundColor: '#fff', alignItems: 'center', justifyContent: 'center' },
+  backButton: { width: 34, height: 34, borderRadius: 17, backgroundColor: C.card, alignItems: 'center', justifyContent: 'center' },
   title: { fontSize: 20, fontWeight: '800', color: C.text },
   content: { padding: 16, gap: 14 },
   warningCard: { backgroundColor: '#FEF2F2', borderWidth: 1, borderColor: '#FECACA', borderRadius: 12, padding: 14, gap: 8 },
@@ -135,11 +136,11 @@ const createStyles = (C: ReturnType<typeof getThemeColors>, T: ReturnType<typeof
   bold: { fontWeight: '800' },
   list: { gap: 2, paddingLeft: 4 },
   listItem: { color: '#7F1D1D', fontSize: 13, lineHeight: 19 },
-  card: { backgroundColor: '#fff', borderRadius: 12, padding: 12, gap: 8 },
+  card: { backgroundColor: C.card, borderRadius: 12, padding: 12, gap: 8 },
   label: { color: C.text, fontSize: 14, fontWeight: '700' },
   input: {
     borderWidth: 1,
-    borderColor: '#E5E7EB',
+    borderColor: C.border,
     borderRadius: 10,
     paddingHorizontal: 12,
     paddingVertical: 10,

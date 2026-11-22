@@ -4,18 +4,19 @@ import { View, Text, StyleSheet, ScrollView, TouchableOpacity, Image, ImageBackg
 import { useRouter } from 'expo-router';
 import Ionicons from '@expo/vector-icons/Ionicons';
 import { useStockStore } from '../../store/stockStore';
-import { getThemeColors, getThemeText, shadowSm } from '../../utils/theme';
+import { getThemeColors, getThemeText, screenBackdropColor, shadowSm, type ThemeMode } from '../../utils/theme';
 import { useAppSettingsStore } from '../../store/appSettingsStore';
-import { daysUntil, findExpiringSoon, resolveStockItems } from '../../data/mockDashboardData';
+import { daysUntil, findExpiringSoon, resolveHomeStockOverviewState, resolveStockItems } from '../../utils/stockDashboard';
 import { countLabelFr } from '../../utils/uiText';
 import { storageZoneLabel, UI_LABELS } from '../../utils/uiLabels';
 import { logger } from '../../utils/logger';
 import { expiryColor, expiryText } from '../../utils/expiryLabels';
 import { useRecipesStore } from '../../store/recipesStore';
+import { formatRecipeDuration, joinRecipeMeta, resolveRecipeDurationMinutes, resolveRecipeIngredientCounts } from '../../utils/recipeDisplay';
 
 export default function HomeDashboardScreen() {
   const router = useRouter();
-  const { items: storeItems, fetchStock } = useStockStore();
+  const { items: storeItems, fetchStock, isLoading: isStockLoading } = useStockStore();
   const fetchSuggestions = useRecipesStore((state) => state.fetchSuggestions);
   const [recipesOnHome, setRecipesOnHome] = React.useState<any[]>([]);
 
@@ -23,11 +24,13 @@ export default function HomeDashboardScreen() {
     fetchStock();
   }, [fetchStock]);
 
-  const { items, isMock } = useMemo(() => resolveStockItems(storeItems), [storeItems]);
+  // BUG-098 : l'accueil n'affiche que le stock réel. Vide, il le dit : il
+  // remplaçait auparavant le stock par un jeu de faux produits.
+  const items = useMemo(() => resolveStockItems(storeItems), [storeItems]);
   const themeMode = useAppSettingsStore((state) => state.themeMode);
   const C = getThemeColors(themeMode);
   const T = getThemeText(C);
-  const styles = useMemo(() => createStyles(C, T), [C, T]);
+  const styles = useMemo(() => createStyles(C, T, themeMode), [C, T, themeMode]);
 
   const summary = useMemo(() => {
     const frigo = items.filter((item) => item.storageZone === 'frigo').length;
@@ -40,15 +43,23 @@ export default function HomeDashboardScreen() {
   }, [items]);
 
   const expiringSoon = useMemo(() => findExpiringSoon(items), [items]);
+  const stockOverviewState = resolveHomeStockOverviewState({
+    itemCount: items.length,
+    expiringSoonCount: expiringSoon.length,
+    isLoading: isStockLoading,
+  });
   const recipes = useMemo(
     () =>
-      recipesOnHome.map((recipe) => ({
-        ...recipe,
-        timeMinutes: recipe.duration_min ?? recipe.timeMinutes ?? 0,
-        matchedCount: recipe.available_count ?? recipe.availableCount ?? 0,
-        missingCount: recipe.missing_count ?? recipe.missingCount ?? 0,
-        imageUrl: recipe.image || recipe.imageUrl || '',
-      })),
+      recipesOnHome.map((recipe) => {
+        const counts = resolveRecipeIngredientCounts(recipe);
+        return {
+          ...recipe,
+          timeMinutes: resolveRecipeDurationMinutes(recipe),
+          matchedCount: counts.available,
+          missingCount: counts.missing,
+          imageUrl: recipe.image || recipe.imageUrl || '',
+        };
+      }),
     [recipesOnHome],
   );
   const summaryCards = useMemo(() => ([
@@ -94,10 +105,6 @@ export default function HomeDashboardScreen() {
           </TouchableOpacity>
         </View>
 
-        {isMock && (
-          <Text style={styles.mockText}>Mode démo actif (données mockées réalistes)</Text>
-        )}
-
         <View style={styles.summaryGrid}>
           {summaryCards.map((card) => (
             <View key={card.key} style={styles.summaryCard}>
@@ -117,19 +124,28 @@ export default function HomeDashboardScreen() {
             <View style={styles.sectionTitleRow}>
               <Text style={styles.sectionTitle}>Aperçu du stock :</Text>
               {expiringSoon.length > 0 && (
-                <View style={[styles.sectionDot, { backgroundColor: expiryColor(daysUntil(expiringSoon[0].expiry_date)) }]} />
+                <View style={[styles.sectionDot, { backgroundColor: expiryColor(daysUntil(expiringSoon[0].expiry_date), themeMode) }]} />
               )}
             </View>
             <TouchableOpacity onPress={() => router.push('/(tabs)/stock')}>
               <Text style={styles.linkText}>{UI_LABELS.fr.actions.viewStock}</Text>
             </TouchableOpacity>
           </View>
-          {expiringSoon.length === 0 ? (
+          {stockOverviewState === 'loading' ? (
+            <Text style={styles.emptyText}>Chargement de votre stock…</Text>
+          ) : stockOverviewState === 'empty' ? (
+            <View testID="home-stock-empty">
+              <Text style={styles.emptyText}>Votre stock est vide. Ajoutez un premier produit pour suivre ses dates.</Text>
+              <TouchableOpacity testID="home-stock-empty-add" onPress={() => router.push('/scan')}>
+                <Text style={styles.linkText}>{UI_LABELS.fr.actions.addProduct}</Text>
+              </TouchableOpacity>
+            </View>
+          ) : stockOverviewState === 'no-urgent' ? (
             <Text style={styles.emptyText}>Aucun produit urgent pour le moment 🎉</Text>
           ) : (
             expiringSoon.map((item) => {
               const days = daysUntil(item.expiry_date);
-              const urgColor = expiryColor(days);
+              const urgColor = expiryColor(days, themeMode);
               return (
                 <View key={item.id} style={styles.rowItem}>
                   <View style={styles.rowMain}>
@@ -180,9 +196,11 @@ export default function HomeDashboardScreen() {
                   <View style={styles.rowText}>
                     <Text style={styles.rowTitle}>{recipe.title}</Text>
                     <Text style={styles.recipeMeta}>
-                      {recipe.timeMinutes} min
-                      {` · ${countLabelFr(recipe.matchedCount, 'ingrédient')} disponible${recipe.matchedCount > 1 ? 's' : ''}`}
-                      {recipe.missingCount > 0 ? ` · Il manque ${countLabelFr(recipe.missingCount, 'ingrédient')}` : ''}
+                      {joinRecipeMeta([
+                        formatRecipeDuration(recipe.timeMinutes),
+                        `${countLabelFr(recipe.matchedCount, 'ingrédient')} disponible${recipe.matchedCount > 1 ? 's' : ''}`,
+                        recipe.missingCount > 0 && `Il manque ${countLabelFr(recipe.missingCount, 'ingrédient')}`,
+                      ])}
                     </Text>
                   </View>
                 </View>
@@ -205,35 +223,34 @@ export default function HomeDashboardScreen() {
 // issu du thème actif. En mode sombre, `C.text` est quasi blanc : le contenu
 // devenait illisible (texte très clair sur fond blanc). On emploie les jetons
 // `C.card`/`C.bg` déjà définis pour les deux thèmes.
-const createStyles = (C: ReturnType<typeof getThemeColors>, T: ReturnType<typeof getThemeText>) => StyleSheet.create({
+const createStyles = (C: ReturnType<typeof getThemeColors>, T: ReturnType<typeof getThemeText>, themeMode: ThemeMode) => StyleSheet.create({
   bgImage: { flex: 1 },
-  container: { flex: 1, backgroundColor: 'transparent' },
+  container: { flex: 1, backgroundColor: screenBackdropColor(themeMode) },
   scroll: { flex: 1 },
   content: { padding: 16, gap: 12, paddingBottom: 28 },
   headerRow: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center' },
   settingsButton: { width: 36, height: 36, borderRadius: 18, backgroundColor: C.card, alignItems: 'center', justifyContent: 'center' },
   title: { fontSize: 28, fontWeight: '800', color: C.text },
   subtitle: { marginTop: 4, ...T.secondary },
-  mockText: { ...T.tertiary, opacity: 0.85 },
   summaryGrid: { flexDirection: 'row', gap: 8 },
   summaryCard: { flex: 1, backgroundColor: C.card, borderRadius: 12, padding: 12, gap: 6 },
   summaryCardHeader: { flexDirection: 'row', alignItems: 'center', gap: 6 },
   summaryIconBadge: { width: 20, height: 20, borderRadius: 10, alignItems: 'center', justifyContent: 'center', backgroundColor: '#DCFCE7' },
   summaryLabel: { ...T.secondarySmall },
   summaryValue: { color: C.text, fontSize: 23, fontWeight: '800' },
-  urgentValue: { color: '#15803d' },
+  urgentValue: { color: themeMode === 'dark' ? C.primary : '#15803d' },
   sectionCard: { backgroundColor: C.card, borderRadius: 14, padding: 13, gap: 8, ...shadowSm },
   recipesCard: { backgroundColor: C.card, borderRadius: 14, padding: 13, gap: 8 },
   sectionHeader: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between' },
   sectionTitleRow: { flexDirection: 'row', alignItems: 'center', gap: 8 },
   sectionDot: { width: 10, height: 10, borderRadius: 5 },
   sectionTitle: { fontSize: 17, fontWeight: '700', color: C.text },
-  linkText: { color: '#166534', fontWeight: '700', fontSize: 13 },
+  linkText: { color: C.primaryText, fontWeight: '700', fontSize: 13 },
   emptyText: { ...T.secondary, paddingVertical: 8 },
   rowItem: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', paddingVertical: 5, gap: 8 },
   rowMain: { flexDirection: 'row', alignItems: 'center', gap: 10, flex: 1 },
   rowText: { flex: 1 },
-  squareThumb: { width: 42, height: 42, borderRadius: 10, backgroundColor: '#F3F4F6', overflow: 'hidden', alignItems: 'center', justifyContent: 'center' },
+  squareThumb: { width: 42, height: 42, borderRadius: 10, backgroundColor: C.surfaceMuted, overflow: 'hidden', alignItems: 'center', justifyContent: 'center' },
   squareThumbImage: { width: '100%', height: '100%' },
   rowTitle: { fontSize: 15, color: C.text, fontWeight: '600' },
   rowMeta: { ...T.secondarySmall, marginTop: 2 },
@@ -241,5 +258,5 @@ const createStyles = (C: ReturnType<typeof getThemeColors>, T: ReturnType<typeof
   recipeRow: { paddingVertical: 5 },
   recipeMeta: { ...T.secondarySmall, marginTop: 2 },
   tipInline: { flexDirection: 'row', gap: 7, alignItems: 'center', paddingVertical: 2 },
-  tipText: { flex: 1, color: '#166534', fontSize: 12, fontWeight: '600' },
+  tipText: { flex: 1, color: C.primaryText, fontSize: 12, fontWeight: '600' },
 });

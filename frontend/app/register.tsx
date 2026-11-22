@@ -17,6 +17,7 @@ import { useRouter } from 'expo-router';
 import Ionicons from '@expo/vector-icons/Ionicons';
 import { useAuthStore } from '../store/authStore';
 import { useLanguageStore } from '../store/languageStore';
+import { getErrorMessage } from '../utils/errorDetails';
 
 function checkPassword(password: string) {
   return {
@@ -74,13 +75,13 @@ export default function RegisterScreen() {
     try {
       const result = await register(email.trim().toLowerCase(), password);
       router.replace(`/email-sent?email=${encodeURIComponent(result.email)}` as any);
-    } catch (err: any) {
+    } catch (err: unknown) {
       setLocalError(
-        err.message?.includes('already') || err.message?.includes('409')
+        getErrorMessage(err)?.includes('already') || getErrorMessage(err)?.includes('409')
           ? (fr ? 'Cette adresse email est déjà utilisée.' : 'This email is already registered.')
-          : err.message?.includes('WEAK_PASSWORD')
+          : getErrorMessage(err)?.includes('WEAK_PASSWORD')
           ? (fr ? 'Mot de passe trop faible.' : 'Password too weak.')
-          : err.message || (fr ? "Erreur lors de l'inscription." : 'Registration failed.')
+          : getErrorMessage(err) || (fr ? "Erreur lors de l'inscription." : 'Registration failed.')
       );
     } finally {
       setIsLoading(false);

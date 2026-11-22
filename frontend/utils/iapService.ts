@@ -10,12 +10,12 @@ import {
   type ProductSubscription,
   type PurchaseError,
 } from 'react-native-iap';
-
-type SubscriptionPurchase = any;
 import { Platform } from 'react-native';
 
 import { logger } from './logger';
 import { processPurchaseUpdate } from './purchaseAcknowledgement';
+
+type SubscriptionPurchase = any;
 
 export const PREMIUM_SKU = 'premium_monthly';
 
