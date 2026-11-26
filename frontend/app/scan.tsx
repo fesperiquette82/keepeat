@@ -167,6 +167,7 @@ export default function ScanScreen() {
       {/* Bottom Actions */}
       <View style={styles.bottomActions}>
         <TouchableOpacity
+          testID="scan-manual-toggle"
           style={[styles.actionBtn, showManualInput && styles.actionBtnActive]}
           onPress={() => setShowManualInput(!showManualInput)}
         >

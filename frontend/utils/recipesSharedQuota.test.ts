@@ -38,3 +38,44 @@ test('fetchSuggestions déclenche le paywall sur une erreur premium/quota (429/4
   assert.match(src, /extractPremiumErrorDetail\(error\)/);
   assert.match(src, /usePremiumUiStore\.getState\(\)\.openPaywall\(premiumError\)/);
 });
+
+// ---------------------------------------------------------------------------
+// BUG-106 — l'accueil appelait fetchSuggestions('expiryDay') sans countUsage :
+// chaque ouverture de l'app consommait le quota gratuit (8/mois). Une fois le
+// quota épuisé, le 429 ouvrait l'écran Premium à chaque lancement, sans que
+// l'utilisateur ait jamais ouvert l'onglet Recettes. Seul cet écran compte.
+// ---------------------------------------------------------------------------
+
+function listSources(relativeDir: string): string[] {
+  const dir = path.join(repoRoot, relativeDir);
+  if (!fs.existsSync(dir)) return [];
+  const files: string[] = [];
+  for (const entry of fs.readdirSync(dir, { withFileTypes: true })) {
+    const relative = path.join(relativeDir, entry.name);
+    if (entry.isDirectory()) {
+      if (entry.name !== 'node_modules') files.push(...listSources(relative));
+    } else if (/\.tsx?$/.test(entry.name) && !/\.test\.tsx?$/.test(entry.name)) {
+      files.push(relative);
+    }
+  }
+  return files;
+}
+
+test("l'accueil affiche ses recettes sans consommer le quota (BUG-106)", () => {
+  const home = readSource('app/(tabs)/index.tsx');
+  assert.match(home, /fetchSuggestions\('expiryDay',\s*false\)/);
+});
+
+test("seul l'écran Recettes consomme le quota en appelant fetchSuggestions (BUG-106)", () => {
+  const counting: string[] = [];
+  for (const file of ['app', 'component', 'data', 'store', 'utils'].flatMap(listSources)) {
+    const source = readSource(file);
+    const calls = /fetchSuggestions\(([^)]*)\)/g;
+    let match: RegExpExecArray | null;
+    while ((match = calls.exec(source)) !== null) {
+      const args = match[1].split(',').map((arg) => arg.trim());
+      if (args[1] !== 'false') counting.push(`${file.split(path.sep).join('/')}: ${match[0]}`);
+    }
+  }
+  assert.deepEqual(counting, ['app/(tabs)/recipes.tsx: fetchSuggestions(activeFilter)']);
+});

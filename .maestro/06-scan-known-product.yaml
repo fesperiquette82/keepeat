@@ -4,6 +4,10 @@ appId: com.fesperiquette.keepeat
 - runFlow: helpers/ensure-authenticated.yaml
 - tapOn:
     id: tab-scan
+# BUG-107 : l'écran Scan s'ouvre sur la caméra ; le champ code-barres
+# n'apparaît qu'après « Saisie manuelle ».
+- tapOn:
+    id: scan-manual-toggle
 - tapOn:
     id: scan-manual-barcode-input
 - inputText: 3017620422003

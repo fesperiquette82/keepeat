@@ -72,7 +72,11 @@ export default function HomeDashboardScreen() {
     let cancelled = false;
     const loadHomeRecipes = async () => {
       try {
-        const backendRecipesOnHome = await fetchSuggestions('expiryDay');
+        // BUG-106 : affichage passif, il ne consomme pas le quota « recettes
+        // suggérées » (8/mois en gratuit). Seul l'onglet Recettes compte
+        // (BUG-048) ; sinon chaque ouverture de l'app entamait le quota, puis
+        // l'écran Premium s'ouvrait de lui-même à chaque lancement.
+        const backendRecipesOnHome = await fetchSuggestions('expiryDay', false);
         if (cancelled) return;
         setRecipesOnHome(backendRecipesOnHome.slice(0, 4));
         logger.debug('[RECIPES_MATCH] home suggestions diagnostics', {

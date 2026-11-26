@@ -615,6 +615,52 @@ def test_bug_105_a_failed_pr_resolution_still_disarms_auto_merge():
     assert workflow.rstrip().endswith('|| echo "No armed auto-merge to disable."'), "la désactivation reste la dernière étape"
 
 
+def test_bug_106_e2e_login_helper_passes_onboarding_without_weakening():
+    """BUG-106 : le scénario 03 (stock vide) arrive, après connexion, sur
+    l'onboarding voulu par BUG-043. L'aide de connexion attendait seulement
+    les onglets et échouait. Elle attend désormais les onglets OU
+    l'onboarding, le passe (« Plus tard »), et garde l'assertion finale
+    stricte sur les onglets, sans étape facultative."""
+    helper = Path(".maestro/helpers/ensure-authenticated.yaml").read_text(encoding="utf-8")
+
+    either = helper.index('id: "tab-home|onboarding-skip"')
+    skip = helper.index("      - tapOn:\n          id: onboarding-skip")
+    final = helper.rindex("- assertVisible:\n    id: tab-home")
+    assert either < skip < final
+    assert helper.rstrip().endswith("- assertVisible:\n    id: tab-home")
+    assert "optional: true" not in helper
+
+
+def test_bug_107_maestro_scenarios_follow_the_current_screens():
+    """BUG-107 : la suite nocturne échouait aussi sur des écrans qui avaient
+    changé. L'écran Scan s'ouvre sur la caméra : le champ code-barres
+    n'apparaît qu'après « Saisie manuelle » (scénarios 06 à 08). Le bouton
+    Enregistrer de l'ajout est en bas du formulaire, sous le clavier
+    (scénario 04). En cas d'échec, le lanceur écrit l'écran dans le journal."""
+    scan = Path("frontend/app/scan.tsx").read_text(encoding="utf-8")
+    toggle = scan.index('testID="scan-manual-toggle"')
+    assert scan.index("onPress={() => setShowManualInput(!showManualInput)}", toggle) - toggle < 200
+
+    flows = sorted(Path(".maestro").glob("*.yaml"))
+    barcode_flows = [flow for flow in flows if "id: scan-manual-barcode-input" in flow.read_text(encoding="utf-8")]
+    assert len(barcode_flows) == 3
+    for flow in barcode_flows:
+        text = flow.read_text(encoding="utf-8")
+        assert text.index("id: scan-manual-toggle") < text.index("id: scan-manual-barcode-input"), flow.name
+
+    add = Path(".maestro/04-stock-add-manual-product.yaml").read_text(encoding="utf-8")
+    tap_save = add.index("- tapOn:\n    id: add-product-save-button")
+    assert add.index("- hideKeyboard") < add.index("- scrollUntilVisible:") < tap_save
+    assert "assertVisible:\n    id: tab-stock" in add[tap_save:]
+
+    runner = Path("scripts/run-maestro-e2e.sh").read_text(encoding="utf-8")
+    failure = runner.split('echo "❌ Maestro flow failed: $flow_name"')[1].split("\ndone\n")[0]
+    assert "uiautomator dump" in failure
+    assert 'python3 scripts/e2e-ui-dump.py "maestro-results/$flow_name/ui-on-failure.xml"' in failure
+    for flow in [*barcode_flows, Path(".maestro/04-stock-add-manual-product.yaml")]:
+        assert "optional: true" not in flow.read_text(encoding="utf-8"), flow.name
+
+
 def test_review_gate_script_runs_without_installing_anything():
     """BUG-097 : le workflow exécute le verrou sur un runner nu, sans
     `pip install`. Une dépendance tierce le ferait échouer, donc refuser

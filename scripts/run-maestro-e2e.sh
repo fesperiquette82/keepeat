@@ -356,6 +356,17 @@ for flow_file in "${FLOW_FILES[@]}"; do
     FLOW_RESULTS_FAILED=$((FLOW_RESULTS_FAILED + 1))
     echo "==> adb devices state on failure"
     adb devices -l || true
+    # BUG-107 : les captures d'écran ne sont lisibles qu'en téléchargeant les
+    # artefacts. Les éléments à l'écran (identifiant, texte) vont aussi dans
+    # le journal, pour diagnostiquer un échec à distance.
+    echo "==> UI on failure (bounds | id | text | content-desc)"
+    adb shell am force-stop dev.mobile.maestro >/dev/null 2>&1 || true
+    if adb shell uiautomator dump /sdcard/keepeat-ui.xml >/dev/null 2>&1 \
+      && adb exec-out cat /sdcard/keepeat-ui.xml > "maestro-results/$flow_name/ui-on-failure.xml" 2>/dev/null; then
+      python3 scripts/e2e-ui-dump.py "maestro-results/$flow_name/ui-on-failure.xml" | head -n 150 || true
+    else
+      echo "  (uiautomator dump unavailable)"
+    fi
     echo "==> Capturing emulator logcat on failure"
     adb logcat -d > emulator-logcat.txt || true
     echo "==> Current Maestro results tree"

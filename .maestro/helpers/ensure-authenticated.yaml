@@ -36,10 +36,21 @@ appId: com.fesperiquette.keepeat
       - waitForAnimationToEnd
       - tapOn:
           id: login-submit-button
-      - extendedWaitUntil:
-          visible:
-            id: tab-home
-          timeout: 60000
+
+# Fin de la connexion : les onglets, ou l'onboarding. Un compte au stock vide
+# (scénario 03) arrive sur l'onboarding, comme voulu (BUG-043) : on le passe,
+# comme le ferait l'utilisateur avec « Plus tard » (BUG-106).
+- extendedWaitUntil:
+    visible:
+      id: "tab-home|onboarding-skip"
+    timeout: 120000
+- runFlow:
+    when:
+      visible:
+        id: onboarding-skip
+    commands:
+      - tapOn:
+          id: onboarding-skip
 
 # Filet de sécurité : attendre la home (lenteur émulateur CI + warm-up backend).
 - extendedWaitUntil:
