@@ -147,11 +147,11 @@ inachevée. Le chronomètre tourne pendant que le reste avance.
       (erreurs « [object Object] », onboarding imposé sur un nouvel appareil,
       onglet Statistiques inutilisable en gratuit). Rien à faire de votre côté ;
       la suite complète nocturne tournera après la fusion de la PR.
-      **Point du 26/11** : la suite complète nocturne tourne mais reste rouge
-      (3 scénarios sur 15). Six échecs venaient d'un vrai défaut de l'app
-      (BUG-106, corrigé) ; le scénario 03 de l'onboarding non passé ; les
-      scénarios 04 à 08 (ajout, édition, saisie manuelle du code-barres)
-      restent à analyser.
+      **Point du 26/11** : la suite complète nocturne était rouge (3 scénarios
+      sur 15). Six échecs venaient d'un vrai défaut de l'app (BUG-106), les
+      autres de scénarios désalignés des écrans (BUG-107). Corrigé dans la
+      PR #175 : **suite complète verte, 15 sur 15**, une première depuis fin
+      août ; elle le sera chaque nuit sur `main` une fois la PR fusionnée.
 - [ ] **Faire un nouveau build EAS pour livrer BUG-106** aux téléphones
       (`eas build --platform android --profile preview`, cf. « Distribuer
       l'app »). Sans lui, un utilisateur gratuit qui ouvre l'app 8 fois dans
