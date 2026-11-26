@@ -44,6 +44,7 @@ Jamais relancés : `ci.yml` et `admin-dashboard-monitoring.yml` (pas de lancemen
 - Deux exécutions concurrentes : une seule fusionne et lance la suite ; l'autre l'annonce par un avertissement.
 - Si l'étape a échoué, ou si l'avertissement « déjà fusionnée » apparaît sans qu'une autre exécution ait lancé la suite : lancer à la main, depuis l'onglet Actions, « Main/Release post-merge checks », « Deploy Render Backend » (si la PR touche le back-end) et « Build Android APKs ».
 - Une fusion à la main (bouton GitHub) déclenche ces workflows normalement, comme avant.
+- File de fusion (merge queue) : aucune n'est exigée sur `main` (ni protection de branche, ni ruleset ; le `merge_group:` de `ci.yml` n'est qu'un déclencheur inactif). Si une file est activée un jour, GitHub refusera la fusion directe : l'étape échouera en rouge et la PR restera ouverte, sans fusion non contrôlée. Il faudra alors faire passer la fusion par la file et lancer la suite une fois la fusion faite (remarque de Codex sur la PR #174).
 - Le contrôle de production (`production-health-check.yml`, toutes les 15 minutes) signale un back-end en production plus ancien que le dernier commit back-end de `main`.
 
 ## Sécurité

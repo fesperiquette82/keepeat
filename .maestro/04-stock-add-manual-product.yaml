@@ -11,6 +11,13 @@ appId: com.fesperiquette.keepeat
 - tapOn:
     id: add-product-name-input
 - inputText: Courgette test
+# BUG-107 : le bouton est en bas du formulaire ; clavier ouvert, il est hors
+# de l'écran. Fermer le clavier et défiler, comme le ferait l'utilisateur.
+- hideKeyboard
+- scrollUntilVisible:
+    element:
+      id: add-product-save-button
+    direction: DOWN
 - tapOn:
     id: add-product-save-button
 - assertVisible:

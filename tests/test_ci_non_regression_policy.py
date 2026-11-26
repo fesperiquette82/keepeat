@@ -615,6 +615,118 @@ def test_bug_105_a_failed_pr_resolution_still_disarms_auto_merge():
     assert workflow.rstrip().endswith('|| echo "No armed auto-merge to disable."'), "la désactivation reste la dernière étape"
 
 
+def test_bug_106_e2e_login_helper_passes_onboarding_without_weakening():
+    """BUG-106 : le scénario 03 (stock vide) arrive, après connexion, sur
+    l'onboarding voulu par BUG-043. L'aide de connexion attendait seulement
+    les onglets et échouait. Elle attend désormais les onglets OU
+    l'onboarding, le passe (« Plus tard »), et garde l'assertion finale
+    stricte sur les onglets, sans étape facultative."""
+    helper = Path(".maestro/helpers/ensure-authenticated.yaml").read_text(encoding="utf-8")
+
+    either = helper.index('id: "tab-home|onboarding-skip"')
+    skip = helper.index("      - tapOn:\n          id: onboarding-skip")
+    final = helper.rindex("- assertVisible:\n    id: tab-home")
+    assert either < skip < final
+    assert helper.rstrip().endswith("- assertVisible:\n    id: tab-home")
+    assert "optional: true" not in helper
+
+
+def _taps_after_closing_keyboard(flow_text: str, button_id: str, *, scroll: bool) -> bool:
+    """Chaque appui sur `button_id` suit, depuis la dernière saisie, la
+    fermeture du clavier (et le défilement jusqu'au bouton si demandé)."""
+    tap = f"- tapOn:\n    id: {button_id}\n"
+    segments = flow_text.split(tap)[:-1]
+    if not segments:
+        return False
+    for before in segments:
+        since_input = before.rsplit("- inputText:", 1)[-1]
+        if "- hideKeyboard" not in since_input:
+            return False
+        if scroll and f"- scrollUntilVisible:\n    element:\n      id: {button_id}" not in since_input:
+            return False
+    return True
+
+
+def test_bug_107_maestro_scenarios_follow_the_current_screens():
+    """BUG-107 : la suite nocturne échouait aussi sur des écrans qui avaient
+    changé. L'écran Scan s'ouvre sur la caméra : le champ code-barres
+    n'apparaît qu'après « Saisie manuelle » (06 à 08). Les boutons
+    Enregistrer sont sous le clavier ouvert : en bas du formulaire d'ajout
+    (04, 14), en pied d'écran de l'édition (05). La recherche d'un code-barres
+    ouvre le formulaire d'ajout (08). En cas d'échec, le lanceur écrit
+    l'écran dans le journal."""
+    scan = Path("frontend/app/scan.tsx").read_text(encoding="utf-8")
+    toggle = scan.index('testID="scan-manual-toggle"')
+    assert scan.index("onPress={() => setShowManualInput(!showManualInput)}", toggle) - toggle < 200
+    add_product = Path("frontend/app/add-product.tsx").read_text(encoding="utf-8")
+    assert 'testID="add-product-back-button"' in add_product
+    assert "'add-product-lookup-not-found'" in add_product
+
+    flows = {flow.name: flow.read_text(encoding="utf-8") for flow in sorted(Path(".maestro").glob("*.yaml"))}
+    barcode_flows = [name for name, text in flows.items() if "id: scan-manual-barcode-input" in text]
+    assert len(barcode_flows) == 3
+    for name in barcode_flows:
+        assert flows[name].index("id: scan-manual-toggle") < flows[name].index("id: scan-manual-barcode-input"), name
+
+    add_flows = [name for name, text in flows.items() if "id: add-product-save-button" in text]
+    assert add_flows == ["04-stock-add-manual-product.yaml", "14-stock-swipe-delete-consecutive.yaml"]
+    for name in add_flows:
+        assert _taps_after_closing_keyboard(flows[name], "add-product-save-button", scroll=True), name
+    assert _taps_after_closing_keyboard(flows["05-stock-edit-product.yaml"], "edit-product-save-button", scroll=False)
+
+    def in_order(flow_text: str, steps: list[str]) -> bool:
+        """Les étapes apparaissent dans cet ordre (chacune après la précédente)."""
+        position = 0
+        for step in steps:
+            position = flow_text.find(step, position)
+            if position < 0:
+                return False
+            position += len(step)
+        return True
+
+    assert in_order(flows["08-scan-401-does-not-logout.yaml"], [
+        "id: scan-manual-search-button",
+        "id: add-product-lookup-not-found",
+        "- assertNotVisible:\n    id: login-email-input",
+        "id: add-product-back-button",
+        "id: scan-back-button",
+        "- assertVisible:\n    id: tab-home",
+    ])
+    # L'édition se confirme par une alerte dont le bouton ramène à la fiche.
+    assert in_order(flows["05-stock-edit-product.yaml"], [
+        "id: edit-product-save-button",
+        'id: "android:id/button1"',
+        "- assertVisible:\n    id: stock-item-edit-button",
+    ])
+    # Les articles ajoutés sont hors de l'écran dans l'ordre par péremption,
+    # et la liste ne défile pas sous le geste de Maestro : trier par ajout
+    # récent avant de vérifier qu'ils sont là, puis les supprimer.
+    assert in_order(flows["14-stock-swipe-delete-consecutive.yaml"], [
+        "- tapOn:\n    id: tab-stock",
+        "- tapOn:\n    id: stock-sort-recent",
+        "- assertVisible:\n    text: Swipe Alpha",
+        "- assertVisible:\n    text: Swipe Beta",
+        "      text: Swipe Alpha\n    direction: LEFT",
+        "      text: Swipe Beta\n    direction: LEFT",
+    ])
+    stock_screen = Path("frontend/app/(tabs)/stock.tsx").read_text(encoding="utf-8")
+    assert "testID={`stock-sort-${sort.key}`}" in stock_screen
+    assert "{ key: 'recent', label: 'Ajout récent' }" in stock_screen
+    assert 'testID="scan-back-button"' in scan
+
+    for name in [*barcode_flows, *add_flows, "05-stock-edit-product.yaml"]:
+        assert "optional: true" not in flows[name], name
+
+    runner = Path("scripts/run-maestro-e2e.sh").read_text(encoding="utf-8")
+    failure = runner.split('echo "❌ Maestro flow failed: $flow_name"')[1].split("\ndone\n")[0]
+    assert "uiautomator dump" in failure
+    # Le résultat JUnit d'un scénario est le fichier maestro-results/<nom> :
+    # le diagnostic s'écrit à côté, pas dedans.
+    assert 'python3 scripts/e2e-ui-dump.py "maestro-results/${flow_name}-ui-on-failure.xml"' in failure
+    assert 'maestro-results/$flow_name/' not in failure
+    assert '--output "maestro-results/$flow_name"' in runner
+
+
 def test_review_gate_script_runs_without_installing_anything():
     """BUG-097 : le workflow exécute le verrou sur un runner nu, sans
     `pip install`. Une dépendance tierce le ferait échouer, donc refuser

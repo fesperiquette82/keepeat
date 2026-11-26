@@ -1053,6 +1053,10 @@ async def test_reset_data():
     collections = [stock_col, products_cache_col, receipt_tickets_col, business_events_col, service_usage_logs_col]
     for collection in collections:
         await collection.delete_many({})
+    # BUG-106 : les comptes de test gardent le même identifiant d'un scénario
+    # à l'autre (upsert par e-mail) ; sans cela, leurs quotas mensuels
+    # s'épuisaient au fil de la suite et l'écran Premium s'ouvrait au milieu.
+    await app_state_col.delete_many({"_id": {"$regex": "^usage:"}})
     await users_col.delete_many({"email": {"$regex": "@keepeat\\.test$"}})
     return {"ok": True, "action": "reset"}
 

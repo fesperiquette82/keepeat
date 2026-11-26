@@ -147,6 +147,16 @@ inachevée. Le chronomètre tourne pendant que le reste avance.
       (erreurs « [object Object] », onboarding imposé sur un nouvel appareil,
       onglet Statistiques inutilisable en gratuit). Rien à faire de votre côté ;
       la suite complète nocturne tournera après la fusion de la PR.
+      **Point du 26/11** : la suite complète nocturne était rouge (3 scénarios
+      sur 15). Six échecs venaient d'un vrai défaut de l'app (BUG-106), les
+      autres de scénarios désalignés des écrans (BUG-107). Corrigé dans la
+      PR #175 : **suite complète verte, 15 sur 15**, une première depuis fin
+      août ; elle le sera chaque nuit sur `main` une fois la PR fusionnée.
+- [ ] **Faire un nouveau build EAS pour livrer BUG-106** aux téléphones
+      (`eas build --platform android --profile preview`, cf. « Distribuer
+      l'app »). Sans lui, un utilisateur gratuit qui ouvre l'app 8 fois dans
+      le mois voit l'écran Premium s'ouvrir seul à chaque lancement, jusqu'au
+      1er du mois suivant. Le serveur ne peut pas corriger cela seul.
 - [x] **Épingler les dépendances backend** — fait le 12/11 (BUG-081, PR #173) :
       `requirements.txt` épinglé, `pip-audit` en CI.
 - [ ] **Regarder le thème sombre sur un vrai appareil.** Il était illisible sur

@@ -16,6 +16,12 @@ appId: com.fesperiquette.keepeat
 - tapOn:
     id: add-product-name-input
 - inputText: Swipe Alpha
+# BUG-107 : bouton en bas du formulaire, hors de l'écran clavier ouvert.
+- hideKeyboard
+- scrollUntilVisible:
+    element:
+      id: add-product-save-button
+    direction: DOWN
 - tapOn:
     id: add-product-save-button
 - tapOn:
@@ -27,11 +33,23 @@ appId: com.fesperiquette.keepeat
 - tapOn:
     id: add-product-name-input
 - inputText: Swipe Beta
+# BUG-107 : bouton en bas du formulaire, hors de l'écran clavier ouvert.
+- hideKeyboard
+- scrollUntilVisible:
+    element:
+      id: add-product-save-button
+    direction: DOWN
 - tapOn:
     id: add-product-save-button
 # --- Aller au stock : les deux articles sont visibles ---
 - tapOn:
     id: tab-stock
+# BUG-107 : triés par péremption, les deux articles ajoutés (sans date)
+# viennent après ceux du jeu de test, hors de l'écran sur un petit téléphone,
+# et la liste ne défile pas sous le geste de Maestro. Trier par ajout récent
+# les place en tête, quelle que soit la taille de l'écran.
+- tapOn:
+    id: stock-sort-recent
 - assertVisible:
     text: Swipe Alpha
 - assertVisible:

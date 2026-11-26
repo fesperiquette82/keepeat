@@ -325,6 +325,7 @@ export default function StockScreen() {
             return (
               <TouchableOpacity
                 key={sort.key}
+                testID={`stock-sort-${sort.key}`}
                 style={[styles.sortChip, selected && styles.sortChipActive]}
                 onPress={() => setActiveSort(sort.key)}
               >

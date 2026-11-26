@@ -4,10 +4,29 @@ appId: com.fesperiquette.keepeat
 - runFlow: helpers/ensure-authenticated.yaml
 - tapOn:
     id: tab-scan
+# BUG-107 : l'écran Scan s'ouvre sur la caméra ; le champ code-barres
+# n'apparaît qu'après « Saisie manuelle ».
+- tapOn:
+    id: scan-manual-toggle
 - tapOn:
     id: scan-manual-barcode-input
 - inputText: 4010000000000
 - tapOn:
     id: scan-manual-search-button
+# BUG-107 : la recherche ouvre le formulaire d'ajout, où le produit est
+# cherché ; son 401 ne doit pas déconnecter. La recherche se termine (produit
+# introuvable), l'écran de connexion n'apparaît pas, et le retour ramène aux
+# onglets : la session est intacte.
+- extendedWaitUntil:
+    visible:
+      id: add-product-lookup-not-found
+    timeout: 30000
+- assertNotVisible:
+    id: login-email-input
+- tapOn:
+    id: add-product-back-button
+# L'écran Scan s'ouvre par-dessus les onglets : un second retour y ramène.
+- tapOn:
+    id: scan-back-button
 - assertVisible:
     id: tab-home
