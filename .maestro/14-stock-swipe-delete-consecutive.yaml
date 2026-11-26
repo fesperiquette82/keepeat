@@ -44,18 +44,14 @@ appId: com.fesperiquette.keepeat
 # --- Aller au stock : les deux articles sont visibles ---
 - tapOn:
     id: tab-stock
-# BUG-107 : les deux articles ajoutés viennent après ceux du jeu de test ;
-# sur un petit écran, ils sont plus bas dans la liste.
-- scrollUntilVisible:
-    element:
-      text: Swipe Alpha
-    direction: DOWN
+# BUG-107 : triés par péremption, les deux articles ajoutés (sans date)
+# viennent après ceux du jeu de test, hors de l'écran sur un petit téléphone,
+# et la liste ne défile pas sous le geste de Maestro. Trier par ajout récent
+# les place en tête, quelle que soit la taille de l'écran.
+- tapOn:
+    id: stock-sort-recent
 - assertVisible:
     text: Swipe Alpha
-- scrollUntilVisible:
-    element:
-      text: Swipe Beta
-    direction: DOWN
 - assertVisible:
     text: Swipe Beta
 # --- 1ère suppression par swipe ---

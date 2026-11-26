@@ -698,15 +698,20 @@ def test_bug_107_maestro_scenarios_follow_the_current_screens():
         'id: "android:id/button1"',
         "- assertVisible:\n    id: stock-item-edit-button",
     ])
-    # Les articles ajoutés sont plus bas dans la liste : défiler avant de
-    # vérifier qu'ils sont là, puis les supprimer.
+    # Les articles ajoutés sont hors de l'écran dans l'ordre par péremption,
+    # et la liste ne défile pas sous le geste de Maestro : trier par ajout
+    # récent avant de vérifier qu'ils sont là, puis les supprimer.
     assert in_order(flows["14-stock-swipe-delete-consecutive.yaml"], [
-        "- scrollUntilVisible:\n    element:\n      text: Swipe Alpha",
+        "- tapOn:\n    id: tab-stock",
+        "- tapOn:\n    id: stock-sort-recent",
         "- assertVisible:\n    text: Swipe Alpha",
-        "- scrollUntilVisible:\n    element:\n      text: Swipe Beta",
         "- assertVisible:\n    text: Swipe Beta",
         "      text: Swipe Alpha\n    direction: LEFT",
+        "      text: Swipe Beta\n    direction: LEFT",
     ])
+    stock_screen = Path("frontend/app/(tabs)/stock.tsx").read_text(encoding="utf-8")
+    assert "testID={`stock-sort-${sort.key}`}" in stock_screen
+    assert "{ key: 'recent', label: 'Ajout récent' }" in stock_screen
     assert 'testID="scan-back-button"' in scan
 
     for name in [*barcode_flows, *add_flows, "05-stock-edit-product.yaml"]:
