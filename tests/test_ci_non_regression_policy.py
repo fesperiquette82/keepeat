@@ -483,7 +483,8 @@ def test_auto_merge_workflow_requires_explicit_critical_success_checks():
     assert "Critical checks gate failed" in workflow
     assert "mergeStateStatus" not in workflow
     assert "Ready to merge" not in workflow
-    assert "--auto --squash" in workflow
+    assert 'gh api -X PUT "repos/$REPO/pulls/$PR_NUMBER/merge"' in workflow
+    assert "merge_method=squash" in workflow
     assert "git push origin" not in workflow
 
 
@@ -509,7 +510,7 @@ def test_auto_merge_waits_for_the_review_of_codex_touched_prs():
     assert 'python3 scripts/ci/codex_fix_review_gate.py --repo "$REPO" --pr "$PR_NUMBER" --owner "$REPO_OWNER"' in review
     assert "REPO_OWNER: ${{ github.repository_owner }}" in review
     assert "continue-on-error" not in workflow
-    assert workflow.index("id: review") < workflow.index("--auto --squash")
+    assert workflow.index("id: review") < workflow.index("id: merge")
 
     # Le script exécuté est celui de main : une PR ne réécrit pas son verrou.
     checkout = _workflow_step(workflow, "Checkout the trusted review gate from main (never the PR head)")
@@ -520,18 +521,20 @@ def test_auto_merge_waits_for_the_review_of_codex_touched_prs():
     for pr_controlled_ref in ("pull_request.head", "github.head_ref"):
         assert pr_controlled_ref not in workflow
 
-    # L'activation exige les checks verts ET la relecture, pour ce commit précis.
-    enable = _workflow_step(workflow, "Enable auto-merge after strict critical checks gate")
-    assert "steps.pr.outputs.should_run == 'true' &&" in enable
-    assert "steps.gate.outputs.all_ok == 'true' &&" in enable
-    assert "steps.review.outputs.review_ok == 'true' &&" in enable
-    assert "steps.review.outputs.reviewed_head_sha == steps.pr.outputs.head_sha" in enable
-    assert '--auto --squash --match-head-commit "$HEAD_SHA"' in enable
-    assert workflow.count("--auto --squash") == 1, "une seule commande peut armer l'auto-merge"
+    # La fusion exige les checks verts ET la relecture, pour ce commit précis.
+    merge = _workflow_step(workflow, "Merge after strict critical checks gate")
+    assert "steps.pr.outputs.should_run == 'true' &&" in merge
+    assert "steps.gate.outputs.all_ok == 'true' &&" in merge
+    assert "steps.review.outputs.review_ok == 'true' &&" in merge
+    assert "steps.review.outputs.reviewed_head_sha == steps.pr.outputs.head_sha" in merge
+    assert '-f merge_method=squash -f sha="$HEAD_SHA"' in merge
+    assert workflow.count("/merge\"") == 1, "une seule commande peut fusionner"
+    for line in re.findall(r"gh pr merge [^\n]*", workflow):
+        assert "--disable-auto" in line, "gh pr merge ne sert plus qu'à désarmer"
 
     # Refus par défaut : une étape en échec ne laisse aucun auto-merge armé.
     disarm = _workflow_step(workflow, "Disarm auto-merge when a gate step failed")
-    assert "if: failure() && steps.pr.outputs.should_run == 'true'" in disarm
+    assert "        if: failure()\n" in disarm
     assert "--disable-auto" in disarm
 
     # Un verdict de relecture, ou une étiquette posée, relance le verrou.
@@ -547,6 +550,69 @@ def test_auto_merge_waits_for_the_review_of_codex_touched_prs():
     assert workflow.count("github.event.comment") == 2
     assert workflow.rindex("github.event.comment") < workflow.index("runs-on:")
     assert 'PR_NUMBER="${{ github.event.issue.number }}"' in workflow
+
+
+def test_bug_104_auto_merge_launches_post_merge_workflows_after_its_own_merge():
+    """BUG-104 : une fusion faite avec le GITHUB_TOKEN ne déclenche aucun
+    workflow « push ». Après la fusion automatique de la PR #173, ni le
+    déploiement du back-end, ni les contrôles post-fusion, ni l'APK n'ont
+    tourné. Le workflow fusionne donc lui-même (plus de --auto, dont la fusion
+    arriverait après lui) puis lance ces workflows. Choix des workflows testé
+    dans tests/test_post_merge_dispatch.py."""
+    workflow = Path(".github/workflows/auto-merge-pr.yml").read_text(encoding="utf-8")
+
+    assert re.search(r"\s--auto\b", workflow) is None, "une fusion armée, faite plus tard par GitHub, ne lancerait rien"
+
+    # merged=true seulement quand CETTE exécution a fusionné : deux exécutions
+    # concurrentes ne lancent pas deux déploiements.
+    merge = _workflow_step(workflow, "Merge after strict critical checks gate")
+    assert "id: merge" in merge
+    assert merge.count("merged=true") == 1
+    assert merge.index('[ "$MERGED" = "true" ]') < merge.index("merged=true") < merge.index("elif")
+    assert 'exit 1' in merge.split("else")[-1], "une fusion refusée reste visible en rouge"
+
+    launch = _workflow_step(workflow, "Launch post-merge workflows (deploy, checks, APK)")
+    assert "if: steps.merge.outputs.merged == 'true'" in launch
+    assert 'python3 scripts/ci/post_merge_dispatch.py --repo "$REPO" --pr "$PR_NUMBER"' in launch
+    assert workflow.index("id: merge") < workflow.index("scripts/ci/post_merge_dispatch.py")
+
+    # Le script vient du checkout de main (scripts/ci), comme le verrou.
+    checkout = _workflow_step(workflow, "Checkout the trusted review gate from main (never the PR head)")
+    assert "scripts/ci" in checkout
+    assert Path("scripts/ci/post_merge_dispatch.py").is_file()
+
+    # Lancer un workflow exige la permission actions: write.
+    permissions = workflow.split("    permissions:\n")[1].split("    steps:")[0]
+    assert "actions: write" in permissions
+
+    # Une PR déjà fusionnée (retrouvée par le commit d'un workflow sur main)
+    # n'est plus évaluée.
+    resolve = _workflow_step(workflow, "Resolve eligible PR context")
+    assert 'if [ "$PR_STATE" != "open" ]; then' in resolve
+
+
+def test_bug_105_a_failed_pr_resolution_still_disarms_auto_merge():
+    """BUG-105 (relecture de Codex sur la PR #173) : la désactivation de
+    l'auto-merge exigeait `should_run == 'true'`, une sortie que l'étape de
+    résolution n'écrit qu'à sa fin. Une panne d'API pendant cette étape
+    laissait donc armé un auto-merge déjà armé : la PR pouvait fusionner sans
+    relecture de son nouveau commit. Comportement testé dans
+    tests/test_auto_merge_workflow_steps.py."""
+    workflow = Path(".github/workflows/auto-merge-pr.yml").read_text(encoding="utf-8")
+
+    disarm = _workflow_step(workflow, "Disarm auto-merge when a gate step failed")
+    condition = re.search(r"^        if: (.+)$", disarm, flags=re.MULTILINE)
+    assert condition is not None
+    assert condition.group(1) == "failure()", "aucune sortie d'une étape en échec dans la condition"
+    pr_number = re.search(r"^          PR_NUMBER: (.+)$", disarm, flags=re.MULTILINE)
+    assert pr_number is not None
+    sources = [part.strip() for part in pr_number.group(1).removeprefix("${{").removesuffix("}}").split("||")]
+    assert sources[0] == "steps.pr.outputs.pr_number"
+    assert "github.event.pull_request.number" in sources
+    assert "github.event.issue.number" in sources
+    assert all(source.endswith("number") for source in sources), "un numéro, jamais un texte de l'événement"
+    assert 'if [ -z "$PR_NUMBER" ]; then' in disarm
+    assert workflow.rstrip().endswith('|| echo "No armed auto-merge to disable."'), "la désactivation reste la dernière étape"
 
 
 def test_review_gate_script_runs_without_installing_anything():

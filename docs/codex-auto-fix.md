@@ -76,8 +76,9 @@ Un commentaire de PR, écrit sous le compte du propriétaire, contenant l’un d
 - Le dernier verdict posté pour ce SHA l’emporte (`changes-requested` retire une approbation).
 - Un verdict écrit par un autre compte, ou par l’intégration GitHub de Codex, ne compte pas.
 - Sans approbation : pas de fusion automatique, et un auto-merge déjà armé est désarmé.
+- Une étape du workflow en échec, y compris l’identification de la PR, désarme aussi un auto-merge armé (BUG-105).
 - Erreur d’API, script introuvable, liste de commits tronquée : refus, visible en rouge dans le workflow.
-- La fusion est demandée avec `--match-head-commit` : un commit poussé entre la relecture et la fusion fait échouer la commande.
+- La fusion est demandée pour le SHA relu (paramètre `sha` de l’API de fusion) : un commit poussé entre la relecture et la fusion la fait échouer.
 
 ### Qui relit
 Une session Claude à qui le propriétaire a demandé de suivre la PR (procédure dans `CLAUDE.md`), ou le propriétaire lui-même. Sans session ouverte, la PR attend : poster le marqueur à la main, ou fusionner à la main.
