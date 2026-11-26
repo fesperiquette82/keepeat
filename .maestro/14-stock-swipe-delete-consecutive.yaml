@@ -44,8 +44,18 @@ appId: com.fesperiquette.keepeat
 # --- Aller au stock : les deux articles sont visibles ---
 - tapOn:
     id: tab-stock
+# BUG-107 : les deux articles ajoutés viennent après ceux du jeu de test ;
+# sur un petit écran, ils sont plus bas dans la liste.
+- scrollUntilVisible:
+    element:
+      text: Swipe Alpha
+    direction: DOWN
 - assertVisible:
     text: Swipe Alpha
+- scrollUntilVisible:
+    element:
+      text: Swipe Beta
+    direction: DOWN
 - assertVisible:
     text: Swipe Beta
 # --- 1ère suppression par swipe ---

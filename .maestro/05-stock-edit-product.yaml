@@ -18,5 +18,9 @@ appId: com.fesperiquette.keepeat
 - hideKeyboard
 - tapOn:
     id: edit-product-save-button
+# BUG-107 : l'enregistrement se confirme par une alerte « Modifié ! », dont
+# le bouton ramène à la fiche produit (bouton positif d'une alerte Android).
+- tapOn:
+    id: "android:id/button1"
 - assertVisible:
     id: stock-item-edit-button

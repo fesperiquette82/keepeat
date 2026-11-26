@@ -25,5 +25,8 @@ appId: com.fesperiquette.keepeat
     id: login-email-input
 - tapOn:
     id: add-product-back-button
+# L'écran Scan s'ouvre par-dessus les onglets : un second retour y ramène.
+- tapOn:
+    id: scan-back-button
 - assertVisible:
     id: tab-home

@@ -674,16 +674,40 @@ def test_bug_107_maestro_scenarios_follow_the_current_screens():
         assert _taps_after_closing_keyboard(flows[name], "add-product-save-button", scroll=True), name
     assert _taps_after_closing_keyboard(flows["05-stock-edit-product.yaml"], "edit-product-save-button", scroll=False)
 
-    no_logout = flows["08-scan-401-does-not-logout.yaml"]
-    steps = [
+    def in_order(flow_text: str, steps: list[str]) -> bool:
+        """Les étapes apparaissent dans cet ordre (chacune après la précédente)."""
+        position = 0
+        for step in steps:
+            position = flow_text.find(step, position)
+            if position < 0:
+                return False
+            position += len(step)
+        return True
+
+    assert in_order(flows["08-scan-401-does-not-logout.yaml"], [
         "id: scan-manual-search-button",
         "id: add-product-lookup-not-found",
         "- assertNotVisible:\n    id: login-email-input",
         "id: add-product-back-button",
+        "id: scan-back-button",
         "- assertVisible:\n    id: tab-home",
-    ]
-    positions = [no_logout.index(step) for step in steps]
-    assert positions == sorted(positions)
+    ])
+    # L'édition se confirme par une alerte dont le bouton ramène à la fiche.
+    assert in_order(flows["05-stock-edit-product.yaml"], [
+        "id: edit-product-save-button",
+        'id: "android:id/button1"',
+        "- assertVisible:\n    id: stock-item-edit-button",
+    ])
+    # Les articles ajoutés sont plus bas dans la liste : défiler avant de
+    # vérifier qu'ils sont là, puis les supprimer.
+    assert in_order(flows["14-stock-swipe-delete-consecutive.yaml"], [
+        "- scrollUntilVisible:\n    element:\n      text: Swipe Alpha",
+        "- assertVisible:\n    text: Swipe Alpha",
+        "- scrollUntilVisible:\n    element:\n      text: Swipe Beta",
+        "- assertVisible:\n    text: Swipe Beta",
+        "      text: Swipe Alpha\n    direction: LEFT",
+    ])
+    assert 'testID="scan-back-button"' in scan
 
     for name in [*barcode_flows, *add_flows, "05-stock-edit-product.yaml"]:
         assert "optional: true" not in flows[name], name
