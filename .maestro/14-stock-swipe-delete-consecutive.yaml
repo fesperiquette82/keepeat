@@ -16,6 +16,12 @@ appId: com.fesperiquette.keepeat
 - tapOn:
     id: add-product-name-input
 - inputText: Swipe Alpha
+# BUG-107 : bouton en bas du formulaire, hors de l'écran clavier ouvert.
+- hideKeyboard
+- scrollUntilVisible:
+    element:
+      id: add-product-save-button
+    direction: DOWN
 - tapOn:
     id: add-product-save-button
 - tapOn:
@@ -27,6 +33,12 @@ appId: com.fesperiquette.keepeat
 - tapOn:
     id: add-product-name-input
 - inputText: Swipe Beta
+# BUG-107 : bouton en bas du formulaire, hors de l'écran clavier ouvert.
+- hideKeyboard
+- scrollUntilVisible:
+    element:
+      id: add-product-save-button
+    direction: DOWN
 - tapOn:
     id: add-product-save-button
 # --- Aller au stock : les deux articles sont visibles ---

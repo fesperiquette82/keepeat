@@ -13,5 +13,17 @@ appId: com.fesperiquette.keepeat
 - inputText: 4010000000000
 - tapOn:
     id: scan-manual-search-button
+# BUG-107 : la recherche ouvre le formulaire d'ajout, où le produit est
+# cherché ; son 401 ne doit pas déconnecter. La recherche se termine (produit
+# introuvable), l'écran de connexion n'apparaît pas, et le retour ramène aux
+# onglets : la session est intacte.
+- extendedWaitUntil:
+    visible:
+      id: add-product-lookup-not-found
+    timeout: 30000
+- assertNotVisible:
+    id: login-email-input
+- tapOn:
+    id: add-product-back-button
 - assertVisible:
     id: tab-home

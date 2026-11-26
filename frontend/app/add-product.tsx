@@ -278,7 +278,7 @@ export default function AddProductScreen() {
   return (
     <SafeAreaView style={styles.container}>
       <View style={styles.header}>
-        <TouchableOpacity style={styles.backButton} onPress={() => router.back()}>
+        <TouchableOpacity testID="add-product-back-button" style={styles.backButton} onPress={() => router.back()}>
           <Ionicons name="arrow-back" size={24} color={C.text} />
         </TouchableOpacity>
         <Text style={styles.headerTitle}>{t('addProduct')}</Text>
@@ -288,7 +288,10 @@ export default function AddProductScreen() {
       <ScrollView style={styles.scrollView} contentContainerStyle={styles.scrollContent}>
 
         {normalizedBarcode && (
-          <View style={[styles.foundBadge, productFound ? styles.foundBadgeSuccess : styles.foundBadgeWarning]}>
+          <View
+            testID={lookupLoading ? 'add-product-lookup-loading' : productFound ? 'add-product-lookup-found' : 'add-product-lookup-not-found'}
+            style={[styles.foundBadge, productFound ? styles.foundBadgeSuccess : styles.foundBadgeWarning]}
+          >
             {lookupLoading ? (
               <ActivityIndicator size="small" color="#22c55e" />
             ) : (

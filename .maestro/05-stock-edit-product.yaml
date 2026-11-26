@@ -14,6 +14,8 @@ appId: com.fesperiquette.keepeat
     id: edit-product-name-input
 - eraseText
 - inputText: Courgette éditée
+# BUG-107 : le bouton Enregistrer est en pied d'écran, sous le clavier ouvert.
+- hideKeyboard
 - tapOn:
     id: edit-product-save-button
 - assertVisible:

@@ -362,8 +362,8 @@ for flow_file in "${FLOW_FILES[@]}"; do
     echo "==> UI on failure (bounds | id | text | content-desc)"
     adb shell am force-stop dev.mobile.maestro >/dev/null 2>&1 || true
     if adb shell uiautomator dump /sdcard/keepeat-ui.xml >/dev/null 2>&1 \
-      && adb exec-out cat /sdcard/keepeat-ui.xml > "maestro-results/$flow_name/ui-on-failure.xml" 2>/dev/null; then
-      python3 scripts/e2e-ui-dump.py "maestro-results/$flow_name/ui-on-failure.xml" | head -n 150 || true
+      && adb exec-out cat /sdcard/keepeat-ui.xml > "maestro-results/${flow_name}-ui-on-failure.xml" 2>/dev/null; then
+      python3 scripts/e2e-ui-dump.py "maestro-results/${flow_name}-ui-on-failure.xml" | head -n 150 || true
     else
       echo "  (uiautomator dump unavailable)"
     fi
